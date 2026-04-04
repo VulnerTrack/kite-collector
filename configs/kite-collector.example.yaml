@@ -1,0 +1,63 @@
+# configs/kite-collector.example.yaml
+
+# Global settings
+log_level: info          # debug, info, warn, error
+output_format: json      # json, table, csv
+data_dir: ./data         # SQLite file location
+
+# Discovery sources
+discovery:
+  sources:
+    network:
+      enabled: true
+      scope:
+        - 192.168.1.0/24
+        - 10.0.0.0/16
+      tcp_ports: [22, 80, 443, 3389, 8080, 8443]
+      timeout: 5s
+      max_concurrent: 256
+
+    agent:
+      enabled: true
+      collect_software: true
+      collect_interfaces: true
+
+    # aws:                    # Phase 2
+    #   enabled: false
+    #   regions: [us-east-1, eu-west-1]
+    #   assume_role: arn:aws:iam::123456789012:role/kite-reader
+
+# Classification
+classification:
+  authorization:
+    # Assets matching any allowlist entry are marked "authorized"
+    # Everything else is "unknown" (never defaults to "authorized")
+    allowlist_file: ./configs/authorized-assets.yaml
+    # Match strategy: hostname, mac_address, ip_address, cloud_instance_id
+    match_fields: [hostname, mac_address]
+
+  managed:
+    # Required controls for is_managed = "managed"
+    required_controls: []   # Empty = opt-in (guidelines 3.2)
+
+# Stale detection
+stale_threshold: 168h       # 7 days
+
+# Streaming mode (Phase 2)
+# streaming:
+#   interval: 6h
+#   otlp:
+#     endpoint: localhost:4317
+#     protocol: grpc         # grpc or http
+#     tls:
+#       enabled: true
+#       cert_file: /etc/kite/tls/client.crt
+#       key_file: /etc/kite/tls/client.key
+#
+# postgres:
+#   dsn: postgres://kite:password@localhost:5432/vulnertrack?sslmode=require
+
+# Metrics
+metrics:
+  enabled: true
+  listen: :9090             # Prometheus scrape endpoint

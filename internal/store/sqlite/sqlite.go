@@ -1,0 +1,636 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/store"
+
+	_ "modernc.org/sqlite" // pure-Go SQLite driver
+)
+
+// SQLiteStore implements store.Store backed by a local SQLite database.
+type SQLiteStore struct {
+	db *sql.DB
+}
+
+// Compile-time interface check.
+var _ store.Store = (*SQLiteStore)(nil)
+
+// New opens (or creates) a SQLite database at dbPath and returns an
+// initialised SQLiteStore. The connection enables WAL journal mode, a 5-second
+// busy timeout, and foreign key enforcement via pragma DSN parameters.
+func New(dbPath string) (*SQLiteStore, error) {
+	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite open %s: %w", dbPath, err)
+	}
+	if err := db.PingContext(context.Background()); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("sqlite ping %s: %w", dbPath, err)
+	}
+	return &SQLiteStore{db: db}, nil
+}
+
+// Migrate creates the schema tables and indexes if they do not already exist.
+func (s *SQLiteStore) Migrate(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, schema)
+	if err != nil {
+		return fmt.Errorf("sqlite migrate: %w", err)
+	}
+	return nil
+}
+
+// Close releases the underlying database connection pool.
+func (s *SQLiteStore) Close() error {
+	return s.db.Close()
+}
+
+// ---------------------------------------------------------------------------
+// Assets
+// ---------------------------------------------------------------------------
+
+const assetColumns = `id, asset_type, hostname, os_family, os_version,
+	is_authorized, is_managed, environment, owner, criticality,
+	discovery_source, first_seen_at, last_seen_at, tags, natural_key`
+
+// scanAsset reads a single row from the result set into an Asset.
+func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
+	var a model.Asset
+	var (
+		idStr          string
+		firstSeen      string
+		lastSeen       string
+		osFamily       sql.NullString
+		osVersion      sql.NullString
+		environment    sql.NullString
+		owner          sql.NullString
+		criticality    sql.NullString
+		tags           sql.NullString
+		naturalKey     sql.NullString
+	)
+	err := row.Scan(
+		&idStr,
+		&a.AssetType,
+		&a.Hostname,
+		&osFamily,
+		&osVersion,
+		&a.IsAuthorized,
+		&a.IsManaged,
+		&environment,
+		&owner,
+		&criticality,
+		&a.DiscoverySource,
+		&firstSeen,
+		&lastSeen,
+		&tags,
+		&naturalKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	a.ID, err = uuid.Parse(idStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse asset id: %w", err)
+	}
+	a.FirstSeenAt, err = time.Parse(time.RFC3339, firstSeen)
+	if err != nil {
+		return nil, fmt.Errorf("parse first_seen_at: %w", err)
+	}
+	a.LastSeenAt, err = time.Parse(time.RFC3339, lastSeen)
+	if err != nil {
+		return nil, fmt.Errorf("parse last_seen_at: %w", err)
+	}
+	a.OSFamily = osFamily.String
+	a.OSVersion = osVersion.String
+	a.Environment = environment.String
+	a.Owner = owner.String
+	a.Criticality = criticality.String
+	a.Tags = tags.String
+	a.NaturalKey = naturalKey.String
+
+	return &a, nil
+}
+
+// UpsertAsset inserts a new asset or replaces an existing one matched by the
+// UNIQUE(hostname, asset_type) constraint. The natural key is computed before
+// writing.
+func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error {
+	asset.ComputeNaturalKey()
+
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO assets (`+assetColumns+`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(hostname, asset_type) DO UPDATE SET
+			os_family        = excluded.os_family,
+			os_version       = excluded.os_version,
+			is_authorized    = excluded.is_authorized,
+			is_managed       = excluded.is_managed,
+			environment      = excluded.environment,
+			owner            = excluded.owner,
+			criticality      = excluded.criticality,
+			discovery_source = excluded.discovery_source,
+			last_seen_at     = excluded.last_seen_at,
+			tags             = excluded.tags,
+			natural_key      = excluded.natural_key
+	`,
+		asset.ID.String(),
+		string(asset.AssetType),
+		asset.Hostname,
+		nullStr(asset.OSFamily),
+		nullStr(asset.OSVersion),
+		string(asset.IsAuthorized),
+		string(asset.IsManaged),
+		nullStr(asset.Environment),
+		nullStr(asset.Owner),
+		nullStr(asset.Criticality),
+		asset.DiscoverySource,
+		asset.FirstSeenAt.Format(time.RFC3339),
+		asset.LastSeenAt.Format(time.RFC3339),
+		nullStr(asset.Tags),
+		asset.NaturalKey,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert asset %s: %w", asset.ID, err)
+	}
+	return nil
+}
+
+// UpsertAssets atomically upserts a batch of assets inside a single
+// transaction and returns counts of newly inserted and updated rows.
+func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (inserted, updated int, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	for i := range assets {
+		assets[i].ComputeNaturalKey()
+
+		// Check whether the asset already exists.
+		var exists int
+		err = tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM assets WHERE hostname = ? AND asset_type = ?`,
+			assets[i].Hostname, string(assets[i].AssetType),
+		).Scan(&exists)
+		if err != nil {
+			return 0, 0, fmt.Errorf("check existing asset: %w", err)
+		}
+
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO assets (`+assetColumns+`)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(hostname, asset_type) DO UPDATE SET
+				os_family        = excluded.os_family,
+				os_version       = excluded.os_version,
+				is_authorized    = excluded.is_authorized,
+				is_managed       = excluded.is_managed,
+				environment      = excluded.environment,
+				owner            = excluded.owner,
+				criticality      = excluded.criticality,
+				discovery_source = excluded.discovery_source,
+				last_seen_at     = excluded.last_seen_at,
+				tags             = excluded.tags,
+				natural_key      = excluded.natural_key
+		`,
+			assets[i].ID.String(),
+			string(assets[i].AssetType),
+			assets[i].Hostname,
+			nullStr(assets[i].OSFamily),
+			nullStr(assets[i].OSVersion),
+			string(assets[i].IsAuthorized),
+			string(assets[i].IsManaged),
+			nullStr(assets[i].Environment),
+			nullStr(assets[i].Owner),
+			nullStr(assets[i].Criticality),
+			assets[i].DiscoverySource,
+			assets[i].FirstSeenAt.Format(time.RFC3339),
+			assets[i].LastSeenAt.Format(time.RFC3339),
+			nullStr(assets[i].Tags),
+			assets[i].NaturalKey,
+		)
+		if err != nil {
+			return 0, 0, fmt.Errorf("upsert asset %s: %w", assets[i].ID, err)
+		}
+
+		if exists > 0 {
+			updated++
+		} else {
+			inserted++
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("commit tx: %w", err)
+	}
+	return inserted, updated, nil
+}
+
+// GetAssetByNaturalKey retrieves the asset whose precomputed SHA-256 natural
+// key matches key. Returns (nil, nil) when no match is found.
+func (s *SQLiteStore) GetAssetByNaturalKey(ctx context.Context, key string) (*model.Asset, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE natural_key = ?`, key)
+	a, err := scanAsset(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get asset by natural key: %w", err)
+	}
+	return a, nil
+}
+
+// ListAssets returns assets matching the supplied filter. An empty filter
+// returns all assets (subject to Limit/Offset).
+func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) ([]model.Asset, error) {
+	var (
+		clauses []string
+		args    []any
+	)
+
+	if filter.AssetType != "" {
+		clauses = append(clauses, "asset_type = ?")
+		args = append(args, filter.AssetType)
+	}
+	if filter.IsAuthorized != "" {
+		clauses = append(clauses, "is_authorized = ?")
+		args = append(args, filter.IsAuthorized)
+	}
+	if filter.IsManaged != "" {
+		clauses = append(clauses, "is_managed = ?")
+		args = append(args, filter.IsManaged)
+	}
+	if filter.Hostname != "" {
+		clauses = append(clauses, "hostname = ?")
+		args = append(args, filter.Hostname)
+	}
+
+	query := `SELECT ` + assetColumns + ` FROM assets`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders, values are in args
+	}
+	query += " ORDER BY last_seen_at DESC"
+
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list assets: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var assets []model.Asset
+	for rows.Next() {
+		a, err := scanAsset(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan asset row: %w", err)
+		}
+		assets = append(assets, *a)
+	}
+	return assets, rows.Err()
+}
+
+// GetStaleAssets returns assets whose last_seen_at is older than the given
+// threshold measured from the current time.
+func (s *SQLiteStore) GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error) {
+	cutoff := time.Now().UTC().Add(-threshold).Format(time.RFC3339)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < ? ORDER BY last_seen_at ASC`,
+		cutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get stale assets: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var assets []model.Asset
+	for rows.Next() {
+		a, err := scanAsset(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan stale asset row: %w", err)
+		}
+		assets = append(assets, *a)
+	}
+	return assets, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+const eventColumns = `id, event_type, asset_id, scan_run_id, severity, details, timestamp`
+
+// scanEvent reads a single row from the result set into an AssetEvent.
+func scanEvent(row interface{ Scan(dest ...any) error }) (*model.AssetEvent, error) {
+	var e model.AssetEvent
+	var (
+		idStr      string
+		assetIDStr string
+		scanIDStr  string
+		details    sql.NullString
+		ts         string
+	)
+	err := row.Scan(
+		&idStr,
+		&e.EventType,
+		&assetIDStr,
+		&scanIDStr,
+		&e.Severity,
+		&details,
+		&ts,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	e.ID, err = uuid.Parse(idStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse event id: %w", err)
+	}
+	e.AssetID, err = uuid.Parse(assetIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse event asset_id: %w", err)
+	}
+	e.ScanRunID, err = uuid.Parse(scanIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse event scan_run_id: %w", err)
+	}
+	e.Timestamp, err = time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return nil, fmt.Errorf("parse event timestamp: %w", err)
+	}
+	e.Details = details.String
+
+	return &e, nil
+}
+
+// InsertEvent persists a single asset lifecycle event.
+func (s *SQLiteStore) InsertEvent(ctx context.Context, event model.AssetEvent) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO events (`+eventColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		event.ID.String(),
+		string(event.EventType),
+		event.AssetID.String(),
+		event.ScanRunID.String(),
+		string(event.Severity),
+		nullStr(event.Details),
+		event.Timestamp.Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("insert event %s: %w", event.ID, err)
+	}
+	return nil
+}
+
+// InsertEvents persists a batch of events inside a single transaction.
+func (s *SQLiteStore) InsertEvents(ctx context.Context, events []model.AssetEvent) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO events (`+eventColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare insert event: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for i := range events {
+		_, err := stmt.ExecContext(ctx,
+			events[i].ID.String(),
+			string(events[i].EventType),
+			events[i].AssetID.String(),
+			events[i].ScanRunID.String(),
+			string(events[i].Severity),
+			nullStr(events[i].Details),
+			events[i].Timestamp.Format(time.RFC3339),
+		)
+		if err != nil {
+			return fmt.Errorf("insert event %s: %w", events[i].ID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// ListEvents returns events matching the supplied filter.
+func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) ([]model.AssetEvent, error) {
+	var (
+		clauses []string
+		args    []any
+	)
+
+	if filter.EventType != "" {
+		clauses = append(clauses, "event_type = ?")
+		args = append(args, filter.EventType)
+	}
+	if filter.AssetID != nil {
+		clauses = append(clauses, "asset_id = ?")
+		args = append(args, filter.AssetID.String())
+	}
+	if filter.ScanRunID != nil {
+		clauses = append(clauses, "scan_run_id = ?")
+		args = append(args, filter.ScanRunID.String())
+	}
+
+	query := `SELECT ` + eventColumns + ` FROM events`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders, values are in args
+	}
+	query += " ORDER BY timestamp DESC"
+
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var events []model.AssetEvent
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan event row: %w", err)
+		}
+		events = append(events, *e)
+	}
+	return events, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Scan runs
+// ---------------------------------------------------------------------------
+
+const scanRunColumns = `id, started_at, completed_at, status, total_assets,
+	new_assets, updated_assets, stale_assets, coverage_percent,
+	error_count, scope_config, discovery_sources`
+
+// scanScanRun reads a single row from the result set into a ScanRun.
+func scanScanRun(row interface{ Scan(dest ...any) error }) (*model.ScanRun, error) {
+	var r model.ScanRun
+	var (
+		idStr            string
+		startedAt        string
+		completedAt      sql.NullString
+		scopeConfig      sql.NullString
+		discoverySources sql.NullString
+	)
+	err := row.Scan(
+		&idStr,
+		&startedAt,
+		&completedAt,
+		&r.Status,
+		&r.TotalAssets,
+		&r.NewAssets,
+		&r.UpdatedAssets,
+		&r.StaleAssets,
+		&r.CoveragePercent,
+		&r.ErrorCount,
+		&scopeConfig,
+		&discoverySources,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	r.ID, err = uuid.Parse(idStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse scan run id: %w", err)
+	}
+	r.StartedAt, err = time.Parse(time.RFC3339, startedAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse started_at: %w", err)
+	}
+	if completedAt.Valid {
+		t, err := time.Parse(time.RFC3339, completedAt.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse completed_at: %w", err)
+		}
+		r.CompletedAt = &t
+	}
+	r.ScopeConfig = scopeConfig.String
+	r.DiscoverySources = discoverySources.String
+
+	return &r, nil
+}
+
+// CreateScanRun records a new scan run.
+func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO scan_runs (`+scanRunColumns+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		run.ID.String(),
+		run.StartedAt.Format(time.RFC3339),
+		nullTimePtr(run.CompletedAt),
+		string(run.Status),
+		run.TotalAssets,
+		run.NewAssets,
+		run.UpdatedAssets,
+		run.StaleAssets,
+		run.CoveragePercent,
+		run.ErrorCount,
+		nullStr(run.ScopeConfig),
+		nullStr(run.DiscoverySources),
+	)
+	if err != nil {
+		return fmt.Errorf("create scan run %s: %w", run.ID, err)
+	}
+	return nil
+}
+
+// CompleteScanRun updates an existing scan run with the final result and marks
+// it as completed.
+func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result model.ScanResult) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE scan_runs SET
+			completed_at     = ?,
+			status           = ?,
+			total_assets     = ?,
+			new_assets       = ?,
+			updated_assets   = ?,
+			stale_assets     = ?,
+			coverage_percent = ?
+		WHERE id = ?`,
+		now,
+		string(model.ScanStatusCompleted),
+		result.TotalAssets,
+		result.NewAssets,
+		result.UpdatedAssets,
+		result.StaleAssets,
+		result.CoveragePercent,
+		id.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("complete scan run %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("scan run %s not found", id)
+	}
+	return nil
+}
+
+// GetLatestScanRun returns the most recent scan run ordered by started_at, or
+// (nil, nil) when no scan runs exist.
+func (s *SQLiteStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT 1`)
+	r, err := scanScanRun(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get latest scan run: %w", err)
+	}
+	return r, nil
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// nullStr returns a sql.NullString that is NULL when s is empty.
+func nullStr(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+// nullTimePtr formats a *time.Time as an RFC3339 sql.NullString, NULL when nil.
+func nullTimePtr(t *time.Time) sql.NullString {
+	if t == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: t.Format(time.RFC3339), Valid: true}
+}

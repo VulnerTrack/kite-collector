@@ -1,0 +1,34 @@
+version: 2
+
+builds:
+  - id: kite-collector
+    main: ./cmd/kite-collector
+    binary: kite-collector
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+dockers:
+  - image_templates:
+      - "ghcr.io/vulnertrack/kite-collector:{{ .Tag }}"
+      - "ghcr.io/vulnertrack/kite-collector:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
