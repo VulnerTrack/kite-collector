@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net/http"
 	"os"
@@ -25,6 +26,8 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent"
 	"github.com/vulnertrack/kite-collector/internal/discovery/cloud"
+	"github.com/vulnertrack/kite-collector/internal/discovery/cmdb"
+	"github.com/vulnertrack/kite-collector/internal/discovery/mdm"
 	"github.com/vulnertrack/kite-collector/internal/discovery/network"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	"github.com/vulnertrack/kite-collector/internal/engine"
@@ -188,6 +191,11 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(cloud.NewAWS())
 	registry.Register(cloud.NewGCP())
 	registry.Register(cloud.NewAzure())
+	registry.Register(mdm.NewJamf())
+	registry.Register(mdm.NewIntune())
+	registry.Register(mdm.NewSCCM())
+	registry.Register(cmdb.NewServiceNow())
+	registry.Register(cmdb.NewNetBox())
 
 	// Set up deduplicator.
 	dd := dedup.New(st)
@@ -583,6 +591,11 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 	registry.Register(cloud.NewAWS())
 	registry.Register(cloud.NewGCP())
 	registry.Register(cloud.NewAzure())
+	registry.Register(mdm.NewJamf())
+	registry.Register(mdm.NewIntune())
+	registry.Register(mdm.NewSCCM())
+	registry.Register(cmdb.NewServiceNow())
+	registry.Register(cmdb.NewNetBox())
 
 	dd := dedup.New(st)
 
@@ -727,14 +740,14 @@ func newReportCmd() *cobra.Command {
 		Use:   "report",
 		Short: "Generate asset inventory report",
 		Long: `Read the SQLite database and produce a report in the requested format.
-Supported formats: json, csv, table.`,
+Supported formats: json, csv, table, html.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runReport(dbPath, format, output)
 		},
 	}
 
 	cmd.Flags().StringVar(&dbPath, "db", "./data/kite.db", "path to SQLite database")
-	cmd.Flags().StringVar(&format, "format", "table", "report format: json, csv, table")
+	cmd.Flags().StringVar(&format, "format", "table", "report format: json, csv, table, html")
 	cmd.Flags().StringVar(&output, "output", "", "output file path (default: stdout)")
 
 	return cmd
@@ -779,6 +792,8 @@ func runReport(dbPath, format, outputPath string) error {
 		return formatJSON(report)
 	case "csv":
 		formatCSV(assets)
+	case "html":
+		return formatHTMLReport(ctx, st, assets, latestRun)
 	default:
 		if latestRun != nil {
 			fmt.Printf("Latest scan: %s (total: %d, new: %d, stale: %d)\n\n",
@@ -873,6 +888,411 @@ func formatCSV(assets []model.Asset) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// HTML compliance report
+// ---------------------------------------------------------------------------
+
+// htmlReportData holds all data rendered by the HTML compliance template.
+type htmlReportData struct {
+	EventSummary      map[string]int
+	LatestScan        *model.ScanRun
+	GeneratedAt       string
+	Version           string
+	Assets            []model.Asset
+	Frameworks        []complianceFramework
+	TotalAssets       int
+	NewAssets         int
+	UpdatedAssets     int
+	StaleAssets       int
+	AuthorizedCount   int
+	UnauthorizedCount int
+	AuthUnknownCount  int
+	ManagedCount      int
+	UnmanagedCount    int
+	MgmtUnknownCount  int
+}
+
+// complianceFramework describes compliance alignment for a single framework.
+type complianceFramework struct {
+	Name        string
+	Control     string
+	Description string
+	Status      string // "Aligned", "Partial", "Not Aligned"
+}
+
+// assessCompliance evaluates compliance alignment based on the current asset
+// inventory state. A framework is "Aligned" when the inventory has full
+// coverage of classification and management data, "Partial" when some data
+// is missing, and "Not Aligned" when the inventory is empty.
+func assessCompliance(data *htmlReportData) []complianceFramework {
+	// Compute a simple coverage score: fraction of assets that are both
+	// classified (authorized/unauthorized) and managed/unmanaged.
+	classifiedCount := data.AuthorizedCount + data.UnauthorizedCount
+	managedClassified := data.ManagedCount + data.UnmanagedCount
+
+	cisStatus := "Not Aligned"
+	nistStatus := "Not Aligned"
+	isoStatus := "Not Aligned"
+
+	if data.TotalAssets > 0 {
+		classifiedRatio := float64(classifiedCount) / float64(data.TotalAssets)
+		managedRatio := float64(managedClassified) / float64(data.TotalAssets)
+
+		if classifiedRatio >= 0.9 {
+			cisStatus = "Aligned"
+		} else if classifiedRatio > 0 {
+			cisStatus = "Partial"
+		}
+
+		if classifiedRatio >= 0.9 && managedRatio >= 0.9 {
+			nistStatus = "Aligned"
+		} else if classifiedRatio > 0 || managedRatio > 0 {
+			nistStatus = "Partial"
+		}
+
+		if classifiedRatio >= 0.9 && managedRatio >= 0.9 && data.UnauthorizedCount == 0 {
+			isoStatus = "Aligned"
+		} else if classifiedRatio > 0 || managedRatio > 0 {
+			isoStatus = "Partial"
+		}
+	}
+
+	return []complianceFramework{
+		{
+			Name:        "CIS Control 1",
+			Control:     "Enterprise Asset Inventory",
+			Description: "Actively manage all enterprise assets connected to the infrastructure",
+			Status:      cisStatus,
+		},
+		{
+			Name:        "NIST SP 1800-5",
+			Control:     "IT Asset Management",
+			Description: "Identify, track, and manage IT assets throughout their lifecycle",
+			Status:      nistStatus,
+		},
+		{
+			Name:        "ISO 27001 A.8",
+			Control:     "Asset Management",
+			Description: "Identify organizational assets and define appropriate protection responsibilities",
+			Status:      isoStatus,
+		},
+	}
+}
+
+// formatHTMLReport generates a self-contained HTML compliance report.
+func formatHTMLReport(ctx context.Context, st store.Store, assets []model.Asset, latestRun *model.ScanRun) error {
+	// Query events for the event summary breakdown.
+	events, err := st.ListEvents(ctx, store.EventFilter{Limit: 10000})
+	if err != nil {
+		return fmt.Errorf("list events for report: %w", err)
+	}
+
+	// Build classification counts.
+	var authCount, unauthCount, authUnk int
+	var mgdCount, unmgdCount, mgdUnk int
+	for _, a := range assets {
+		switch a.IsAuthorized {
+		case model.AuthorizationAuthorized:
+			authCount++
+		case model.AuthorizationUnauthorized:
+			unauthCount++
+		case model.AuthorizationUnknown:
+			authUnk++
+		}
+		switch a.IsManaged {
+		case model.ManagedManaged:
+			mgdCount++
+		case model.ManagedUnmanaged:
+			unmgdCount++
+		case model.ManagedUnknown:
+			mgdUnk++
+		}
+	}
+
+	// Build event type counts.
+	eventSummary := make(map[string]int)
+	for _, ev := range events {
+		eventSummary[string(ev.EventType)]++
+	}
+
+	data := htmlReportData{
+		GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
+		Version:           version,
+		TotalAssets:       len(assets),
+		AuthorizedCount:   authCount,
+		UnauthorizedCount: unauthCount,
+		AuthUnknownCount:  authUnk,
+		ManagedCount:      mgdCount,
+		UnmanagedCount:    unmgdCount,
+		MgmtUnknownCount: mgdUnk,
+		Assets:            assets,
+		EventSummary:      eventSummary,
+		LatestScan:        latestRun,
+	}
+
+	if latestRun != nil {
+		data.NewAssets = latestRun.NewAssets
+		data.UpdatedAssets = latestRun.UpdatedAssets
+		data.StaleAssets = latestRun.StaleAssets
+	}
+
+	data.Frameworks = assessCompliance(&data)
+
+	tmpl, err := template.New("report").Parse(htmlReportTemplate)
+	if err != nil {
+		return fmt.Errorf("parse HTML template: %w", err)
+	}
+
+	return tmpl.Execute(os.Stdout, data)
+}
+
+// htmlReportTemplate is the self-contained HTML compliance report template.
+// It uses only inline CSS and no external resources.
+const htmlReportTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kite Collector - Asset Compliance Report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0; padding: 0; background: #f4f6f9; color: #1a1a2e;
+    line-height: 1.6;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff; padding: 32px 24px; margin-bottom: 24px; border-radius: 8px;
+  }
+  header h1 { margin: 0 0 8px 0; font-size: 1.75rem; }
+  header p { margin: 0; opacity: 0.85; font-size: 0.9rem; }
+  .meta-row { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 12px; }
+  .meta-item { font-size: 0.85rem; opacity: 0.75; }
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px; margin-bottom: 24px;
+  }
+  .stat-card {
+    background: #fff; border-radius: 8px; padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center;
+  }
+  .stat-card .value { font-size: 2rem; font-weight: 700; color: #1a1a2e; }
+  .stat-card .label { font-size: 0.8rem; text-transform: uppercase; color: #666; letter-spacing: 0.5px; }
+  section { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  section h2 { margin-top: 0; font-size: 1.25rem; border-bottom: 2px solid #e0e0e0; padding-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  th { background: #f0f2f5; text-align: left; padding: 10px 12px; font-weight: 600; border-bottom: 2px solid #ddd; }
+  td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  tr:hover td { background: #f0f4ff; }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 12px;
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+  }
+  .badge-green { background: #d4edda; color: #155724; }
+  .badge-red { background: #f8d7da; color: #721c24; }
+  .badge-yellow { background: #fff3cd; color: #856404; }
+  .badge-blue { background: #d1ecf1; color: #0c5460; }
+  .badge-gray { background: #e2e3e5; color: #383d41; }
+  .compliance-status { font-weight: 600; }
+  .status-aligned { color: #155724; }
+  .status-partial { color: #856404; }
+  .status-not-aligned { color: #721c24; }
+  .classification-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+  }
+  @media (max-width: 640px) {
+    .classification-grid { grid-template-columns: 1fr; }
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .bar-container { display: flex; height: 24px; border-radius: 4px; overflow: hidden; margin: 8px 0; }
+  .bar-segment { display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 600; color: #fff; min-width: 2px; }
+  .bar-green { background: #28a745; }
+  .bar-red { background: #dc3545; }
+  .bar-yellow { background: #ffc107; color: #333; }
+  footer { text-align: center; padding: 16px; font-size: 0.8rem; color: #999; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>Asset Compliance Report</h1>
+  <p>Kite Collector - Enterprise Asset Inventory and Compliance Assessment</p>
+  <div class="meta-row">
+    <span class="meta-item">Generated: {{.GeneratedAt}}</span>
+    <span class="meta-item">Version: {{.Version}}</span>
+    {{- if .LatestScan}}
+    <span class="meta-item">Latest Scan: {{.LatestScan.StartedAt.Format "2006-01-02T15:04:05Z"}} ({{.LatestScan.Status}})</span>
+    {{- end}}
+  </div>
+</header>
+
+<div class="summary-grid">
+  <div class="stat-card">
+    <div class="value">{{.TotalAssets}}</div>
+    <div class="label">Total Assets</div>
+  </div>
+  <div class="stat-card">
+    <div class="value">{{.NewAssets}}</div>
+    <div class="label">New Assets</div>
+  </div>
+  <div class="stat-card">
+    <div class="value">{{.UpdatedAssets}}</div>
+    <div class="label">Updated Assets</div>
+  </div>
+  <div class="stat-card">
+    <div class="value">{{.StaleAssets}}</div>
+    <div class="label">Stale Assets</div>
+  </div>
+  <div class="stat-card">
+    <div class="value">{{.AuthorizedCount}}</div>
+    <div class="label">Authorized</div>
+  </div>
+  <div class="stat-card">
+    <div class="value">{{.UnauthorizedCount}}</div>
+    <div class="label">Unauthorized</div>
+  </div>
+</div>
+
+<section>
+  <h2>Compliance Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Framework</th>
+        <th>Control</th>
+        <th>Description</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .Frameworks}}
+      <tr>
+        <td><strong>{{.Name}}</strong></td>
+        <td>{{.Control}}</td>
+        <td>{{.Description}}</td>
+        <td>
+          {{if eq .Status "Aligned"}}<span class="badge badge-green">Aligned</span>
+          {{else if eq .Status "Partial"}}<span class="badge badge-yellow">Partial</span>
+          {{else}}<span class="badge badge-red">Not Aligned</span>
+          {{end}}
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Classification Breakdown</h2>
+  <div class="classification-grid">
+    <div>
+      <h3>Authorization State</h3>
+      {{if gt .TotalAssets 0}}
+      <div class="bar-container">
+        {{if gt .AuthorizedCount 0}}<div class="bar-segment bar-green" style="flex:{{.AuthorizedCount}}">{{.AuthorizedCount}}</div>{{end}}
+        {{if gt .UnauthorizedCount 0}}<div class="bar-segment bar-red" style="flex:{{.UnauthorizedCount}}">{{.UnauthorizedCount}}</div>{{end}}
+        {{if gt .AuthUnknownCount 0}}<div class="bar-segment bar-yellow" style="flex:{{.AuthUnknownCount}}">{{.AuthUnknownCount}}</div>{{end}}
+      </div>
+      {{end}}
+      <table>
+        <tr><td><span class="badge badge-green">Authorized</span></td><td>{{.AuthorizedCount}}</td></tr>
+        <tr><td><span class="badge badge-red">Unauthorized</span></td><td>{{.UnauthorizedCount}}</td></tr>
+        <tr><td><span class="badge badge-yellow">Unknown</span></td><td>{{.AuthUnknownCount}}</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>Managed State</h3>
+      {{if gt .TotalAssets 0}}
+      <div class="bar-container">
+        {{if gt .ManagedCount 0}}<div class="bar-segment bar-green" style="flex:{{.ManagedCount}}">{{.ManagedCount}}</div>{{end}}
+        {{if gt .UnmanagedCount 0}}<div class="bar-segment bar-red" style="flex:{{.UnmanagedCount}}">{{.UnmanagedCount}}</div>{{end}}
+        {{if gt .MgmtUnknownCount 0}}<div class="bar-segment bar-yellow" style="flex:{{.MgmtUnknownCount}}">{{.MgmtUnknownCount}}</div>{{end}}
+      </div>
+      {{end}}
+      <table>
+        <tr><td><span class="badge badge-green">Managed</span></td><td>{{.ManagedCount}}</td></tr>
+        <tr><td><span class="badge badge-red">Unmanaged</span></td><td>{{.UnmanagedCount}}</td></tr>
+        <tr><td><span class="badge badge-yellow">Unknown</span></td><td>{{.MgmtUnknownCount}}</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+{{if .EventSummary}}
+<section>
+  <h2>Event Summary</h2>
+  <table>
+    <thead>
+      <tr><th>Event Type</th><th>Count</th></tr>
+    </thead>
+    <tbody>
+    {{range $type, $count := .EventSummary}}
+      <tr>
+        <td>{{$type}}</td>
+        <td>{{$count}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+
+<section>
+  <h2>Asset Inventory</h2>
+  <p>Total: {{.TotalAssets}} assets</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Hostname</th>
+        <th>Type</th>
+        <th>OS</th>
+        <th>Authorization</th>
+        <th>Managed</th>
+        <th>Source</th>
+        <th>Owner</th>
+        <th>Last Seen</th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .Assets}}
+      <tr>
+        <td>{{.Hostname}}</td>
+        <td>{{.AssetType}}</td>
+        <td>{{if .OSVersion}}{{.OSVersion}}{{else}}{{.OSFamily}}{{end}}</td>
+        <td>
+          {{if eq (printf "%s" .IsAuthorized) "authorized"}}<span class="badge badge-green">Authorized</span>
+          {{else if eq (printf "%s" .IsAuthorized) "unauthorized"}}<span class="badge badge-red">Unauthorized</span>
+          {{else}}<span class="badge badge-yellow">Unknown</span>
+          {{end}}
+        </td>
+        <td>
+          {{if eq (printf "%s" .IsManaged) "managed"}}<span class="badge badge-green">Managed</span>
+          {{else if eq (printf "%s" .IsManaged) "unmanaged"}}<span class="badge badge-red">Unmanaged</span>
+          {{else}}<span class="badge badge-yellow">Unknown</span>
+          {{end}}
+        </td>
+        <td>{{.DiscoverySource}}</td>
+        <td>{{.Owner}}</td>
+        <td>{{.LastSeenAt.Format "2006-01-02T15:04:05Z"}}</td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  Kite Collector {{.Version}} &mdash; Report generated {{.GeneratedAt}}
+</footer>
+
+</div>
+</body>
+</html>
+`
 
 // ---------------------------------------------------------------------------
 // main

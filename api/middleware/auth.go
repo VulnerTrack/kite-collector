@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 // apiKeyHeader is the HTTP header name checked by APIKeyAuth.
@@ -42,17 +43,62 @@ func APIKeyAuth(next http.Handler, apiKey string) http.Handler {
 	})
 }
 
-// MTLSAuth returns middleware that will enforce mutual TLS client certificate
-// validation in Phase 3. Currently it logs a warning and passes the request
-// through without verification.
+// MTLSAuth returns middleware that enforces mutual TLS client certificate
+// authentication. Requests without a valid, non-expired client certificate
+// receive a 401 Unauthorized JSON response.
 func MTLSAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
-			slog.Warn("mTLS auth not yet enforced — passing request through", //#nosec G706 -- method and path are safe to log for audit purposes
-				"method", r.Method,
-				"path", r.URL.Path,
-			)
+			writeJSONError(w, http.StatusUnauthorized, "mTLS required: no client certificate provided")
+			return
 		}
+
+		// Extract client certificate subject for logging.
+		clientCert := r.TLS.PeerCertificates[0]
+		slog.Debug("mTLS: client authenticated", //#nosec G706 -- cert fields from TLS handshake, not user input
+			"subject", clientCert.Subject.CommonName,
+			"issuer", clientCert.Issuer.CommonName,
+			"serial", clientCert.SerialNumber.String(),
+			"not_after", clientCert.NotAfter.Format(time.RFC3339),
+		)
+
+		// Check certificate expiry.
+		if time.Now().After(clientCert.NotAfter) {
+			writeJSONError(w, http.StatusUnauthorized, "mTLS: client certificate has expired")
+			return
+		}
+
 		next.ServeHTTP(w, r)
+	})
+}
+
+// MTLSOrAPIKey returns middleware that accepts either a valid mTLS client
+// certificate or a matching X-API-Key header. If neither authentication
+// method succeeds, the request receives a 401 Unauthorized JSON response.
+func MTLSOrAPIKey(next http.Handler, apiKey string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If mTLS client cert is present and not expired, use that.
+		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
+			clientCert := r.TLS.PeerCertificates[0]
+			if time.Now().Before(clientCert.NotAfter) {
+				slog.Debug("mTLS+APIKey: authenticated via client certificate", //#nosec G706 -- cert fields from TLS handshake, not user input
+					"subject", clientCert.Subject.CommonName,
+				)
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		// Fall back to API key.
+		if apiKey != "" {
+			provided := r.Header.Get(apiKeyHeader)
+			if provided == apiKey {
+				slog.Debug("mTLS+APIKey: authenticated via API key")
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		writeJSONError(w, http.StatusUnauthorized, "authentication required: provide client certificate or API key")
 	})
 }

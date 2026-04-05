@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package kite.v1;
+
+option go_package = "github.com/vulnertrack/kite-collector/api/grpc/proto/kite/v1;kitev1";
+
+import "google/protobuf/timestamp.proto";
+
+service CollectorService {
+    // ReportAssets streams asset snapshots from agents to the server.
+    rpc ReportAssets(stream AssetSnapshot) returns (ReportResponse);
+
+    // Heartbeat allows agents to signal liveness without a full report.
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message AssetSnapshot {
+    string hostname = 1;
+    string asset_type = 2;
+    string os_family = 3;
+    string os_version = 4;
+    string environment = 5;
+    string owner = 6;
+    string criticality = 7;
+    string tags_json = 8;
+    google.protobuf.Timestamp collected_at = 9;
+    repeated InstalledPackage software = 10;
+    string discovery_source = 11;
+}
+
+message InstalledPackage {
+    string name = 1;
+    string version = 2;
+    string vendor = 3;
+    string cpe23 = 4;
+    string package_manager = 5;
+}
+
+message ReportResponse {
+    int32 accepted = 1;
+    int32 rejected = 2;
+}
+
+message HeartbeatRequest {
+    string agent_id = 1;
+}
+
+message HeartbeatResponse {
+    google.protobuf.Timestamp server_time = 1;
+}
