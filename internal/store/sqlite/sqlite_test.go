@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -373,8 +374,232 @@ func TestGetLatestScanRun_Empty(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Installed Software
+// ---------------------------------------------------------------------------
+
+func makeSoftware(assetID uuid.UUID, name, version, pkgMgr string) model.InstalledSoftware {
+	return model.InstalledSoftware{
+		ID:             uuid.Must(uuid.NewV7()),
+		AssetID:        assetID,
+		SoftwareName:   name,
+		Version:        version,
+		PackageManager: pkgMgr,
+	}
+}
+
+func TestUpsertSoftware_InsertAndList(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	asset := makeAsset("sw-host", model.AssetTypeServer)
+	require.NoError(t, s.UpsertAsset(ctx, asset))
+
+	sw := []model.InstalledSoftware{
+		makeSoftware(asset.ID, "curl", "7.88.1", "dpkg"),
+		makeSoftware(asset.ID, "wget", "1.21.3", "dpkg"),
+		makeSoftware(asset.ID, "vim", "9.0", "dpkg"),
+	}
+	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw))
+
+	got, err := s.ListSoftware(ctx, asset.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	assert.Equal(t, "curl", got[0].SoftwareName)
+	assert.Equal(t, "7.88.1", got[0].Version)
+	assert.Equal(t, "dpkg", got[0].PackageManager)
+	assert.Equal(t, asset.ID, got[0].AssetID)
+}
+
+func TestUpsertSoftware_ReplacesExisting(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	asset := makeAsset("replace-host", model.AssetTypeServer)
+	require.NoError(t, s.UpsertAsset(ctx, asset))
+
+	// First batch
+	sw1 := []model.InstalledSoftware{
+		makeSoftware(asset.ID, "old-pkg1", "1.0", "pacman"),
+		makeSoftware(asset.ID, "old-pkg2", "2.0", "pacman"),
+	}
+	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw1))
+
+	// Second batch replaces first
+	sw2 := []model.InstalledSoftware{
+		makeSoftware(asset.ID, "new-pkg1", "3.0", "pacman"),
+		makeSoftware(asset.ID, "new-pkg2", "4.0", "pacman"),
+		makeSoftware(asset.ID, "new-pkg3", "5.0", "pacman"),
+	}
+	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw2))
+
+	got, err := s.ListSoftware(ctx, asset.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	assert.Equal(t, "new-pkg1", got[0].SoftwareName)
+}
+
+func TestUpsertSoftware_EmptySlice_DeletesAll(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	asset := makeAsset("empty-sw-host", model.AssetTypeServer)
+	require.NoError(t, s.UpsertAsset(ctx, asset))
+
+	sw := []model.InstalledSoftware{
+		makeSoftware(asset.ID, "pkg", "1.0", "dpkg"),
+	}
+	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw))
+
+	// Replace with empty
+	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, nil))
+
+	got, err := s.ListSoftware(ctx, asset.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestListSoftware_NoResults(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	asset := makeAsset("no-sw-host", model.AssetTypeServer)
+	require.NoError(t, s.UpsertAsset(ctx, asset))
+
+	got, err := s.ListSoftware(ctx, asset.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestListSoftware_OrderedByName(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	asset := makeAsset("ordered-host", model.AssetTypeServer)
+	require.NoError(t, s.UpsertAsset(ctx, asset))
+
+	sw := []model.InstalledSoftware{
+		makeSoftware(asset.ID, "zlib", "1.2", "pacman"),
+		makeSoftware(asset.ID, "bash", "5.2", "pacman"),
+		makeSoftware(asset.ID, "curl", "8.0", "pacman"),
+	}
+	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw))
+
+	got, err := s.ListSoftware(ctx, asset.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	assert.Equal(t, "bash", got[0].SoftwareName)
+	assert.Equal(t, "curl", got[1].SoftwareName)
+	assert.Equal(t, "zlib", got[2].SoftwareName)
+}
+
+func TestUpsertSoftware_WithCPE(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	asset := makeAsset("cpe-host", model.AssetTypeServer)
+	require.NoError(t, s.UpsertAsset(ctx, asset))
+
+	sw := []model.InstalledSoftware{
+		{
+			ID:             uuid.Must(uuid.NewV7()),
+			AssetID:        asset.ID,
+			SoftwareName:   "openssl",
+			Version:        "3.1.4",
+			Vendor:         "OpenSSL Project",
+			CPE23:          "cpe:2.3:a:openssl:openssl:3.1.4:*:*:*:*:*:*:*",
+			PackageManager: "rpm",
+		},
+	}
+	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw))
+
+	got, err := s.ListSoftware(ctx, asset.ID)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "openssl", got[0].SoftwareName)
+	assert.Equal(t, "OpenSSL Project", got[0].Vendor)
+	assert.Equal(t, "cpe:2.3:a:openssl:openssl:3.1.4:*:*:*:*:*:*:*", got[0].CPE23)
+}
+
+// ---------------------------------------------------------------------------
 // Close
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// ListAssets — additional filters
+// ---------------------------------------------------------------------------
+
+func TestListAssets_FilterByIsAuthorized(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	auth := makeAsset("auth-host", model.AssetTypeServer)
+	auth.IsAuthorized = model.AuthorizationAuthorized
+	require.NoError(t, s.UpsertAsset(ctx, auth))
+
+	unauth := makeAsset("unauth-host", model.AssetTypeServer)
+	unauth.IsAuthorized = model.AuthorizationUnauthorized
+	require.NoError(t, s.UpsertAsset(ctx, unauth))
+
+	results, err := s.ListAssets(ctx, store.AssetFilter{IsAuthorized: string(model.AuthorizationAuthorized)})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "auth-host", results[0].Hostname)
+}
+
+func TestListAssets_FilterByIsManaged(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	managed := makeAsset("managed-host", model.AssetTypeServer)
+	managed.IsManaged = model.ManagedManaged
+	require.NoError(t, s.UpsertAsset(ctx, managed))
+
+	unmanaged := makeAsset("unmanaged-host", model.AssetTypeServer)
+	unmanaged.IsManaged = model.ManagedUnmanaged
+	require.NoError(t, s.UpsertAsset(ctx, unmanaged))
+
+	results, err := s.ListAssets(ctx, store.AssetFilter{IsManaged: string(model.ManagedManaged)})
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "managed-host", results[0].Hostname)
+}
+
+// ---------------------------------------------------------------------------
+// Concurrent access
+// ---------------------------------------------------------------------------
+
+func TestConcurrentAccess(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Insert assets sequentially to avoid SQLite BUSY contention.
+	const numAssets = 10
+	for i := 0; i < numAssets; i++ {
+		hostname := fmt.Sprintf("concurrent-host-%d", i)
+		asset := makeAsset(hostname, model.AssetTypeServer)
+		require.NoError(t, s.UpsertAsset(ctx, asset))
+	}
+
+	// Concurrent reads should be safe (WAL mode allows this).
+	const numReaders = 10
+	errs := make(chan error, numReaders)
+
+	for i := 0; i < numReaders; i++ {
+		go func() {
+			_, err := s.ListAssets(ctx, store.AssetFilter{})
+			errs <- err
+		}()
+	}
+
+	for i := 0; i < numReaders; i++ {
+		err := <-errs
+		assert.NoError(t, err, "concurrent ListAssets should not error")
+	}
+
+	all, err := s.ListAssets(ctx, store.AssetFilter{})
+	require.NoError(t, err)
+	assert.Len(t, all, numAssets)
+}
 
 func TestClose(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "close_test.db")

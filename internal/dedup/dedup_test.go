@@ -85,6 +85,14 @@ func (m *mockStore) CompleteScanRun(_ context.Context, _ uuid.UUID, _ model.Scan
 
 func (m *mockStore) GetLatestScanRun(_ context.Context) (*model.ScanRun, error) { return nil, nil }
 
+func (m *mockStore) UpsertSoftware(_ context.Context, _ uuid.UUID, _ []model.InstalledSoftware) error {
+	return nil
+}
+
+func (m *mockStore) ListSoftware(_ context.Context, _ uuid.UUID) ([]model.InstalledSoftware, error) {
+	return nil, nil
+}
+
 func (m *mockStore) Migrate(_ context.Context) error { return nil }
 
 func (m *mockStore) Close() error { return nil }
@@ -241,6 +249,42 @@ func TestDedup_IntraBatchDedup_DifferentTypes(t *testing.T) {
 
 	assert.Len(t, res.Assets, 2, "same hostname with different types are distinct")
 	assert.Equal(t, 2, res.NewCount)
+}
+
+func TestDedup_EmptyInput(t *testing.T) {
+	ms := newMockStore()
+	dd := New(ms)
+	ctx := context.Background()
+
+	res, err := dd.Deduplicate(ctx, nil)
+	require.NoError(t, err)
+	assert.Empty(t, res.Assets)
+	assert.Equal(t, 0, res.NewCount)
+	assert.Equal(t, 0, res.UpdatedCount)
+
+	res2, err := dd.Deduplicate(ctx, []model.Asset{})
+	require.NoError(t, err)
+	assert.Empty(t, res2.Assets)
+	assert.Equal(t, 0, res2.NewCount)
+	assert.Equal(t, 0, res2.UpdatedCount)
+}
+
+func TestDedup_NewAssetFirstSeenEqualsLastSeen(t *testing.T) {
+	ms := newMockStore()
+	dd := New(ms)
+	ctx := context.Background()
+
+	assets := []model.Asset{
+		{Hostname: "fresh-host", AssetType: model.AssetTypeWorkstation, DiscoverySource: "test"},
+	}
+
+	res, err := dd.Deduplicate(ctx, assets)
+	require.NoError(t, err)
+	require.Len(t, res.Assets, 1)
+
+	assert.Equal(t, res.Assets[0].FirstSeenAt, res.Assets[0].LastSeenAt,
+		"for a new asset, FirstSeenAt must equal LastSeenAt")
+	assert.False(t, res.Assets[0].FirstSeenAt.IsZero(), "timestamps must not be zero")
 }
 
 func TestDedup_MergesOSInfo(t *testing.T) {
