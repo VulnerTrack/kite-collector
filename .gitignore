@@ -27,6 +27,15 @@ go.work.sum
 # env file
 .env
 
+# Build output
+bin/
+
+# Runtime data
+data/
+
+# Claude Code
+.claude/
+
 # Editor/IDE
 # .idea/
 # .vscode/
