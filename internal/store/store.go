@@ -69,6 +69,14 @@ type Store interface {
 	// nil when no scan runs exist.
 	GetLatestScanRun(ctx context.Context) (*model.ScanRun, error)
 
+	// UpsertSoftware replaces all installed software records for the given
+	// asset. It deletes existing rows for assetID and inserts the new set
+	// inside a single transaction (full replacement per scan).
+	UpsertSoftware(ctx context.Context, assetID uuid.UUID, software []model.InstalledSoftware) error
+
+	// ListSoftware returns all installed software records for the given asset.
+	ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error)
+
 	// Migrate creates the schema tables and indexes if they do not exist.
 	Migrate(ctx context.Context) error
 

@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -188,45 +188,19 @@ func collectNetworkInterfaces() ([]model.NetworkInterface, error) {
 	return result, nil
 }
 
-// CollectInstalledSoftware enumerates installed packages on the host. On
-// Debian-based Linux it uses dpkg-query; on other platforms it returns an
-// empty slice (graceful degradation).
+// CollectInstalledSoftware enumerates installed packages on the host using
+// all available package manager collectors (dpkg, pacman, rpm).
 func CollectInstalledSoftware(ctx context.Context) ([]model.InstalledSoftware, error) {
 	return collectInstalledSoftware(ctx)
 }
 
 func collectInstalledSoftware(ctx context.Context) ([]model.InstalledSoftware, error) {
-	if runtime.GOOS != "linux" {
-		return nil, nil
+	reg := software.NewRegistry()
+	result := reg.Collect(ctx)
+	if result.HasErrors() {
+		slog.Warn("agent probe: software parse errors", "count", result.TotalErrors())
 	}
-
-	// Try dpkg-query for Debian-based systems.
-	out, err := exec.CommandContext(ctx,
-		"dpkg-query", "-W", "-f=${Package}\t${Version}\n",
-	).Output()
-	if err != nil {
-		slog.Debug("agent probe: dpkg-query not available", "error", err)
-		return nil, nil // graceful degradation
-	}
-
-	var software []model.InstalledSoftware
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) != 2 || parts[0] == "" {
-			continue
-		}
-		sw := model.InstalledSoftware{
-			ID:             uuid.Must(uuid.NewV7()),
-			SoftwareName:   parts[0],
-			Version:        parts[1],
-			PackageManager: "dpkg",
-		}
-		software = append(software, sw)
-	}
-
-	return software, nil
+	return result.Items, nil
 }
 
 // ensure Probe satisfies the discovery.Source interface at compile time.

@@ -616,6 +616,120 @@ func (s *SQLiteStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, err
 }
 
 // ---------------------------------------------------------------------------
+// Installed Software
+// ---------------------------------------------------------------------------
+
+const softwareColumns = `id, asset_id, software_name, vendor, version, cpe23, package_manager`
+
+// scanSoftware reads a single row from the result set into an InstalledSoftware.
+func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSoftware, error) {
+	var s model.InstalledSoftware
+	var (
+		idStr      string
+		assetIDStr string
+		vendor     sql.NullString
+		cpe23      sql.NullString
+		pkgMgr     sql.NullString
+	)
+	err := row.Scan(
+		&idStr,
+		&assetIDStr,
+		&s.SoftwareName,
+		&vendor,
+		&s.Version,
+		&cpe23,
+		&pkgMgr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	s.ID, err = uuid.Parse(idStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse software id: %w", err)
+	}
+	s.AssetID, err = uuid.Parse(assetIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse software asset_id: %w", err)
+	}
+	s.Vendor = vendor.String
+	s.CPE23 = cpe23.String
+	s.PackageManager = pkgMgr.String
+
+	return &s, nil
+}
+
+// UpsertSoftware replaces all installed software records for the given asset.
+// It deletes existing rows and inserts the new set inside a single transaction.
+func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, software []model.InstalledSoftware) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM installed_software WHERE asset_id = ?`, assetID.String())
+	if err != nil {
+		return fmt.Errorf("delete old software for %s: %w", assetID, err)
+	}
+
+	if len(software) == 0 {
+		return tx.Commit()
+	}
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare insert software: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for i := range software {
+		_, err = stmt.ExecContext(ctx,
+			software[i].ID.String(),
+			assetID.String(),
+			software[i].SoftwareName,
+			software[i].Vendor, // NOT NULL DEFAULT '' in schema
+			software[i].Version,
+			nullStr(software[i].CPE23),
+			nullStr(software[i].PackageManager),
+		)
+		if err != nil {
+			return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// ListSoftware returns all installed software records for the given asset,
+// ordered by software name.
+func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = ? ORDER BY software_name`,
+		assetID.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list software: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var software []model.InstalledSoftware
+	for rows.Next() {
+		sw, err := scanSoftware(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan software row: %w", err)
+		}
+		software = append(software, *sw)
+	}
+	return software, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
