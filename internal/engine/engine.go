@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/audit"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/dedup"
@@ -142,6 +143,53 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		}
 	}
 
+	// Configuration audit phase: run enabled auditors on the agent asset.
+	var findingsCount int
+	if cfg.Audit.Enabled {
+		if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
+			var agentAsset model.Asset
+			for _, a := range assets {
+				if a.ID == agentID {
+					agentAsset = a
+					break
+				}
+			}
+
+			auditReg := audit.NewRegistry()
+			if cfg.Audit.SSH.Enabled {
+				auditReg.Register(audit.NewSSH(cfg.Audit.SSH.ConfigPath))
+			}
+			if cfg.Audit.Firewall.Enabled {
+				auditReg.Register(audit.NewFirewall())
+			}
+			if cfg.Audit.Kernel.Enabled {
+				auditReg.Register(audit.NewKernel())
+			}
+			if cfg.Audit.Permissions.Enabled {
+				auditReg.Register(audit.NewPermissions(cfg.Audit.Permissions.Paths))
+			}
+			if cfg.Audit.Service.Enabled {
+				auditReg.Register(audit.NewService(cfg.Audit.Service.CriticalPorts))
+			}
+
+			findings, auditErr := auditReg.AuditAll(ctx, agentAsset)
+			if auditErr != nil {
+				slog.Warn("engine: audit phase failed", "error", auditErr)
+			}
+			if len(findings) > 0 {
+				for i := range findings {
+					findings[i].ScanRunID = scanID
+				}
+				if err := e.store.InsertFindings(ctx, findings); err != nil {
+					slog.Error("engine: failed to persist findings", "error", err, "count", len(findings))
+				} else {
+					findingsCount = len(findings)
+					slog.Info("engine: audit complete", "findings", findingsCount)
+				}
+			}
+		}
+	}
+
 	staleAssets, err := e.store.GetStaleAssets(ctx, cfg.StaleThresholdDuration())
 	if err != nil {
 		slog.Warn("engine: failed to detect stale assets", "error", err)
@@ -212,6 +260,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		EventsEmitted:  len(events),
 		SoftwareCount:   softwareCount,
 		SoftwareErrors:  softwareErrors,
+		FindingsCount:   findingsCount,
 		CoveragePercent: coveragePct,
 	}
 
