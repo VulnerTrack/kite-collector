@@ -30,6 +30,8 @@ import (
 	dockerdisc "github.com/vulnertrack/kite-collector/internal/discovery/docker"
 	"github.com/vulnertrack/kite-collector/internal/discovery/mdm"
 	"github.com/vulnertrack/kite-collector/internal/discovery/network"
+	"github.com/vulnertrack/kite-collector/internal/discovery/proxmox"
+	"github.com/vulnertrack/kite-collector/internal/discovery/snmp"
 	"github.com/vulnertrack/kite-collector/internal/discovery/unifi"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	"github.com/vulnertrack/kite-collector/internal/engine"
@@ -205,6 +207,8 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(cmdb.NewNetBox())
 	registry.Register(dockerdisc.New())
 	registry.Register(unifi.New())
+	registry.Register(proxmox.New())
+	registry.Register(snmp.New())
 
 	// Set up metrics.
 	met := metrics.New()
@@ -637,6 +641,8 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 	registry.Register(cmdb.NewNetBox())
 	registry.Register(dockerdisc.New())
 	registry.Register(unifi.New())
+	registry.Register(proxmox.New())
+	registry.Register(snmp.New())
 
 	met := metrics.New()
 	var metricsSrv *http.Server
