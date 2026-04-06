@@ -819,6 +819,9 @@ func runReport(dbPath, format, outputPath string) error {
 		os.Stdout = f
 	}
 
+	// Collect findings for the report.
+	allFindings, _ := st.ListFindings(ctx, store.FindingFilter{})
+
 	switch strings.ToLower(format) {
 	case "json":
 		report := map[string]any{
@@ -828,6 +831,10 @@ func runReport(dbPath, format, outputPath string) error {
 		}
 		if latestRun != nil {
 			report["latest_scan"] = latestRun
+		}
+		if len(allFindings) > 0 {
+			report["findings"] = allFindings
+			report["total_findings"] = len(allFindings)
 		}
 		return formatJSON(report)
 	case "csv":
