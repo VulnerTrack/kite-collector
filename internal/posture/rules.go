@@ -6,11 +6,11 @@ import "github.com/vulnertrack/kite-collector/internal/model"
 // All RequiredCWEs must be present in the asset's findings for the rule
 // to match.
 type Rule struct {
-	CAPECID      string
-	CAPECName    string
-	RequiredCWEs []string       // ALL must be present
-	Likelihood   model.Severity // reuse severity enum for likelihood
-	Mitigation   string
+	CAPECID    string
+	CAPECName  string
+	Likelihood model.Severity // reuse severity enum for likelihood
+	Mitigation string
+	RequiredCWEs []string // ALL must be present
 }
 
 // Rules defines the static CWE→CAPEC mapping table. Each rule represents

@@ -22,9 +22,9 @@ type kernelCheck struct {
 	Severity    model.Severity
 	Remediation string
 	CISControl  string
-	Expected    string
 	// IsInsecure returns true when the sysctl value is insecure.
 	IsInsecure func(value string) bool
+	Expected   string
 }
 
 var kernelChecks = []kernelCheck{

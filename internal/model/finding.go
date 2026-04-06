@@ -8,9 +8,7 @@ import (
 
 // ConfigFinding represents a single configuration weakness discovered on an asset.
 type ConfigFinding struct {
-	ID          uuid.UUID `json:"id"`
-	AssetID     uuid.UUID `json:"asset_id"`
-	ScanRunID   uuid.UUID `json:"scan_run_id"`
+	Timestamp   time.Time `json:"timestamp"`
 	Auditor     string    `json:"auditor"`
 	CheckID     string    `json:"check_id"`
 	Title       string    `json:"title"`
@@ -21,5 +19,7 @@ type ConfigFinding struct {
 	Expected    string    `json:"expected"`
 	Remediation string    `json:"remediation"`
 	CISControl  string    `json:"cis_control,omitempty"`
-	Timestamp   time.Time `json:"timestamp"`
+	ID          uuid.UUID `json:"id"`
+	AssetID     uuid.UUID `json:"asset_id"`
+	ScanRunID   uuid.UUID `json:"scan_run_id"`
 }

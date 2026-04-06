@@ -17,7 +17,6 @@ import (
 // serviceCheck defines a check for a specific listening service.
 type serviceCheck struct {
 	ID          string
-	Port        int
 	ServiceName string
 	Title       string
 	CWEID       string
@@ -25,6 +24,7 @@ type serviceCheck struct {
 	Severity    model.Severity
 	Remediation string
 	CISControl  string
+	Port        int
 }
 
 var defaultServiceChecks = []serviceCheck{
@@ -111,8 +111,8 @@ var postgresCheck = serviceCheck{
 
 // ListeningPort represents a port found by parsing ss or /proc/net/tcp.
 type ListeningPort struct {
-	Port    int
 	Address string // e.g., "0.0.0.0", "127.0.0.1", "::"
+	Port    int
 }
 
 // Service audits listening network services.
@@ -164,7 +164,7 @@ func ParseSSOutput(raw string) []ListeningPort {
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Skip header.
-		if strings.HasPrefix(line, "State") || strings.HasPrefix(line, "LISTEN") == false {
+		if strings.HasPrefix(line, "State") || !strings.HasPrefix(line, "LISTEN") {
 			if !strings.Contains(line, "LISTEN") {
 				continue
 			}

@@ -181,8 +181,8 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 				for i := range findings {
 					findings[i].ScanRunID = scanID
 				}
-				if err := e.store.InsertFindings(ctx, findings); err != nil {
-					slog.Error("engine: failed to persist findings", "error", err, "count", len(findings))
+				if fErr := e.store.InsertFindings(ctx, findings); fErr != nil {
+					slog.Error("engine: failed to persist findings", "error", fErr, "count", len(findings))
 				} else {
 					findingsCount = len(findings)
 					slog.Info("engine: audit complete", "findings", findingsCount)
@@ -192,9 +192,9 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 				if cfg.Posture.Enabled {
 					assessments := posture.Evaluate(findings, agentID, scanID)
 					if len(assessments) > 0 {
-						if err := e.store.InsertPostureAssessments(ctx, assessments); err != nil {
+						if pErr := e.store.InsertPostureAssessments(ctx, assessments); pErr != nil {
 							slog.Error("engine: failed to persist posture assessments",
-								"error", err, "count", len(assessments))
+								"error", pErr, "count", len(assessments))
 						} else {
 							postureCount = len(assessments)
 							slog.Info("engine: posture analysis complete", "assessments", postureCount)

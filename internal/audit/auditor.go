@@ -25,8 +25,8 @@ type Auditor interface {
 
 // Registry manages a set of auditors and orchestrates parallel execution.
 type Registry struct {
-	mu       sync.RWMutex
 	auditors map[string]Auditor
+	mu       sync.RWMutex
 }
 
 // NewRegistry creates an empty auditor registry.
@@ -56,9 +56,9 @@ func (r *Registry) AuditAll(ctx context.Context, asset model.Asset) ([]model.Con
 	r.mu.RUnlock()
 
 	type result struct {
-		findings []model.ConfigFinding
-		name     string
 		err      error
+		name     string
+		findings []model.ConfigFinding
 	}
 
 	ch := make(chan result, len(auditors))

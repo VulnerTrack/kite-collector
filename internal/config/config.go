@@ -14,8 +14,6 @@ import (
 type Config struct {
 	Discovery      DiscoveryConfig      `mapstructure:"discovery"`
 	Classification ClassificationConfig `mapstructure:"classification"`
-	Audit          AuditConfig          `mapstructure:"audit"`
-	Posture        PostureConfig        `mapstructure:"posture"`
 	Streaming      StreamingConfig      `mapstructure:"streaming"`
 	Postgres       PostgresConfig       `mapstructure:"postgres"`
 	LogLevel       string               `mapstructure:"log_level"`
@@ -23,6 +21,8 @@ type Config struct {
 	DataDir        string               `mapstructure:"data_dir"`
 	StaleThreshold string               `mapstructure:"stale_threshold"` // duration string like "168h"
 	Metrics        MetricsConfig        `mapstructure:"metrics"`
+	Audit          AuditConfig          `mapstructure:"audit"`
+	Posture        PostureConfig        `mapstructure:"posture"`
 }
 
 // DiscoveryConfig holds configuration for all discovery sources.
@@ -93,11 +93,11 @@ type TLSConfig struct {
 // AuditConfig configures the configuration audit subsystem.
 type AuditConfig struct {
 	SSH         SSHAuditConfig         `mapstructure:"ssh"`
-	Firewall    AuditorToggle          `mapstructure:"firewall"`
-	Kernel      AuditorToggle          `mapstructure:"kernel"`
+	Profile     string                 `mapstructure:"profile"` // minimal, standard, full
 	Permissions PermissionsAuditConfig `mapstructure:"permissions"`
 	Service     ServiceAuditConfig     `mapstructure:"service"`
-	Profile     string                 `mapstructure:"profile"` // minimal, standard, full
+	Firewall    AuditorToggle          `mapstructure:"firewall"`
+	Kernel      AuditorToggle          `mapstructure:"kernel"`
 	Enabled     bool                   `mapstructure:"enabled"`
 }
 
