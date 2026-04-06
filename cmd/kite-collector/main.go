@@ -35,6 +35,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/snmp"
 	"github.com/vulnertrack/kite-collector/internal/discovery/unifi"
 	"github.com/vulnertrack/kite-collector/internal/discovery/vps"
+	wazuhdisc "github.com/vulnertrack/kite-collector/internal/discovery/wazuh"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	"github.com/vulnertrack/kite-collector/internal/engine"
 	"github.com/vulnertrack/kite-collector/internal/metrics"
@@ -250,6 +251,7 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(vps.NewOVHcloud())
 	registry.Register(vps.NewUpCloud())
 	registry.Register(vps.NewKamatera())
+	registry.Register(wazuhdisc.New())
 
 	// Set up metrics.
 	met := metrics.New()
@@ -794,6 +796,7 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 	registry.Register(vps.NewOVHcloud())
 	registry.Register(vps.NewUpCloud())
 	registry.Register(vps.NewKamatera())
+	registry.Register(wazuhdisc.New())
 
 	met := metrics.New()
 	var metricsSrv *http.Server
