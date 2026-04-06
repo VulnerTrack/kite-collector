@@ -57,6 +57,10 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 
 	creds := loadAWSCredentials()
 	if creds.accessKey == "" || creds.secretKey == "" {
+		// Source is explicitly configured — fail fast instead of silently skipping.
+		if cfg != nil {
+			return nil, fmt.Errorf("aws_ec2: source enabled but AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not set")
+		}
 		slog.Warn("aws_ec2: AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not set, skipping discovery")
 		return nil, nil
 	}

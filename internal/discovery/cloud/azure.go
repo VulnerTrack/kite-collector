@@ -56,12 +56,18 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	}
 
 	if creds.tenantID == "" || creds.clientID == "" || creds.clientSecret == "" {
+		if cfg != nil {
+			return nil, fmt.Errorf("azure_vm: source enabled but AZURE_TENANT_ID, AZURE_CLIENT_ID, or AZURE_CLIENT_SECRET not set")
+		}
 		slog.Warn("azure_vm: AZURE_TENANT_ID, AZURE_CLIENT_ID, or AZURE_CLIENT_SECRET not set, skipping discovery")
 		return nil, nil
 	}
 
 	token, err := az.acquireToken(ctx, creds)
 	if err != nil {
+		if cfg != nil {
+			return nil, fmt.Errorf("azure_vm: source enabled but failed to acquire OAuth2 token: %w", err)
+		}
 		slog.Warn("azure_vm: failed to acquire OAuth2 token, skipping discovery",
 			"error", err,
 		)

@@ -27,12 +27,19 @@ type PostgresStore struct {
 var _ store.Store = (*PostgresStore)(nil)
 
 // New creates a PostgresStore by parsing the DSN and establishing a connection
-// pool. The pool verifies connectivity lazily on first use.
+// pool with bounded resource limits. The pool verifies connectivity lazily on
+// first use.
 func New(dsn string) (*PostgresStore, error) {
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("postgres parse config: %w", err)
 	}
+
+	config.MaxConns = 25
+	config.MinConns = 2
+	config.MaxConnLifetime = 30 * time.Minute
+	config.MaxConnIdleTime = 5 * time.Minute
+	config.ConnConfig.ConnectTimeout = 10 * time.Second
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
@@ -232,6 +239,21 @@ func (s *PostgresStore) UpsertAssets(ctx context.Context, assets []model.Asset) 
 		return 0, 0, fmt.Errorf("commit tx: %w", err)
 	}
 	return inserted, updated, nil
+}
+
+// GetAssetByID retrieves the asset identified by id. Returns store.ErrNotFound
+// when the id does not exist.
+func (s *PostgresStore) GetAssetByID(ctx context.Context, id uuid.UUID) (*model.Asset, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE id = $1`, id)
+	a, err := scanAsset(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get asset by id: %w", err)
+	}
+	return a, nil
 }
 
 // GetAssetByNaturalKey retrieves the asset whose precomputed SHA-256 natural

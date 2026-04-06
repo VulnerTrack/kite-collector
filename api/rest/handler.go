@@ -5,6 +5,7 @@ package rest
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -97,25 +98,18 @@ func (h *Handler) handleGetAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The Store interface does not expose a GetAssetByID method, so we
-	// retrieve the full list (unbounded) and scan for the matching ID.
-	// This is adequate for the expected dataset sizes. If the asset table
-	// grows large, a dedicated store method should be added.
-	assets, err := h.store.ListAssets(r.Context(), store.AssetFilter{})
+	asset, err := h.store.GetAssetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "asset not found")
+		return
+	}
 	if err != nil {
-		h.logger.Error("list assets failed", "error", err)
+		h.logger.Error("get asset by id failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	for i := range assets {
-		if assets[i].ID == id {
-			writeJSON(w, http.StatusOK, assets[i])
-			return
-		}
-	}
-
-	writeError(w, http.StatusNotFound, "asset not found")
+	writeJSON(w, http.StatusOK, asset)
 }
 
 func (h *Handler) handleListAssets(w http.ResponseWriter, r *http.Request) {

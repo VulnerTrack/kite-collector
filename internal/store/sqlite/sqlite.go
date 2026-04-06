@@ -234,6 +234,21 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 	return inserted, updated, nil
 }
 
+// GetAssetByID retrieves the asset identified by id. Returns store.ErrNotFound
+// when the id does not exist.
+func (s *SQLiteStore) GetAssetByID(ctx context.Context, id uuid.UUID) (*model.Asset, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE id = ?`, id.String())
+	a, err := scanAsset(row)
+	if err == sql.ErrNoRows {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get asset by id: %w", err)
+	}
+	return a, nil
+}
+
 // GetAssetByNaturalKey retrieves the asset whose precomputed SHA-256 natural
 // key matches key. Returns (nil, nil) when no match is found.
 func (s *SQLiteStore) GetAssetByNaturalKey(ctx context.Context, key string) (*model.Asset, error) {

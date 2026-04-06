@@ -2,11 +2,15 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
+
+// ErrNotFound is returned when a requested record does not exist.
+var ErrNotFound = errors.New("not found")
 
 // AssetFilter constrains which assets are returned by ListAssets.
 type AssetFilter struct {
@@ -37,6 +41,10 @@ type Store interface {
 	// UpsertAssets atomically upserts a batch of assets inside a single
 	// transaction and returns the number of inserts and updates performed.
 	UpsertAssets(ctx context.Context, assets []model.Asset) (inserted, updated int, err error)
+
+	// GetAssetByID retrieves the asset identified by id.
+	// Returns store.ErrNotFound when the id does not exist.
+	GetAssetByID(ctx context.Context, id uuid.UUID) (*model.Asset, error)
 
 	// GetAssetByNaturalKey retrieves the asset whose SHA-256 natural key
 	// (hostname|asset_type) matches key. Returns nil when not found.

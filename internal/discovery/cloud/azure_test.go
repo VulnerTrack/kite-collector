@@ -89,9 +89,9 @@ func TestAzureDiscover_NoCredentials(t *testing.T) {
 	t.Setenv("AZURE_SUBSCRIPTION_ID", "")
 
 	az := NewAzure()
-	assets, err := az.Discover(context.Background(), map[string]any{})
-	require.NoError(t, err)
-	assert.Empty(t, assets, "should return nil when credentials are missing")
+	_, err := az.Discover(context.Background(), map[string]any{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "source enabled")
 }
 
 func TestAzureListSubscriptions_Mock(t *testing.T) {

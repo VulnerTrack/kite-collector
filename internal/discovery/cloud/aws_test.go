@@ -72,12 +72,12 @@ func TestAWSDiscover_NoCredentials(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
 
 	aws := NewAWS()
-	assets, err := aws.Discover(context.Background(), map[string]any{
+	_, err := aws.Discover(context.Background(), map[string]any{
 		"regions": []any{"us-east-1"},
 	})
 
-	require.NoError(t, err)
-	assert.Empty(t, assets, "should return nil when credentials are missing")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "source enabled")
 }
 
 func TestAWSDiscover_MockEC2(t *testing.T) {

@@ -67,6 +67,18 @@ func (m *mockStore) UpsertAssets(_ context.Context, assets []model.Asset) (int, 
 	return inserted, updated, nil
 }
 
+func (m *mockStore) GetAssetByID(_ context.Context, id uuid.UUID) (*model.Asset, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, a := range m.assets {
+		if a.ID == id {
+			cp := a
+			return &cp, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+
 func (m *mockStore) GetAssetByNaturalKey(_ context.Context, key string) (*model.Asset, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

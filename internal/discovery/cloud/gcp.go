@@ -49,12 +49,18 @@ func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 	)
 
 	if project == "" {
+		if cfg != nil {
+			return nil, fmt.Errorf("gcp_compute: source enabled but project not specified in config")
+		}
 		slog.Warn("gcp_compute: project not specified in config, skipping discovery")
 		return nil, nil
 	}
 
 	token, err := obtainGCPToken(ctx)
 	if err != nil {
+		if cfg != nil {
+			return nil, fmt.Errorf("gcp_compute: source enabled but could not obtain access token: %w", err)
+		}
 		slog.Warn("gcp_compute: could not obtain access token, skipping discovery",
 			"error", err,
 		)

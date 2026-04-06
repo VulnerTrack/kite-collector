@@ -87,9 +87,9 @@ func TestGuessOSFromDisks(t *testing.T) {
 
 func TestGCPDiscover_NoProject(t *testing.T) {
 	gcp := NewGCP()
-	assets, err := gcp.Discover(context.Background(), map[string]any{})
-	require.NoError(t, err)
-	assert.Empty(t, assets, "should return nil when project is missing")
+	_, err := gcp.Discover(context.Background(), map[string]any{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "source enabled")
 }
 
 func TestFetchDiskSourceImage(t *testing.T) {
