@@ -31,6 +31,7 @@ import (
 	dockerdisc "github.com/vulnertrack/kite-collector/internal/discovery/docker"
 	"github.com/vulnertrack/kite-collector/internal/discovery/mdm"
 	"github.com/vulnertrack/kite-collector/internal/discovery/network"
+	"github.com/vulnertrack/kite-collector/internal/discovery/paas"
 	"github.com/vulnertrack/kite-collector/internal/discovery/proxmox"
 	"github.com/vulnertrack/kite-collector/internal/discovery/snmp"
 	"github.com/vulnertrack/kite-collector/internal/discovery/unifi"
@@ -252,6 +253,9 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(vps.NewUpCloud())
 	registry.Register(vps.NewKamatera())
 	registry.Register(wazuhdisc.New())
+	registry.Register(paas.NewHeroku())
+	registry.Register(paas.NewRender())
+	registry.Register(paas.NewFlyIO())
 
 	// Set up metrics.
 	met := metrics.New()
