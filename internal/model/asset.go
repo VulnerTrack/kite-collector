@@ -18,6 +18,8 @@ type Asset struct {
 	Hostname        string             `json:"hostname"`
 	OSFamily        string             `json:"os_family"`
 	OSVersion       string             `json:"os_version"`
+	KernelVersion   string             `json:"kernel_version,omitempty"`
+	Architecture    string             `json:"architecture,omitempty"`
 	Environment     string             `json:"environment"`
 	Owner           string             `json:"owner"`
 	Criticality     string             `json:"criticality"`
@@ -53,6 +55,7 @@ type InstalledSoftware struct {
 	Version        string    `json:"version"`
 	CPE23          string    `json:"cpe23"`
 	PackageManager string    `json:"package_manager"`
+	Architecture   string    `json:"architecture,omitempty"`
 	ID             uuid.UUID `json:"id"`
 	AssetID        uuid.UUID `json:"asset_id"`
 }

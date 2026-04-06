@@ -14,6 +14,8 @@ import (
 type Config struct {
 	Discovery      DiscoveryConfig      `mapstructure:"discovery"`
 	Classification ClassificationConfig `mapstructure:"classification"`
+	Audit          AuditConfig          `mapstructure:"audit"`
+	Posture        PostureConfig        `mapstructure:"posture"`
 	Streaming      StreamingConfig      `mapstructure:"streaming"`
 	Postgres       PostgresConfig       `mapstructure:"postgres"`
 	LogLevel       string               `mapstructure:"log_level"`
@@ -88,6 +90,45 @@ type TLSConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`
 }
 
+// AuditConfig configures the configuration audit subsystem.
+type AuditConfig struct {
+	SSH         SSHAuditConfig         `mapstructure:"ssh"`
+	Firewall    AuditorToggle          `mapstructure:"firewall"`
+	Kernel      AuditorToggle          `mapstructure:"kernel"`
+	Permissions PermissionsAuditConfig `mapstructure:"permissions"`
+	Service     ServiceAuditConfig     `mapstructure:"service"`
+	Profile     string                 `mapstructure:"profile"` // minimal, standard, full
+	Enabled     bool                   `mapstructure:"enabled"`
+}
+
+// AuditorToggle is a simple enabled/disabled toggle for an auditor.
+type AuditorToggle struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
+// SSHAuditConfig configures the SSH auditor.
+type SSHAuditConfig struct {
+	ConfigPath string `mapstructure:"config_path"`
+	Enabled    bool   `mapstructure:"enabled"`
+}
+
+// PermissionsAuditConfig configures the permissions auditor.
+type PermissionsAuditConfig struct {
+	Paths   []string `mapstructure:"paths"`
+	Enabled bool     `mapstructure:"enabled"`
+}
+
+// ServiceAuditConfig configures the service auditor.
+type ServiceAuditConfig struct {
+	CriticalPorts []int `mapstructure:"critical_ports"`
+	Enabled       bool  `mapstructure:"enabled"`
+}
+
+// PostureConfig configures the posture analysis engine.
+type PostureConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 // PostgresConfig configures the PostgreSQL backend for streaming mode.
 type PostgresConfig struct {
 	DSN string `mapstructure:"dsn"`
@@ -109,6 +150,16 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("discovery.sources.agent.collect_interfaces", true)
 	v.SetDefault("metrics.enabled", false)
 	v.SetDefault("metrics.listen", ":9090")
+	v.SetDefault("audit.enabled", true)
+	v.SetDefault("audit.profile", "standard")
+	v.SetDefault("audit.ssh.enabled", true)
+	v.SetDefault("audit.ssh.config_path", "/etc/ssh/sshd_config")
+	v.SetDefault("audit.firewall.enabled", true)
+	v.SetDefault("audit.kernel.enabled", true)
+	v.SetDefault("audit.permissions.enabled", true)
+	v.SetDefault("audit.service.enabled", true)
+	v.SetDefault("audit.service.critical_ports", []int{23, 21, 111, 3306, 5432, 6379, 9200})
+	v.SetDefault("posture.enabled", true)
 	v.SetDefault("streaming.interval", "6h")
 	v.SetDefault("streaming.otlp.protocol", "grpc")
 

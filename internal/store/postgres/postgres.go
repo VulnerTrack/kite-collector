@@ -5,6 +5,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -69,7 +70,7 @@ func (s *PostgresStore) Close() error {
 // ---------------------------------------------------------------------------
 
 const assetColumns = `id, asset_type, hostname, os_family, os_version,
-	is_authorized, is_managed, environment, owner, criticality,
+	kernel_version, architecture, is_authorized, is_managed, environment, owner, criticality,
 	discovery_source, first_seen_at, last_seen_at, tags, natural_key`
 
 // scanAsset reads a single row into a model.Asset. The column order must match
@@ -77,13 +78,15 @@ const assetColumns = `id, asset_type, hostname, os_family, os_version,
 func scanAsset(row pgx.Row) (*model.Asset, error) {
 	var a model.Asset
 	var (
-		osFamily    *string
-		osVersion   *string
-		environment *string
-		owner       *string
-		criticality *string
-		tags        *string
-		naturalKey  *string
+		osFamily      *string
+		osVersion     *string
+		kernelVersion *string
+		architecture  *string
+		environment   *string
+		owner         *string
+		criticality   *string
+		tags          *string
+		naturalKey    *string
 	)
 	err := row.Scan(
 		&a.ID,
@@ -91,6 +94,8 @@ func scanAsset(row pgx.Row) (*model.Asset, error) {
 		&a.Hostname,
 		&osFamily,
 		&osVersion,
+		&kernelVersion,
+		&architecture,
 		&a.IsAuthorized,
 		&a.IsManaged,
 		&environment,
@@ -108,6 +113,8 @@ func scanAsset(row pgx.Row) (*model.Asset, error) {
 
 	a.OSFamily = derefStr(osFamily)
 	a.OSVersion = derefStr(osVersion)
+	a.KernelVersion = derefStr(kernelVersion)
+	a.Architecture = derefStr(architecture)
 	a.Environment = derefStr(environment)
 	a.Owner = derefStr(owner)
 	a.Criticality = derefStr(criticality)
@@ -139,10 +146,12 @@ func (s *PostgresStore) UpsertAsset(ctx context.Context, asset model.Asset) erro
 
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO assets (`+assetColumns+`)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		ON CONFLICT(hostname, asset_type) DO UPDATE SET
 			os_family        = EXCLUDED.os_family,
 			os_version       = EXCLUDED.os_version,
+			kernel_version   = EXCLUDED.kernel_version,
+			architecture     = EXCLUDED.architecture,
 			is_authorized    = EXCLUDED.is_authorized,
 			is_managed       = EXCLUDED.is_managed,
 			environment      = EXCLUDED.environment,
@@ -158,6 +167,8 @@ func (s *PostgresStore) UpsertAsset(ctx context.Context, asset model.Asset) erro
 		asset.Hostname,
 		nullStr(asset.OSFamily),
 		nullStr(asset.OSVersion),
+		nullStr(asset.KernelVersion),
+		nullStr(asset.Architecture),
 		string(asset.IsAuthorized),
 		string(asset.IsManaged),
 		nullStr(asset.Environment),
@@ -193,10 +204,12 @@ func (s *PostgresStore) UpsertAssets(ctx context.Context, assets []model.Asset) 
 		var xmax uint32
 		err = tx.QueryRow(ctx, `
 			INSERT INTO assets (`+assetColumns+`)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 			ON CONFLICT(hostname, asset_type) DO UPDATE SET
 				os_family        = EXCLUDED.os_family,
 				os_version       = EXCLUDED.os_version,
+				kernel_version   = EXCLUDED.kernel_version,
+				architecture     = EXCLUDED.architecture,
 				is_authorized    = EXCLUDED.is_authorized,
 				is_managed       = EXCLUDED.is_managed,
 				environment      = EXCLUDED.environment,
@@ -213,6 +226,8 @@ func (s *PostgresStore) UpsertAssets(ctx context.Context, assets []model.Asset) 
 			assets[i].Hostname,
 			nullStr(assets[i].OSFamily),
 			nullStr(assets[i].OSVersion),
+			nullStr(assets[i].KernelVersion),
+			nullStr(assets[i].Architecture),
 			string(assets[i].IsAuthorized),
 			string(assets[i].IsManaged),
 			nullStr(assets[i].Environment),
@@ -595,7 +610,7 @@ func (s *PostgresStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, e
 // Installed Software
 // ---------------------------------------------------------------------------
 
-const softwareColumns = `id, asset_id, software_name, vendor, version, cpe23, package_manager`
+const softwareColumns = `id, asset_id, software_name, vendor, version, cpe23, package_manager, architecture`
 
 // scanSoftware reads a single row into a model.InstalledSoftware.
 func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
@@ -603,6 +618,7 @@ func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
 	var (
 		cpe23  *string
 		pkgMgr *string
+		arch   *string
 	)
 	err := row.Scan(
 		&sw.ID,
@@ -612,12 +628,14 @@ func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
 		&sw.Version,
 		&cpe23,
 		&pkgMgr,
+		&arch,
 	)
 	if err != nil {
 		return nil, err
 	}
 	sw.CPE23 = derefStr(cpe23)
 	sw.PackageManager = derefStr(pkgMgr)
+	sw.Architecture = derefStr(arch)
 	return &sw, nil
 }
 
@@ -638,7 +656,7 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, s
 
 	for i := range software {
 		_, err = tx.Exec(ctx,
-			`INSERT INTO installed_software (`+softwareColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			`INSERT INTO installed_software (`+softwareColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 			software[i].ID,
 			assetID,
 			software[i].SoftwareName,
@@ -646,6 +664,7 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, s
 			software[i].Version,
 			nullStr(software[i].CPE23),
 			nullStr(software[i].PackageManager),
+			nullStr(software[i].Architecture),
 		)
 		if err != nil {
 			return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)
@@ -679,6 +698,300 @@ func (s *PostgresStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]
 		software = append(software, *sw)
 	}
 	return software, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Config Findings
+// ---------------------------------------------------------------------------
+
+const findingColumns = `id, asset_id, scan_run_id, auditor, check_id, title,
+	severity, cwe_id, cwe_name, evidence, expected, remediation, cis_control, timestamp`
+
+// scanFinding reads a single row into a model.ConfigFinding. The column order
+// must match findingColumns exactly.
+func scanFinding(row pgx.Row) (*model.ConfigFinding, error) {
+	var f model.ConfigFinding
+	var (
+		cweName     *string
+		evidence    *string
+		expected    *string
+		remediation *string
+		cisControl  *string
+	)
+	err := row.Scan(
+		&f.ID,
+		&f.AssetID,
+		&f.ScanRunID,
+		&f.Auditor,
+		&f.CheckID,
+		&f.Title,
+		&f.Severity,
+		&f.CWEID,
+		&cweName,
+		&evidence,
+		&expected,
+		&remediation,
+		&cisControl,
+		&f.Timestamp,
+	)
+	if err != nil {
+		return nil, err
+	}
+	f.CWEName = derefStr(cweName)
+	f.Evidence = derefStr(evidence)
+	f.Expected = derefStr(expected)
+	f.Remediation = derefStr(remediation)
+	f.CISControl = derefStr(cisControl)
+	return &f, nil
+}
+
+// scanFindings collects all rows from a pgx.Rows result set into a slice.
+func scanFindings(rows pgx.Rows) ([]model.ConfigFinding, error) {
+	defer rows.Close()
+	var findings []model.ConfigFinding
+	for rows.Next() {
+		f, err := scanFinding(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan finding row: %w", err)
+		}
+		findings = append(findings, *f)
+	}
+	return findings, rows.Err()
+}
+
+// InsertFindings persists a batch of config findings inside a single transaction.
+func (s *PostgresStore) InsertFindings(ctx context.Context, findings []model.ConfigFinding) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	for i := range findings {
+		_, err = tx.Exec(ctx,
+			`INSERT INTO config_findings (`+findingColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+			findings[i].ID,
+			findings[i].AssetID,
+			findings[i].ScanRunID,
+			findings[i].Auditor,
+			findings[i].CheckID,
+			findings[i].Title,
+			string(findings[i].Severity),
+			findings[i].CWEID,
+			nullStr(findings[i].CWEName),
+			nullStr(findings[i].Evidence),
+			nullStr(findings[i].Expected),
+			nullStr(findings[i].Remediation),
+			nullStr(findings[i].CISControl),
+			findings[i].Timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("insert finding %s: %w", findings[i].ID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// ListFindings returns config findings matching the supplied filter.
+func (s *PostgresStore) ListFindings(ctx context.Context, filter store.FindingFilter) ([]model.ConfigFinding, error) {
+	var (
+		clauses []string
+		args    []any
+		paramN  int
+	)
+
+	if filter.AssetID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("asset_id = $%d", paramN))
+		args = append(args, *filter.AssetID)
+	}
+	if filter.ScanRunID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("scan_run_id = $%d", paramN))
+		args = append(args, *filter.ScanRunID)
+	}
+	if filter.Auditor != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("auditor = $%d", paramN))
+		args = append(args, filter.Auditor)
+	}
+	if filter.Severity != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("severity = $%d", paramN))
+		args = append(args, filter.Severity)
+	}
+	if filter.CWEID != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("cwe_id = $%d", paramN))
+		args = append(args, filter.CWEID)
+	}
+
+	query := `SELECT ` + findingColumns + ` FROM config_findings`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY timestamp DESC"
+
+	if filter.Limit > 0 {
+		paramN++
+		query += fmt.Sprintf(" LIMIT $%d", paramN)
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		paramN++
+		query += fmt.Sprintf(" OFFSET $%d", paramN)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list findings: %w", err)
+	}
+	return scanFindings(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Posture Assessments
+// ---------------------------------------------------------------------------
+
+const postureColumns = `id, asset_id, scan_run_id, capec_id, capec_name,
+	finding_ids, likelihood, mitigation, timestamp`
+
+// scanPosture reads a single row into a model.PostureAssessment. The column
+// order must match postureColumns exactly. finding_ids is stored as JSONB.
+func scanPosture(row pgx.Row) (*model.PostureAssessment, error) {
+	var p model.PostureAssessment
+	var (
+		capecName  *string
+		findingIDs []byte
+		mitigation *string
+	)
+	err := row.Scan(
+		&p.ID,
+		&p.AssetID,
+		&p.ScanRunID,
+		&p.CAPECID,
+		&capecName,
+		&findingIDs,
+		&p.Likelihood,
+		&mitigation,
+		&p.Timestamp,
+	)
+	if err != nil {
+		return nil, err
+	}
+	p.CAPECName = derefStr(capecName)
+	p.Mitigation = derefStr(mitigation)
+	if findingIDs != nil {
+		if err := json.Unmarshal(findingIDs, &p.FindingIDs); err != nil {
+			return nil, fmt.Errorf("unmarshal finding_ids: %w", err)
+		}
+	}
+	return &p, nil
+}
+
+// scanPostures collects all rows from a pgx.Rows result set into a slice.
+func scanPostures(rows pgx.Rows) ([]model.PostureAssessment, error) {
+	defer rows.Close()
+	var assessments []model.PostureAssessment
+	for rows.Next() {
+		p, err := scanPosture(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan posture row: %w", err)
+		}
+		assessments = append(assessments, *p)
+	}
+	return assessments, rows.Err()
+}
+
+// InsertPostureAssessments persists a batch of posture assessments inside a
+// single transaction. FindingIDs are stored as JSONB.
+func (s *PostgresStore) InsertPostureAssessments(ctx context.Context, assessments []model.PostureAssessment) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	for i := range assessments {
+		findingIDs, err := json.Marshal(assessments[i].FindingIDs)
+		if err != nil {
+			return fmt.Errorf("marshal finding_ids for %s: %w", assessments[i].ID, err)
+		}
+
+		_, err = tx.Exec(ctx,
+			`INSERT INTO posture_assessments (`+postureColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			assessments[i].ID,
+			assessments[i].AssetID,
+			assessments[i].ScanRunID,
+			assessments[i].CAPECID,
+			nullStr(assessments[i].CAPECName),
+			findingIDs,
+			string(assessments[i].Likelihood),
+			nullStr(assessments[i].Mitigation),
+			assessments[i].Timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("insert posture assessment %s: %w", assessments[i].ID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// ListPostureAssessments returns posture assessments matching the supplied filter.
+func (s *PostgresStore) ListPostureAssessments(ctx context.Context, filter store.PostureFilter) ([]model.PostureAssessment, error) {
+	var (
+		clauses []string
+		args    []any
+		paramN  int
+	)
+
+	if filter.AssetID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("asset_id = $%d", paramN))
+		args = append(args, *filter.AssetID)
+	}
+	if filter.ScanRunID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("scan_run_id = $%d", paramN))
+		args = append(args, *filter.ScanRunID)
+	}
+	if filter.CAPECID != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("capec_id = $%d", paramN))
+		args = append(args, filter.CAPECID)
+	}
+
+	query := `SELECT ` + postureColumns + ` FROM posture_assessments`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY timestamp DESC"
+
+	if filter.Limit > 0 {
+		paramN++
+		query += fmt.Sprintf(" LIMIT $%d", paramN)
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		paramN++
+		query += fmt.Sprintf(" OFFSET $%d", paramN)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list posture assessments: %w", err)
+	}
+	return scanPostures(rows)
 }
 
 // ---------------------------------------------------------------------------

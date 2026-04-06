@@ -85,9 +85,41 @@ type Store interface {
 	// ListSoftware returns all installed software records for the given asset.
 	ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error)
 
+	// InsertFindings persists a batch of configuration audit findings.
+	InsertFindings(ctx context.Context, findings []model.ConfigFinding) error
+
+	// ListFindings returns configuration findings matching the supplied filter.
+	ListFindings(ctx context.Context, filter FindingFilter) ([]model.ConfigFinding, error)
+
+	// InsertPostureAssessments persists a batch of posture assessments.
+	InsertPostureAssessments(ctx context.Context, assessments []model.PostureAssessment) error
+
+	// ListPostureAssessments returns posture assessments matching the filter.
+	ListPostureAssessments(ctx context.Context, filter PostureFilter) ([]model.PostureAssessment, error)
+
 	// Migrate creates the schema tables and indexes if they do not exist.
 	Migrate(ctx context.Context) error
 
 	// Close releases all resources held by the store.
 	Close() error
+}
+
+// FindingFilter constrains which config findings are returned by ListFindings.
+type FindingFilter struct {
+	AssetID   *uuid.UUID
+	ScanRunID *uuid.UUID
+	Auditor   string
+	Severity  string
+	CWEID     string
+	Limit     int
+	Offset    int
+}
+
+// PostureFilter constrains which posture assessments are returned.
+type PostureFilter struct {
+	AssetID   *uuid.UUID
+	ScanRunID *uuid.UUID
+	CAPECID   string
+	Limit     int
+	Offset    int
 }

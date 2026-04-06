@@ -133,6 +133,20 @@ func (m *mockStore) ListSoftware(_ context.Context, assetID uuid.UUID) ([]model.
 	return m.software[assetID], nil
 }
 
+func (m *mockStore) InsertFindings(_ context.Context, _ []model.ConfigFinding) error { return nil }
+
+func (m *mockStore) ListFindings(_ context.Context, _ store.FindingFilter) ([]model.ConfigFinding, error) {
+	return nil, nil
+}
+
+func (m *mockStore) InsertPostureAssessments(_ context.Context, _ []model.PostureAssessment) error {
+	return nil
+}
+
+func (m *mockStore) ListPostureAssessments(_ context.Context, _ store.PostureFilter) ([]model.PostureAssessment, error) {
+	return nil, nil
+}
+
 func (m *mockStore) Migrate(_ context.Context) error { return nil }
 func (m *mockStore) Close() error                    { return nil }
 

@@ -10,6 +10,12 @@ import (
 // application. Fields that cannot be determined are set to "*" (ANY).
 // Returns empty string when both product and version are empty.
 func BuildCPE23(vendor, product, version string) string {
+	return BuildCPE23WithArch(vendor, product, version, "")
+}
+
+// BuildCPE23WithArch constructs a CPE 2.3 string with an optional target
+// hardware architecture in the target_hw field (position 10).
+func BuildCPE23WithArch(vendor, product, version, arch string) string {
 	p := normalizeComponent(product)
 	v := normalizeComponent(version)
 
@@ -28,7 +34,12 @@ func BuildCPE23(vendor, product, version string) string {
 		v = "*"
 	}
 
-	return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:*:*:*", ven, p, v)
+	targetHW := "*"
+	if a := normalizeComponent(arch); a != "" {
+		targetHW = a
+	}
+
+	return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:*:%s:*", ven, p, v, targetHW)
 }
 
 // normalizeComponent lowercases and sanitises a single CPE component value.

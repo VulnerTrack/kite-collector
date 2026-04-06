@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -57,6 +58,7 @@ func (s *SQLiteStore) Close() error {
 // ---------------------------------------------------------------------------
 
 const assetColumns = `id, asset_type, hostname, os_family, os_version,
+	kernel_version, architecture,
 	is_authorized, is_managed, environment, owner, criticality,
 	discovery_source, first_seen_at, last_seen_at, tags, natural_key`
 
@@ -64,16 +66,18 @@ const assetColumns = `id, asset_type, hostname, os_family, os_version,
 func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 	var a model.Asset
 	var (
-		idStr          string
-		firstSeen      string
-		lastSeen       string
-		osFamily       sql.NullString
-		osVersion      sql.NullString
-		environment    sql.NullString
-		owner          sql.NullString
-		criticality    sql.NullString
-		tags           sql.NullString
-		naturalKey     sql.NullString
+		idStr         string
+		firstSeen     string
+		lastSeen      string
+		osFamily      sql.NullString
+		osVersion     sql.NullString
+		kernelVersion sql.NullString
+		architecture  sql.NullString
+		environment   sql.NullString
+		owner         sql.NullString
+		criticality   sql.NullString
+		tags          sql.NullString
+		naturalKey    sql.NullString
 	)
 	err := row.Scan(
 		&idStr,
@@ -81,6 +85,8 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 		&a.Hostname,
 		&osFamily,
 		&osVersion,
+		&kernelVersion,
+		&architecture,
 		&a.IsAuthorized,
 		&a.IsManaged,
 		&environment,
@@ -110,6 +116,8 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 	}
 	a.OSFamily = osFamily.String
 	a.OSVersion = osVersion.String
+	a.KernelVersion = kernelVersion.String
+	a.Architecture = architecture.String
 	a.Environment = environment.String
 	a.Owner = owner.String
 	a.Criticality = criticality.String
@@ -127,10 +135,12 @@ func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error 
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO assets (`+assetColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(hostname, asset_type) DO UPDATE SET
 			os_family        = excluded.os_family,
 			os_version       = excluded.os_version,
+			kernel_version   = excluded.kernel_version,
+			architecture     = excluded.architecture,
 			is_authorized    = excluded.is_authorized,
 			is_managed       = excluded.is_managed,
 			environment      = excluded.environment,
@@ -146,6 +156,8 @@ func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error 
 		asset.Hostname,
 		nullStr(asset.OSFamily),
 		nullStr(asset.OSVersion),
+		nullStr(asset.KernelVersion),
+		nullStr(asset.Architecture),
 		string(asset.IsAuthorized),
 		string(asset.IsManaged),
 		nullStr(asset.Environment),
@@ -208,10 +220,12 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 	for i := range assets {
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO assets (`+assetColumns+`)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(hostname, asset_type) DO UPDATE SET
 				os_family        = excluded.os_family,
 				os_version       = excluded.os_version,
+				kernel_version   = excluded.kernel_version,
+				architecture     = excluded.architecture,
 				is_authorized    = excluded.is_authorized,
 				is_managed       = excluded.is_managed,
 				environment      = excluded.environment,
@@ -227,6 +241,8 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 			assets[i].Hostname,
 			nullStr(assets[i].OSFamily),
 			nullStr(assets[i].OSVersion),
+			nullStr(assets[i].KernelVersion),
+			nullStr(assets[i].Architecture),
 			string(assets[i].IsAuthorized),
 			string(assets[i].IsManaged),
 			nullStr(assets[i].Environment),
@@ -661,7 +677,7 @@ func (s *SQLiteStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, err
 // Installed Software
 // ---------------------------------------------------------------------------
 
-const softwareColumns = `id, asset_id, software_name, vendor, version, cpe23, package_manager`
+const softwareColumns = `id, asset_id, software_name, vendor, version, cpe23, package_manager, architecture`
 
 // scanSoftware reads a single row from the result set into an InstalledSoftware.
 func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSoftware, error) {
@@ -672,6 +688,7 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 		vendor     sql.NullString
 		cpe23      sql.NullString
 		pkgMgr     sql.NullString
+		arch       sql.NullString
 	)
 	err := row.Scan(
 		&idStr,
@@ -681,6 +698,7 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 		&s.Version,
 		&cpe23,
 		&pkgMgr,
+		&arch,
 	)
 	if err != nil {
 		return nil, err
@@ -697,6 +715,7 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 	s.Vendor = vendor.String
 	s.CPE23 = cpe23.String
 	s.PackageManager = pkgMgr.String
+	s.Architecture = arch.String
 
 	return &s, nil
 }
@@ -721,7 +740,7 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 	}
 
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare insert software: %w", err)
 	}
@@ -736,6 +755,7 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 			software[i].Version,
 			nullStr(software[i].CPE23),
 			nullStr(software[i].PackageManager),
+			nullStr(software[i].Architecture),
 		)
 		if err != nil {
 			return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)
@@ -769,6 +789,336 @@ func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]mo
 		software = append(software, *sw)
 	}
 	return software, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Config Findings
+// ---------------------------------------------------------------------------
+
+const findingColumns = `id, asset_id, scan_run_id, auditor, check_id, title,
+	severity, cwe_id, cwe_name, evidence, expected, remediation,
+	cis_control, timestamp`
+
+// scanFinding reads a single row into a ConfigFinding.
+func scanFinding(row interface{ Scan(dest ...any) error }) (*model.ConfigFinding, error) {
+	var f model.ConfigFinding
+	var (
+		idStr      string
+		assetIDStr string
+		scanIDStr  string
+		expected   sql.NullString
+		remediation sql.NullString
+		cisControl sql.NullString
+		ts         string
+	)
+	err := row.Scan(
+		&idStr,
+		&assetIDStr,
+		&scanIDStr,
+		&f.Auditor,
+		&f.CheckID,
+		&f.Title,
+		&f.Severity,
+		&f.CWEID,
+		&f.CWEName,
+		&f.Evidence,
+		&expected,
+		&remediation,
+		&cisControl,
+		&ts,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	f.ID, err = uuid.Parse(idStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding id: %w", err)
+	}
+	f.AssetID, err = uuid.Parse(assetIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding asset_id: %w", err)
+	}
+	f.ScanRunID, err = uuid.Parse(scanIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding scan_run_id: %w", err)
+	}
+	f.Timestamp, err = time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return nil, fmt.Errorf("parse finding timestamp: %w", err)
+	}
+	f.Expected = expected.String
+	f.Remediation = remediation.String
+	f.CISControl = cisControl.String
+
+	return &f, nil
+}
+
+// InsertFindings persists a batch of config findings inside a single transaction.
+func (s *SQLiteStore) InsertFindings(ctx context.Context, findings []model.ConfigFinding) error {
+	if len(findings) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO config_findings (`+findingColumns+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare insert finding: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for i := range findings {
+		_, err := stmt.ExecContext(ctx,
+			findings[i].ID.String(),
+			findings[i].AssetID.String(),
+			findings[i].ScanRunID.String(),
+			findings[i].Auditor,
+			findings[i].CheckID,
+			findings[i].Title,
+			string(findings[i].Severity),
+			findings[i].CWEID,
+			findings[i].CWEName,
+			findings[i].Evidence,
+			findings[i].Expected,
+			findings[i].Remediation,
+			findings[i].CISControl,
+			findings[i].Timestamp.Format(time.RFC3339),
+		)
+		if err != nil {
+			return fmt.Errorf("insert finding %s: %w", findings[i].ID, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// ListFindings returns config findings matching the supplied filter.
+func (s *SQLiteStore) ListFindings(ctx context.Context, filter store.FindingFilter) ([]model.ConfigFinding, error) {
+	var (
+		clauses []string
+		args    []any
+	)
+
+	if filter.AssetID != nil {
+		clauses = append(clauses, "asset_id = ?")
+		args = append(args, filter.AssetID.String())
+	}
+	if filter.ScanRunID != nil {
+		clauses = append(clauses, "scan_run_id = ?")
+		args = append(args, filter.ScanRunID.String())
+	}
+	if filter.Auditor != "" {
+		clauses = append(clauses, "auditor = ?")
+		args = append(args, filter.Auditor)
+	}
+	if filter.Severity != "" {
+		clauses = append(clauses, "severity = ?")
+		args = append(args, filter.Severity)
+	}
+	if filter.CWEID != "" {
+		clauses = append(clauses, "cwe_id = ?")
+		args = append(args, filter.CWEID)
+	}
+
+	query := `SELECT ` + findingColumns + ` FROM config_findings`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders
+	}
+	query += " ORDER BY timestamp DESC"
+
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list findings: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var findings []model.ConfigFinding
+	for rows.Next() {
+		f, err := scanFinding(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan finding row: %w", err)
+		}
+		findings = append(findings, *f)
+	}
+	return findings, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Posture Assessments
+// ---------------------------------------------------------------------------
+
+const postureColumns = `id, asset_id, scan_run_id, capec_id, capec_name,
+	finding_ids, likelihood, mitigation, timestamp`
+
+// scanPosture reads a single row into a PostureAssessment.
+func scanPosture(row interface{ Scan(dest ...any) error }) (*model.PostureAssessment, error) {
+	var p model.PostureAssessment
+	var (
+		idStr      string
+		assetIDStr string
+		scanIDStr  string
+		findingIDs string
+		mitigation sql.NullString
+		ts         string
+	)
+	err := row.Scan(
+		&idStr,
+		&assetIDStr,
+		&scanIDStr,
+		&p.CAPECID,
+		&p.CAPECName,
+		&findingIDs,
+		&p.Likelihood,
+		&mitigation,
+		&ts,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	p.ID, err = uuid.Parse(idStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse posture id: %w", err)
+	}
+	p.AssetID, err = uuid.Parse(assetIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse posture asset_id: %w", err)
+	}
+	p.ScanRunID, err = uuid.Parse(scanIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse posture scan_run_id: %w", err)
+	}
+	p.Timestamp, err = time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return nil, fmt.Errorf("parse posture timestamp: %w", err)
+	}
+	p.Mitigation = mitigation.String
+
+	// Parse JSON array of finding UUIDs.
+	if findingIDs != "" && findingIDs != "[]" {
+		var ids []string
+		if jsonErr := json.Unmarshal([]byte(findingIDs), &ids); jsonErr == nil {
+			for _, idS := range ids {
+				if fid, parseErr := uuid.Parse(idS); parseErr == nil {
+					p.FindingIDs = append(p.FindingIDs, fid)
+				}
+			}
+		}
+	}
+
+	return &p, nil
+}
+
+// InsertPostureAssessments persists a batch of posture assessments.
+func (s *SQLiteStore) InsertPostureAssessments(ctx context.Context, assessments []model.PostureAssessment) error {
+	if len(assessments) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO posture_assessments (`+postureColumns+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare insert posture: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for i := range assessments {
+		ids := make([]string, len(assessments[i].FindingIDs))
+		for j, fid := range assessments[i].FindingIDs {
+			ids[j] = fid.String()
+		}
+		idsJSON, _ := json.Marshal(ids)
+
+		_, err := stmt.ExecContext(ctx,
+			assessments[i].ID.String(),
+			assessments[i].AssetID.String(),
+			assessments[i].ScanRunID.String(),
+			assessments[i].CAPECID,
+			assessments[i].CAPECName,
+			string(idsJSON),
+			string(assessments[i].Likelihood),
+			assessments[i].Mitigation,
+			assessments[i].Timestamp.Format(time.RFC3339),
+		)
+		if err != nil {
+			return fmt.Errorf("insert posture %s: %w", assessments[i].ID, err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// ListPostureAssessments returns posture assessments matching the filter.
+func (s *SQLiteStore) ListPostureAssessments(ctx context.Context, filter store.PostureFilter) ([]model.PostureAssessment, error) {
+	var (
+		clauses []string
+		args    []any
+	)
+
+	if filter.AssetID != nil {
+		clauses = append(clauses, "asset_id = ?")
+		args = append(args, filter.AssetID.String())
+	}
+	if filter.ScanRunID != nil {
+		clauses = append(clauses, "scan_run_id = ?")
+		args = append(args, filter.ScanRunID.String())
+	}
+	if filter.CAPECID != "" {
+		clauses = append(clauses, "capec_id = ?")
+		args = append(args, filter.CAPECID)
+	}
+
+	query := `SELECT ` + postureColumns + ` FROM posture_assessments`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders
+	}
+	query += " ORDER BY timestamp DESC"
+
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list posture assessments: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var assessments []model.PostureAssessment
+	for rows.Next() {
+		p, err := scanPosture(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan posture row: %w", err)
+		}
+		assessments = append(assessments, *p)
+	}
+	return assessments, rows.Err()
 }
 
 // ---------------------------------------------------------------------------

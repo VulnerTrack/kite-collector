@@ -31,14 +31,14 @@ func (r *RPM) Available() bool {
 // Collect runs rpm -qa and returns parsed results. Output is capped at
 // 64 MB and the command is killed after 60 seconds.
 func (r *RPM) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "rpm", "-qa", "--queryformat", "%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\n")
+	out, err := runWithLimits(ctx, "rpm", "-qa", "--queryformat", "%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\t%{ARCH}\n")
 	if err != nil {
 		return nil, fmt.Errorf("rpm -qa: %w", err)
 	}
 	return ParseRPMOutput(string(out)), nil
 }
 
-// ParseRPMOutput parses the raw output of rpm -qa --queryformat '%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\n'.
+// ParseRPMOutput parses the raw output of rpm -qa --queryformat '%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\t%{ARCH}\n'.
 func ParseRPMOutput(raw string) *Result {
 	result := &Result{}
 	scanner := bufio.NewScanner(strings.NewReader(raw))
@@ -51,13 +51,13 @@ func ParseRPMOutput(raw string) *Result {
 			continue
 		}
 
-		parts := strings.SplitN(line, "\t", 3)
+		parts := strings.SplitN(line, "\t", 4)
 		if len(parts) < 2 || parts[0] == "" {
 			result.Errs = append(result.Errs, CollectError{
 				Collector: "rpm",
 				Line:      lineNum,
 				RawLine:   line,
-				Err:       errors.New("expected 'name\\tversion[\\tvendor]' format"),
+				Err:       errors.New("expected 'name\\tversion[\\tvendor[\\tarch]]' format"),
 			})
 			continue
 		}
@@ -70,13 +70,22 @@ func ParseRPMOutput(raw string) *Result {
 			}
 		}
 
+		arch := ""
+		if len(parts) >= 4 {
+			a := strings.TrimSpace(parts[3])
+			if a != "(none)" && a != "" {
+				arch = a
+			}
+		}
+
 		result.Items = append(result.Items, model.InstalledSoftware{
 			ID:             uuid.Must(uuid.NewV7()),
 			SoftwareName:   parts[0],
 			Version:        parts[1],
 			Vendor:         vendor,
 			PackageManager: "rpm",
-			CPE23:          BuildCPE23(vendor, parts[0], parts[1]),
+			Architecture:   arch,
+			CPE23:          BuildCPE23WithArch(vendor, parts[0], parts[1], arch),
 		})
 	}
 

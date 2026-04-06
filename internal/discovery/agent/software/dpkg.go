@@ -31,14 +31,14 @@ func (d *Dpkg) Available() bool {
 // Collect runs dpkg-query and returns parsed results. Output is capped at
 // 64 MB and the command is killed after 60 seconds.
 func (d *Dpkg) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "dpkg-query", "-W", "-f=${Package}\t${Version}\n")
+	out, err := runWithLimits(ctx, "dpkg-query", "-W", "-f=${Package}\t${Version}\t${Architecture}\n")
 	if err != nil {
 		return nil, fmt.Errorf("dpkg-query: %w", err)
 	}
 	return ParseDpkgOutput(string(out)), nil
 }
 
-// ParseDpkgOutput parses the raw output of dpkg-query -W -f='${Package}\t${Version}\n'.
+// ParseDpkgOutput parses the raw output of dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n'.
 func ParseDpkgOutput(raw string) *Result {
 	result := &Result{}
 	scanner := bufio.NewScanner(strings.NewReader(raw))
@@ -51,15 +51,20 @@ func ParseDpkgOutput(raw string) *Result {
 			continue
 		}
 
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) != 2 || parts[0] == "" {
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 2 || parts[0] == "" {
 			result.Errs = append(result.Errs, CollectError{
 				Collector: "dpkg",
 				Line:      lineNum,
 				RawLine:   line,
-				Err:       errors.New("expected 'package\\tversion' format"),
+				Err:       errors.New("expected 'package\\tversion[\\tarch]' format"),
 			})
 			continue
+		}
+
+		arch := ""
+		if len(parts) == 3 {
+			arch = parts[2]
 		}
 
 		result.Items = append(result.Items, model.InstalledSoftware{
@@ -67,7 +72,8 @@ func ParseDpkgOutput(raw string) *Result {
 			SoftwareName:   parts[0],
 			Version:        parts[1],
 			PackageManager: "dpkg",
-			CPE23:          BuildCPE23("", parts[0], parts[1]),
+			Architecture:   arch,
+			CPE23:          BuildCPE23WithArch("", parts[0], parts[1], arch),
 		})
 	}
 

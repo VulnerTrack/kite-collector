@@ -32,6 +32,8 @@ type ScanResult struct {
 	EventsEmitted   int     `json:"events_emitted"`
 	SoftwareCount   int     `json:"software_count"`
 	SoftwareErrors  int     `json:"software_errors"`
+	FindingsCount   int     `json:"findings_count"`
+	PostureCount    int     `json:"posture_count"`
 	ErrorCount      int     `json:"error_count"`
 	CoveragePercent float64 `json:"coverage_percent"`
 }

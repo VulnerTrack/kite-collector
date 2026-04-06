@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS assets (
     hostname         TEXT NOT NULL,
     os_family        TEXT,
     os_version       TEXT,
+    kernel_version   TEXT,
+    architecture     TEXT,
     is_authorized    TEXT NOT NULL DEFAULT 'unknown' CHECK(is_authorized IN ('unknown','authorized','unauthorized')),
     is_managed       TEXT NOT NULL DEFAULT 'unknown' CHECK(is_managed IN ('unknown','managed','unmanaged')),
     environment      TEXT,
@@ -45,7 +47,8 @@ CREATE TABLE IF NOT EXISTS installed_software (
     vendor          TEXT NOT NULL DEFAULT '',
     version         TEXT NOT NULL,
     cpe23           TEXT,
-    package_manager TEXT
+    package_manager TEXT,
+    architecture    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS scan_runs (
@@ -73,6 +76,35 @@ CREATE TABLE IF NOT EXISTS events (
     timestamp   TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS config_findings (
+    id          UUID PRIMARY KEY,
+    asset_id    UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    scan_run_id UUID NOT NULL REFERENCES scan_runs(id),
+    auditor     TEXT NOT NULL,
+    check_id    TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    severity    TEXT NOT NULL DEFAULT 'low',
+    cwe_id      TEXT NOT NULL,
+    cwe_name    TEXT NOT NULL,
+    evidence    TEXT NOT NULL,
+    expected    TEXT NOT NULL DEFAULT '',
+    remediation TEXT NOT NULL DEFAULT '',
+    cis_control TEXT NOT NULL DEFAULT '',
+    timestamp   TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS posture_assessments (
+    id          UUID PRIMARY KEY,
+    asset_id    UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    scan_run_id UUID NOT NULL REFERENCES scan_runs(id),
+    capec_id    TEXT NOT NULL,
+    capec_name  TEXT NOT NULL,
+    finding_ids JSONB NOT NULL DEFAULT '[]',
+    likelihood  TEXT NOT NULL DEFAULT 'low',
+    mitigation  TEXT NOT NULL DEFAULT '',
+    timestamp   TIMESTAMPTZ NOT NULL
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_assets_hostname ON assets(hostname);
 CREATE INDEX IF NOT EXISTS idx_assets_last_seen ON assets(last_seen_at);
@@ -83,4 +115,10 @@ CREATE INDEX IF NOT EXISTS idx_interfaces_mac ON network_interfaces(mac_address)
 CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(event_type, timestamp);
 CREATE INDEX IF NOT EXISTS idx_events_asset ON events(asset_id);
 CREATE INDEX IF NOT EXISTS idx_software_cpe ON installed_software(cpe23);
+CREATE INDEX IF NOT EXISTS idx_findings_asset ON config_findings(asset_id);
+CREATE INDEX IF NOT EXISTS idx_findings_cwe ON config_findings(cwe_id);
+CREATE INDEX IF NOT EXISTS idx_findings_severity ON config_findings(severity);
+CREATE INDEX IF NOT EXISTS idx_findings_check ON config_findings(check_id);
+CREATE INDEX IF NOT EXISTS idx_posture_asset ON posture_assessments(asset_id);
+CREATE INDEX IF NOT EXISTS idx_posture_capec ON posture_assessments(capec_id);
 `

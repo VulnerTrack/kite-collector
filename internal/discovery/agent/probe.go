@@ -52,6 +52,8 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		Hostname:        hostname,
 		OSFamily:        osFamily,
 		OSVersion:       osVersion,
+		KernelVersion:   readKernelVersion(),
+		Architecture:    runtime.GOARCH,
 		DiscoverySource: "agent",
 		FirstSeenAt:     now,
 		LastSeenAt:      now,
@@ -125,6 +127,23 @@ func readOSVersion() string {
 		}
 	}
 	return fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH)
+}
+
+// readKernelVersion reads the running kernel version. On Linux it reads
+// /proc/version and extracts the version string. On other platforms it
+// falls back to runtime.GOARCH.
+func readKernelVersion() string {
+	if runtime.GOOS == "linux" {
+		data, err := os.ReadFile("/proc/version")
+		if err == nil {
+			// /proc/version format: "Linux version 6.1.0-amd64 (...) ..."
+			fields := strings.Fields(string(data))
+			if len(fields) >= 3 {
+				return fields[2]
+			}
+		}
+	}
+	return ""
 }
 
 // CollectNetworkInterfaces enumerates the host's network interfaces and
