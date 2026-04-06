@@ -49,6 +49,15 @@ func NewRegistry() *Registry {
 			NewOpkg(),
 			NewPkgsrc(),
 			NewMacPorts(),
+			// Phase 3 — Language (RFC-0058)
+			NewComposer(),
+			NewConda(),
+			NewGoMod(),
+			NewNuGet(),
+			NewYarn(),
+			NewBun(),
+			NewMaven(),
+			NewMamba(),
 		},
 	}
 }

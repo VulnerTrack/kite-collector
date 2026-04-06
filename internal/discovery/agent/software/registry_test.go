@@ -152,7 +152,7 @@ func TestRegistry_Register(t *testing.T) {
 }
 
 func TestNewRegistry_ContainsAllCollectors(t *testing.T) {
-	// RFC-0056 (18) + RFC-0058 OS (8) = 26 so far.
+	// RFC-0056 (18) + RFC-0058 OS (8) + RFC-0058 Lang-1 (8) = 34 so far.
 	// Update this list when adding new collectors.
 	expected := []string{
 		// Phase 0 — Linux
@@ -166,6 +166,9 @@ func TestNewRegistry_ContainsAllCollectors(t *testing.T) {
 		// Phase 3 — OS (RFC-0058)
 		"dnf", "zypper", "freebsdpkg", "portage",
 		"xbps", "opkg", "pkgsrc", "macports",
+		// Phase 3 — Language (RFC-0058)
+		"composer", "conda", "gomod", "nuget",
+		"yarn", "bun", "maven", "mamba",
 	}
 
 	r := NewRegistry()
