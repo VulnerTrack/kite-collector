@@ -19,6 +19,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/policy"
+	"github.com/vulnertrack/kite-collector/internal/posture"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
@@ -144,7 +145,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 	}
 
 	// Configuration audit phase: run enabled auditors on the agent asset.
-	var findingsCount int
+	var findingsCount, postureCount int
 	if cfg.Audit.Enabled {
 		if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
 			var agentAsset model.Asset
@@ -185,6 +186,20 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 				} else {
 					findingsCount = len(findings)
 					slog.Info("engine: audit complete", "findings", findingsCount)
+				}
+
+				// Posture analysis: evaluate CWE→CAPEC mappings.
+				if cfg.Posture.Enabled {
+					assessments := posture.Evaluate(findings, agentID, scanID)
+					if len(assessments) > 0 {
+						if err := e.store.InsertPostureAssessments(ctx, assessments); err != nil {
+							slog.Error("engine: failed to persist posture assessments",
+								"error", err, "count", len(assessments))
+						} else {
+							postureCount = len(assessments)
+							slog.Info("engine: posture analysis complete", "assessments", postureCount)
+						}
+					}
 				}
 			}
 		}
@@ -261,6 +276,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		SoftwareCount:   softwareCount,
 		SoftwareErrors:  softwareErrors,
 		FindingsCount:   findingsCount,
+		PostureCount:    postureCount,
 		CoveragePercent: coveragePct,
 	}
 

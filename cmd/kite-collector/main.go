@@ -819,8 +819,9 @@ func runReport(dbPath, format, outputPath string) error {
 		os.Stdout = f
 	}
 
-	// Collect findings for the report.
+	// Collect findings and posture assessments for the report.
 	allFindings, _ := st.ListFindings(ctx, store.FindingFilter{})
+	allPosture, _ := st.ListPostureAssessments(ctx, store.PostureFilter{})
 
 	switch strings.ToLower(format) {
 	case "json":
@@ -835,6 +836,10 @@ func runReport(dbPath, format, outputPath string) error {
 		if len(allFindings) > 0 {
 			report["findings"] = allFindings
 			report["total_findings"] = len(allFindings)
+		}
+		if len(allPosture) > 0 {
+			report["posture_assessments"] = allPosture
+			report["total_posture"] = len(allPosture)
 		}
 		return formatJSON(report)
 	case "csv":
