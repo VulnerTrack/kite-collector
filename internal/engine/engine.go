@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -88,7 +89,12 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 	slog.Info("engine: starting discovery", "scan_id", scanID)
 	discovered, err := e.registry.DiscoverAll(ctx, configs)
 	if err != nil {
-		return nil, err
+		failResult := model.ScanResult{
+			Status:     string(model.ScanStatusFailed),
+			ErrorCount: 1,
+		}
+		_ = e.store.CompleteScanRun(ctx, scanID, failResult)
+		return nil, fmt.Errorf("discovery: %w", err)
 	}
 	slog.Info("engine: discovery complete", "raw_assets", len(discovered))
 
@@ -106,17 +112,21 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 	slog.Info("engine: persisted assets", "inserted", inserted, "updated", updated)
 
 	// Collect and persist installed software for the agent asset.
+	var softwareCount, softwareErrors int
 	if agentCfg, ok := configs["agent"]; ok {
 		if cs, ok := agentCfg["collect_software"].(bool); ok && cs {
 			if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
 				swReg := software.NewRegistry()
 				swResult := swReg.Collect(ctx)
+				softwareCount = len(swResult.Items)
 				if len(swResult.Items) > 0 {
 					for i := range swResult.Items {
 						swResult.Items[i].AssetID = agentID
 					}
 					if swErr := e.store.UpsertSoftware(ctx, agentID, swResult.Items); swErr != nil {
-						slog.Warn("engine: failed to persist software", "error", swErr)
+						slog.Error("engine: failed to persist software",
+							"error", swErr, "asset_id", agentID, "count", len(swResult.Items))
+						softwareErrors++
 					} else {
 						slog.Info("engine: persisted software",
 							"asset_id", agentID,
@@ -194,11 +204,14 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 	}
 
 	result := &model.ScanResult{
+		Status:          string(model.ScanStatusCompleted),
 		TotalAssets:     totalKnown,
 		NewAssets:       dedupResult.NewCount,
 		UpdatedAssets:   dedupResult.UpdatedCount,
 		StaleAssets:     len(staleAssets),
 		EventsEmitted:  len(events),
+		SoftwareCount:   softwareCount,
+		SoftwareErrors:  softwareErrors,
 		CoveragePercent: coveragePct,
 	}
 

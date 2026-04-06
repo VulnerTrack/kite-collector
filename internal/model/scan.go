@@ -24,10 +24,14 @@ type ScanRun struct {
 
 // ScanResult is a summary returned after a scan completes.
 type ScanResult struct {
+	Status          string  `json:"status"`
 	TotalAssets     int     `json:"total_assets"`
 	NewAssets       int     `json:"new_assets"`
 	UpdatedAssets   int     `json:"updated_assets"`
 	StaleAssets     int     `json:"stale_assets"`
 	EventsEmitted   int     `json:"events_emitted"`
+	SoftwareCount   int     `json:"software_count"`
+	SoftwareErrors  int     `json:"software_errors"`
+	ErrorCount      int     `json:"error_count"`
 	CoveragePercent float64 `json:"coverage_percent"`
 }

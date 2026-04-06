@@ -241,9 +241,10 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	}
 
 	// Print scan summary to stderr.
-	_, _ = fmt.Fprintf(os.Stderr, "\nScan complete: %d total, %d new, %d updated, %d stale, %d events\n",
+	_, _ = fmt.Fprintf(os.Stderr, "\nScan complete: %d total, %d new, %d updated, %d stale, %d events, %d software (%d errors)\n",
 		result.TotalAssets, result.NewAssets, result.UpdatedAssets,
-		result.StaleAssets, result.EventsEmitted)
+		result.StaleAssets, result.EventsEmitted,
+		result.SoftwareCount, result.SoftwareErrors)
 
 	// Output asset list with software.
 	assets, err := st.ListAssets(ctx, store.AssetFilter{})

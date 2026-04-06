@@ -517,9 +517,13 @@ func (s *PostgresStore) CreateScanRun(ctx context.Context, run model.ScanRun) er
 }
 
 // CompleteScanRun updates an existing scan run with the final result and marks
-// it as completed.
+// it as completed (or failed when the result carries a non-completed status).
 func (s *PostgresStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result model.ScanResult) error {
 	now := time.Now().UTC()
+	status := string(model.ScanStatusCompleted)
+	if result.Status != "" {
+		status = result.Status
+	}
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE scan_runs SET
 			completed_at     = $1,
@@ -528,15 +532,17 @@ func (s *PostgresStore) CompleteScanRun(ctx context.Context, id uuid.UUID, resul
 			new_assets       = $4,
 			updated_assets   = $5,
 			stale_assets     = $6,
-			coverage_percent = $7
-		WHERE id = $8`,
+			coverage_percent = $7,
+			error_count      = $8
+		WHERE id = $9`,
 		now,
-		string(model.ScanStatusCompleted),
+		status,
 		result.TotalAssets,
 		result.NewAssets,
 		result.UpdatedAssets,
 		result.StaleAssets,
 		result.CoveragePercent,
+		result.ErrorCount,
 		id,
 	)
 	if err != nil {

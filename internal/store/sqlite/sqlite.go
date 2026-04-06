@@ -568,9 +568,13 @@ func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) erro
 }
 
 // CompleteScanRun updates an existing scan run with the final result and marks
-// it as completed.
+// it as completed (or failed when the result carries a non-completed status).
 func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result model.ScanResult) error {
 	now := time.Now().UTC().Format(time.RFC3339)
+	status := string(model.ScanStatusCompleted)
+	if result.Status != "" {
+		status = result.Status
+	}
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE scan_runs SET
 			completed_at     = ?,
@@ -579,15 +583,17 @@ func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result 
 			new_assets       = ?,
 			updated_assets   = ?,
 			stale_assets     = ?,
-			coverage_percent = ?
+			coverage_percent = ?,
+			error_count      = ?
 		WHERE id = ?`,
 		now,
-		string(model.ScanStatusCompleted),
+		status,
 		result.TotalAssets,
 		result.NewAssets,
 		result.UpdatedAssets,
 		result.StaleAssets,
 		result.CoveragePercent,
+		result.ErrorCount,
 		id.String(),
 	)
 	if err != nil {
