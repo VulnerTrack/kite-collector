@@ -33,6 +33,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/proxmox"
 	"github.com/vulnertrack/kite-collector/internal/discovery/snmp"
 	"github.com/vulnertrack/kite-collector/internal/discovery/unifi"
+	"github.com/vulnertrack/kite-collector/internal/discovery/vps"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	"github.com/vulnertrack/kite-collector/internal/engine"
 	"github.com/vulnertrack/kite-collector/internal/metrics"
@@ -209,6 +210,9 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(unifi.New())
 	registry.Register(proxmox.New())
 	registry.Register(snmp.New())
+	registry.Register(vps.NewHetzner())
+	registry.Register(vps.NewDigitalOcean())
+	registry.Register(vps.NewVultr())
 
 	// Set up metrics.
 	met := metrics.New()
@@ -561,7 +565,7 @@ continuous mode with a configurable scan interval.`,
 	cmd.Flags().BoolVar(&stream, "stream", false, "enable continuous streaming mode")
 	cmd.Flags().StringVar(&interval, "interval", "", "scan interval (overrides config, e.g. 6h)")
 	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to configuration file")
-	cmd.Flags().StringVar(&dbPath, "db", "./data/kite.db", "path to SQLite database")
+	cmd.Flags().StringVar(&dbPath, "db", "kite.db", "path to SQLite database")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable debug logging")
 
 	return cmd
@@ -643,6 +647,9 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 	registry.Register(unifi.New())
 	registry.Register(proxmox.New())
 	registry.Register(snmp.New())
+	registry.Register(vps.NewHetzner())
+	registry.Register(vps.NewDigitalOcean())
+	registry.Register(vps.NewVultr())
 
 	met := metrics.New()
 	var metricsSrv *http.Server
