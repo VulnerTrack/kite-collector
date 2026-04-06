@@ -58,6 +58,16 @@ func NewRegistry() *Registry {
 			NewBun(),
 			NewMaven(),
 			NewMamba(),
+			// Phase 3 — Additional Language (RFC-0058)
+			NewCocoaPods(),
+			NewSwiftPM(),
+			NewPub(),
+			NewHex(),
+			NewCPAN(),
+			NewLuaRocks(),
+			NewCRAN(),
+			NewJuliaPkg(),
+			NewCabal(),
 		},
 	}
 }
