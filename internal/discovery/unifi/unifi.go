@@ -1,6 +1,16 @@
 // Package unifi implements a discovery.Source that enumerates clients and
-// network devices from a Ubiquiti UniFi Controller REST API.  Communication
-// uses session-based authentication — no vendor SDK dependency.
+// network devices from UniFi APIs.
+//
+// Two authentication modes are supported:
+//
+//  1. Cloud API Key (recommended): set KITE_UNIFI_API_KEY.
+//     Uses the official UniFi Site Manager API at api.ui.com.
+//     Read-only, no MFA issues.
+//
+//  2. Local session auth: set KITE_UNIFI_ENDPOINT + KITE_UNIFI_USERNAME +
+//     KITE_UNIFI_PASSWORD.  Authenticates directly to the controller on
+//     your LAN.  Tries /api/auth/login (UDM/UniFi OS) first, falls back
+//     to /api/login (legacy controller).
 package unifi
 
 import (
@@ -13,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -22,7 +33,10 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
-const clientTimeout = 30 * time.Second
+const (
+	clientTimeout = 30 * time.Second
+	cloudBaseURL  = "https://api.ui.com"
+)
 
 // UniFi implements discovery.Source for the UniFi Controller API.
 type UniFi struct{}
@@ -33,11 +47,220 @@ func New() *UniFi { return &UniFi{} }
 // Name returns the stable identifier for this source.
 func (u *UniFi) Name() string { return "unifi" }
 
-// Discover enumerates clients and devices from the UniFi Controller.
-// Credentials are read from KITE_UNIFI_USERNAME and KITE_UNIFI_PASSWORD
-// environment variables.  The endpoint and site can be set via cfg or
-// KITE_UNIFI_ENDPOINT env.
+// Discover enumerates clients and devices from UniFi.
+//
+// Authentication priority:
+//  1. KITE_UNIFI_API_KEY → cloud API (api.ui.com)
+//  2. KITE_UNIFI_USERNAME + PASSWORD → local session auth
 func (u *UniFi) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+	apiKey := os.Getenv("KITE_UNIFI_API_KEY")
+	if apiKey != "" {
+		return u.discoverCloud(ctx, apiKey)
+	}
+	return u.discoverLocal(ctx, cfg)
+}
+
+// -------------------------------------------------------------------------
+// Cloud API (api.ui.com with X-API-KEY)
+// -------------------------------------------------------------------------
+
+func (u *UniFi) discoverCloud(ctx context.Context, apiKey string) ([]model.Asset, error) {
+	slog.Info("unifi: using cloud API (api.ui.com)")
+
+	client := &cloudClient{
+		apiKey: apiKey,
+		http:   &http.Client{Timeout: clientTimeout},
+	}
+
+	now := time.Now().UTC()
+	var assets []model.Asset
+
+	// List hosts (consoles/controllers).
+	hosts, err := client.listHosts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("unifi cloud: list hosts: %w", err)
+	}
+	slog.Info("unifi: found hosts", "count", len(hosts))
+
+	// List devices across all hosts.
+	devices, err := client.listDevices(ctx)
+	if err != nil {
+		slog.Warn("unifi cloud: failed to list devices", "error", err)
+	} else {
+		for _, d := range devices {
+			assets = append(assets, cloudDeviceToAsset(d, now))
+		}
+	}
+
+	// Add hosts as assets.
+	for _, h := range hosts {
+		assets = append(assets, cloudHostToAsset(h, now))
+	}
+
+	slog.Info("unifi: cloud discovery complete", "assets", len(assets))
+	return assets, nil
+}
+
+type cloudClient struct {
+	http   *http.Client
+	apiKey string
+}
+
+func (c *cloudClient) get(ctx context.Context, path string) ([]byte, error) {
+	url := cloudBaseURL + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-API-KEY", c.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf(
+			"HTTP 401 — invalid API key. Generate one at unifi.ui.com → Settings → API Keys")
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("HTTP 429 — rate limited. Try again later")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+	}
+
+	return body, nil
+}
+
+// Cloud API response types.
+
+type cloudHostsResponse struct {
+	Data []cloudHost `json:"data"`
+}
+
+type cloudHost struct {
+	ID            string `json:"id"`
+	HardwareID    string `json:"hardware_id"`
+	Hostname      string `json:"reported_state__hostname"`
+	Model         string `json:"hardware_type"`
+	FirmwareVer   string `json:"reported_state__firmware"`
+	IPAddress     string `json:"ip_address"`
+	ControllerVer string `json:"reported_state__controller_version"`
+	IsOnline      bool   `json:"is_blocked"`
+}
+
+type cloudDevicesResponse struct {
+	Data []cloudDevice `json:"data"`
+}
+
+type cloudDevice struct {
+	Name     string `json:"name"`
+	MAC      string `json:"mac"`
+	IP       string `json:"ip"`
+	Model    string `json:"model"`
+	Firmware string `json:"firmware"`
+	State    string `json:"state"`
+	Type     string `json:"type"`
+}
+
+func (c *cloudClient) listHosts(ctx context.Context) ([]cloudHost, error) {
+	body, err := c.get(ctx, "/ea/hosts")
+	if err != nil {
+		return nil, err
+	}
+	var resp cloudHostsResponse
+	if err = json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("parse hosts: %w", err)
+	}
+	return resp.Data, nil
+}
+
+func (c *cloudClient) listDevices(ctx context.Context) ([]cloudDevice, error) {
+	body, err := c.get(ctx, "/ea/devices")
+	if err != nil {
+		return nil, err
+	}
+	var resp cloudDevicesResponse
+	if err = json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("parse devices: %w", err)
+	}
+	return resp.Data, nil
+}
+
+func cloudHostToAsset(h cloudHost, now time.Time) model.Asset {
+	hostname := h.Hostname
+	if hostname == "" {
+		hostname = h.HardwareID
+	}
+
+	tags := map[string]any{
+		"ip":             h.IPAddress,
+		"model":          h.Model,
+		"firmware":       h.FirmwareVer,
+		"controller_ver": h.ControllerVer,
+		"hardware_id":    h.HardwareID,
+		"source":         "unifi_cloud",
+	}
+	tagsJSON, _ := json.Marshal(tags)
+
+	return model.Asset{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        hostname,
+		AssetType:       model.AssetTypeAppliance,
+		OSFamily:        "ubiquiti",
+		OSVersion:       h.FirmwareVer,
+		DiscoverySource: "unifi",
+		IsAuthorized:    model.AuthorizationUnknown,
+		IsManaged:       model.ManagedUnknown,
+		Tags:            string(tagsJSON),
+		LastSeenAt:      now,
+	}
+}
+
+func cloudDeviceToAsset(d cloudDevice, now time.Time) model.Asset {
+	hostname := d.Name
+	if hostname == "" {
+		hostname = d.MAC
+	}
+
+	tags := map[string]any{
+		"mac":      d.MAC,
+		"ip":       d.IP,
+		"model":    d.Model,
+		"firmware": d.Firmware,
+		"state":    d.State,
+		"type":     d.Type,
+		"source":   "unifi_cloud",
+	}
+	tagsJSON, _ := json.Marshal(tags)
+
+	return model.Asset{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        hostname,
+		AssetType:       model.AssetTypeNetworkDevice,
+		OSFamily:        "ubiquiti",
+		OSVersion:       d.Firmware,
+		DiscoverySource: "unifi",
+		IsAuthorized:    model.AuthorizationUnknown,
+		IsManaged:       model.ManagedUnknown,
+		Tags:            string(tagsJSON),
+		LastSeenAt:      now,
+	}
+}
+
+// -------------------------------------------------------------------------
+// Local API (session auth to controller on LAN)
+// -------------------------------------------------------------------------
+
+func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
 	endpoint := toString(cfg["endpoint"])
 	if endpoint == "" {
 		endpoint = os.Getenv("KITE_UNIFI_ENDPOINT")
@@ -50,14 +273,17 @@ func (u *UniFi) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 	}
 
 	if endpoint == "" || username == "" || password == "" {
-		return nil, fmt.Errorf("unifi: KITE_UNIFI_ENDPOINT, KITE_UNIFI_USERNAME, and KITE_UNIFI_PASSWORD are required")
+		return nil, fmt.Errorf(
+			"unifi: set KITE_UNIFI_API_KEY (cloud) or " +
+				"KITE_UNIFI_ENDPOINT + KITE_UNIFI_USERNAME + " +
+				"KITE_UNIFI_PASSWORD (local)")
 	}
 
 	endpoint = strings.TrimRight(endpoint, "/")
 
-	slog.Info("unifi: starting discovery", "endpoint", endpoint, "site", site) //#nosec G706 -- structured slog key-value
+	slog.Info("unifi: using local API", "endpoint", endpoint, "site", site)
 
-	client, err := newUniFiClient(ctx, endpoint, username, password)
+	client, err := newLocalClient(ctx, endpoint, username, password)
 	if err != nil {
 		return nil, fmt.Errorf("unifi: login failed: %w", err)
 	}
@@ -86,20 +312,25 @@ func (u *UniFi) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		}
 	}
 
-	slog.Info("unifi: discovery complete", "assets", len(assets)) //#nosec G706 -- structured slog
+	slog.Info("unifi: local discovery complete", slog.Int("assets", len(assets)))
 	return assets, nil
 }
 
 // -------------------------------------------------------------------------
-// HTTP client with session auth
+// Local HTTP client with session auth
 // -------------------------------------------------------------------------
 
-type unifiClient struct {
+type localClient struct {
 	http *http.Client
-	base string
+	base *url.URL
 }
 
-func newUniFiClient(ctx context.Context, endpoint, username, password string) (*unifiClient, error) {
+func newLocalClient(ctx context.Context, endpoint, username, password string) (*localClient, error) {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return nil, fmt.Errorf("invalid endpoint URL %q: scheme must be http or https", endpoint)
+	}
+
 	jar, _ := cookiejar.New(nil)
 
 	transport := &http.Transport{
@@ -114,8 +345,8 @@ func newUniFiClient(ctx context.Context, endpoint, username, password string) (*
 		transport.TLSClientConfig.InsecureSkipVerify = true //#nosec G402 -- user-opted insecure mode
 	}
 
-	c := &unifiClient{
-		base: endpoint,
+	c := &localClient{
+		base: parsed,
 		http: &http.Client{
 			Transport: transport,
 			Timeout:   clientTimeout,
@@ -130,53 +361,77 @@ func newUniFiClient(ctx context.Context, endpoint, username, password string) (*
 	return c, nil
 }
 
-func (c *unifiClient) login(ctx context.Context, username, password string) error {
+// resolveURL safely joins the base endpoint URL with the given path.
+// The URL is reconstructed from validated components (scheme, host) to
+// prevent SSRF — the base URL was parsed and scheme-checked in
+// newLocalClient.
+func (c *localClient) resolveURL(path string) string {
+	u := url.URL{
+		Scheme: c.base.Scheme,
+		Host:   c.base.Host,
+		Path:   path,
+	}
+	return u.String()
+}
+
+func (c *localClient) login(ctx context.Context, username, password string) error {
 	payload, _ := json.Marshal(map[string]string{
 		"username": username,
 		"password": password,
 	})
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, //#nosec G704 -- URL from user-configured endpoint
-		c.base+"/api/login", bytes.NewReader(payload))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
+	// Try UDM/UniFi OS endpoint first, fall back to legacy.
+	for _, path := range []string{"/api/auth/login", "/api/login"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, //#nosec G704 -- endpoint is operator-configured, scheme-validated in newLocalClient
+			c.resolveURL(path), bytes.NewReader(payload))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.http.Do(req) //#nosec G704 -- intentional request to user-configured endpoint
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
+		resp, err := c.http.Do(req) //#nosec G704
+		if err != nil {
+			continue
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("login returned HTTP %d — check credentials and endpoint", resp.StatusCode)
+		if resp.StatusCode == http.StatusOK {
+			slog.Debug("unifi: logged in via " + path)
+			return nil
+		}
 	}
 
-	return nil
+	return fmt.Errorf("login failed — check credentials, endpoint, " +
+		"and ensure the account is a local admin (not a UI.com cloud account)")
 }
 
-func (c *unifiClient) logout(ctx context.Context) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, //#nosec G704 -- logout to user-configured endpoint
-		c.base+"/api/logout", nil)
-	if err != nil {
-		return
+func (c *localClient) logout(ctx context.Context) {
+	// Try both logout paths.
+	for _, path := range []string{"/api/auth/logout", "/api/logout"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, //#nosec G704 -- endpoint is operator-configured, scheme-validated in newLocalClient
+			c.resolveURL(path), nil)
+		if err != nil {
+			continue
+		}
+		resp, err := c.http.Do(req) //#nosec G704
+		if err != nil {
+			continue
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return
+		}
 	}
-	resp, err := c.http.Do(req) //#nosec G704 -- intentional request to user-configured endpoint
-	if err != nil {
-		return
-	}
-	_ = resp.Body.Close()
 }
 
-func (c *unifiClient) get(ctx context.Context, path string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- URL from user-configured endpoint
+func (c *localClient) get(ctx context.Context, path string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.resolveURL(path), nil) //#nosec G704 -- endpoint is operator-configured, scheme-validated in newLocalClient
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := c.http.Do(req) //#nosec G704 -- intentional request to user-configured endpoint
+	resp, err := c.http.Do(req) //#nosec G704
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +450,7 @@ func (c *unifiClient) get(ctx context.Context, path string) ([]byte, error) {
 }
 
 // -------------------------------------------------------------------------
-// API types
+// Local API types
 // -------------------------------------------------------------------------
 
 // apiResponse wraps the standard UniFi JSON envelope.
@@ -245,7 +500,7 @@ type unifiDevice struct {
 // API calls
 // -------------------------------------------------------------------------
 
-func (c *unifiClient) listClients(ctx context.Context, site string) ([]unifiClientEntry, error) {
+func (c *localClient) listClients(ctx context.Context, site string) ([]unifiClientEntry, error) {
 	body, err := c.get(ctx, fmt.Sprintf("/api/s/%s/stat/sta", site))
 	if err != nil {
 		return nil, err
@@ -261,7 +516,7 @@ func (c *unifiClient) listClients(ctx context.Context, site string) ([]unifiClie
 	return clients, nil
 }
 
-func (c *unifiClient) listDevices(ctx context.Context, site string) ([]unifiDevice, error) {
+func (c *localClient) listDevices(ctx context.Context, site string) ([]unifiDevice, error) {
 	body, err := c.get(ctx, fmt.Sprintf("/api/s/%s/stat/device", site))
 	if err != nil {
 		return nil, err

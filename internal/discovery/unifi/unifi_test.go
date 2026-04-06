@@ -165,6 +165,7 @@ func TestUniFi_Discover_Success(t *testing.T) {
 }
 
 func TestUniFi_Discover_MissingCredentials(t *testing.T) {
+	t.Setenv("KITE_UNIFI_API_KEY", "")
 	t.Setenv("KITE_UNIFI_ENDPOINT", "")
 	t.Setenv("KITE_UNIFI_USERNAME", "")
 	t.Setenv("KITE_UNIFI_PASSWORD", "")
@@ -172,7 +173,7 @@ func TestUniFi_Discover_MissingCredentials(t *testing.T) {
 	u := New()
 	_, err := u.Discover(context.Background(), map[string]any{})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "required")
+	assert.Contains(t, err.Error(), "KITE_UNIFI_API_KEY")
 }
 
 func TestUniFi_Discover_LoginFailure(t *testing.T) {
