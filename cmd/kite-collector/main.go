@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vulnertrack/kite-collector/api/rest"
+	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/dedup"
@@ -91,6 +92,7 @@ lifecycle events for downstream consumption.`,
 		newAgentCmd(),
 		newDiffCmd(),
 		newReportCmd(),
+		newDiscoverServicesCmd(),
 		newVersionCmd(),
 	)
 
@@ -103,12 +105,13 @@ lifecycle events for downstream consumption.`,
 
 func newScanCmd() *cobra.Command {
 	var (
-		cfgFile string
-		scope   []string
-		output  string
-		dbPath  string
-		sources []string
-		verbose bool
+		cfgFile       string
+		scope         []string
+		output        string
+		dbPath        string
+		sources       []string
+		verbose       bool
+		autoDiscovery bool
 	)
 
 	cmd := &cobra.Command{
@@ -116,9 +119,12 @@ func newScanCmd() *cobra.Command {
 		Short: "Run an asset discovery scan",
 		Long: `Execute a full scan cycle: discover assets from enabled sources, deduplicate
 against the local database, classify authorization and managed state, evaluate
-policy rules, persist results, and emit lifecycle events.`,
+policy rules, persist results, and emit lifecycle events.
+
+Use --auto to run infrastructure auto-discovery first and enable all ready
+sources automatically.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runScan(cfgFile, scope, output, dbPath, sources, verbose)
+			return runScan(cfgFile, scope, output, dbPath, sources, verbose, autoDiscovery)
 		},
 	}
 
@@ -128,11 +134,12 @@ policy rules, persist results, and emit lifecycle events.`,
 	cmd.Flags().StringVar(&dbPath, "db", "./data/kite.db", "path to SQLite database")
 	cmd.Flags().StringSliceVar(&sources, "source", nil, "discovery sources to enable")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable debug logging")
+	cmd.Flags().BoolVar(&autoDiscovery, "auto", false, "auto-discover infrastructure services and enable ready sources")
 
 	return cmd
 }
 
-func runScan(cfgFile string, scope []string, output, dbPath string, sources []string, verbose bool) error {
+func runScan(cfgFile string, scope []string, output, dbPath string, sources []string, verbose, autoDiscover bool) error {
 	// Set up context with signal handling.
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -151,6 +158,30 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 			return fmt.Errorf("load config %s: %w", cfgFile, loadErr)
 		}
 		cfg = c
+	}
+
+	// Auto-discovery: detect available infrastructure services and enable
+	// all ready sources in the config before scanning.
+	if autoDiscover {
+		discovered := autodiscovery.Run(ctx, autodiscovery.Options{})
+		if cfg.Discovery.Sources == nil {
+			cfg.Discovery.Sources = make(map[string]config.SourceConfig)
+		}
+		readyCount := 0
+		for _, svc := range discovered {
+			if svc.Status != "ready" {
+				continue
+			}
+			src := cfg.Discovery.Sources[svc.Name]
+			src.Enabled = true
+			if svc.Endpoint != "" {
+				src.Endpoint = svc.Endpoint
+			}
+			cfg.Discovery.Sources[svc.Name] = src
+			readyCount++
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "Auto-discovery: %d services found, %d ready and enabled\n",
+			len(discovered), readyCount)
 	}
 
 	// Override scope from flag if provided.
@@ -542,6 +573,107 @@ func formatDiffCSV(result DiffResult, showUnchanged bool) {
 			_ = w.Write([]string{"unchanged", a.Hostname, string(a.AssetType), string(a.IsAuthorized), string(a.IsManaged), a.OSVersion, ""})
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// discover-services command
+// ---------------------------------------------------------------------------
+
+func newDiscoverServicesCmd() *cobra.Command {
+	var (
+		output  string
+		verbose bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "discover-services",
+		Short: "Detect reachable infrastructure APIs",
+		Long: `Probe the local machine and network gateway for known infrastructure services
+(Docker, Wazuh, Proxmox, ClickHouse, etc.) and report what was found. This
+helps identify which discovery sources can be enabled without manual
+configuration.
+
+All probes are read-only: no credentials are sent, no data is written.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDiscoverServices(output, verbose)
+		},
+	}
+
+	cmd.Flags().StringVar(&output, "output", "table", "output format: json, table")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable debug logging")
+
+	return cmd
+}
+
+func runDiscoverServices(output string, verbose bool) error {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	logLevel := slog.LevelWarn
+	if verbose {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
+	slog.SetDefault(logger)
+
+	discovered := autodiscovery.Run(ctx, autodiscovery.Options{})
+
+	switch strings.ToLower(output) {
+	case "json":
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(discovered)
+	default:
+		formatDiscoveredServices(discovered)
+	}
+
+	return nil
+}
+
+func formatDiscoveredServices(services []autodiscovery.DiscoveredService) {
+	fmt.Println()
+	fmt.Println("Infrastructure Auto-Discovery")
+	fmt.Println("==============================")
+	fmt.Println()
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "  SERVICE\tENDPOINT\tSTATUS")
+	for _, svc := range services {
+		_, _ = fmt.Fprintf(w, "  %s\t%s\t%s\n", svc.Name, svc.Endpoint, svc.Status)
+	}
+	_ = w.Flush()
+
+	ready := 0
+	needsCreds := 0
+	for _, svc := range services {
+		switch svc.Status {
+		case "ready":
+			ready++
+		case "needs_credentials":
+			needsCreds++
+		}
+	}
+	fmt.Printf("\n  Ready: %d | Need credentials: %d\n", ready, needsCreds)
+
+	// Print setup hints for services that need credentials.
+	hasHints := false
+	for _, svc := range services {
+		if svc.Status == "needs_credentials" && svc.SetupHint != "" {
+			if !hasHints {
+				fmt.Println()
+				fmt.Println("  To enable all discovered services:")
+				fmt.Println()
+				hasHints = true
+			}
+			fmt.Printf("    # %s\n", svc.DisplayName)
+			fmt.Printf("    %s\n\n", svc.SetupHint)
+		}
+	}
+
+	if ready > 0 {
+		fmt.Println("  Then run: kite-collector scan --auto")
+	}
+	fmt.Println()
 }
 
 // ---------------------------------------------------------------------------
