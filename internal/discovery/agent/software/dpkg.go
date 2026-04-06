@@ -28,11 +28,10 @@ func (d *Dpkg) Available() bool {
 	return err == nil
 }
 
-// Collect runs dpkg-query and returns parsed results.
+// Collect runs dpkg-query and returns parsed results. Output is capped at
+// 64 MB and the command is killed after 60 seconds.
 func (d *Dpkg) Collect(ctx context.Context) (*Result, error) {
-	out, err := exec.CommandContext(ctx,
-		"dpkg-query", "-W", "-f=${Package}\t${Version}\n",
-	).Output()
+	out, err := runWithLimits(ctx, "dpkg-query", "-W", "-f=${Package}\t${Version}\n")
 	if err != nil {
 		return nil, fmt.Errorf("dpkg-query: %w", err)
 	}

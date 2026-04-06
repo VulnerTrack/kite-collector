@@ -18,6 +18,7 @@ type Metrics struct {
 	DiscoveryErrors *prometheus.CounterVec
 	ScanCoverage    *prometheus.GaugeVec
 	StaleAssets     prometheus.Gauge
+	DedupSkipped    prometheus.Counter
 	registry        *prometheus.Registry
 }
 
@@ -55,6 +56,11 @@ func New() *Metrics {
 		Help: "Number of assets that have not been seen within the staleness threshold.",
 	})
 
+	dedupSkipped := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "kite_dedup_skipped_total",
+		Help: "Total number of duplicate assets skipped during deduplication.",
+	})
+
 	reg.MustRegister(
 		scanDuration,
 		assetsTotal,
@@ -62,6 +68,7 @@ func New() *Metrics {
 		discoveryErrors,
 		scanCoverage,
 		staleAssets,
+		dedupSkipped,
 	)
 
 	return &Metrics{
@@ -71,6 +78,7 @@ func New() *Metrics {
 		DiscoveryErrors: discoveryErrors,
 		ScanCoverage:    scanCoverage,
 		StaleAssets:     staleAssets,
+		DedupSkipped:    dedupSkipped,
 		registry:        reg,
 	}
 }
@@ -82,8 +90,9 @@ func (m *Metrics) Handler() http.Handler {
 }
 
 // Serve starts an HTTP server in a background goroutine that exposes
-// /metrics on the given address. It does not block the caller.
-func (m *Metrics) Serve(addr string) {
+// /metrics on the given address. The returned *http.Server can be used
+// to shut the listener down gracefully.
+func (m *Metrics) Serve(addr string) *http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", m.Handler())
 
@@ -96,8 +105,10 @@ func (m *Metrics) Serve(addr string) {
 	}
 
 	go func() {
-		if err := srv.ListenAndServe(); err != nil {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("metrics server exited", "error", err)
 		}
 	}()
+
+	return srv
 }

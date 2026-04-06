@@ -28,11 +28,10 @@ func (r *RPM) Available() bool {
 	return err == nil
 }
 
-// Collect runs rpm -qa and returns parsed results.
+// Collect runs rpm -qa and returns parsed results. Output is capped at
+// 64 MB and the command is killed after 60 seconds.
 func (r *RPM) Collect(ctx context.Context) (*Result, error) {
-	out, err := exec.CommandContext(ctx,
-		"rpm", "-qa", "--queryformat", "%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\n",
-	).Output()
+	out, err := runWithLimits(ctx, "rpm", "-qa", "--queryformat", "%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\n")
 	if err != nil {
 		return nil, fmt.Errorf("rpm -qa: %w", err)
 	}

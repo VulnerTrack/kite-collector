@@ -66,6 +66,16 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		maxConc = int(mc)
 	}
 
+	// Apply an overall scan deadline so a large scope cannot run forever.
+	scanDeadline := 30 * time.Minute
+	if sd, ok := cfg["scan_timeout"].(string); ok {
+		if d, err := time.ParseDuration(sd); err == nil {
+			scanDeadline = d
+		}
+	}
+	ctx, cancel := context.WithTimeout(ctx, scanDeadline)
+	defer cancel()
+
 	// Collect all IPs from all CIDR ranges.
 	var ips []netip.Addr
 	for _, cidr := range cidrs {

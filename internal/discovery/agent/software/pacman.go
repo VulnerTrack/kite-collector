@@ -28,9 +28,10 @@ func (p *Pacman) Available() bool {
 	return err == nil
 }
 
-// Collect runs pacman -Q and returns parsed results.
+// Collect runs pacman -Q and returns parsed results. Output is capped at
+// 64 MB and the command is killed after 60 seconds.
 func (p *Pacman) Collect(ctx context.Context) (*Result, error) {
-	out, err := exec.CommandContext(ctx, "pacman", "-Q").Output()
+	out, err := runWithLimits(ctx, "pacman", "-Q")
 	if err != nil {
 		return nil, fmt.Errorf("pacman -Q: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -25,12 +26,15 @@ import (
 // can distinguish new from updated assets by checking whether FirstSeenAt
 // equals LastSeenAt (new) or not (updated).
 type Deduplicator struct {
-	store store.Store
+	store   store.Store
+	metrics *metrics.Metrics
 }
 
-// New creates a Deduplicator backed by the given store.
-func New(s store.Store) *Deduplicator {
-	return &Deduplicator{store: s}
+// New creates a Deduplicator backed by the given store. An optional
+// *metrics.Metrics can be passed to record dedup skip counters; pass nil
+// to disable metrics.
+func New(s store.Store, m *metrics.Metrics) *Deduplicator {
+	return &Deduplicator{store: s, metrics: m}
 }
 
 // Result groups deduplication output so callers can inspect what changed.
@@ -61,10 +65,13 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, assets []model.Asset) (*
 		asset.ComputeNaturalKey()
 
 		if _, dup := seen[asset.NaturalKey]; dup {
-			slog.Debug("dedup: skipping intra-batch duplicate",
+			slog.Info("dedup: skipping intra-batch duplicate",
 				"hostname", asset.Hostname,
 				"asset_type", asset.AssetType,
 			)
+			if d.metrics != nil {
+				d.metrics.DedupSkipped.Inc()
+			}
 			continue
 		}
 		seen[asset.NaturalKey] = struct{}{}
@@ -115,12 +122,14 @@ func mergeAsset(existing *model.Asset, incoming *model.Asset, now time.Time) mod
 	merged := *existing
 	merged.LastSeenAt = now
 
-	// Update OS information if the incoming data provides it and the
-	// existing record is blank.
+	// Update OS family only when the existing record is blank (stable field).
 	if incoming.OSFamily != "" && existing.OSFamily == "" {
 		merged.OSFamily = incoming.OSFamily
 	}
-	if incoming.OSVersion != "" && existing.OSVersion == "" {
+
+	// Mutable fields: always prefer incoming non-empty values so that
+	// newer discovery data wins over stale records.
+	if incoming.OSVersion != "" {
 		merged.OSVersion = incoming.OSVersion
 	}
 
@@ -135,8 +144,8 @@ func mergeAsset(existing *model.Asset, incoming *model.Asset, now time.Time) mod
 		merged.Tags = incoming.Tags
 	}
 
-	// Merge environment/owner/criticality when previously unset.
-	if incoming.Environment != "" && existing.Environment == "" {
+	// Mutable fields: always prefer incoming non-empty values.
+	if incoming.Environment != "" {
 		merged.Environment = incoming.Environment
 	}
 	if incoming.Owner != "" && existing.Owner == "" {

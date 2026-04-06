@@ -159,6 +159,11 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 		cfg.Discovery.Sources["network"] = netCfg
 	}
 
+	// Validate configuration early.
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	// Configure structured logger.
 	logLevel := slog.LevelInfo
 	if verbose || strings.EqualFold(cfg.LogLevel, "debug") {
@@ -197,8 +202,19 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(cmdb.NewServiceNow())
 	registry.Register(cmdb.NewNetBox())
 
+	// Set up metrics.
+	met := metrics.New()
+	var metricsSrv *http.Server
+	if cfg.Metrics.Enabled {
+		listen := cfg.Metrics.Listen
+		if listen == "" {
+			listen = ":9090"
+		}
+		metricsSrv = met.Serve(listen)
+	}
+
 	// Set up deduplicator.
-	dd := dedup.New(st)
+	dd := dedup.New(st, met)
 
 	// Set up classifier.
 	authorizer, err := classifier.NewAuthorizer(
@@ -222,20 +238,18 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	}
 	pol := policy.New(defaultRules, cfg.StaleThresholdDuration())
 
-	// Set up metrics.
-	met := metrics.New()
-	if cfg.Metrics.Enabled {
-		listen := cfg.Metrics.Listen
-		if listen == "" {
-			listen = ":9090"
-		}
-		met.Serve(listen)
-	}
-
 	// Create and run the scan engine.
 	eng := engine.New(st, registry, dd, cls, em, pol, met)
 
 	result, err := eng.Run(ctx, cfg)
+
+	// Graceful shutdown of metrics server (if started).
+	if metricsSrv != nil {
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = metricsSrv.Shutdown(shutCtx)
+		shutCancel()
+	}
+
 	if err != nil {
 		return fmt.Errorf("scan failed: %w", err)
 	}
@@ -564,6 +578,11 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 		cfg = c
 	}
 
+	// Validate configuration early.
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+
 	logLevel := slog.LevelInfo
 	if verbose || strings.EqualFold(cfg.LogLevel, "debug") {
 		logLevel = slog.LevelDebug
@@ -613,7 +632,17 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 	registry.Register(cmdb.NewServiceNow())
 	registry.Register(cmdb.NewNetBox())
 
-	dd := dedup.New(st)
+	met := metrics.New()
+	var metricsSrv *http.Server
+	if cfg.Metrics.Enabled {
+		listen := cfg.Metrics.Listen
+		if listen == "" {
+			listen = ":9090"
+		}
+		metricsSrv = met.Serve(listen)
+	}
+
+	dd := dedup.New(st, met)
 
 	authorizer, err := classifier.NewAuthorizer(
 		cfg.Classification.Authorization.AllowlistFile,
@@ -654,15 +683,6 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 		{IsManaged: model.ManagedUnmanaged, Severity: model.SeverityMedium},
 	}
 	pol := policy.New(defaultRules, cfg.StaleThresholdDuration())
-
-	met := metrics.New()
-	if cfg.Metrics.Enabled {
-		listen := cfg.Metrics.Listen
-		if listen == "" {
-			listen = ":9090"
-		}
-		met.Serve(listen)
-	}
 
 	eng := engine.New(st, registry, dd, cls, em, pol, met)
 
@@ -725,6 +745,10 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
 			_ = apiSrv.Shutdown(shutdownCtx)
+			if metricsSrv != nil {
+				_ = metricsSrv.Shutdown(shutdownCtx)
+			}
+			_ = em.Shutdown(shutdownCtx)
 			return nil
 		case <-ticker.C:
 			if result, scanErr := eng.Run(ctx, cfg); scanErr != nil {

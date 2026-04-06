@@ -118,7 +118,7 @@ var _ store.Store = (*mockStore)(nil)
 
 func TestDedup_NewAssetGetsUUIDv7(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	assets := []model.Asset{
@@ -136,7 +136,7 @@ func TestDedup_NewAssetGetsUUIDv7(t *testing.T) {
 
 func TestDedup_ExistingAssetPreservesID(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	// Pre-populate the store with an existing asset.
@@ -169,7 +169,7 @@ func TestDedup_ExistingAssetPreservesID(t *testing.T) {
 
 func TestDedup_FirstSeenAtPreservedOnUpdate(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	firstSeen := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -198,7 +198,7 @@ func TestDedup_FirstSeenAtPreservedOnUpdate(t *testing.T) {
 
 func TestDedup_LastSeenAtUpdatedOnRediscovery(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	oldTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -228,7 +228,7 @@ func TestDedup_LastSeenAtUpdatedOnRediscovery(t *testing.T) {
 
 func TestDedup_IntraBatchDedup(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	// Two assets with the same hostname+type in one batch
@@ -247,7 +247,7 @@ func TestDedup_IntraBatchDedup(t *testing.T) {
 
 func TestDedup_IntraBatchDedup_DifferentTypes(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	// Same hostname but different types are distinct assets
@@ -265,7 +265,7 @@ func TestDedup_IntraBatchDedup_DifferentTypes(t *testing.T) {
 
 func TestDedup_EmptyInput(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	res, err := dd.Deduplicate(ctx, nil)
@@ -283,7 +283,7 @@ func TestDedup_EmptyInput(t *testing.T) {
 
 func TestDedup_NewAssetFirstSeenEqualsLastSeen(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	assets := []model.Asset{
@@ -301,7 +301,7 @@ func TestDedup_NewAssetFirstSeenEqualsLastSeen(t *testing.T) {
 
 func TestDedup_MergesOSInfo(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms)
+	dd := New(ms, nil)
 	ctx := context.Background()
 
 	existing := model.Asset{

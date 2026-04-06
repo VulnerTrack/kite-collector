@@ -172,19 +172,40 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 	}
 	defer tx.Rollback() //nolint:errcheck
 
+	// Pre-compute natural keys for the whole batch.
 	for i := range assets {
 		assets[i].ComputeNaturalKey()
+	}
 
-		// Check whether the asset already exists.
-		var exists int
-		err = tx.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM assets WHERE hostname = ? AND asset_type = ?`,
-			assets[i].Hostname, string(assets[i].AssetType),
-		).Scan(&exists)
-		if err != nil {
-			return 0, 0, fmt.Errorf("check existing asset: %w", err)
+	// Batch-query existing natural keys to avoid per-row SELECT COUNT(*).
+	existingKeys := make(map[string]bool, len(assets))
+	if len(assets) > 0 {
+		placeholders := make([]string, len(assets))
+		args := make([]any, len(assets))
+		for i, a := range assets {
+			placeholders[i] = "?"
+			args[i] = a.NaturalKey
 		}
+		query := `SELECT natural_key FROM assets WHERE natural_key IN (` +
+			strings.Join(placeholders, ",") + `)` //#nosec G202 -- placeholders are literal "?" strings, values are in args
+		rows, qErr := tx.QueryContext(ctx, query, args...)
+		if qErr != nil {
+			return 0, 0, fmt.Errorf("batch lookup existing keys: %w", qErr)
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var key string
+			if scanErr := rows.Scan(&key); scanErr != nil {
+				return 0, 0, fmt.Errorf("scan existing key: %w", scanErr)
+			}
+			existingKeys[key] = true
+		}
+		if rowErr := rows.Err(); rowErr != nil {
+			return 0, 0, fmt.Errorf("batch lookup rows: %w", rowErr)
+		}
+	}
 
+	for i := range assets {
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO assets (`+assetColumns+`)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -221,7 +242,7 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 			return 0, 0, fmt.Errorf("upsert asset %s: %w", assets[i].ID, err)
 		}
 
-		if exists > 0 {
+		if existingKeys[assets[i].NaturalKey] {
 			updated++
 		} else {
 			inserted++

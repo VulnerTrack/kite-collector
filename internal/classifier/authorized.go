@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -33,6 +34,18 @@ type Authorizer struct {
 // file does not exist, an authorizer with zero entries is returned so that
 // every asset evaluates to "unknown" (no data to decide).
 func NewAuthorizer(allowlistPath string, matchFields []string) (*Authorizer, error) {
+	// Validate that all match_fields are currently supported.
+	for _, f := range matchFields {
+		switch strings.ToLower(f) {
+		case "hostname":
+			// supported
+		case "mac_address", "ip_address":
+			return nil, fmt.Errorf("match_field %q is not yet supported; only \"hostname\" is available", f)
+		default:
+			return nil, fmt.Errorf("unknown match_field %q", f)
+		}
+	}
+
 	a := &Authorizer{
 		matchFields: matchFields,
 	}

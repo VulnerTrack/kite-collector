@@ -250,7 +250,7 @@ func newTestConfig() *config.Config {
 }
 
 func newTestEngine(st *mockStore, reg *discovery.Registry, em emitter.Emitter) *Engine {
-	dd := dedup.New(st)
+	dd := dedup.New(st, nil)
 	auth, _ := classifier.NewAuthorizer("", nil)
 	mgr := classifier.NewManager(nil)
 	cls := classifier.New(auth, mgr)
@@ -365,7 +365,7 @@ func TestEngine_UnauthorizedAssetsGenerateEvent(t *testing.T) {
 	mgr := classifier.NewManager(nil)
 	cls := classifier.New(auth, mgr)
 
-	dd := dedup.New(ms)
+	dd := dedup.New(ms, nil)
 	pol := policy.New(nil, 168*time.Hour)
 	eng := New(ms, reg, dd, cls, em, pol, nil)
 	cfg := newTestConfig()

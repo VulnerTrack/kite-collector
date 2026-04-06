@@ -1,6 +1,9 @@
 package config
 
 import (
+	"fmt"
+	"net/netip"
+	"os"
 	"strings"
 	"time"
 
@@ -128,6 +131,50 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// Validate checks configuration values for common errors and returns a
+// descriptive error for the first problem found.
+func (c *Config) Validate() error {
+	// Stale threshold must be parseable.
+	if c.StaleThreshold != "" {
+		if _, err := time.ParseDuration(c.StaleThreshold); err != nil {
+			return fmt.Errorf("invalid stale_threshold %q: %w", c.StaleThreshold, err)
+		}
+	}
+
+	// Log level must be recognized.
+	switch strings.ToLower(c.LogLevel) {
+	case "", "debug", "info", "warn", "error":
+		// ok
+	default:
+		return fmt.Errorf("invalid log_level %q: expected debug, info, warn, or error", c.LogLevel)
+	}
+
+	// Validate CIDR scopes in network source.
+	if netSrc, ok := c.Discovery.Sources["network"]; ok && netSrc.Enabled {
+		for _, cidr := range netSrc.Scope {
+			if _, err := netip.ParsePrefix(cidr); err != nil {
+				return fmt.Errorf("invalid CIDR in network scope %q: %w", cidr, err)
+			}
+		}
+	}
+
+	// Streaming interval must be parseable when set.
+	if c.Streaming.Interval != "" {
+		if _, err := time.ParseDuration(c.Streaming.Interval); err != nil {
+			return fmt.Errorf("invalid streaming interval %q: %w", c.Streaming.Interval, err)
+		}
+	}
+
+	// Allowlist file must exist if configured.
+	if p := c.Classification.Authorization.AllowlistFile; p != "" {
+		if _, err := os.Stat(p); err != nil {
+			return fmt.Errorf("allowlist_file %q: %w", p, err)
+		}
+	}
+
+	return nil
 }
 
 // StaleThresholdDuration parses the StaleThreshold string into a
