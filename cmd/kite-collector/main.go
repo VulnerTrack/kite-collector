@@ -256,6 +256,10 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(paas.NewHeroku())
 	registry.Register(paas.NewRender())
 	registry.Register(paas.NewFlyIO())
+	registry.Register(paas.NewRailway())
+	registry.Register(paas.NewVercel())
+	registry.Register(paas.NewCoolify())
+	registry.Register(paas.NewCapRover())
 
 	// Set up metrics.
 	met := metrics.New()
