@@ -5,6 +5,7 @@
 package paas
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -45,6 +46,13 @@ func bearerAuth(token string) authFunc {
 	}
 }
 
+// captainAuth returns an authFunc for CapRover's x-captain-auth header.
+func captainAuth(token string) authFunc {
+	return func(req *http.Request) {
+		req.Header.Set("x-captain-auth", token)
+	}
+}
+
 // apiClient is a shared HTTP client for PaaS provider APIs with retry,
 // rate-limit handling, and JSON response decoding.
 type apiClient struct {
@@ -81,12 +89,12 @@ func (c *apiClient) applyHeaders(req *http.Request) {
 // body into out. Transient errors are retried with exponential backoff.
 func (c *apiClient) get(ctx context.Context, path string, out any) error {
 	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G107 -- base URL is hardcoded per provider
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider
 		if reqErr != nil {
 			return nil, reqErr
 		}
 		c.applyHeaders(req)
-		return c.http.Do(req)
+		return c.http.Do(req) //#nosec G704 -- request built from internal base URL
 	})
 	if err != nil {
 		return err
@@ -100,7 +108,7 @@ func (c *apiClient) get(ctx context.Context, path string, out any) error {
 // is carried in response headers (e.g. Heroku Range pagination).
 func (c *apiClient) getPage(ctx context.Context, path string, extraHeaders map[string]string, out any) (http.Header, error) {
 	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G107 -- base URL is hardcoded per provider
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider
 		if reqErr != nil {
 			return nil, reqErr
 		}
@@ -108,7 +116,7 @@ func (c *apiClient) getPage(ctx context.Context, path string, extraHeaders map[s
 		for k, v := range extraHeaders {
 			req.Header.Set(k, v)
 		}
-		return c.http.Do(req)
+		return c.http.Do(req) //#nosec G704 -- request built from internal base URL
 	})
 	if err != nil {
 		return nil, err
@@ -118,6 +126,29 @@ func (c *apiClient) getPage(ctx context.Context, path string, extraHeaders map[s
 		return nil, err
 	}
 	return resp.Header, nil
+}
+
+// post performs an authenticated POST with a JSON body and decodes the
+// response into out. Used for GraphQL queries.
+func (c *apiClient) post(ctx context.Context, path string, body any, out any) error {
+	payload, mErr := json.Marshal(body)
+	if mErr != nil {
+		return fmt.Errorf("marshal request body: %w", mErr)
+	}
+	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, bytes.NewReader(payload)) //#nosec G704 -- base URL is hardcoded per provider
+		if reqErr != nil {
+			return nil, reqErr
+		}
+		c.applyHeaders(req)
+		req.Header.Set("Content-Type", "application/json")
+		return c.http.Do(req) //#nosec G704 -- request built from internal base URL
+	})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 // doWithRetry executes fn up to maxRetryAttempts times with exponential
@@ -137,7 +168,7 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 
 		if attempt > 0 {
 			delay := retryBackoff(attempt)
-			slog.Debug(c.name+": retrying",
+			slog.Debug(c.name+": retrying", //#nosec G706 -- c.name is a hardcoded provider literal
 				"attempt", attempt+1,
 				"delay", delay,
 			)
@@ -151,7 +182,7 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 		resp, err := fn()
 		if err != nil {
 			lastErr = fmt.Errorf("%s: request failed: %w", c.name, err)
-			slog.Warn(c.name+": network error, will retry",
+			slog.Warn(c.name+": network error, will retry", //#nosec G706 -- c.name is a hardcoded provider literal
 				"attempt", attempt+1,
 				"error", err,
 			)
@@ -170,7 +201,7 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 			body := drainBody(resp, 200)
 			lastErr = fmt.Errorf("%s: rate limited (429): %s", c.name, body)
-			slog.Warn(c.name+": rate limited",
+			slog.Warn(c.name+": rate limited", //#nosec G706 -- c.name is a hardcoded provider literal
 				"attempt", attempt+1,
 				"retry_after", retryAfter,
 			)
@@ -186,7 +217,7 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 		case resp.StatusCode >= 500:
 			body := drainBody(resp, 500)
 			lastErr = fmt.Errorf("%s: server error (%d): %s", c.name, resp.StatusCode, body)
-			slog.Warn(c.name+": server error, will retry",
+			slog.Warn(c.name+": server error, will retry", //#nosec G706 -- c.name is a hardcoded provider literal
 				"attempt", attempt+1,
 				"status", resp.StatusCode,
 			)
