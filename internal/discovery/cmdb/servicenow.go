@@ -96,12 +96,9 @@ func (s *ServiceNow) Discover(ctx context.Context, cfg map[string]any) ([]model.
 // serviceNowCI holds the fields extracted from the ServiceNow Table API
 // response.
 type serviceNowCI struct {
-	sysID             string
 	name              string
 	os                string
 	osVersion         string
-	ipAddress         string
-	assetTag          string
 	operationalStatus string
 }
 
@@ -145,14 +142,14 @@ func (s *ServiceNow) fetchCIPage(ctx context.Context, instanceURL, username, pas
 		instanceURL, table, serviceNowPageSize, offset,
 	)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil) //#nosec G107 -- URL from operator-configured ServiceNow instance
 	if err != nil {
 		return nil, false, fmt.Errorf("creating request: %w", err)
 	}
 	req.SetBasicAuth(username, password)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //#nosec G107
 	if err != nil {
 		return nil, false, fmt.Errorf("executing request: %w", err)
 	}
@@ -200,12 +197,9 @@ func (s *ServiceNow) fetchCIPage(ctx context.Context, instanceURL, username, pas
 // object.
 func parseServiceNowCI(data json.RawMessage) (serviceNowCI, error) {
 	var raw struct {
-		SysID             string `json:"sys_id"`
 		Name              string `json:"name"`
 		OS                string `json:"os"`
 		OSVersion         string `json:"os_version"`
-		IPAddress         string `json:"ip_address"`
-		AssetTag          string `json:"asset_tag"`
 		OperationalStatus string `json:"operational_status"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -213,12 +207,9 @@ func parseServiceNowCI(data json.RawMessage) (serviceNowCI, error) {
 	}
 
 	return serviceNowCI{
-		sysID:             raw.SysID,
 		name:              raw.Name,
 		os:                raw.OS,
 		osVersion:         raw.OSVersion,
-		ipAddress:         raw.IPAddress,
-		assetTag:          raw.AssetTag,
 		operationalStatus: raw.OperationalStatus,
 	}, nil
 }

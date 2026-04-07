@@ -131,14 +131,14 @@ type jamfComputerDetail struct {
 func (j *Jamf) listComputers(ctx context.Context, apiURL, username, password string) ([]jamfComputerListEntry, error) {
 	endpoint := apiURL + "/JSSResource/computers"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil) //#nosec G107 -- URL from operator-configured Jamf instance
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.SetBasicAuth(username, password)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //#nosec G107
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}
@@ -172,14 +172,14 @@ func (j *Jamf) listComputers(ctx context.Context, apiURL, username, password str
 func (j *Jamf) getComputerDetail(ctx context.Context, apiURL, username, password string, computerID int) (jamfComputerDetail, error) {
 	endpoint := fmt.Sprintf("%s/JSSResource/computers/id/%d", apiURL, computerID)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil) //#nosec G107 -- URL from operator-configured Jamf instance
 	if err != nil {
 		return jamfComputerDetail{}, fmt.Errorf("creating request: %w", err)
 	}
 	req.SetBasicAuth(username, password)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //#nosec G107
 	if err != nil {
 		return jamfComputerDetail{}, fmt.Errorf("executing request: %w", err)
 	}

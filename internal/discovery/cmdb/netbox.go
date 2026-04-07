@@ -95,7 +95,6 @@ type netboxDevice struct {
 	platform   string
 	site       string
 	tenant     string
-	status     string
 }
 
 // ---------------------------------------------------------------------------
@@ -130,14 +129,14 @@ func (n *NetBox) listDevices(ctx context.Context, apiURL, token string) ([]netbo
 // fetchDevicePage fetches a single page of the devices response and returns
 // parsed devices plus the next page URL (empty if no more pages).
 func (n *NetBox) fetchDevicePage(ctx context.Context, apiURL, token string) ([]netboxDevice, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil) //#nosec G107 -- URL from operator-configured NetBox instance
 	if err != nil {
 		return nil, "", fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Token "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //#nosec G107
 	if err != nil {
 		return nil, "", fmt.Errorf("executing request: %w", err)
 	}
@@ -205,10 +204,6 @@ func parseNetBoxDevice(data json.RawMessage) (netboxDevice, error) {
 			Name string `json:"name"`
 			Slug string `json:"slug"`
 		} `json:"tenant"`
-		Status *struct {
-			Value string `json:"value"`
-			Label string `json:"label"`
-		} `json:"status"`
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -229,9 +224,6 @@ func parseNetBoxDevice(data json.RawMessage) (netboxDevice, error) {
 	}
 	if raw.Tenant != nil {
 		dev.tenant = raw.Tenant.Name
-	}
-	if raw.Status != nil {
-		dev.status = raw.Status.Value
 	}
 
 	return dev, nil

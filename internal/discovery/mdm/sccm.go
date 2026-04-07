@@ -93,7 +93,6 @@ func (s *SCCM) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 type sccmDevice struct {
 	name             string
 	osNameAndVersion string
-	lastActiveTime   string
 	isClient         bool
 }
 
@@ -105,14 +104,14 @@ type sccmDevice struct {
 func (s *SCCM) listDevices(ctx context.Context, apiURL, username, password string) ([]sccmDevice, error) {
 	endpoint := apiURL + "/AdminService/v1.0/Device"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil) //#nosec G107 -- URL from operator-configured SCCM endpoint
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.SetBasicAuth(username, password)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //#nosec G107
 	if err != nil {
 		return nil, fmt.Errorf("executing request: %w", err)
 	}
@@ -158,7 +157,6 @@ func parseSCCMDevice(data json.RawMessage) (sccmDevice, error) {
 	var raw struct {
 		Name                          string `json:"Name"`
 		OperatingSystemNameAndVersion string `json:"OperatingSystemNameandVersion"`
-		LastActiveTime                string `json:"LastActiveTime"`
 		IsClient                      bool   `json:"IsClient"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -169,7 +167,6 @@ func parseSCCMDevice(data json.RawMessage) (sccmDevice, error) {
 		name:             raw.Name,
 		osNameAndVersion: raw.OperatingSystemNameAndVersion,
 		isClient:         raw.IsClient,
-		lastActiveTime:   raw.LastActiveTime,
 	}, nil
 }
 
