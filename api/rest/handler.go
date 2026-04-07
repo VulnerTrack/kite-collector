@@ -9,9 +9,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
@@ -26,8 +29,51 @@ const maxLimit = 1000
 // the underlying store.Store is required to be safe for concurrent use and
 // Handler itself carries no mutable state.
 type Handler struct {
-	store  store.Store
-	logger *slog.Logger
+	store               store.Store
+	logger              *slog.Logger
+	panicsRecovered     *prometheus.CounterVec
+	responseTruncations prometheus.Counter
+	circuitBreaker      *safety.CircuitBreaker
+	maxRequestBytes     int64
+	maxResponseBytes    int64
+}
+
+// SetPanicsRecovered sets the Prometheus counter used by the recovery
+// middleware to track recovered panics.
+func (h *Handler) SetPanicsRecovered(c *prometheus.CounterVec) {
+	h.panicsRecovered = c
+}
+
+// SetMaxRequestBytes configures the maximum allowed request body size.
+func (h *Handler) SetMaxRequestBytes(n int64) { h.maxRequestBytes = n }
+
+// SetMaxResponseBytes configures the maximum allowed response body size.
+func (h *Handler) SetMaxResponseBytes(n int64) { h.maxResponseBytes = n }
+
+// SetResponseTruncations sets the Prometheus counter incremented when a
+// response is truncated due to the size limit.
+func (h *Handler) SetResponseTruncations(c prometheus.Counter) { h.responseTruncations = c }
+
+// SetCircuitBreaker sets the circuit breaker used to serve source health.
+func (h *Handler) SetCircuitBreaker(cb *safety.CircuitBreaker) { h.circuitBreaker = cb }
+
+// Handler returns an http.Handler that wraps all routes with safety
+// middleware. The chain (outermost first) is: recovery → response
+// bounding → request body limiting → routes.
+func (h *Handler) Handler() http.Handler {
+	var handler http.Handler = h.Mux()
+
+	if h.maxRequestBytes > 0 {
+		handler = MaxBytesMiddleware(h.maxRequestBytes, handler)
+	}
+	if h.maxResponseBytes > 0 {
+		handler = ResponseBoundingMiddleware(h.maxResponseBytes, h.responseTruncations, handler)
+	}
+	if h.panicsRecovered != nil {
+		handler = RecoveryMiddleware(h.panicsRecovered, handler)
+	}
+
+	return handler
 }
 
 // New creates a Handler backed by the given store. If logger is nil a
@@ -53,6 +99,9 @@ func (h *Handler) Mux() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/events", h.handleListEvents)
 	mux.HandleFunc("GET /api/v1/scans/latest", h.handleLatestScan)
 	mux.HandleFunc("GET /api/v1/scans", h.handleListScans)
+	mux.HandleFunc("GET /api/v1/runtime-incidents", h.handleListIncidents)
+	mux.HandleFunc("GET /api/v1/source-health", h.handleListSourceHealth)
+	mux.HandleFunc("GET /api/v1/source-health/{name}", h.handleGetSourceHealth)
 
 	return mux
 }
@@ -222,6 +271,84 @@ func (h *Handler) handleLatestScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, run)
+}
+
+func (h *Handler) handleListIncidents(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("request", "method", r.Method, "path", r.URL.Path)
+
+	q := r.URL.Query()
+
+	filter := store.IncidentFilter{
+		IncidentType: q.Get("type"),
+		Limit:        clampLimit(parseIntParam(q.Get("limit"), defaultLimit)),
+		Offset:       clampOffset(parseIntParam(q.Get("offset"), 0)),
+	}
+
+	if raw := q.Get("since"); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid since: expected RFC3339")
+			return
+		}
+		filter.Since = &t
+	}
+
+	if raw := q.Get("scan_run_id"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid scan_run_id")
+			return
+		}
+		filter.ScanRunID = &id
+	}
+
+	incidents, err := h.store.ListRuntimeIncidents(r.Context(), filter)
+	if err != nil {
+		h.logger.Error("list runtime incidents failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if len(incidents) == 0 {
+		writeJSON(w, http.StatusOK, emptyArray)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, incidents)
+}
+
+func (h *Handler) handleListSourceHealth(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("request", "method", r.Method, "path", r.URL.Path)
+
+	if h.circuitBreaker == nil {
+		writeJSON(w, http.StatusOK, emptyArray)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, h.circuitBreaker.AllSourceHealth())
+}
+
+func (h *Handler) handleGetSourceHealth(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("request", "method", r.Method, "path", r.URL.Path)
+
+	name := r.PathValue("name")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "missing source name")
+		return
+	}
+
+	if h.circuitBreaker == nil {
+		writeError(w, http.StatusNotFound, "source not found")
+		return
+	}
+
+	health := h.circuitBreaker.GetSourceHealth(name)
+	if health == nil {
+		writeError(w, http.StatusNotFound, "source not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, health)
 }
 
 // --- utilities --------------------------------------------------------------

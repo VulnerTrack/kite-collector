@@ -26,6 +26,17 @@ func (f *fixedSource) Discover(_ context.Context, _ map[string]any) ([]model.Ass
 	return f.assets, nil
 }
 
+// panickingSource panics during Discover.
+type panickingSource struct {
+	name string
+}
+
+func (p *panickingSource) Name() string { return p.name }
+
+func (p *panickingSource) Discover(_ context.Context, _ map[string]any) ([]model.Asset, error) {
+	panic("nil pointer dereference")
+}
+
 // failingSource always returns an error.
 type failingSource struct {
 	name string
@@ -110,6 +121,44 @@ func TestRegistry_AllSourcesFail(t *testing.T) {
 
 	assets, err := reg.DiscoverAll(context.Background(), configs)
 	require.NoError(t, err, "per-source failures are logged, not returned as errors")
+	assert.Empty(t, assets)
+}
+
+func TestRegistry_PanickingSourceDoesNotAbortOthers(t *testing.T) {
+	reg := NewRegistry()
+
+	reg.Register(&fixedSource{
+		name: "good",
+		assets: []model.Asset{
+			{Hostname: "host-a", AssetType: model.AssetTypeServer},
+		},
+	})
+	reg.Register(&panickingSource{name: "bad"})
+
+	configs := map[string]map[string]any{
+		"good": {},
+		"bad":  {},
+	}
+
+	assets, err := reg.DiscoverAll(context.Background(), configs)
+	require.NoError(t, err)
+	assert.Len(t, assets, 1, "assets from good source must be returned despite panic in bad source")
+	assert.Equal(t, "host-a", assets[0].Hostname)
+}
+
+func TestRegistry_AllSourcesPanic(t *testing.T) {
+	reg := NewRegistry()
+
+	reg.Register(&panickingSource{name: "panic1"})
+	reg.Register(&panickingSource{name: "panic2"})
+
+	configs := map[string]map[string]any{
+		"panic1": {},
+		"panic2": {},
+	}
+
+	assets, err := reg.DiscoverAll(context.Background(), configs)
+	require.NoError(t, err, "panics are recovered, not returned as errors")
 	assert.Empty(t, assets)
 }
 

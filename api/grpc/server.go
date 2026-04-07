@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -21,10 +22,17 @@ import (
 // model.Asset values, and persists them through the store.Store interface.
 type Server struct {
 	kitev1.UnimplementedCollectorServiceServer
-	store  store.Store
-	logger *slog.Logger
-	grpc   *grpc.Server
-	addr   string
+	store           store.Store
+	logger          *slog.Logger
+	grpc            *grpc.Server
+	addr            string
+	panicsRecovered *prometheus.CounterVec
+}
+
+// SetPanicsRecovered sets the Prometheus counter used by the gRPC recovery
+// interceptors to track recovered panics.
+func (s *Server) SetPanicsRecovered(c *prometheus.CounterVec) {
+	s.panicsRecovered = c
 }
 
 // New creates a Server that will listen on addr when Serve is called. The
@@ -49,7 +57,10 @@ func (s *Server) Serve() error {
 	if err != nil {
 		return err
 	}
-	s.grpc = grpc.NewServer()
+	s.grpc = grpc.NewServer(
+		grpc.ChainUnaryInterceptor(UnaryRecoveryInterceptor(s.panicsRecovered)),
+		grpc.ChainStreamInterceptor(StreamRecoveryInterceptor(s.panicsRecovered)),
+	)
 	kitev1.RegisterCollectorServiceServer(s.grpc, s)
 	s.logger.Info("gRPC server listening", "addr", s.addr)
 	return s.grpc.Serve(lis)

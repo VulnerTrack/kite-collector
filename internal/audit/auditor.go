@@ -5,10 +5,15 @@ package audit
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safety"
 )
 
 // Auditor inspects system configuration and returns findings.
@@ -25,8 +30,15 @@ type Auditor interface {
 
 // Registry manages a set of auditors and orchestrates parallel execution.
 type Registry struct {
-	auditors map[string]Auditor
-	mu       sync.RWMutex
+	auditors        map[string]Auditor
+	mu              sync.RWMutex
+	panicsRecovered *prometheus.CounterVec
+}
+
+// SetPanicsRecovered sets the Prometheus counter used to track recovered
+// panics. If nil, panics are still recovered and logged but not counted.
+func (r *Registry) SetPanicsRecovered(c *prometheus.CounterVec) {
+	r.panicsRecovered = c
 }
 
 // NewRegistry creates an empty auditor registry.
@@ -65,8 +77,17 @@ func (r *Registry) AuditAll(ctx context.Context, asset model.Asset) ([]model.Con
 
 	for _, a := range auditors {
 		go func(aud Auditor) {
-			findings, err := aud.Audit(ctx, asset)
-			ch <- result{findings: findings, name: aud.Name(), err: err}
+			var res result
+			res.name = aud.Name()
+			defer func() {
+				if rv := recover(); rv != nil {
+					stack := string(debug.Stack())
+					safety.LogPanic("audit."+aud.Name(), rv, stack, r.panicsRecovered)
+					res.err = fmt.Errorf("panic in audit.%s: %v", aud.Name(), rv)
+				}
+				ch <- res
+			}()
+			res.findings, res.err = aud.Audit(ctx, asset)
 		}(a)
 	}
 

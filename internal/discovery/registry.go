@@ -6,14 +6,30 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safety"
 )
 
 // Registry manages discovery sources and runs them in parallel.
 type Registry struct {
-	sources []Source
+	sources         []Source
+	panicsRecovered *prometheus.CounterVec
+	circuitBreaker  *safety.CircuitBreaker
+}
+
+// SetPanicsRecovered sets the Prometheus counter used to track recovered
+// panics. If nil, panics are still recovered and logged but not counted.
+func (r *Registry) SetPanicsRecovered(c *prometheus.CounterVec) {
+	r.panicsRecovered = c
+}
+
+// SetCircuitBreaker sets the circuit breaker used to skip sources that
+// have repeatedly failed.
+func (r *Registry) SetCircuitBreaker(cb *safety.CircuitBreaker) {
+	r.circuitBreaker = cb
 }
 
 // NewRegistry returns an empty Registry ready for source registration.
@@ -46,6 +62,15 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 
 	for _, src := range r.sources {
 		g.Go(func() error {
+			defer safety.Recover("discovery."+src.Name(), r.panicsRecovered, nil)
+
+			// Circuit breaker: skip sources with open circuits.
+			if r.circuitBreaker != nil && r.circuitBreaker.ShouldSkip(src.Name()) {
+				slog.Warn("discovery source skipped: circuit open",
+					"source", src.Name())
+				return nil
+			}
+
 			cfg := configs[src.Name()]
 
 			slog.Info("discovery source starting", "source", src.Name())
@@ -56,8 +81,15 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 					"source", src.Name(),
 					"error", err,
 				)
+				if r.circuitBreaker != nil {
+					r.circuitBreaker.RecordFailure(src.Name(), err.Error())
+				}
 				// Return nil so other sources continue.
 				return nil
+			}
+
+			if r.circuitBreaker != nil {
+				r.circuitBreaker.RecordSuccess(src.Name())
 			}
 
 			slog.Info("discovery source completed",
