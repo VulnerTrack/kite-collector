@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -315,7 +316,16 @@ func networkNames(c containerSummary) []string {
 // -------------------------------------------------------------------------
 
 // detectSocket checks common Docker and Podman socket paths.
+// On Windows it checks the Docker Desktop named pipe and TCP endpoint.
 func detectSocket() string {
+	if runtime.GOOS == "windows" {
+		return detectSocketWindows()
+	}
+	return detectSocketUnix()
+}
+
+// detectSocketUnix checks Unix socket paths for Docker and Podman.
+func detectSocketUnix() string {
 	paths := []string{
 		"/var/run/docker.sock",
 		"/run/podman/podman.sock",
@@ -328,6 +338,26 @@ func detectSocket() string {
 		if fi, err := os.Stat(p); err == nil && fi.Mode().Type() == os.ModeSocket {
 			return "unix://" + p
 		}
+	}
+	return ""
+}
+
+// detectSocketWindows probes for Docker Desktop on Windows via named pipe
+// or TCP endpoint.
+func detectSocketWindows() string {
+	// Check Docker Desktop named pipe.
+	pipe := `\\.\pipe\docker_engine`
+	if _, err := os.Stat(pipe); err == nil {
+		// Named pipe exists — Docker Desktop is running.
+		// Use TCP endpoint which Docker Desktop exposes.
+		return "tcp://localhost:2375"
+	}
+	// Try Docker Desktop TCP directly.
+	d := net.Dialer{Timeout: 2 * time.Second}
+	conn, err := d.DialContext(context.Background(), "tcp", "localhost:2375")
+	if err == nil {
+		_ = conn.Close()
+		return "tcp://localhost:2375"
 	}
 	return ""
 }
