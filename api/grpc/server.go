@@ -25,8 +25,8 @@ type Server struct {
 	store           store.Store
 	logger          *slog.Logger
 	grpc            *grpc.Server
-	addr            string
 	panicsRecovered *prometheus.CounterVec
+	addr            string
 }
 
 // SetPanicsRecovered sets the Prometheus counter used by the gRPC recovery

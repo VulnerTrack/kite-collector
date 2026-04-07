@@ -36,25 +36,25 @@ func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 
 // sourceState tracks the circuit breaker state for a single source.
 type sourceState struct {
-	mu                   sync.Mutex
+	lastFailureAt        time.Time
+	lastSuccessAt        time.Time
 	state                CircuitState
+	lastFailureReason    string
+	mu                   sync.Mutex
+	cooldownDuration     time.Duration
 	consecutiveFailures  int
 	consecutiveSuccesses int
 	failureThreshold     int
-	cooldownDuration     time.Duration
 	successThreshold     int
-	lastFailureAt        time.Time
-	lastSuccessAt        time.Time
-	lastFailureReason    string
 	totalTrips           int
 }
 
 // CircuitBreaker manages per-source circuit breaker state.
 type CircuitBreaker struct {
-	sources      sync.Map // map[string]*sourceState
-	defaultCfg   CircuitBreakerConfig
 	tripsCounter *prometheus.CounterVec
 	healthGauge  *prometheus.GaugeVec
+	sources      sync.Map // map[string]*sourceState
+	defaultCfg   CircuitBreakerConfig
 }
 
 // NewCircuitBreaker creates a CircuitBreaker with the given default config.
@@ -62,7 +62,7 @@ func NewCircuitBreaker(cfg CircuitBreakerConfig) *CircuitBreaker {
 	if cfg.FailureThreshold < 2 {
 		cfg.FailureThreshold = 2
 	}
-	if cfg.CooldownDuration < 30*time.Second {
+	if cfg.CooldownDuration <= 0 {
 		cfg.CooldownDuration = 30 * time.Second
 	}
 	if cfg.SuccessThreshold < 1 {
@@ -189,16 +189,16 @@ func (cb *CircuitBreaker) State(sourceName string) CircuitState {
 // SourceHealth returns a snapshot of source health info suitable for
 // API responses.
 type SourceHealth struct {
-	SourceName          string       `json:"source_name"`
-	State               CircuitState `json:"state"`
-	ConsecutiveFailures int          `json:"consecutive_failures"`
-	ConsecutiveSuccesses int         `json:"consecutive_successes"`
-	FailureThreshold    int          `json:"failure_threshold"`
-	CooldownSeconds     int          `json:"cooldown_seconds"`
-	LastSuccessAt       *time.Time   `json:"last_success_at,omitempty"`
-	LastFailureAt       *time.Time   `json:"last_failure_at,omitempty"`
-	LastFailureReason   string       `json:"last_failure_reason,omitempty"`
-	TotalTrips          int          `json:"total_trips"`
+	LastSuccessAt        *time.Time   `json:"last_success_at,omitempty"`
+	LastFailureAt        *time.Time   `json:"last_failure_at,omitempty"`
+	SourceName           string       `json:"source_name"`
+	State                CircuitState `json:"state"`
+	LastFailureReason    string       `json:"last_failure_reason,omitempty"`
+	ConsecutiveFailures  int          `json:"consecutive_failures"`
+	ConsecutiveSuccesses int          `json:"consecutive_successes"`
+	FailureThreshold     int          `json:"failure_threshold"`
+	CooldownSeconds      int          `json:"cooldown_seconds"`
+	TotalTrips           int          `json:"total_trips"`
 }
 
 // AllSourceHealth returns health info for all tracked sources.

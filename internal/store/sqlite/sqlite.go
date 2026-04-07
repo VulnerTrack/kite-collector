@@ -1177,7 +1177,7 @@ func (s *SQLiteStore) ListRuntimeIncidents(ctx context.Context, filter store.Inc
 
 	query := "SELECT " + incidentColumns + " FROM runtime_incidents"
 	if len(clauses) > 0 {
-		query += " WHERE " + strings.Join(clauses, " AND ")
+		query += " WHERE " + strings.Join(clauses, " AND ") // #nosec G202 -- clauses use parameterized placeholders, not user input
 	}
 	query += " ORDER BY created_at DESC"
 

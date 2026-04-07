@@ -31,8 +31,8 @@ type Auditor interface {
 // Registry manages a set of auditors and orchestrates parallel execution.
 type Registry struct {
 	auditors        map[string]Auditor
-	mu              sync.RWMutex
 	panicsRecovered *prometheus.CounterVec
+	mu              sync.RWMutex
 }
 
 // SetPanicsRecovered sets the Prometheus counter used to track recovered

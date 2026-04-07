@@ -43,21 +43,21 @@ var sourceEnvVars = map[string]map[string]string{ //#nosec G101 -- values are en
 	"intune": {
 		"tenant_id":     "KITE_INTUNE_TENANT_ID",
 		"client_id":     "KITE_INTUNE_CLIENT_ID",
-		"client_secret": "KITE_INTUNE_CLIENT_SECRET",
+		"client_secret": "KITE_INTUNE_CLIENT_SECRET", // #nosec G101 -- env var name, not a credential
 	},
 	"jamf": {
 		"api_url":  "KITE_JAMF_API_URL",
 		"username": "KITE_JAMF_USERNAME",
-		"password": "KITE_JAMF_PASSWORD",
+		"password": "KITE_JAMF_PASSWORD", // #nosec G101 -- env var name, not a credential
 	},
 	"sccm": {
 		"api_url":  "KITE_SCCM_API_URL",
 		"username": "KITE_SCCM_USERNAME",
-		"password": "KITE_SCCM_PASSWORD",
+		"password": "KITE_SCCM_PASSWORD", // #nosec G101 -- env var name, not a credential
 	},
 	"netbox": {
 		"api_url": "KITE_NETBOX_API_URL",
-		"token":   "KITE_NETBOX_TOKEN",
+		"token": "KITE_NETBOX_TOKEN", // #nosec G101 -- env var name, not a credential
 	},
 	"servicenow": {
 		"instance_url": "KITE_SERVICENOW_INSTANCE_URL",

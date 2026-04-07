@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -28,7 +29,7 @@ func TestRecoveryMiddleware_CatchesPanic(t *testing.T) {
 	})
 
 	handler := RecoveryMiddleware(counter, panicking)
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -50,7 +51,7 @@ func TestRecoveryMiddleware_NoPanic(t *testing.T) {
 	})
 
 	handler := RecoveryMiddleware(nil, normal)
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -64,7 +65,7 @@ func TestRecoveryMiddleware_NilCounter(t *testing.T) {
 	})
 
 	handler := RecoveryMiddleware(nil, panicking)
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -88,7 +89,7 @@ func TestMaxBytesMiddleware_RejectsOversizedBody(t *testing.T) {
 
 	handler := MaxBytesMiddleware(10, inner) // 10-byte limit
 	body := strings.NewReader("this body is definitely longer than ten bytes")
-	req := httptest.NewRequest("POST", "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/test", body)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -108,7 +109,7 @@ func TestMaxBytesMiddleware_AllowsSmallBody(t *testing.T) {
 
 	handler := MaxBytesMiddleware(100, inner)
 	body := strings.NewReader("small")
-	req := httptest.NewRequest("POST", "/test", body)
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/test", body)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -124,7 +125,7 @@ func TestMaxBytesMiddleware_ZeroLimitPassesThrough(t *testing.T) {
 	handler := MaxBytesMiddleware(0, inner)
 
 	// With zero limit, the middleware should be a no-op.
-	req := httptest.NewRequest("POST", "/test", strings.NewReader("anything"))
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/test", strings.NewReader("anything"))
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -148,7 +149,7 @@ func TestResponseBoundingMiddleware_TruncatesLargeResponse(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(50, counter, inner) // 50-byte limit
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -171,7 +172,7 @@ func TestResponseBoundingMiddleware_AllowsSmallResponse(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(1000, counter, inner)
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -190,7 +191,7 @@ func TestResponseBoundingMiddleware_ZeroLimitPassesThrough(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(0, nil, inner)
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -205,7 +206,7 @@ func TestResponseBoundingMiddleware_NilCounter(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(20, nil, inner)
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -226,7 +227,7 @@ func TestResponseBoundingMiddleware_MultipleWrites(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(8, counter, inner)
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
