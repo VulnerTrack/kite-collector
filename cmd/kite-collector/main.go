@@ -21,6 +21,8 @@ import (
 
 	"github.com/vulnertrack/kite-collector/api/rest"
 	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+	"github.com/vulnertrack/kite-collector/internal/osutil"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/dedup"
@@ -96,6 +98,7 @@ lifecycle events for downstream consumption.`,
 		newReportCmd(),
 		newDiscoverServicesCmd(),
 		newVersionCmd(),
+		newErrorCmd(),
 	)
 
 	return root
@@ -666,9 +669,10 @@ func formatDiscoveredServices(services []autodiscovery.DiscoveredService) {
 	fmt.Printf("\n  Ready: %d | Need credentials: %d\n", ready, needsCreds)
 
 	// Print setup hints for services that need credentials.
+	// Uses OS-aware env set commands (export / set / $env:).
 	hasHints := false
 	for _, svc := range services {
-		if svc.Status == "needs_credentials" && svc.SetupHint != "" {
+		if svc.Status == "needs_credentials" && len(svc.Credentials) > 0 {
 			if !hasHints {
 				fmt.Println()
 				fmt.Println("  To enable all discovered services:")
@@ -676,7 +680,10 @@ func formatDiscoveredServices(services []autodiscovery.DiscoveredService) {
 				hasHints = true
 			}
 			fmt.Printf("    # %s\n", svc.DisplayName)
-			fmt.Printf("    %s\n\n", svc.SetupHint)
+			for _, env := range svc.Credentials {
+				fmt.Printf("    %s\n", osutil.EnvSetCommand(env, "..."))
+			}
+			fmt.Println()
 		}
 	}
 
@@ -1033,6 +1040,53 @@ func runReport(dbPath, format, outputPath string) error {
 	}
 
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// error command
+// ---------------------------------------------------------------------------
+
+func newErrorCmd() *cobra.Command {
+	var listAll bool
+
+	cmd := &cobra.Command{
+		Use:   "error [code]",
+		Short: "Look up a kite-collector error code",
+		Long: `Display detailed information about a kite-collector error code including
+the cause and OS-specific remediation steps.
+
+Example: kite-collector error KITE-E001`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if listAll {
+				for _, code := range kiteerrors.Codes() {
+					e := kiteerrors.Lookup(code)
+					fmt.Printf("  %s  %s\n", e.Code, e.Message)
+				}
+				return nil
+			}
+			if len(args) == 0 {
+				fmt.Println("Usage: kite-collector error <code>")
+				fmt.Println()
+				fmt.Println("Known error codes:")
+				for _, code := range kiteerrors.Codes() {
+					e := kiteerrors.Lookup(code)
+					fmt.Printf("  %s  %s\n", e.Code, e.Message)
+				}
+				return nil
+			}
+			e := kiteerrors.Lookup(args[0])
+			if e == nil {
+				return fmt.Errorf("unknown error code: %s", args[0])
+			}
+			fmt.Print(e.Format())
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&listAll, "list", false, "list all error codes")
+
+	return cmd
 }
 
 // ---------------------------------------------------------------------------
