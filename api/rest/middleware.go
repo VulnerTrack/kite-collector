@@ -17,7 +17,7 @@ func RecoveryMiddleware(counter *prometheus.CounterVec, next http.Handler) http.
 		defer func() {
 			if rec := recover(); rec != nil {
 				stack := string(debug.Stack())
-				slog.Error("panic recovered in REST handler",
+				slog.Error("panic recovered in REST handler", // #nosec G706 -- structured logging; values are not interpolated
 					"component", "rest",
 					"method", r.Method,
 					"path", r.URL.Path,
@@ -53,10 +53,10 @@ func MaxBytesMiddleware(maxBytes int64, next http.Handler) http.Handler {
 // should keep responses well under the cap.
 type boundedResponseWriter struct {
 	http.ResponseWriter
+	counter   prometheus.Counter
 	maxBytes  int64
 	written   int64
 	truncated bool
-	counter   prometheus.Counter
 }
 
 func (w *boundedResponseWriter) Write(p []byte) (int, error) {

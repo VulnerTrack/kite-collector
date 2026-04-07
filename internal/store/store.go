@@ -113,8 +113,8 @@ type Store interface {
 // IncidentFilter constrains which runtime incidents are returned.
 type IncidentFilter struct {
 	ScanRunID    *uuid.UUID
-	IncidentType string
 	Since        *time.Time
+	IncidentType string
 	Limit        int
 	Offset       int
 }

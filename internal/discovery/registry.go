@@ -15,9 +15,9 @@ import (
 
 // Registry manages discovery sources and runs them in parallel.
 type Registry struct {
-	sources         []Source
-	panicsRecovered *prometheus.CounterVec
 	circuitBreaker  *safety.CircuitBreaker
+	panicsRecovered *prometheus.CounterVec
+	sources         []Source
 }
 
 // SetPanicsRecovered sets the Prometheus counter used to track recovered

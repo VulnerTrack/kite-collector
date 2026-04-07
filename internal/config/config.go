@@ -16,28 +16,28 @@ type Config struct {
 	Classification ClassificationConfig `mapstructure:"classification"`
 	Streaming      StreamingConfig      `mapstructure:"streaming"`
 	Postgres       PostgresConfig       `mapstructure:"postgres"`
-	Safety         SafetyConfig         `mapstructure:"safety"`
 	LogLevel       string               `mapstructure:"log_level"`
 	OutputFormat   string               `mapstructure:"output_format"`
 	DataDir        string               `mapstructure:"data_dir"`
 	StaleThreshold string               `mapstructure:"stale_threshold"` // duration string like "168h"
 	Metrics        MetricsConfig        `mapstructure:"metrics"`
 	Audit          AuditConfig          `mapstructure:"audit"`
+	Safety         SafetyConfig         `mapstructure:"safety"`
 	Posture        PostureConfig        `mapstructure:"posture"`
 }
 
 // SafetyConfig holds runtime safety settings.
 type SafetyConfig struct {
 	ScanDeadline     string               `mapstructure:"scan_deadline"`      // duration like "30m"
+	CircuitBreaker   CircuitBreakerConfig `mapstructure:"circuit_breaker"`
 	MaxResponseBytes int64                `mapstructure:"max_response_bytes"` // 0 = unlimited
 	MaxRequestBytes  int64                `mapstructure:"max_request_bytes"`
-	CircuitBreaker   CircuitBreakerConfig `mapstructure:"circuit_breaker"`
 }
 
 // CircuitBreakerConfig configures the per-source circuit breaker.
 type CircuitBreakerConfig struct {
-	FailureThreshold int    `mapstructure:"failure_threshold"`
 	Cooldown         string `mapstructure:"cooldown"` // duration like "5m"
+	FailureThreshold int    `mapstructure:"failure_threshold"`
 	SuccessThreshold int    `mapstructure:"success_threshold"`
 }
 
