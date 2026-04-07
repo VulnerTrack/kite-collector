@@ -34,13 +34,13 @@ func TestMigrateFilenameConvention(t *testing.T) {
 	entries, err := fs.ReadDir(migrationFS, "migrations")
 	require.NoError(t, err)
 
-	re := regexp.MustCompile(`^\d{3}_`)
+	re := regexp.MustCompile(`^\d{14}_`)
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
 			continue
 		}
 		assert.True(t, re.MatchString(e.Name()),
-			"migration %q does not match NNN_ convention", e.Name())
+			"migration %q does not match YYYYMMDDHHMMSS_ convention", e.Name())
 	}
 }
 
@@ -147,13 +147,13 @@ func TestRepairMigration_ReAppliesOnNextRun(t *testing.T) {
 	require.NoError(t, s.Migrate(context.Background()))
 
 	// Repair a specific migration.
-	require.NoError(t, s.RepairMigration(context.Background(), "002_config_findings"))
+	require.NoError(t, s.RepairMigration(context.Background(), "20260405000000_config_findings"))
 
 	// Status should show it as pending.
 	infos, err := s.MigrationStatus(context.Background())
 	require.NoError(t, err)
 	for _, info := range infos {
-		if info.Version == "002_config_findings" {
+		if info.Version == "20260405000000_config_findings" {
 			assert.False(t, info.Applied,
 				"repaired migration should be pending")
 		}

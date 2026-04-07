@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-// migrationNameRe enforces the NNN_ prefix convention for migration filenames.
-var migrationNameRe = regexp.MustCompile(`^\d{3}_`)
+// migrationNameRe enforces the YYYYMMDDHHMMSS_ timestamp prefix convention.
+var migrationNameRe = regexp.MustCompile(`^\d{14}_`)
 
 // appliedMigration holds the recorded state of a previously applied migration.
 type appliedMigration struct {
@@ -234,7 +234,7 @@ func listMigrationFiles() ([]string, error) {
 		}
 		// R7: enforce NNN_ naming convention.
 		if !migrationNameRe.MatchString(e.Name()) {
-			return nil, fmt.Errorf("migration %q does not match required naming convention NNN_name.sql", e.Name())
+			return nil, fmt.Errorf("migration %q does not match required naming convention YYYYMMDDHHMMSS_name.sql", e.Name())
 		}
 		files = append(files, e.Name())
 	}
