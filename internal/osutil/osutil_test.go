@@ -1,6 +1,7 @@
 package osutil
 
 import (
+	"os"
 	"runtime"
 	"testing"
 
@@ -36,8 +37,12 @@ func TestShellName_NonEmpty(t *testing.T) {
 }
 
 func TestIsPowerShell(t *testing.T) {
-	// On Linux/macOS without PSModulePath, should return false.
-	if runtime.GOOS != "windows" {
-		assert.False(t, IsPowerShell())
-	}
+	// Clear PSModulePath to test the false path — GitHub Actions
+	// Ubuntu runners have pwsh installed which sets this variable.
+	_ = os.Unsetenv("PSModulePath")
+	assert.False(t, IsPowerShell())
+
+	// Set it to test the true path.
+	t.Setenv("PSModulePath", "/opt/microsoft/powershell/Modules")
+	assert.True(t, IsPowerShell())
 }

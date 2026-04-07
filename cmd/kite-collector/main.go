@@ -1458,7 +1458,7 @@ Examples:
   kite-collector migrate                          # apply pending migrations
   kite-collector migrate --status                 # show applied/pending
   kite-collector migrate --dry-run                # show what would run
-  kite-collector migrate --repair 002_config_findings  # allow re-apply`,
+  kite-collector migrate --repair 20260405000000_config_findings  # allow re-apply`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runMigrate(dbPath, status, repair, dryRun)
 		},
