@@ -103,6 +103,7 @@ lifecycle events for downstream consumption.`,
 		newInitCmd(),
 		newQueryCmd(),
 		newDBCmd(),
+		newMigrateCmd(),
 		newVersionCmd(),
 		newErrorCmd(),
 	)
@@ -1427,8 +1428,125 @@ func newVersionCmd() *cobra.Command {
 			fmt.Printf("  built:   %s\n", date)
 			fmt.Printf("  go:      %s\n", runtime.Version())
 			fmt.Printf("  os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+			n := sqlite.EmbeddedMigrationCount()
+			fmt.Printf("  schema:  v%d (%d migrations embedded)\n", n, n)
 		},
 	}
+}
+
+// ---------------------------------------------------------------------------
+// migrate command
+// ---------------------------------------------------------------------------
+
+func newMigrateCmd() *cobra.Command {
+	var (
+		dbPath string
+		status bool
+		repair string
+		dryRun bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "migrate",
+		Short: "Run or inspect database migrations",
+		Long: `Apply pending embedded SQL migrations to the SQLite database,
+show migration status, or repair a failed migration entry.
+
+Examples:
+  kite-collector migrate                          # apply pending migrations
+  kite-collector migrate --status                 # show applied/pending
+  kite-collector migrate --dry-run                # show what would run
+  kite-collector migrate --repair 002_config_findings  # allow re-apply`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runMigrate(dbPath, status, repair, dryRun)
+		},
+	}
+
+	cmd.Flags().StringVar(&dbPath, "db", "./data/kite.db", "path to SQLite database")
+	cmd.Flags().BoolVar(&status, "status", false, "show applied and pending migrations")
+	cmd.Flags().StringVar(&repair, "repair", "", "remove migration entry for re-application")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would be applied without running")
+
+	return cmd
+}
+
+func runMigrate(dbPath string, status bool, repair string, dryRun bool) error {
+	ctx := context.Background()
+
+	dataDir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dataDir, 0o750); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+
+	st, err := sqlite.New(dbPath)
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer func() { _ = st.Close() }()
+
+	switch {
+	case status:
+		return showMigrationStatus(ctx, st, dbPath)
+	case repair != "":
+		return st.RepairMigration(ctx, repair)
+	case dryRun:
+		return showPendingMigrations(ctx, st)
+	default:
+		if mErr := st.Migrate(ctx); mErr != nil {
+			return mErr
+		}
+		_, _ = fmt.Fprintln(os.Stderr, "all migrations applied")
+		return nil
+	}
+}
+
+func showMigrationStatus(ctx context.Context, st *sqlite.SQLiteStore, dbPath string) error {
+	infos, err := st.MigrationStatus(ctx)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("\n  Migration Status (SQLite: %s)\n", dbPath)
+	fmt.Printf("  %s\n", strings.Repeat("=", 60))
+	fmt.Printf("  %-30s %-10s %s\n", "VERSION", "STATUS", "CHECKSUM")
+
+	applied, pending := 0, 0
+	for _, info := range infos {
+		if info.Applied {
+			fmt.Printf("  %-30s applied (%s)  %s\n",
+				info.Version, info.AppliedAt, info.AppliedChecksum[:12])
+			applied++
+		} else {
+			fmt.Printf("  %-30s pending       %s\n",
+				info.Version, info.Checksum[:12])
+			pending++
+		}
+	}
+
+	fmt.Printf("\n  Applied: %d | Pending: %d\n\n", applied, pending)
+	return nil
+}
+
+func showPendingMigrations(ctx context.Context, st *sqlite.SQLiteStore) error {
+	infos, err := st.MigrationStatus(ctx)
+	if err != nil {
+		return err
+	}
+
+	pending := 0
+	for _, info := range infos {
+		if !info.Applied {
+			fmt.Printf("  would apply: %s (%s)\n", info.Version, info.Checksum[:12])
+			pending++
+		}
+	}
+
+	if pending == 0 {
+		fmt.Println("  all migrations already applied")
+	} else {
+		fmt.Printf("\n  %d migration(s) would be applied\n", pending)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
