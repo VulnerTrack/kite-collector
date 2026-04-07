@@ -17,8 +17,32 @@ builds:
       - goos: windows
         goarch: arm64
 
+# Flat binary distribution — single file download, no tar.gz.
+archives:
+  - id: flat
+    format: binary
+    name_template: "kite-collector_{{ .Os }}_{{ .Arch }}"
+
 checksum:
   name_template: "checksums.txt"
+
+# Linux packages via nfpm.
+nfpms:
+  - id: packages
+    package_name: kite-collector
+    vendor: VulnerTrack
+    homepage: https://github.com/VulnerTrack/kite-collector
+    maintainer: VulnerTrack <hello@vulnertrack.dev>
+    description: Cybersecurity asset discovery, configuration audit, and posture analysis agent.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+    contents:
+      - src: configs/kite-collector.example.yaml
+        dst: /etc/kite-collector/kite-collector.example.yaml
+        type: config
 
 changelog:
   sort: asc
