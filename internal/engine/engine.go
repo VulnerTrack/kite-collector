@@ -54,6 +54,11 @@ func New(
 }
 
 func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult, error) {
+	// Apply scan deadline — all scan work uses scanCtx; persistence uses
+	// the original ctx so results are saved even when the deadline fires.
+	scanCtx, cancel := context.WithTimeout(ctx, cfg.ScanDeadlineDuration())
+	defer cancel()
+
 	scanID := uuid.Must(uuid.NewV7())
 	now := time.Now().UTC()
 
@@ -93,14 +98,23 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 	}
 
 	slog.Info("engine: starting discovery", "scan_id", scanID)
-	discovered, err := e.registry.DiscoverAll(ctx, configs)
+	discovered, err := e.registry.DiscoverAll(scanCtx, configs)
 	if err != nil {
-		failResult := model.ScanResult{
-			Status:     string(model.ScanStatusFailed),
-			ErrorCount: 1,
+		if scanCtx.Err() == context.DeadlineExceeded {
+			slog.Warn("engine: scan deadline exceeded during discovery",
+				"scan_id", scanID,
+				"partial_assets", len(discovered),
+			)
+			// Fall through — process whatever was discovered.
+			// Metric is incremented in the final status check.
+		} else {
+			failResult := model.ScanResult{
+				Status:     string(model.ScanStatusFailed),
+				ErrorCount: 1,
+			}
+			_ = e.store.CompleteScanRun(ctx, scanID, failResult)
+			return nil, fmt.Errorf("discovery: %w", err)
 		}
-		_ = e.store.CompleteScanRun(ctx, scanID, failResult)
-		return nil, fmt.Errorf("discovery: %w", err)
 	}
 	slog.Info("engine: discovery complete", "raw_assets", len(discovered))
 
@@ -118,39 +132,43 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 	slog.Info("engine: persisted assets", "inserted", inserted, "updated", updated)
 
 	// Collect and persist installed software for the agent asset.
+	// Skip if scan deadline already exceeded.
 	var softwareCount, softwareErrors int
-	if agentCfg, ok := configs["agent"]; ok {
-		if cs, ok := agentCfg["collect_software"].(bool); ok && cs {
-			if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
-				swReg := software.NewRegistry()
-				swResult := swReg.Collect(ctx)
-				softwareCount = len(swResult.Items)
-				if len(swResult.Items) > 0 {
-					for i := range swResult.Items {
-						swResult.Items[i].AssetID = agentID
+	if scanCtx.Err() == nil {
+		if agentCfg, ok := configs["agent"]; ok {
+			if cs, ok := agentCfg["collect_software"].(bool); ok && cs {
+				if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
+					swReg := software.NewRegistry()
+					swResult := swReg.Collect(scanCtx)
+					softwareCount = len(swResult.Items)
+					if len(swResult.Items) > 0 {
+						for i := range swResult.Items {
+							swResult.Items[i].AssetID = agentID
+						}
+						if swErr := e.store.UpsertSoftware(ctx, agentID, swResult.Items); swErr != nil {
+							slog.Error("engine: failed to persist software",
+								"error", swErr, "asset_id", agentID, "count", len(swResult.Items))
+							softwareErrors++
+						} else {
+							slog.Info("engine: persisted software",
+								"asset_id", agentID,
+								"count", len(swResult.Items),
+								"parse_errors", swResult.TotalErrors(),
+							)
+						}
 					}
-					if swErr := e.store.UpsertSoftware(ctx, agentID, swResult.Items); swErr != nil {
-						slog.Error("engine: failed to persist software",
-							"error", swErr, "asset_id", agentID, "count", len(swResult.Items))
-						softwareErrors++
-					} else {
-						slog.Info("engine: persisted software",
-							"asset_id", agentID,
-							"count", len(swResult.Items),
-							"parse_errors", swResult.TotalErrors(),
-						)
+					if swResult.HasErrors() {
+						slog.Warn("engine: software parse errors", "count", swResult.TotalErrors())
 					}
-				}
-				if swResult.HasErrors() {
-					slog.Warn("engine: software parse errors", "count", swResult.TotalErrors())
 				}
 			}
 		}
 	}
 
 	// Configuration audit phase: run enabled auditors on the agent asset.
+	// Skip if scan deadline already exceeded.
 	var findingsCount, postureCount int
-	if cfg.Audit.Enabled {
+	if scanCtx.Err() == nil && cfg.Audit.Enabled {
 		if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
 			var agentAsset model.Asset
 			for _, a := range assets {
@@ -177,7 +195,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 				auditReg.Register(audit.NewService(cfg.Audit.Service.CriticalPorts))
 			}
 
-			findings, auditErr := auditReg.AuditAll(ctx, agentAsset)
+			findings, auditErr := auditReg.AuditAll(scanCtx, agentAsset)
 			if auditErr != nil {
 				slog.Warn("engine: audit phase failed", "error", auditErr)
 			}
@@ -209,13 +227,19 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		}
 	}
 
-	staleAssets, err := e.store.GetStaleAssets(ctx, cfg.StaleThresholdDuration())
-	if err != nil {
-		slog.Warn("engine: failed to detect stale assets", "error", err)
-		staleAssets = nil
+	// Stale asset detection and event generation — skip heavy work if
+	// the scan deadline already fired.
+	var staleAssets []model.Asset
+	var events []model.AssetEvent
+
+	if scanCtx.Err() == nil {
+		staleAssets, err = e.store.GetStaleAssets(ctx, cfg.StaleThresholdDuration())
+		if err != nil {
+			slog.Warn("engine: failed to detect stale assets", "error", err)
+			staleAssets = nil
+		}
 	}
 
-	var events []model.AssetEvent
 	for i := range assets {
 		var evtType model.EventType
 		if assets[i].FirstSeenAt.Equal(assets[i].LastSeenAt) {
@@ -270,8 +294,30 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		coveragePct = float64(len(assets)) / float64(totalKnown) * 100.0
 	}
 
+	scanStatus := model.ScanStatusCompleted
+	var errorCount int
+	if scanCtx.Err() == context.DeadlineExceeded {
+		scanStatus = model.ScanStatusTimedOut
+		errorCount = 1
+		if e.metrics != nil {
+			e.metrics.ScanDeadlineExceeded.Inc()
+		}
+		// Record runtime incident for the deadline breach.
+		_ = e.store.InsertRuntimeIncident(ctx, model.RuntimeIncident{
+			ID:           uuid.Must(uuid.NewV7()),
+			IncidentType: model.IncidentTimeoutExceeded,
+			Component:    "engine",
+			ErrorMessage: fmt.Sprintf("scan deadline exceeded (%s)", cfg.ScanDeadlineDuration()),
+			ScanRunID:    &scanID,
+			Severity:     string(model.SeverityHigh),
+			Recovered:    true,
+			ErrorCode:    "KITE-E013",
+			CreatedAt:    time.Now().UTC(),
+		})
+	}
+
 	result := &model.ScanResult{
-		Status:          string(model.ScanStatusCompleted),
+		Status:          string(scanStatus),
 		TotalAssets:     totalKnown,
 		NewAssets:       dedupResult.NewCount,
 		UpdatedAssets:   dedupResult.UpdatedCount,
@@ -281,6 +327,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		SoftwareErrors:  softwareErrors,
 		FindingsCount:   findingsCount,
 		PostureCount:    postureCount,
+		ErrorCount:      errorCount,
 		CoveragePercent: coveragePct,
 	}
 
@@ -294,6 +341,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		"updated", result.UpdatedAssets,
 		"stale", result.StaleAssets,
 		"events", result.EventsEmitted,
+		"status", result.Status,
 	)
 
 	return result, nil

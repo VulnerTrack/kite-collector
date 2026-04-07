@@ -31,6 +31,7 @@ type mockStore struct {
 	software  map[uuid.UUID][]model.InstalledSoftware
 	completed map[uuid.UUID]model.ScanResult
 	events    []model.AssetEvent
+	incidents []model.RuntimeIncident
 	scanRuns  []model.ScanRun
 	mu        sync.Mutex
 }
@@ -199,6 +200,21 @@ func (m *mockStore) InsertPostureAssessments(_ context.Context, _ []model.Postur
 
 func (m *mockStore) ListPostureAssessments(_ context.Context, _ store.PostureFilter) ([]model.PostureAssessment, error) {
 	return nil, nil
+}
+
+func (m *mockStore) InsertRuntimeIncident(_ context.Context, incident model.RuntimeIncident) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.incidents = append(m.incidents, incident)
+	return nil
+}
+
+func (m *mockStore) ListRuntimeIncidents(_ context.Context, _ store.IncidentFilter) ([]model.RuntimeIncident, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]model.RuntimeIncident, len(m.incidents))
+	copy(cp, m.incidents)
+	return cp, nil
 }
 
 func (m *mockStore) Migrate(_ context.Context) error { return nil }
@@ -446,6 +462,68 @@ func TestEngine_StaleAssetsGenerateNotSeenEvents(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, notSeenEvents, "one AssetNotSeen event expected for the stale asset")
+}
+
+// ---------------------------------------------------------------------------
+// Slow source for deadline tests
+// ---------------------------------------------------------------------------
+
+type slowSource struct {
+	name  string
+	delay time.Duration
+}
+
+func (s *slowSource) Name() string { return s.name }
+func (s *slowSource) Discover(ctx context.Context, _ map[string]any) ([]model.Asset, error) {
+	select {
+	case <-time.After(s.delay):
+		return []model.Asset{
+			{Hostname: "slow-host", AssetType: model.AssetTypeServer, DiscoverySource: s.name},
+		}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func TestEngine_ScanDeadlineExceeded(t *testing.T) {
+	ms := newMockStore()
+	reg := discovery.NewRegistry()
+	reg.Register(&slowSource{name: "test", delay: 5 * time.Second})
+
+	em := &recordingEmitter{}
+	eng := newTestEngine(ms, reg, em)
+	cfg := newTestConfig()
+	cfg.Safety.ScanDeadline = "50ms" // very short deadline
+
+	result, err := eng.Run(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, string(model.ScanStatusTimedOut), result.Status)
+	assert.Equal(t, 1, result.ErrorCount)
+}
+
+func TestEngine_ScanDeadlineNotExceeded(t *testing.T) {
+	ms := newMockStore()
+	reg := discovery.NewRegistry()
+	reg.Register(&mockSource{
+		name: "test",
+		assets: []model.Asset{
+			{Hostname: "fast-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		},
+	})
+
+	em := &recordingEmitter{}
+	eng := newTestEngine(ms, reg, em)
+	cfg := newTestConfig()
+	cfg.Safety.ScanDeadline = "30s" // generous deadline
+
+	result, err := eng.Run(context.Background(), cfg)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, string(model.ScanStatusCompleted), result.Status)
+	assert.Equal(t, 0, result.ErrorCount)
 }
 
 func TestEngine_EmptyDiscovery(t *testing.T) {
