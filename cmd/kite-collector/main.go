@@ -24,6 +24,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/api/rest"
 	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
+	"github.com/vulnertrack/kite-collector/internal/dashboard"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/osutil"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
@@ -104,6 +105,7 @@ lifecycle events for downstream consumption.`,
 		newQueryCmd(),
 		newDBCmd(),
 		newMigrateCmd(),
+		newDashboardCmd(),
 		newVersionCmd(),
 		newErrorCmd(),
 	)
@@ -2017,10 +2019,116 @@ const htmlReportTemplate = `<!DOCTYPE html>
 `
 
 // ---------------------------------------------------------------------------
+// dashboard command
+// ---------------------------------------------------------------------------
+
+func newDashboardCmd() *cobra.Command {
+	var (
+		dbPath string
+		addr   string
+		noBrowser bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "dashboard",
+		Short: "Open the browser-based dashboard",
+		Long: `Start an embedded web server that provides a live view of assets,
+software inventory, findings, and scan history. Data is read directly
+from the local SQLite database — no external connections are made.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer cancel()
+
+			st, err := sqlite.New(dbPath)
+			if err != nil {
+				return fmt.Errorf("open store: %w", err)
+			}
+			defer func() { _ = st.Close() }()
+
+			rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
+
+			logger := slog.Default()
+			srv := dashboard.Serve(addr, st, rc, logger)
+
+			go func() {
+				logger.Info("dashboard listening", "addr", addr)
+				if listenErr := srv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
+					logger.Error("dashboard server error", "error", listenErr)
+				}
+			}()
+
+			if !noBrowser {
+				dashboard.OpenBrowser("http://" + addr)
+			}
+
+			<-ctx.Done()
+			shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutCancel()
+			return srv.Shutdown(shutCtx)
+		},
+	}
+
+	cmd.Flags().StringVar(&dbPath, "db", "./data/kite.db", "path to SQLite database")
+	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:9090", "listen address for the dashboard")
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "do not open a browser automatically")
+
+	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// double-click interactive menu (Windows Explorer / macOS Finder)
+// ---------------------------------------------------------------------------
+
+func runInteractiveMenu() {
+	fmt.Println("╔══════════════════════════════════════╗")
+	fmt.Println("║        kite-collector " + version + "          ║")
+	fmt.Println("╠══════════════════════════════════════╣")
+	fmt.Println("║  1) Run scan                         ║")
+	fmt.Println("║  2) Open dashboard                   ║")
+	fmt.Println("║  3) Show version                     ║")
+	fmt.Println("║  4) Exit                             ║")
+	fmt.Println("╚══════════════════════════════════════╝")
+	fmt.Print("\nSelect [1-4]: ")
+
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return
+	}
+
+	switch strings.TrimSpace(scanner.Text()) {
+	case "1":
+		fmt.Println("\nStarting scan with defaults...")
+		if err := runScan("kite-collector.yaml", nil, "table", "./data/kite.db", nil, false, false); err != nil {
+			fmt.Fprintf(os.Stderr, "Scan error: %v\n", err)
+		}
+	case "2":
+		fmt.Println("\nStarting dashboard...")
+		os.Args = []string{os.Args[0], "dashboard"}
+		if err := newRootCmd().Execute(); err != nil {
+			fmt.Fprintf(os.Stderr, "Dashboard error: %v\n", err)
+		}
+	case "3":
+		fmt.Printf("kite-collector %s (commit %s, built %s)\n", version, commit, date)
+	case "4":
+		fmt.Println("Bye!")
+	default:
+		fmt.Println("Invalid selection.")
+	}
+
+	fmt.Print("\nPress Enter to close...")
+	scanner.Scan()
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
 func main() {
+	if osutil.IsDoubleClicked() {
+		runInteractiveMenu()
+		return
+	}
+
 	if err := newRootCmd().Execute(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
