@@ -18,11 +18,17 @@ import (
 // Intune implements discovery.Source by listing managed devices from
 // Microsoft Intune via the Microsoft Graph API. All devices present in
 // Intune are considered managed.
-type Intune struct{}
+type Intune struct {
+	tokenBaseURL string // override for testing; empty = production
+	graphBaseURL string // override for testing; empty = production
+}
 
 // NewIntune returns a new Microsoft Intune discovery source.
 func NewIntune() *Intune {
-	return &Intune{}
+	return &Intune{ //#nosec G101 -- base URLs, not credentials
+		tokenBaseURL: "https://login.microsoftonline.com",
+		graphBaseURL: "https://graph.microsoft.com",
+	}
 }
 
 // Name returns the stable identifier for this source.
@@ -100,8 +106,8 @@ func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 // the Microsoft identity platform for the Graph API scope.
 func (i *Intune) acquireToken(ctx context.Context, tenantID, clientID, clientSecret string) (string, error) {
 	tokenURL := fmt.Sprintf(
-		"https://login.microsoftonline.com/%s/oauth2/v2.0/token",
-		url.PathEscape(tenantID),
+		"%s/%s/oauth2/v2.0/token",
+		i.tokenBaseURL, url.PathEscape(tenantID),
 	)
 
 	form := url.Values{
@@ -111,7 +117,7 @@ func (i *Intune) acquireToken(ctx context.Context, tenantID, clientID, clientSec
 		"scope":         {"https://graph.microsoft.com/.default"},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL,
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, //#nosec G107 -- URL from operator-configured Intune tenant
 		strings.NewReader(form.Encode()),
 	)
 	if err != nil {
@@ -119,7 +125,7 @@ func (i *Intune) acquireToken(ctx context.Context, tenantID, clientID, clientSec
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //#nosec G107
 	if err != nil {
 		return "", fmt.Errorf("executing token request: %w", err)
 	}
@@ -166,7 +172,7 @@ type intuneDevice struct {
 // listManagedDevices calls the Microsoft Graph API to enumerate all Intune
 // managed devices, handling pagination via @odata.nextLink.
 func (i *Intune) listManagedDevices(ctx context.Context, token string) ([]intuneDevice, error) {
-	apiURL := "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices"
+	apiURL := i.graphBaseURL + "/v1.0/deviceManagement/managedDevices"
 
 	var allDevices []intuneDevice
 
@@ -189,14 +195,14 @@ func (i *Intune) listManagedDevices(ctx context.Context, token string) ([]intune
 // fetchDevicePage fetches a single page of the managed devices response and
 // returns parsed devices plus the next page URL (empty if no more pages).
 func (i *Intune) fetchDevicePage(ctx context.Context, apiURL, token string) ([]intuneDevice, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil) //#nosec G107 -- URL from operator-configured Intune/Graph API
 	if err != nil {
 		return nil, "", fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //#nosec G107
 	if err != nil {
 		return nil, "", fmt.Errorf("executing request: %w", err)
 	}

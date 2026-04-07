@@ -342,8 +342,8 @@ func (h *Handler) handleGetSourceHealth(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	health := h.circuitBreaker.GetSourceHealth(name)
-	if health == nil {
+	health, err := h.circuitBreaker.GetSourceHealth(name)
+	if err != nil || health == nil {
 		writeError(w, http.StatusNotFound, "source not found")
 		return
 	}

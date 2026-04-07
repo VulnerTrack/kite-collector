@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,39 @@ type Engine struct {
 	emitter      emitter.Emitter
 	policy       *policy.Engine
 	metrics      *metrics.Metrics
+}
+
+// sourceEnvVars maps discovery source names to the environment variables
+// that supply their credentials. Values are injected into the per-source
+// config map so connectors read them via cfg["key"]. Only non-empty env
+// vars are applied; missing vars result in graceful skip inside each
+// connector's Discover method.
+var sourceEnvVars = map[string]map[string]string{ //#nosec G101 -- values are env var names, not credentials
+	"intune": {
+		"tenant_id":     "KITE_INTUNE_TENANT_ID",
+		"client_id":     "KITE_INTUNE_CLIENT_ID",
+		"client_secret": "KITE_INTUNE_CLIENT_SECRET",
+	},
+	"jamf": {
+		"api_url":  "KITE_JAMF_API_URL",
+		"username": "KITE_JAMF_USERNAME",
+		"password": "KITE_JAMF_PASSWORD",
+	},
+	"sccm": {
+		"api_url":  "KITE_SCCM_API_URL",
+		"username": "KITE_SCCM_USERNAME",
+		"password": "KITE_SCCM_PASSWORD",
+	},
+	"netbox": {
+		"api_url": "KITE_NETBOX_API_URL",
+		"token":   "KITE_NETBOX_TOKEN",
+	},
+	"servicenow": {
+		"instance_url": "KITE_SERVICENOW_INSTANCE_URL",
+		"username":     "KITE_SERVICENOW_USERNAME",
+		"password":     "KITE_SERVICENOW_PASSWORD",
+		"table":        "KITE_SERVICENOW_TABLE",
+	},
 }
 
 func New(
@@ -93,6 +127,14 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 			"endpoint":          src.Endpoint,
 			"site":              src.Site,
 			"community":         src.Community,
+		}
+		// Bind MDM/CMDB credential environment variables into the
+		// config map so connectors receive them via the standard
+		// cfg parameter. Credentials never appear in config files.
+		for key, envVar := range sourceEnvVars[name] {
+			if val := os.Getenv(envVar); val != "" {
+				m[key] = val
+			}
 		}
 		configs[name] = m
 	}
