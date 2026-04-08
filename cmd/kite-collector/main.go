@@ -25,7 +25,9 @@ import (
 	"github.com/vulnertrack/kite-collector/api/rest"
 	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
 	"github.com/vulnertrack/kite-collector/internal/dashboard"
+	"github.com/vulnertrack/kite-collector/internal/enrollment"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/osutil"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
 	"github.com/vulnertrack/kite-collector/internal/config"
@@ -108,6 +110,7 @@ lifecycle events for downstream consumption.`,
 		newDashboardCmd(),
 		newVersionCmd(),
 		newErrorCmd(),
+		newEnrollCmd(),
 	)
 
 	return root
@@ -2117,6 +2120,104 @@ func runInteractiveMenu() {
 
 	fmt.Print("\nPress Enter to close...")
 	scanner.Scan()
+}
+
+// ---------------------------------------------------------------------------
+// enroll command
+// ---------------------------------------------------------------------------
+
+func newEnrollCmd() *cobra.Command {
+	var (
+		token   string
+		caFile  string
+		cfgFile string
+		dataDir string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "enroll <endpoint-name>",
+		Short: "Enroll this agent with a backend endpoint",
+		Long: `Perform a token-based enrollment handshake with the named endpoint to
+obtain mTLS credentials. The endpoint must be defined in the config file.
+
+Example:
+  kite-collector enroll primary --token abc123`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runEnroll(args[0], token, caFile, cfgFile, dataDir)
+		},
+	}
+
+	cmd.Flags().StringVar(&token, "token", "", "enrollment token (required)")
+	cmd.Flags().StringVar(&caFile, "ca-file", "", "CA certificate for bootstrap TLS (optional)")
+	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to configuration file")
+	cmd.Flags().StringVar(&dataDir, "data-dir", "", "override identity data directory")
+	_ = cmd.MarkFlagRequired("token")
+
+	return cmd
+}
+
+func runEnroll(endpointName, token, caFile, cfgFile, dataDirOverride string) error {
+	logger := slog.Default()
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		logger.Warn("could not load config file, using defaults", "error", err)
+		cfg = &config.Config{}
+		cfg.Identity.DataDir = "/var/lib/kite-collector"
+	}
+
+	dataDir := cfg.Identity.DataDir
+	if dataDirOverride != "" {
+		dataDir = dataDirOverride
+	}
+
+	// Find endpoint in config.
+	var epAddr string
+	for _, ep := range cfg.Endpoints {
+		if ep.Name == endpointName {
+			epAddr = ep.Address
+			break
+		}
+	}
+	if epAddr == "" {
+		return fmt.Errorf("endpoint %q not found in configuration", endpointName)
+	}
+
+	// Load or create agent identity.
+	id, err := identity.LoadOrCreate(dataDir, logger)
+	if err != nil {
+		return fmt.Errorf("load identity: %w", err)
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	client := enrollment.NewClient(logger)
+	result, err := client.Enroll(ctx, epAddr, token, caFile, id)
+	if err != nil {
+		return fmt.Errorf("enrollment failed: %w", err)
+	}
+
+	if result.Status == "pending" {
+		logger.Info("enrollment request submitted — awaiting server approval",
+			"endpoint", endpointName,
+			"agent_id", id.AgentID,
+		)
+		return nil
+	}
+
+	// Store certificates.
+	if err := enrollment.StoreCertificates(dataDir, endpointName, result); err != nil {
+		return fmt.Errorf("store certificates: %w", err)
+	}
+
+	logger.Info("enrollment complete",
+		"endpoint", endpointName,
+		"agent_id", id.AgentID,
+		"status", result.Status,
+	)
+	return nil
 }
 
 // ---------------------------------------------------------------------------

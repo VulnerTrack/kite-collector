@@ -16,6 +16,8 @@ type Config struct {
 	Classification ClassificationConfig `mapstructure:"classification"`
 	Streaming      StreamingConfig      `mapstructure:"streaming"`
 	Postgres       PostgresConfig       `mapstructure:"postgres"`
+	Identity       IdentityConfig       `mapstructure:"identity"`
+	Endpoints      []EndpointConfig     `mapstructure:"endpoints"`
 	LogLevel       string               `mapstructure:"log_level"`
 	OutputFormat   string               `mapstructure:"output_format"`
 	DataDir        string               `mapstructure:"data_dir"`
@@ -26,9 +28,64 @@ type Config struct {
 	Posture        PostureConfig        `mapstructure:"posture"`
 }
 
+// IdentityConfig configures the agent's persistent identity and credential storage.
+type IdentityConfig struct {
+	DataDir    string `mapstructure:"data_dir"`    // stores keypair + per-endpoint certs
+	KeyBackend string `mapstructure:"key_backend"` // "auto" | "tpm" | "keyring" | "file"
+}
+
+// EndpointConfig describes a single backend endpoint the agent connects to.
+type EndpointConfig struct {
+	Health     HealthConfig     `mapstructure:"health"`
+	Name       string           `mapstructure:"name"`
+	Address    string           `mapstructure:"address"`
+	TLS        TLSConfig        `mapstructure:"tls"`
+	Encryption EncryptionConfig `mapstructure:"encryption"`
+	Routes     []string         `mapstructure:"routes"`
+	Priority   int              `mapstructure:"priority"`
+}
+
+// EncryptionConfig configures JWE payload encryption for an endpoint.
+type EncryptionConfig struct {
+	ServerJWKURL      string `mapstructure:"server_jwk_url"`
+	Algorithm         string `mapstructure:"algorithm"`
+	ContentEncryption string `mapstructure:"content_encryption"`
+	Enabled           bool   `mapstructure:"enabled"`
+}
+
+// HealthConfig configures endpoint health checking.
+type HealthConfig struct {
+	Interval string `mapstructure:"interval"` // duration string like "30s"
+	Timeout  string `mapstructure:"timeout"`  // duration string like "5s"
+}
+
+// HealthIntervalDuration parses the Interval string. Falls back to 30s.
+func (h *HealthConfig) HealthIntervalDuration() time.Duration {
+	if h.Interval == "" {
+		return 30 * time.Second
+	}
+	d, err := time.ParseDuration(h.Interval)
+	if err != nil {
+		return 30 * time.Second
+	}
+	return d
+}
+
+// HealthTimeoutDuration parses the Timeout string. Falls back to 5s.
+func (h *HealthConfig) HealthTimeoutDuration() time.Duration {
+	if h.Timeout == "" {
+		return 5 * time.Second
+	}
+	d, err := time.ParseDuration(h.Timeout)
+	if err != nil {
+		return 5 * time.Second
+	}
+	return d
+}
+
 // SafetyConfig holds runtime safety settings.
 type SafetyConfig struct {
-	ScanDeadline     string               `mapstructure:"scan_deadline"`      // duration like "30m"
+	ScanDeadline     string               `mapstructure:"scan_deadline"` // duration like "30m"
 	CircuitBreaker   CircuitBreakerConfig `mapstructure:"circuit_breaker"`
 	MaxResponseBytes int64                `mapstructure:"max_response_bytes"` // 0 = unlimited
 	MaxRequestBytes  int64                `mapstructure:"max_request_bytes"`
@@ -80,10 +137,10 @@ type SourceConfig struct {
 	AssumeRole        string   `mapstructure:"assume_role"`
 	Project           string   `mapstructure:"project"`
 	SubscriptionID    string   `mapstructure:"subscription_id"`
-	Host              string   `mapstructure:"host"`              // Docker/Podman socket path
-	Endpoint          string   `mapstructure:"endpoint"`          // API endpoint URL (UniFi, Proxmox)
-	Site              string   `mapstructure:"site"`              // UniFi site name
-	Community         string   `mapstructure:"community"`         // SNMP v2c community string
+	Host              string   `mapstructure:"host"`      // Docker/Podman socket path
+	Endpoint          string   `mapstructure:"endpoint"`  // API endpoint URL (UniFi, Proxmox)
+	Site              string   `mapstructure:"site"`      // UniFi site name
+	Community         string   `mapstructure:"community"` // SNMP v2c community string
 	TCPPorts          []int    `mapstructure:"tcp_ports"`
 	MaxConcurrent     int      `mapstructure:"max_concurrent"`
 	Enabled           bool     `mapstructure:"enabled"`
@@ -214,6 +271,8 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("safety.circuit_breaker.failure_threshold", 3)
 	v.SetDefault("safety.circuit_breaker.cooldown", "5m")
 	v.SetDefault("safety.circuit_breaker.success_threshold", 1)
+	v.SetDefault("identity.data_dir", "/var/lib/kite-collector")
+	v.SetDefault("identity.key_backend", "auto")
 
 	// Environment variable binding
 	v.SetEnvPrefix("KITE")
@@ -275,6 +334,39 @@ func (c *Config) Validate() error {
 		if _, err := os.Stat(p); err != nil {
 			return fmt.Errorf("allowlist_file %q: %w", p, err)
 		}
+	}
+
+	// Validate endpoints.
+	names := make(map[string]struct{})
+	for i, ep := range c.Endpoints {
+		if ep.Name == "" {
+			return fmt.Errorf("endpoints[%d]: name is required", i)
+		}
+		if _, dup := names[ep.Name]; dup {
+			return fmt.Errorf("endpoints[%d]: duplicate name %q", i, ep.Name)
+		}
+		names[ep.Name] = struct{}{}
+		if ep.Address == "" {
+			return fmt.Errorf("endpoints[%d] %q: address is required", i, ep.Name)
+		}
+		if ep.Health.Interval != "" {
+			if _, err := time.ParseDuration(ep.Health.Interval); err != nil {
+				return fmt.Errorf("endpoints[%d] %q: invalid health interval: %w", i, ep.Name, err)
+			}
+		}
+		if ep.Health.Timeout != "" {
+			if _, err := time.ParseDuration(ep.Health.Timeout); err != nil {
+				return fmt.Errorf("endpoints[%d] %q: invalid health timeout: %w", i, ep.Name, err)
+			}
+		}
+	}
+
+	// Validate identity key backend.
+	switch c.Identity.KeyBackend {
+	case "", "auto", "tpm", "keyring", "file":
+		// ok
+	default:
+		return fmt.Errorf("invalid identity.key_backend %q: expected auto, tpm, keyring, or file", c.Identity.KeyBackend)
 	}
 
 	return nil
