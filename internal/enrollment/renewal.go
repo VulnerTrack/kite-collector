@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -132,19 +133,14 @@ func parseCertPEM(certPEM []byte) (*x509.Certificate, error) {
 	return x509.ParseCertificate(block)
 }
 
-// decodePEM is a minimal PEM decoder to avoid encoding/pem import issues
-// with gosec. It extracts the first base64 block between PEM headers.
+// decodePEM extracts the first PEM block from data, returning the decoded
+// bytes and the remainder. Returns (nil, data) if no PEM block is found.
 func decodePEM(data []byte) ([]byte, []byte) {
-	// Use the standard library — encoding/pem is safe.
-	// Import is below; using a helper to keep the cert parsing clean.
-	return pemDecode(data)
-}
-
-// Wrap the standard library call.
-var pemDecode = func(data []byte) ([]byte, []byte) {
-	// Minimal self-signed cert generation helper for testing.
-	// In production, enrollment returns DER-encoded certs.
-	return nil, data
+	block, rest := pem.Decode(data)
+	if block == nil {
+		return nil, data
+	}
+	return block.Bytes, rest
 }
 
 // GenerateSelfSignedCert creates a minimal self-signed certificate for

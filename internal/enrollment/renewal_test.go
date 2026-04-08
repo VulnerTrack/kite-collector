@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/pem"
 	"testing"
 	"time"
 
@@ -80,6 +81,30 @@ func TestParseCertExpiry(t *testing.T) {
 	require.NoError(t, err)
 
 	nb, na, err := ParseCertExpiry(certDER)
+	require.NoError(t, err)
+
+	assert.Equal(t, notBefore, nb)
+	assert.Equal(t, notAfter, na)
+}
+
+func TestParseCertExpiry_PEMEncoded(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	notBefore := time.Now().Add(-1 * time.Hour).UTC().Truncate(time.Second)
+	notAfter := time.Now().Add(89 * time.Hour).UTC().Truncate(time.Second)
+
+	certDER, err := GenerateSelfSignedCert(priv, pub, notBefore, notAfter)
+	require.NoError(t, err)
+
+	// Wrap in PEM encoding.
+	certPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDER,
+	})
+	require.NotEmpty(t, certPEM)
+
+	nb, na, err := ParseCertExpiry(certPEM)
 	require.NoError(t, err)
 
 	assert.Equal(t, notBefore, nb)
