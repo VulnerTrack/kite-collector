@@ -19,8 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CollectorService_ReportAssets_FullMethodName = "/kite.v1.CollectorService/ReportAssets"
-	CollectorService_Heartbeat_FullMethodName    = "/kite.v1.CollectorService/Heartbeat"
+	CollectorService_ReportAssets_FullMethodName     = "/kite.v1.CollectorService/ReportAssets"
+	CollectorService_ReportFindings_FullMethodName   = "/kite.v1.CollectorService/ReportFindings"
+	CollectorService_Heartbeat_FullMethodName        = "/kite.v1.CollectorService/Heartbeat"
+	CollectorService_Enroll_FullMethodName           = "/kite.v1.CollectorService/Enroll"
+	CollectorService_RenewCertificate_FullMethodName = "/kite.v1.CollectorService/RenewCertificate"
 )
 
 // CollectorServiceClient is the client API for CollectorService service.
@@ -29,8 +32,16 @@ const (
 type CollectorServiceClient interface {
 	// ReportAssets streams asset snapshots from agents to the server.
 	ReportAssets(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AssetSnapshot, ReportResponse], error)
+	// ReportFindings streams configuration audit findings from agents.
+	ReportFindings(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ConfigFinding, ReportResponse], error)
 	// Heartbeat allows agents to signal liveness without a full report.
 	Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
+	// Enroll performs a token-based enrollment handshake to obtain mTLS
+	// credentials for an agent connecting to this endpoint.
+	Enroll(ctx context.Context, in *EnrollRequest, opts ...grpc.CallOption) (*EnrollResponse, error)
+	// RenewCertificate allows an already-enrolled agent to renew its
+	// mTLS client certificate before expiry.
+	RenewCertificate(ctx context.Context, in *RenewRequest, opts ...grpc.CallOption) (*RenewResponse, error)
 }
 
 type collectorServiceClient struct {
@@ -54,10 +65,43 @@ func (c *collectorServiceClient) ReportAssets(ctx context.Context, opts ...grpc.
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CollectorService_ReportAssetsClient = grpc.ClientStreamingClient[AssetSnapshot, ReportResponse]
 
+func (c *collectorServiceClient) ReportFindings(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ConfigFinding, ReportResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &CollectorService_ServiceDesc.Streams[1], CollectorService_ReportFindings_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ConfigFinding, ReportResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type CollectorService_ReportFindingsClient = grpc.ClientStreamingClient[ConfigFinding, ReportResponse]
+
 func (c *collectorServiceClient) Heartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HeartbeatResponse)
 	err := c.cc.Invoke(ctx, CollectorService_Heartbeat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *collectorServiceClient) Enroll(ctx context.Context, in *EnrollRequest, opts ...grpc.CallOption) (*EnrollResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EnrollResponse)
+	err := c.cc.Invoke(ctx, CollectorService_Enroll_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *collectorServiceClient) RenewCertificate(ctx context.Context, in *RenewRequest, opts ...grpc.CallOption) (*RenewResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RenewResponse)
+	err := c.cc.Invoke(ctx, CollectorService_RenewCertificate_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +114,16 @@ func (c *collectorServiceClient) Heartbeat(ctx context.Context, in *HeartbeatReq
 type CollectorServiceServer interface {
 	// ReportAssets streams asset snapshots from agents to the server.
 	ReportAssets(grpc.ClientStreamingServer[AssetSnapshot, ReportResponse]) error
+	// ReportFindings streams configuration audit findings from agents.
+	ReportFindings(grpc.ClientStreamingServer[ConfigFinding, ReportResponse]) error
 	// Heartbeat allows agents to signal liveness without a full report.
 	Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
+	// Enroll performs a token-based enrollment handshake to obtain mTLS
+	// credentials for an agent connecting to this endpoint.
+	Enroll(context.Context, *EnrollRequest) (*EnrollResponse, error)
+	// RenewCertificate allows an already-enrolled agent to renew its
+	// mTLS client certificate before expiry.
+	RenewCertificate(context.Context, *RenewRequest) (*RenewResponse, error)
 	mustEmbedUnimplementedCollectorServiceServer()
 }
 
@@ -85,8 +137,17 @@ type UnimplementedCollectorServiceServer struct{}
 func (UnimplementedCollectorServiceServer) ReportAssets(grpc.ClientStreamingServer[AssetSnapshot, ReportResponse]) error {
 	return status.Error(codes.Unimplemented, "method ReportAssets not implemented")
 }
+func (UnimplementedCollectorServiceServer) ReportFindings(grpc.ClientStreamingServer[ConfigFinding, ReportResponse]) error {
+	return status.Error(codes.Unimplemented, "method ReportFindings not implemented")
+}
 func (UnimplementedCollectorServiceServer) Heartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Heartbeat not implemented")
+}
+func (UnimplementedCollectorServiceServer) Enroll(context.Context, *EnrollRequest) (*EnrollResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Enroll not implemented")
+}
+func (UnimplementedCollectorServiceServer) RenewCertificate(context.Context, *RenewRequest) (*RenewResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RenewCertificate not implemented")
 }
 func (UnimplementedCollectorServiceServer) mustEmbedUnimplementedCollectorServiceServer() {}
 func (UnimplementedCollectorServiceServer) testEmbeddedByValue()                          {}
@@ -116,6 +177,13 @@ func _CollectorService_ReportAssets_Handler(srv interface{}, stream grpc.ServerS
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CollectorService_ReportAssetsServer = grpc.ClientStreamingServer[AssetSnapshot, ReportResponse]
 
+func _CollectorService_ReportFindings_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(CollectorServiceServer).ReportFindings(&grpc.GenericServerStream[ConfigFinding, ReportResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type CollectorService_ReportFindingsServer = grpc.ClientStreamingServer[ConfigFinding, ReportResponse]
+
 func _CollectorService_Heartbeat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HeartbeatRequest)
 	if err := dec(in); err != nil {
@@ -134,6 +202,42 @@ func _CollectorService_Heartbeat_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CollectorService_Enroll_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnrollRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CollectorServiceServer).Enroll(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CollectorService_Enroll_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CollectorServiceServer).Enroll(ctx, req.(*EnrollRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CollectorService_RenewCertificate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CollectorServiceServer).RenewCertificate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CollectorService_RenewCertificate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CollectorServiceServer).RenewCertificate(ctx, req.(*RenewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CollectorService_ServiceDesc is the grpc.ServiceDesc for CollectorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -145,11 +249,24 @@ var CollectorService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Heartbeat",
 			Handler:    _CollectorService_Heartbeat_Handler,
 		},
+		{
+			MethodName: "Enroll",
+			Handler:    _CollectorService_Enroll_Handler,
+		},
+		{
+			MethodName: "RenewCertificate",
+			Handler:    _CollectorService_RenewCertificate_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "ReportAssets",
 			Handler:       _CollectorService_ReportAssets_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReportFindings",
+			Handler:       _CollectorService_ReportFindings_Handler,
 			ClientStreams: true,
 		},
 	},
