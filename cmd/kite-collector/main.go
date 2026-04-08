@@ -111,6 +111,7 @@ lifecycle events for downstream consumption.`,
 		newVersionCmd(),
 		newErrorCmd(),
 		newEnrollCmd(),
+		newEndpointsCmd(),
 	)
 
 	return root
@@ -2120,6 +2121,61 @@ func runInteractiveMenu() {
 
 	fmt.Print("\nPress Enter to close...")
 	scanner.Scan()
+}
+
+// ---------------------------------------------------------------------------
+// endpoints command
+// ---------------------------------------------------------------------------
+
+func newEndpointsCmd() *cobra.Command {
+	var cfgFile string
+
+	cmd := &cobra.Command{
+		Use:   "endpoints",
+		Short: "Show status of all configured endpoints",
+		Long:  `Display the health state, priority, routes, and last-seen time for each configured backend endpoint.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runEndpoints(cfgFile)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to configuration file")
+	return cmd
+}
+
+func runEndpoints(cfgFile string) error {
+	logger := slog.Default()
+
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	if len(cfg.Endpoints) == 0 {
+		fmt.Println("No endpoints configured.")
+		return nil
+	}
+
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "NAME\tADDRESS\tPRIORITY\tROUTES\tTLS")
+	for _, ep := range cfg.Endpoints {
+		tlsStatus := "none"
+		if ep.TLS.CertFile != "" {
+			tlsStatus = "mTLS"
+		} else if ep.TLS.Enabled {
+			tlsStatus = "TLS"
+		}
+		routes := strings.Join(ep.Routes, ",")
+		if routes == "" {
+			routes = "(none)"
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%d\t%s\t%s\n",
+			ep.Name, ep.Address, ep.Priority, routes, tlsStatus)
+	}
+	if flushErr := tw.Flush(); flushErr != nil {
+		logger.Warn("flush table writer", "error", flushErr)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
