@@ -21,12 +21,12 @@ type SignedConfig struct {
 	IssuedAt  string `yaml:"issued_at"`
 	ExpiresAt string `yaml:"expires_at"`
 
-	// Policy content
-	Policy PolicyContent `yaml:"policy"`
-
 	// Ed25519 signature (base64) of the YAML content above (minus the
 	// signature field itself).
 	Signature string `yaml:"signature"`
+
+	// Policy content
+	Policy PolicyContent `yaml:"policy"`
 }
 
 // PolicyContent defines the configurable policy fields that the SaaS
@@ -39,21 +39,21 @@ type PolicyContent struct {
 	// ScanInterval overrides the default scan interval.
 	ScanInterval string `yaml:"scan_interval,omitempty"`
 
-	// EnabledAuditors lists which audit modules should be active.
-	EnabledAuditors []string `yaml:"enabled_auditors,omitempty"`
-
 	// StalenessThreshold overrides the default staleness threshold.
 	StalenessThreshold string `yaml:"staleness_threshold,omitempty"`
 
 	// PrivacyMode enforces the tenant's privacy mode on the agent.
 	PrivacyMode string `yaml:"privacy_mode,omitempty"`
+
+	// EnabledAuditors lists which audit modules should be active.
+	EnabledAuditors []string `yaml:"enabled_auditors,omitempty"`
 }
 
 // PullClient fetches and verifies signed policy configs from a static URL.
 type PullClient struct {
 	policyURL  string
-	verifyKey  ed25519.PublicKey
 	httpClient *http.Client
+	verifyKey  ed25519.PublicKey
 }
 
 // NewPullClient creates a policy pull client. policyURL is the HTTPS
@@ -83,7 +83,7 @@ func (c *PullClient) Pull(ctx context.Context) (*PolicyContent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("policy pull: fetch: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("policy pull: server returned %d", resp.StatusCode)

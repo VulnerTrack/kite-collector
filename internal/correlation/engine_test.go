@@ -9,18 +9,18 @@ import (
 
 func TestSeverityFromCVSS(t *testing.T) {
 	tests := []struct {
-		score float64
 		want  string
+		score float64
 	}{
-		{10.0, "critical"},
-		{9.0, "critical"},
-		{8.5, "high"},
-		{7.0, "high"},
-		{6.9, "medium"},
-		{4.0, "medium"},
-		{3.9, "low"},
-		{0.1, "low"},
-		{0.0, "none"},
+		{"critical", 10.0},
+		{"critical", 9.0},
+		{"high", 8.5},
+		{"high", 7.0},
+		{"medium", 6.9},
+		{"medium", 4.0},
+		{"low", 3.9},
+		{"low", 0.1},
+		{"none", 0.0},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.want, SeverityFromCVSS(tt.score), "score=%.1f", tt.score)

@@ -19,9 +19,9 @@ type EncryptedStore struct {
 	store.Store                  // embedded SQLiteStore
 	encPath     string           // path to the encrypted file on disk
 	workPath    string           // path to the decrypted working copy
-	key         []byte           // AES-256 key (32 bytes)
-	logger      *slog.Logger
 	keyBackend  string           // "tpm", "keyring", or "file"
+	logger      *slog.Logger
+	key         []byte           // AES-256 key (32 bytes)
 }
 
 // NewEncrypted opens an encrypted SQLite database. If encPath contains
@@ -64,13 +64,15 @@ func NewEncrypted(encPath string, key []byte, keyBackend string, logger *slog.Lo
 
 	if encrypted {
 		logger.Info("decrypting database for use", "path", encPath)
-		if err := DecryptFile(encPath, workPath, key); err != nil {
+		err = DecryptFile(encPath, workPath, key)
+		if err != nil {
 			return nil, fmt.Errorf("encrypted store: decrypt: %w", err)
 		}
 	} else if fileExists(encPath) {
 		// Unencrypted existing DB — first time enabling encryption.
 		logger.Info("migrating unencrypted database to encrypted storage", "path", encPath)
-		if err := copyFile(encPath, workPath); err != nil {
+		err = copyFile(encPath, workPath)
+		if err != nil {
 			return nil, fmt.Errorf("encrypted store: copy: %w", err)
 		}
 	}
@@ -128,5 +130,9 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0600)
+	safeDst, err := securePath(dst)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(safeDst, data, 0600) // #nosec G703 -- safeDst validated by securePath
 }
