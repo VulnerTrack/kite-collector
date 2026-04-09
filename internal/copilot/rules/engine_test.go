@@ -83,8 +83,8 @@ func TestEmptyList(t *testing.T) {
 	require.NoError(t, e.Compile("vps", "[]"))
 	result, err := e.Evaluate("vps", map[string]any{})
 	require.NoError(t, err)
-	list, ok := result.([]any)
-	require.True(t, ok, "expected []any, got %T", result)
+	list, ok := result.([]string)
+	require.True(t, ok, "expected []string, got %T", result)
 	assert.Empty(t, list)
 }
 
@@ -93,9 +93,9 @@ func TestStringList(t *testing.T) {
 	require.NoError(t, e.Compile("frameworks", "['none']"))
 	result, err := e.Evaluate("frameworks", map[string]any{})
 	require.NoError(t, err)
-	list, ok := result.([]any)
-	require.True(t, ok, "expected []any, got %T", result)
-	assert.Equal(t, []any{"none"}, list)
+	list, ok := result.([]string)
+	require.True(t, ok, "expected []string, got %T", result)
+	assert.Equal(t, []string{"none"}, list)
 }
 
 func TestConditionalList(t *testing.T) {
@@ -105,12 +105,12 @@ func TestConditionalList(t *testing.T) {
 
 	result, err := e.Evaluate("match_fields", map[string]any{"classification.allowlist_file": "/path/to/file"})
 	require.NoError(t, err)
-	list := result.([]any)
-	assert.Equal(t, []any{"hostname", "mac_address"}, list)
+	list := result.([]string)
+	assert.Equal(t, []string{"hostname", "mac_address"}, list)
 
 	result, err = e.Evaluate("match_fields", map[string]any{"classification.allowlist_file": ""})
 	require.NoError(t, err)
-	list = result.([]any)
+	list = result.([]string)
 	assert.Empty(t, list)
 }
 

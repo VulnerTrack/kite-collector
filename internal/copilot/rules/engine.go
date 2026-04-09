@@ -114,28 +114,44 @@ func toNative(v ref.Val) any {
 	case types.DoubleType:
 		return v.Value().(float64)
 	case types.ListType:
-		return convertList(v)
+		return convertListVal(v)
 	default:
 		return v.Value()
 	}
 }
 
-// convertList converts a CEL list value to a native Go []any slice.
-func convertList(v ref.Val) []any {
+// convertListVal converts a CEL list value to a native Go slice. If all
+// elements are strings, returns []string for consistency with Prompter types.
+// Otherwise returns []any.
+func convertListVal(v ref.Val) any {
 	lister, ok := v.(traits.Lister)
 	if !ok {
-		return nil
+		return []string{}
 	}
 	size, ok := lister.Size().Value().(int64)
 	if !ok {
-		return nil
+		return []string{}
 	}
-	result := make([]any, size)
+	if size == 0 {
+		return []string{}
+	}
+	allStrings := true
+	items := make([]any, size)
 	for i := int64(0); i < size; i++ {
 		elem := lister.Get(types.Int(i))
-		result[i] = toNative(elem)
+		items[i] = toNative(elem)
+		if _, isStr := items[i].(string); !isStr {
+			allStrings = false
+		}
 	}
-	return result
+	if allStrings {
+		out := make([]string, size)
+		for i, item := range items {
+			out[i] = item.(string)
+		}
+		return out
+	}
+	return items
 }
 
 func copyMap(m map[string]any) map[string]any {
