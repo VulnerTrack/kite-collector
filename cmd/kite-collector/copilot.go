@@ -236,28 +236,36 @@ func runCopilot(cmd *cobra.Command, f copilotFlags) error {
 		}
 	}
 
-	// Export config.
+	// Export config — always write so post-actions (e.g. run_first_scan) have
+	// a valid config file to reference. --export overrides the default path.
 	outPath := f.exportPath
 	if outPath == "" {
 		outPath = "kite-collector.yaml"
 	}
 
-	if f.dryRun {
-		_, _ = fmt.Fprintf(out, "\n--dry-run: would write config to %s\n", outPath)
-		data, _ := yaml.Marshal(wc.Resolved)
-		_, _ = fmt.Fprintln(out, string(data))
-		return nil
+	data, marshalErr := yaml.Marshal(wc.Resolved)
+	if marshalErr != nil {
+		return fmt.Errorf("marshal config: %w", marshalErr)
 	}
 
-	if f.exportPath != "" || f.nonInteractive || f.acceptDefaults {
-		data, marshalErr := yaml.Marshal(wc.Resolved)
-		if marshalErr != nil {
-			return fmt.Errorf("marshal config: %w", marshalErr)
-		}
+	if f.dryRun {
+		_, _ = fmt.Fprintf(out, "\n--dry-run: would write config to %s\n", outPath)
+		_, _ = fmt.Fprintln(out, string(data))
+	} else {
 		if writeErr := os.WriteFile(outPath, data, 0o600); writeErr != nil {
 			return fmt.Errorf("write config: %w", writeErr)
 		}
 		_, _ = fmt.Fprintf(out, "\nConfiguration written to %s\n", outPath)
+	}
+
+	// Execute post-actions defined by the selected goal preset.
+	if len(wc.PostActions) > 0 {
+		runner := newPostActionRunner(wc, outPath, f.dryRun, f.nonInteractive, out)
+		for _, action := range wc.PostActions {
+			if err := runner.Run(action); err != nil {
+				return fmt.Errorf("post-action %q: %w", action, err)
+			}
+		}
 	}
 
 	return nil
