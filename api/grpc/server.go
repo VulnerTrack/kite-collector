@@ -25,6 +25,16 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
+// PrivacyMode controls which data flows are enabled (RFC-0077 §5.4).
+type PrivacyMode string
+
+const (
+	// PrivacyModePrivate disables ReportAssets — only aggregates leave the agent.
+	PrivacyModePrivate PrivacyMode = "private"
+	// PrivacyModeManaged allows full asset details, BYOK encrypted.
+	PrivacyModeManaged PrivacyMode = "managed"
+)
+
 // Server implements the kite.v1.CollectorService gRPC service. It receives
 // streamed asset snapshots from remote agents, converts them to domain
 // model.Asset values, and persists them through the store.Store interface.
@@ -36,6 +46,7 @@ type Server struct {
 	panicsRecovered *prometheus.CounterVec
 	tlsConfig       *tls.Config
 	addr            string
+	privacyMode     PrivacyMode
 }
 
 // SetPanicsRecovered sets the Prometheus counter used by the gRPC recovery
@@ -46,16 +57,25 @@ func (s *Server) SetPanicsRecovered(c *prometheus.CounterVec) {
 
 // New creates a Server that will listen on addr when Serve is called. The
 // supplied store is used for all persistence operations. If logger is nil a
-// default slog.Logger is used.
+// default slog.Logger is used. The default privacy mode is "managed"
+// (backwards compatible).
 func New(addr string, st store.Store, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Server{
-		addr:   addr,
-		store:  st,
-		logger: logger,
+		addr:        addr,
+		store:       st,
+		logger:      logger,
+		privacyMode: PrivacyModeManaged,
 	}
+}
+
+// SetPrivacyMode configures the tenant privacy mode (RFC-0077 §5.4).
+// In "private" mode, ReportAssets is disabled.
+func (s *Server) SetPrivacyMode(mode PrivacyMode) {
+	s.privacyMode = mode
+	s.logger.Info("gRPC: privacy mode set", "mode", string(mode))
 }
 
 // ConfigureMTLS sets up mutual TLS on the server. The server presents its
@@ -132,7 +152,16 @@ func (s *Server) Stop() {
 // a client stream of AssetSnapshot messages, upserting each into the store
 // (along with any attached software inventory), and returns a summary of
 // accepted vs rejected snapshots when the stream ends.
+//
+// In private mode (RFC-0077 §5.4), this RPC is disabled. The agent
+// retains all asset data locally and only sends aggregates via OTLP.
 func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer) error {
+	if s.privacyMode == PrivacyModePrivate {
+		return status.Error(codes.PermissionDenied,
+			"ReportAssets is disabled in private privacy mode — "+
+				"asset details are retained on the agent")
+	}
+
 	ctx := stream.Context()
 	var accepted, rejected int32
 
