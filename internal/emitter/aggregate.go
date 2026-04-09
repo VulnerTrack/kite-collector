@@ -1,7 +1,6 @@
 package emitter
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,11 +20,10 @@ var _ Emitter = (*AggregateOTLPEmitter)(nil)
 //
 // See RFC-0077 §5.2.2 for the payload specification.
 type AggregateOTLPEmitter struct {
-	otlp *OTLPEmitter // underlying transport
-
-	mu   sync.Mutex
+	last time.Time      // last flush
+	otlp *OTLPEmitter   // underlying transport
 	agg  aggregateState
-	last time.Time // last flush
+	mu   sync.Mutex
 }
 
 // aggregateState tracks running counts across a scan.
@@ -70,6 +68,8 @@ func (a *AggregateOTLPEmitter) Emit(_ context.Context, event model.AssetEvent) e
 		a.agg.unmanagedAssets++
 	case model.EventAssetNotSeen:
 		a.agg.staleAssets++
+	case model.EventAssetRemoved:
+		a.agg.findingsCount++
 	default:
 		a.agg.findingsCount++
 	}
@@ -179,14 +179,6 @@ func (a *AggregateOTLPEmitter) buildAggregatePayload(state aggregateState) otlpL
 // Additional OTLP value helpers for aggregate payloads
 // ---------------------------------------------------------------------------
 
-type otlpIntValue struct {
-	IntValue *string `json:"intValue,omitempty"`
-}
-
-type otlpDoubleValue struct {
-	DoubleValue *float64 `json:"doubleValue,omitempty"`
-}
-
 // intKV creates an OTLP key-value pair with an integer value.
 // OTLP JSON encodes integers as strings in the intValue field.
 func intKV(key string, value int) otlpKeyValue {
@@ -200,13 +192,3 @@ func doubleKV(key string, value float64) otlpKeyValue {
 	return otlpKeyValue{Key: key, Value: otlpAnyValue{StringValue: &s}}
 }
 
-// marshalJSON is a helper that prevents import cycles when testing.
-func marshalJSON(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}

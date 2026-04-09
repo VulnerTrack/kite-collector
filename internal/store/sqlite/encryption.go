@@ -7,7 +7,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
+
+// securePath resolves and validates a file path, rejecting traversal attempts.
+func securePath(p string) (string, error) {
+	abs, err := filepath.Abs(filepath.Clean(p))
+	if err != nil {
+		return "", fmt.Errorf("resolve path: %w", err)
+	}
+	return abs, nil
+}
 
 // EncryptFile encrypts srcPath with AES-256-GCM using the provided key
 // and writes the ciphertext to dstPath. The file format is:
@@ -16,6 +26,11 @@ import (
 //
 // Used to encrypt the SQLite database at rest when the agent shuts down.
 func EncryptFile(srcPath, dstPath string, key []byte) error {
+	dst, err := securePath(dstPath)
+	if err != nil {
+		return fmt.Errorf("encrypt: %w", err)
+	}
+
 	plaintext, err := os.ReadFile(srcPath) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("encrypt: read source: %w", err)
@@ -36,7 +51,7 @@ func EncryptFile(srcPath, dstPath string, key []byte) error {
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
-	if err := os.WriteFile(dstPath, ciphertext, 0600); err != nil {
+	if err := os.WriteFile(dst, ciphertext, 0600); err != nil { // #nosec G703 -- dst validated by securePath
 		return fmt.Errorf("encrypt: write output: %w", err)
 	}
 	return nil
@@ -45,6 +60,11 @@ func EncryptFile(srcPath, dstPath string, key []byte) error {
 // DecryptFile decrypts an AES-256-GCM encrypted file (written by
 // EncryptFile) and writes the plaintext to dstPath.
 func DecryptFile(srcPath, dstPath string, key []byte) error {
+	dst, err := securePath(dstPath)
+	if err != nil {
+		return fmt.Errorf("decrypt: %w", err)
+	}
+
 	ciphertext, err := os.ReadFile(srcPath) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("decrypt: read source: %w", err)
@@ -70,7 +90,7 @@ func DecryptFile(srcPath, dstPath string, key []byte) error {
 		return fmt.Errorf("decrypt: authentication failed: %w", err)
 	}
 
-	if err := os.WriteFile(dstPath, plaintext, 0600); err != nil {
+	if err := os.WriteFile(dst, plaintext, 0600); err != nil { // #nosec G703 -- dst validated by securePath
 		return fmt.Errorf("decrypt: write output: %w", err)
 	}
 	return nil
@@ -86,7 +106,7 @@ func IsEncrypted(path string) (bool, error) {
 		}
 		return false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	header := make([]byte, 16)
 	n, err := f.Read(header)

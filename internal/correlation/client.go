@@ -17,8 +17,8 @@ const MaxCPEsPerRequest = 10_000
 
 // Client calls the SaaS CPE-to-CVE correlation API.
 type Client struct {
-	endpoint   string
 	httpClient *http.Client
+	endpoint   string
 }
 
 // NewClient creates a correlation API client. The endpoint should be the
@@ -69,7 +69,7 @@ func (c *Client) Correlate(ctx context.Context, cpes []string) (*Response, error
 	if err != nil {
 		return nil, fmt.Errorf("correlation: send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
