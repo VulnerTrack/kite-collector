@@ -14,6 +14,7 @@ import (
 type Config struct {
 	Discovery      DiscoveryConfig      `mapstructure:"discovery"`
 	Classification ClassificationConfig `mapstructure:"classification"`
+	Connectivity   ConnectivityConfig   `mapstructure:"connectivity"`
 	Streaming      StreamingConfig      `mapstructure:"streaming"`
 	Postgres       PostgresConfig       `mapstructure:"postgres"`
 	Identity       IdentityConfig       `mapstructure:"identity"`
@@ -26,6 +27,50 @@ type Config struct {
 	Audit          AuditConfig          `mapstructure:"audit"`
 	Safety         SafetyConfig         `mapstructure:"safety"`
 	Posture        PostureConfig        `mapstructure:"posture"`
+}
+
+// ConnectivityConfig holds settings for network connectivity aids like tunnels.
+type ConnectivityConfig struct {
+	Tunnel TunnelConfig `mapstructure:"tunnel"`
+}
+
+// TunnelConfig configures the auto-tunnel subsystem. When Enabled is true and
+// the backend endpoint is unreachable, the agent provisions a reverse tunnel
+// using the specified provider binary.
+type TunnelConfig struct {
+	Provider        string   `mapstructure:"provider"`          // ngrok, cloudflared, bore, tailscale, frp, rathole
+	Target          string   `mapstructure:"target"`            // backend endpoint to tunnel to
+	AuthTokenEnv    string   `mapstructure:"auth_token_env"`    // env var containing auth token
+	BackoffBase     string   `mapstructure:"restart_backoff_base"` // exponential backoff base (e.g., "5s")
+	BackoffMax      string   `mapstructure:"restart_backoff_max"`  // backoff cap (e.g., "5m")
+	ExtraArgs       []string `mapstructure:"extra_args"`        // additional CLI args
+	LocalPort       int      `mapstructure:"local_port"`        // local listen port for tunnel
+	RestartMax      int      `mapstructure:"restart_max"`       // max restarts (0 = unlimited)
+	Enabled         bool     `mapstructure:"enabled"`           // master toggle (default: false)
+}
+
+// TunnelBackoffBase parses the BackoffBase duration string. Falls back to 5s.
+func (t *TunnelConfig) TunnelBackoffBase() time.Duration {
+	if t.BackoffBase == "" {
+		return 5 * time.Second
+	}
+	d, err := time.ParseDuration(t.BackoffBase)
+	if err != nil {
+		return 5 * time.Second
+	}
+	return d
+}
+
+// TunnelBackoffMax parses the BackoffMax duration string. Falls back to 5m.
+func (t *TunnelConfig) TunnelBackoffMax() time.Duration {
+	if t.BackoffMax == "" {
+		return 5 * time.Minute
+	}
+	d, err := time.ParseDuration(t.BackoffMax)
+	if err != nil {
+		return 5 * time.Minute
+	}
+	return d
 }
 
 // IdentityConfig configures the agent's persistent identity and credential storage.
@@ -273,6 +318,14 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("safety.circuit_breaker.success_threshold", 1)
 	v.SetDefault("identity.data_dir", "/var/lib/kite-collector")
 	v.SetDefault("identity.key_backend", "auto")
+	v.SetDefault("connectivity.tunnel.enabled", false)
+	v.SetDefault("connectivity.tunnel.provider", "")
+	v.SetDefault("connectivity.tunnel.target", "")
+	v.SetDefault("connectivity.tunnel.local_port", 14318)
+	v.SetDefault("connectivity.tunnel.auth_token_env", "KITE_TUNNEL_AUTH_TOKEN")
+	v.SetDefault("connectivity.tunnel.restart_max", 5)
+	v.SetDefault("connectivity.tunnel.restart_backoff_base", "5s")
+	v.SetDefault("connectivity.tunnel.restart_backoff_max", "5m")
 
 	// Environment variable binding
 	v.SetEnvPrefix("KITE")
@@ -367,6 +420,35 @@ func (c *Config) Validate() error {
 		// ok
 	default:
 		return fmt.Errorf("invalid identity.key_backend %q: expected auto, tpm, keyring, or file", c.Identity.KeyBackend)
+	}
+
+	// Validate tunnel config when enabled.
+	if c.Connectivity.Tunnel.Enabled {
+		t := c.Connectivity.Tunnel
+		switch t.Provider {
+		case "ngrok", "cloudflared", "bore", "tailscale", "frp", "rathole":
+			// ok
+		case "":
+			return fmt.Errorf("connectivity.tunnel.provider is required when tunnel is enabled")
+		default:
+			return fmt.Errorf("invalid connectivity.tunnel.provider %q: expected ngrok, cloudflared, bore, tailscale, frp, or rathole", t.Provider)
+		}
+		if t.Target == "" {
+			return fmt.Errorf("connectivity.tunnel.target is required when tunnel is enabled")
+		}
+		if t.LocalPort < 1 || t.LocalPort > 65535 {
+			return fmt.Errorf("connectivity.tunnel.local_port must be 1-65535, got %d", t.LocalPort)
+		}
+		if t.BackoffBase != "" {
+			if _, err := time.ParseDuration(t.BackoffBase); err != nil {
+				return fmt.Errorf("invalid connectivity.tunnel.restart_backoff_base %q: %w", t.BackoffBase, err)
+			}
+		}
+		if t.BackoffMax != "" {
+			if _, err := time.ParseDuration(t.BackoffMax); err != nil {
+				return fmt.Errorf("invalid connectivity.tunnel.restart_backoff_max %q: %w", t.BackoffMax, err)
+			}
+		}
 	}
 
 	return nil
