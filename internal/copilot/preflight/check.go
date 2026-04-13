@@ -119,4 +119,7 @@ func (r *Runner) registerDefaults() {
 	r.Register("endpoint:tls:connect", &TLSConnectChecker{})
 	r.Register("endpoint:enroll", &EnrollChecker{})
 	r.Register("otel:health:check", &OTELHealthChecker{})
+	r.Register("tunnel:binary:available", &TunnelBinaryChecker{})
+	r.Register("tunnel:auth:valid", &TunnelAuthChecker{})
+	r.Register("tunnel:port:free", &TunnelPortChecker{})
 }

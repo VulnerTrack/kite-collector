@@ -178,6 +178,39 @@ var KnownServices = []ServiceSignature{
 		},
 		SetupHint: "export KITE_POSTGRES_DSN=postgres://user:pass@localhost:5432/kite", //#nosec G101 -- example DSN in setup hint, not actual credentials
 	},
+
+	// Tunnel tools (RFC-0083) — detected via binary presence in PATH, not ports.
+	{
+		Name:        "ngrok",
+		DisplayName: "ngrok",
+		EnvVars:     []string{"NGROK_AUTHTOKEN"},
+		SetupHint:   "Install ngrok: https://ngrok.com/download",
+	},
+	{
+		Name:        "cloudflared",
+		DisplayName: "Cloudflare Tunnel (cloudflared)",
+		SetupHint:   "Install cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/",
+	},
+	{
+		Name:        "bore",
+		DisplayName: "bore",
+		SetupHint:   "Install bore: cargo install bore-cli",
+	},
+	{
+		Name:        "tailscale",
+		DisplayName: "Tailscale",
+		SetupHint:   "Install Tailscale: https://tailscale.com/download",
+	},
+	{
+		Name:        "frpc",
+		DisplayName: "frp (client)",
+		SetupHint:   "Install frpc: https://github.com/fatedier/frp/releases",
+	},
+	{
+		Name:        "rathole",
+		DisplayName: "rathole",
+		SetupHint:   "Install rathole: https://github.com/rapiz1/rathole/releases",
+	},
 }
 
 // allPorts returns a deduplicated slice of all default ports from the given
