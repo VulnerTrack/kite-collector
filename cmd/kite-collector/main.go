@@ -30,6 +30,7 @@ import (
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/osutil"
+	"github.com/vulnertrack/kite-collector/internal/tunnel"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/dedup"
@@ -824,6 +825,44 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
 	slog.SetDefault(logger)
+
+	// Start tunnel if configured. When healthy, the tunnel rewrites endpoint
+	// addresses to route through localhost:local_port transparently.
+	var tunnelMgr *tunnel.Manager
+	if cfg.Connectivity.Tunnel.Enabled {
+		tunnelMgr = tunnel.NewManager(tunnel.ManagerConfig{
+			Enabled:      true,
+			Provider:     tunnel.ProviderName(cfg.Connectivity.Tunnel.Provider),
+			Target:       cfg.Connectivity.Tunnel.Target,
+			LocalPort:    uint16(cfg.Connectivity.Tunnel.LocalPort),
+			AuthTokenEnv: cfg.Connectivity.Tunnel.AuthTokenEnv,
+			RestartMax:   cfg.Connectivity.Tunnel.RestartMax,
+			BackoffBase:  cfg.Connectivity.Tunnel.TunnelBackoffBase(),
+			BackoffMax:   cfg.Connectivity.Tunnel.TunnelBackoffMax(),
+			ExtraArgs:    cfg.Connectivity.Tunnel.ExtraArgs,
+		}, logger)
+
+		localAddr, tunnelErr := tunnelMgr.Start(ctx)
+		if tunnelErr != nil {
+			slog.Warn("tunnel start failed, continuing without tunnel",
+				"error", tunnelErr,
+				"provider", cfg.Connectivity.Tunnel.Provider,
+			)
+		} else if localAddr != "" {
+			// Rewrite endpoint addresses to route through the tunnel.
+			slog.Info("tunnel active, rewriting endpoint addresses",
+				"local_addr", localAddr,
+				"original_target", cfg.Connectivity.Tunnel.Target,
+			)
+			for i := range cfg.Endpoints {
+				cfg.Endpoints[i].Address = localAddr
+			}
+			if cfg.Streaming.OTLP.Endpoint != "" {
+				cfg.Streaming.OTLP.Endpoint = "http://" + localAddr
+			}
+		}
+		defer tunnelMgr.Stop()
+	}
 
 	// Select store backend: PostgreSQL if DSN is configured, otherwise SQLite.
 	var st store.Store
