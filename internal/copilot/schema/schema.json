@@ -161,6 +161,26 @@
       ]
     },
     {
+      "id": "tunnel_to_saas",
+      "primary": true,
+      "title": "Connect via tunnel (behind firewall/NAT)",
+      "description": "Set up a reverse tunnel to reach the VulnerTrack backend from a restricted network.",
+      "context": {
+        "connectivity.tunnel.enabled": true,
+        "discovery.agent.enabled": true,
+        "audit.enabled": true,
+        "streaming.otlp.protocol": "http"
+      },
+      "skip_groups": [
+        "business_context"
+      ],
+      "post_actions": [
+        "start_tunnel",
+        "enroll_if_token_provided",
+        "run_first_scan"
+      ]
+    },
+    {
       "id": "custom",
       "primary": true,
       "title": "Custom configuration (full wizard)",
@@ -563,6 +583,80 @@
           "default_rule": "ctx['endpoint.primary.address'] != ''",
           "required": true,
           "skip_when": "ctx['endpoint.primary.address'] == ''"
+        }
+      ]
+    },
+    {
+      "id": "connectivity",
+      "title": "Connectivity & Tunneling (RFC-0083)",
+      "nodes": [
+        {
+          "id": "connectivity.backend_reachable",
+          "type": "confirm",
+          "prompt": "Can this agent reach the backend endpoint directly?",
+          "depends_on": [
+            "endpoint.primary.address"
+          ],
+          "default_rule": "true",
+          "required": true,
+          "skip_when": "ctx['endpoint.primary.address'] == ''",
+          "preflight_validate": "endpoint:tls:connect"
+        },
+        {
+          "id": "connectivity.tunnel.enabled",
+          "type": "confirm",
+          "prompt": "Set up a tunnel to reach the backend?",
+          "depends_on": [
+            "connectivity.backend_reachable"
+          ],
+          "default_rule": "has(ctx['connectivity.backend_reachable']) && ctx['connectivity.backend_reachable'] == false",
+          "required": true,
+          "skip_when": "has(ctx['connectivity.backend_reachable']) && ctx['connectivity.backend_reachable'] == true"
+        },
+        {
+          "id": "connectivity.tunnel.provider",
+          "type": "select",
+          "prompt": "Which tunnel tool is installed?",
+          "options": [
+            "ngrok",
+            "cloudflared",
+            "bore",
+            "tailscale",
+            "frp",
+            "rathole"
+          ],
+          "depends_on": [
+            "connectivity.tunnel.enabled"
+          ],
+          "default_rule": "has(ctx.autodiscovery) && ctx.autodiscovery.exists(s, s == 'ngrok') ? 'ngrok' : has(ctx.autodiscovery) && ctx.autodiscovery.exists(s, s == 'cloudflared') ? 'cloudflared' : 'ngrok'",
+          "required": true,
+          "skip_when": "ctx['connectivity.tunnel.enabled'] == false",
+          "preflight_validate": "tunnel:binary:available"
+        },
+        {
+          "id": "connectivity.tunnel.target",
+          "type": "input",
+          "prompt": "Backend address to tunnel to:",
+          "depends_on": [
+            "connectivity.tunnel.enabled",
+            "endpoint.primary.address"
+          ],
+          "default_rule": "ctx['endpoint.primary.address']",
+          "required": true,
+          "skip_when": "ctx['connectivity.tunnel.enabled'] == false",
+          "preflight_validate": "tunnel:port:free"
+        },
+        {
+          "id": "connectivity.tunnel.auth_token_env",
+          "type": "input",
+          "prompt": "Env var for auth token (leave empty if none):",
+          "depends_on": [
+            "connectivity.tunnel.enabled"
+          ],
+          "default_rule": "ctx['connectivity.tunnel.provider'] == 'ngrok' ? 'KITE_TUNNEL_AUTH_TOKEN' : ctx['connectivity.tunnel.provider'] == 'frp' ? 'KITE_TUNNEL_AUTH_TOKEN' : ''",
+          "required": false,
+          "skip_when": "ctx['connectivity.tunnel.enabled'] == false",
+          "preflight_validate": "tunnel:auth:valid"
         }
       ]
     },

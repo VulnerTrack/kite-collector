@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -268,6 +269,83 @@ func (c *OTELHealthChecker) Check(ctx context.Context, nodeID string, value any,
 	}
 	_ = conn.Close()
 	return CheckResult{NodeID: nodeID, Check: "otel:health:check", Passed: true, Message: fmt.Sprintf("OTEL Collector at %s reachable", endpoint)}
+}
+
+// TunnelBinaryChecker verifies that the selected tunnel binary exists in PATH.
+type TunnelBinaryChecker struct{}
+
+func (c *TunnelBinaryChecker) Check(_ context.Context, nodeID string, value any, _ map[string]any) CheckResult {
+	provider, ok := value.(string)
+	if !ok || provider == "" {
+		return CheckResult{NodeID: nodeID, Check: "tunnel:binary:available", Passed: true, Message: "no tunnel provider selected"}
+	}
+
+	// Map provider name to binary name (frp uses frpc).
+	binary := provider
+	if provider == "frp" {
+		binary = "frpc"
+	}
+
+	path, err := exec.LookPath(binary)
+	if err != nil {
+		return CheckResult{
+			NodeID:  nodeID,
+			Check:   "tunnel:binary:available",
+			Passed:  false,
+			Message: fmt.Sprintf("%s not found in PATH", binary),
+			Hint:    fmt.Sprintf("Install %s or add it to your PATH", provider),
+		}
+	}
+	return CheckResult{NodeID: nodeID, Check: "tunnel:binary:available", Passed: true, Message: fmt.Sprintf("%s found at %s", provider, path)}
+}
+
+// TunnelAuthChecker verifies that the tunnel auth token env var is set and non-empty.
+type TunnelAuthChecker struct{}
+
+func (c *TunnelAuthChecker) Check(_ context.Context, nodeID string, value any, resolved map[string]any) CheckResult {
+	envVar, ok := value.(string)
+	if !ok || envVar == "" {
+		return CheckResult{NodeID: nodeID, Check: "tunnel:auth:valid", Passed: true, Message: "no auth required"}
+	}
+
+	// Check if the provider actually requires auth.
+	provider, _ := resolved["connectivity.tunnel.provider"].(string)
+	authOptional := provider == "cloudflared" || provider == "bore"
+	if authOptional && os.Getenv(envVar) == "" {
+		return CheckResult{NodeID: nodeID, Check: "tunnel:auth:valid", Passed: true, Message: fmt.Sprintf("auth optional for %s, skipped", provider)}
+	}
+
+	if os.Getenv(envVar) == "" {
+		return CheckResult{
+			NodeID:  nodeID,
+			Check:   "tunnel:auth:valid",
+			Passed:  false,
+			Message: fmt.Sprintf("env var %s is not set", envVar),
+			Hint:    fmt.Sprintf("export %s=<your-token>", envVar),
+		}
+	}
+	return CheckResult{NodeID: nodeID, Check: "tunnel:auth:valid", Passed: true, Message: fmt.Sprintf("%s is set", envVar)}
+}
+
+// TunnelPortChecker verifies that the local tunnel port is available.
+type TunnelPortChecker struct{}
+
+func (c *TunnelPortChecker) Check(_ context.Context, nodeID string, _ any, resolved map[string]any) CheckResult {
+	// Default port from RFC.
+	port := "14318"
+
+	ln, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return CheckResult{
+			NodeID:  nodeID,
+			Check:   "tunnel:port:free",
+			Passed:  false,
+			Message: fmt.Sprintf("port %s is in use", port),
+			Hint:    "Change connectivity.tunnel.local_port or stop the process using the port",
+		}
+	}
+	_ = ln.Close()
+	return CheckResult{NodeID: nodeID, Check: "tunnel:port:free", Passed: true, Message: fmt.Sprintf("port %s available", port)}
 }
 
 func toStrSlice(v any) []string {

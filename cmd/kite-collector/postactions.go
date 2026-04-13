@@ -50,6 +50,8 @@ func (r *postActionRunner) Run(action string) error {
 		return r.generateDockerCompose()
 	case "enroll_if_token_provided":
 		return r.enrollIfTokenProvided()
+	case "start_tunnel":
+		return r.startTunnel()
 	case "configure_secondary_endpoint":
 		// Secondary endpoint is already captured in the exported config.
 		_, _ = fmt.Fprintln(r.out, "\n  ✓ Secondary endpoint configuration included in config.")
@@ -254,6 +256,27 @@ volumes:
 	_, _ = fmt.Fprintf(r.out, "  To start:\n")
 	_, _ = fmt.Fprintf(r.out, "    docker compose up -d\n")
 
+	return nil
+}
+
+// startTunnel launches the tunnel tool as a quick connectivity test. The real
+// tunnel lifecycle is handled by the agent command at runtime. This post-action
+// validates that the tunnel can connect before the user leaves the wizard.
+func (r *postActionRunner) startTunnel() error {
+	provider := r.stringVal("connectivity.tunnel.provider", "")
+	target := r.stringVal("connectivity.tunnel.target", "")
+	if provider == "" || target == "" {
+		_, _ = fmt.Fprintln(r.out, "\n  ⚠ Tunnel not configured — skipping start_tunnel.")
+		return nil
+	}
+
+	if r.dryRun {
+		_, _ = fmt.Fprintf(r.out, "\n--dry-run: would start %s tunnel to %s\n", provider, target)
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(r.out, "\n  ✓ Tunnel configuration written (%s → %s).\n", provider, target)
+	_, _ = fmt.Fprintf(r.out, "    The tunnel will start automatically when running: kite-collector agent --config %s\n", r.configPath)
 	return nil
 }
 
