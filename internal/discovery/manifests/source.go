@@ -92,7 +92,10 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		}
 
 		if m.IsGitDir {
-			// Git detection is Phase 2; skip for now.
+			asset := s.processGitRepo(ctx, m.Path, now, sc)
+			if asset != nil {
+				assets = append(assets, *asset)
+			}
 			continue
 		}
 
@@ -198,6 +201,83 @@ func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) 
 	}
 
 	return &asset, sw
+}
+
+func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time.Time, sc sourceConfig) *model.Asset {
+	info, err := DetectGitRepo(ctx, gitDirPath, sc.gitDetectDirty, sc.gitStaleDays)
+	if err != nil {
+		slog.Warn("manifest scanner: git detection error",
+			"path", gitDirPath, "error", err)
+		return nil
+	}
+
+	hostname := info.RemoteURL
+	if hostname == "" {
+		hostname = filepath.Base(info.Path)
+	}
+
+	tags := map[string]any{
+		"local_path":  info.Path,
+		"branch":      info.Branch,
+		"head_commit": info.HeadCommit,
+		"remote_url":  info.RemoteURL,
+		"repo_name":   info.RepoName,
+		"is_dirty":    info.IsDirty,
+		"is_stale":    info.IsStale,
+	}
+	if !info.LastCommitDate.IsZero() {
+		tags["last_commit_date"] = info.LastCommitDate.Format(time.RFC3339)
+	}
+	tagsJSON, _ := json.Marshal(tags)
+
+	asset := model.Asset{
+		ID:              newID(),
+		AssetType:       model.AssetTypeRepository,
+		Hostname:        hostname,
+		DiscoverySource: "manifest_scanner",
+		FirstSeenAt:     now,
+		LastSeenAt:      now,
+		IsAuthorized:    model.AuthorizationUnknown,
+		IsManaged:       model.ManagedUnknown,
+		Tags:            string(tagsJSON),
+	}
+	asset.ComputeNaturalKey()
+
+	// Generate findings for stale/dirty repos.
+	if info.IsStale {
+		finding := model.ConfigFinding{
+			ID:          newID(),
+			AssetID:     asset.ID,
+			Timestamp:   now,
+			Auditor:     "manifest_scanner",
+			CheckID:     "git:stale_repo",
+			Title:       fmt.Sprintf("Stale repository: %s (no commits in %d days)", info.RepoName, sc.gitStaleDays),
+			Severity:    model.SeverityMedium,
+			Evidence:    fmt.Sprintf("Last commit: %s", info.LastCommitDate.Format(time.RFC3339)),
+			Remediation: "Review repository for relevance; update or archive.",
+		}
+		s.mu.Lock()
+		s.findings = append(s.findings, finding)
+		s.mu.Unlock()
+	}
+	if info.IsDirty {
+		finding := model.ConfigFinding{
+			ID:          newID(),
+			AssetID:     asset.ID,
+			Timestamp:   now,
+			Auditor:     "manifest_scanner",
+			CheckID:     "git:dirty_repo",
+			Title:       fmt.Sprintf("Dirty repository: %s (uncommitted changes)", info.RepoName),
+			Severity:    model.SeverityLow,
+			Evidence:    "git status --porcelain returned non-empty output",
+			Remediation: "Review and commit or discard uncommitted changes.",
+		}
+		s.mu.Lock()
+		s.findings = append(s.findings, finding)
+		s.mu.Unlock()
+	}
+
+	return &asset
 }
 
 func (s *Source) totalSoftware() int {
