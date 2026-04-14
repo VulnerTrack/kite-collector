@@ -26,39 +26,39 @@ const (
 
 // TunnelInstance represents a running tunnel subprocess.
 type TunnelInstance struct {
-	EntityID        uuid.UUID    `json:"entity_id"`
 	Provider        ProviderName `json:"provider"`
 	Target          string       `json:"target"`
 	TunnelURL       string       `json:"tunnel_url,omitempty"`
-	Status          Status       `json:"status"`
 	StartedAt       time.Time    `json:"started_at"`
 	LastConnectedAt time.Time    `json:"last_connected_at,omitempty"`
-	LocalPort       uint16       `json:"local_port"`
+	Status          Status       `json:"status"`
+	EntityID        uuid.UUID    `json:"entity_id"`
 	PID             int          `json:"pid,omitempty"`
 	RestartCount    uint32       `json:"restart_count"`
+	LocalPort       uint16       `json:"local_port"`
 }
 
 // ManagerConfig holds the tunnel manager configuration.
 type ManagerConfig struct {
-	Provider        ProviderName
-	Target          string // remote endpoint (e.g., "ingest.vulnertrack.io:443")
-	AuthTokenEnv    string // env var name containing auth token
-	ExtraArgs       []string
-	BackoffBase     time.Duration
-	BackoffMax      time.Duration
-	LocalPort       uint16
-	RestartMax      int  // 0 = unlimited
-	Enabled         bool // master toggle
+	Provider     ProviderName
+	Target       string // remote endpoint (e.g., "ingest.vulnertrack.io:443")
+	AuthTokenEnv string // env var name containing auth token
+	ExtraArgs    []string
+	BackoffBase  time.Duration
+	BackoffMax   time.Duration
+	RestartMax   int    // 0 = unlimited
+	LocalPort    uint16
+	Enabled      bool // master toggle
 }
 
 // Manager manages the lifecycle of a tunnel subprocess: start, monitor,
 // restart with exponential backoff, and stop on context cancellation.
 type Manager struct {
-	cfg      ManagerConfig
 	logger   *slog.Logger
 	instance *TunnelInstance
 	cancel   context.CancelFunc
 	cmd      *exec.Cmd
+	cfg      ManagerConfig
 	mu       sync.Mutex
 	stopped  bool
 }
@@ -243,7 +243,7 @@ func (m *Manager) waitHealthy(ctx context.Context, addr string) error {
 		default:
 		}
 
-		conn, err := net.DialTimeout("tcp", addr, dialTimeout)
+		conn, err := (&net.Dialer{Timeout: dialTimeout}).DialContext(ctx, "tcp", addr)
 		if err == nil {
 			_ = conn.Close()
 			return nil

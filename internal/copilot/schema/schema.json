@@ -609,9 +609,9 @@
           "depends_on": [
             "connectivity.backend_reachable"
           ],
-          "default_rule": "has(ctx['connectivity.backend_reachable']) && ctx['connectivity.backend_reachable'] == false",
+          "default_rule": "'connectivity.backend_reachable' in ctx && ctx['connectivity.backend_reachable'] == false",
           "required": true,
-          "skip_when": "has(ctx['connectivity.backend_reachable']) && ctx['connectivity.backend_reachable'] == true"
+          "skip_when": "'connectivity.backend_reachable' in ctx && ctx['connectivity.backend_reachable'] == true"
         },
         {
           "id": "connectivity.tunnel.provider",
@@ -630,7 +630,7 @@
           ],
           "default_rule": "has(ctx.autodiscovery) && ctx.autodiscovery.exists(s, s == 'ngrok') ? 'ngrok' : has(ctx.autodiscovery) && ctx.autodiscovery.exists(s, s == 'cloudflared') ? 'cloudflared' : 'ngrok'",
           "required": true,
-          "skip_when": "ctx['connectivity.tunnel.enabled'] == false",
+          "skip_when": "!('connectivity.tunnel.enabled' in ctx) || ctx['connectivity.tunnel.enabled'] == false",
           "preflight_validate": "tunnel:binary:available"
         },
         {
@@ -643,7 +643,7 @@
           ],
           "default_rule": "ctx['endpoint.primary.address']",
           "required": true,
-          "skip_when": "ctx['connectivity.tunnel.enabled'] == false",
+          "skip_when": "!('connectivity.tunnel.enabled' in ctx) || ctx['connectivity.tunnel.enabled'] == false",
           "preflight_validate": "tunnel:port:free"
         },
         {
@@ -655,7 +655,7 @@
           ],
           "default_rule": "ctx['connectivity.tunnel.provider'] == 'ngrok' ? 'KITE_TUNNEL_AUTH_TOKEN' : ctx['connectivity.tunnel.provider'] == 'frp' ? 'KITE_TUNNEL_AUTH_TOKEN' : ''",
           "required": false,
-          "skip_when": "ctx['connectivity.tunnel.enabled'] == false",
+          "skip_when": "!('connectivity.tunnel.enabled' in ctx) || ctx['connectivity.tunnel.enabled'] == false",
           "preflight_validate": "tunnel:auth:valid"
         }
       ]

@@ -330,11 +330,11 @@ func (c *TunnelAuthChecker) Check(_ context.Context, nodeID string, value any, r
 // TunnelPortChecker verifies that the local tunnel port is available.
 type TunnelPortChecker struct{}
 
-func (c *TunnelPortChecker) Check(_ context.Context, nodeID string, _ any, resolved map[string]any) CheckResult {
+func (c *TunnelPortChecker) Check(ctx context.Context, nodeID string, _ any, resolved map[string]any) CheckResult {
 	// Default port from RFC.
 	port := "14318"
 
-	ln, err := net.Listen("tcp", ":"+port)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":"+port)
 	if err != nil {
 		return CheckResult{
 			NodeID:  nodeID,
