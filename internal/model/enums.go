@@ -10,8 +10,10 @@ const (
 	AssetTypeCloudInstance  AssetType = "cloud_instance"
 	AssetTypeContainer      AssetType = "container"
 	AssetTypeVirtualMachine AssetType = "virtual_machine"
-	AssetTypeIOTDevice      AssetType = "iot_device"
-	AssetTypeAppliance      AssetType = "appliance"
+	AssetTypeIOTDevice        AssetType = "iot_device"
+	AssetTypeAppliance        AssetType = "appliance"
+	AssetTypeSoftwareProject  AssetType = "software_project"
+	AssetTypeRepository       AssetType = "repository"
 )
 
 // Valid returns true when the AssetType is one of the recognised values.
@@ -24,7 +26,9 @@ func (a AssetType) Valid() bool {
 		AssetTypeContainer,
 		AssetTypeVirtualMachine,
 		AssetTypeIOTDevice,
-		AssetTypeAppliance:
+		AssetTypeAppliance,
+		AssetTypeSoftwareProject,
+		AssetTypeRepository:
 		return true
 	default:
 		return false
