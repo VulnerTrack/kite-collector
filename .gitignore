@@ -36,7 +36,7 @@ data/
 
 # Claude Code
 .claude/
-/kite-collector
+kite-collector
 
 # Editor/IDE
 # .idea/
