@@ -18,6 +18,7 @@ func NewRegistry() *Registry {
 	r := &Registry{exact: make(map[string]ManifestParser)}
 
 	all := []ManifestParser{
+		// Phase 1: core ecosystems
 		&NodeParser{},
 		&NodeLockParser{},
 		&ComposerParser{},
@@ -31,6 +32,17 @@ func NewRegistry() *Registry {
 		&CargoLockParser{},
 		&GemfileParser{},
 		&GemfileLockParser{},
+		// Phase 2: additional ecosystems and lockfiles
+		&YarnLockParser{},
+		&PnpmLockParser{},
+		&MavenParser{},
+		&GradleParser{},
+		&CsprojParser{},
+		&PackagesConfigParser{},
+		&MixExsParser{},
+		&PubspecParser{},
+		&SwiftPackageParser{},
+		&CpanfileParser{},
 	}
 
 	for _, p := range all {
