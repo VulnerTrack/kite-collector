@@ -1,0 +1,19 @@
+version: "2"
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - gosec
+    - bodyclose
+    - sqlclosecheck
+    - noctx
+    - exhaustive
+    - prealloc
+  settings:
+    gosec:
+      severity: high
+      confidence: medium
+    govet:
+      enable-all: true
