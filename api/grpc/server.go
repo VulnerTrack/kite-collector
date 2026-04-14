@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -153,6 +154,9 @@ func (s *Server) Stop() {
 // (along with any attached software inventory), and returns a summary of
 // accepted vs rejected snapshots when the stream ends.
 //
+// When mTLS is active, tenant_id is extracted from the certificate Organization
+// field and injected into every asset for tenant-scoped isolation (RFC-0063).
+//
 // In private mode (RFC-0077 §5.4), this RPC is disabled. The agent
 // retains all asset data locally and only sends aggregates via OTLP.
 func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer) error {
@@ -163,6 +167,7 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 	}
 
 	ctx := stream.Context()
+	tenantID := peerTenantID(ctx)
 	var accepted, rejected int32
 
 	for {
@@ -178,6 +183,11 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 		}
 
 		asset := snapshotToAsset(snapshot)
+		if tenantID != "" {
+			asset.TenantID = tenantID
+			asset.ComputeNaturalKey() // recompute with tenant scope
+		}
+
 		if upsertErr := s.store.UpsertAsset(ctx, asset); upsertErr != nil {
 			s.logger.Warn("gRPC: failed to upsert asset", "hostname", snapshot.Hostname, "error", upsertErr)
 			rejected++
@@ -227,9 +237,17 @@ func (s *Server) ReportFindings(stream kitev1.CollectorService_ReportFindingsSer
 	}
 }
 
-// Heartbeat implements kite.v1.CollectorService.Heartbeat. It returns the
-// current server time so agents can verify connectivity and clock drift.
+// Heartbeat implements kite.v1.CollectorService.Heartbeat. When mTLS is
+// active, it validates that the agent_id in the request matches the
+// certificate CN (RFC-0063 §5.4).
 func (s *Server) Heartbeat(ctx context.Context, req *kitev1.HeartbeatRequest) (*kitev1.HeartbeatResponse, error) {
+	if certCN := peerCN(ctx); certCN != "" && req.AgentId != certCN {
+		s.logger.Warn("gRPC: heartbeat agent_id mismatch",
+			"request_agent_id", req.AgentId,
+			"cert_cn", certCN,
+		)
+		return nil, status.Error(codes.PermissionDenied, "agent_id does not match certificate CN")
+	}
 	s.logger.Debug("gRPC: heartbeat received", "agent_id", req.AgentId)
 	return &kitev1.HeartbeatResponse{
 		ServerTime: timestamppb.Now(),
@@ -255,6 +273,45 @@ func (s *Server) Enroll(ctx context.Context, req *kitev1.EnrollRequest) (*kitev1
 func (s *Server) RenewCertificate(ctx context.Context, req *kitev1.RenewRequest) (*kitev1.RenewResponse, error) {
 	s.logger.Info("gRPC: certificate renewal request", "agent_id", req.AgentId)
 	return nil, status.Errorf(codes.Unimplemented, "certificate renewal handled by fleet manager (RFC-0063)")
+}
+
+// peerCN extracts the Common Name from the TLS peer certificate presented
+// during the gRPC handshake. Returns an empty string when mTLS is not active.
+func peerCN(ctx context.Context) string {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return ""
+	}
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		return ""
+	}
+	if len(tlsInfo.State.PeerCertificates) == 0 {
+		return ""
+	}
+	return tlsInfo.State.PeerCertificates[0].Subject.CommonName
+}
+
+// peerTenantID extracts the Organization (tenant_id) from the TLS peer
+// certificate. Returns an empty string when mTLS is not active or the
+// Organization field is empty.
+func peerTenantID(ctx context.Context) string {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return ""
+	}
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		return ""
+	}
+	if len(tlsInfo.State.PeerCertificates) == 0 {
+		return ""
+	}
+	orgs := tlsInfo.State.PeerCertificates[0].Subject.Organization
+	if len(orgs) == 0 {
+		return ""
+	}
+	return orgs[0]
 }
 
 // snapshotToAsset converts a protobuf AssetSnapshot into a domain model.Asset

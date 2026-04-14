@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/vulnertrack/kite-collector/internal/identity"
 )
 
 func TestStoreCertificates(t *testing.T) {
@@ -43,6 +45,6 @@ func TestStoreCertificates(t *testing.T) {
 }
 
 func TestMachineFingerprint(t *testing.T) {
-	fp := machineFingerprint()
+	fp := identity.MachineFingerprint()
 	assert.NotEmpty(t, fp)
 }

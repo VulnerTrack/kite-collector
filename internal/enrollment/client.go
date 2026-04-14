@@ -80,7 +80,7 @@ func (c *Client) Enroll(ctx context.Context, address, token, caFile string, id *
 		AgentId:            id.AgentID.String(),
 		PublicKey:          id.PubKeyB64,
 		Hostname:           hostname,
-		MachineFingerprint: machineFingerprint(),
+		MachineFingerprint: identity.MachineFingerprint(),
 		EnrollmentToken:    token,
 		AgentVersion:       "dev",
 		OsFamily:           runtime.GOOS,
@@ -130,15 +130,3 @@ func StoreCertificates(dataDir, endpointName string, result *Result) error {
 	return nil
 }
 
-// machineFingerprint returns a best-effort machine identifier.
-func machineFingerprint() string {
-	// Try /etc/machine-id (Linux).
-	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
-		s := string(data)
-		if len(s) > 0 {
-			return s[:len(s)-1] // trim trailing newline
-		}
-	}
-	h, _ := os.Hostname()
-	return h
-}

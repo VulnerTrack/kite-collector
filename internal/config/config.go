@@ -18,6 +18,7 @@ type Config struct {
 	Streaming      StreamingConfig      `mapstructure:"streaming"`
 	Postgres       PostgresConfig       `mapstructure:"postgres"`
 	Identity       IdentityConfig       `mapstructure:"identity"`
+	Fleet          FleetConfig          `mapstructure:"fleet"`
 	Endpoints      []EndpointConfig     `mapstructure:"endpoints"`
 	LogLevel       string               `mapstructure:"log_level"`
 	OutputFormat   string               `mapstructure:"output_format"`
@@ -27,6 +28,15 @@ type Config struct {
 	Audit          AuditConfig          `mapstructure:"audit"`
 	Safety         SafetyConfig         `mapstructure:"safety"`
 	Posture        PostureConfig        `mapstructure:"posture"`
+}
+
+// FleetConfig configures fleet identity and multi-tenant agent routing (RFC-0063).
+type FleetConfig struct {
+	APIKey            string `mapstructure:"api_key"`             // shared API key for admin endpoints
+	TenantID          string `mapstructure:"tenant_id"`           // pre-assigned tenant ID for this agent
+	Enabled           bool   `mapstructure:"enabled"`             // master toggle for fleet features
+	RequireEnrollment bool   `mapstructure:"require_enrollment"`  // require agents to enroll before reporting
+	MTLSRequired      bool   `mapstructure:"mtls_required"`       // require mTLS on all endpoints
 }
 
 // ConnectivityConfig holds settings for network connectivity aids like tunnels.
@@ -326,6 +336,9 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("connectivity.tunnel.restart_max", 5)
 	v.SetDefault("connectivity.tunnel.restart_backoff_base", "5s")
 	v.SetDefault("connectivity.tunnel.restart_backoff_max", "5m")
+	v.SetDefault("fleet.enabled", false)
+	v.SetDefault("fleet.require_enrollment", false)
+	v.SetDefault("fleet.mtls_required", false)
 
 	// Environment variable binding
 	v.SetEnvPrefix("KITE")
@@ -448,6 +461,13 @@ func (c *Config) Validate() error {
 			if _, err := time.ParseDuration(t.BackoffMax); err != nil {
 				return fmt.Errorf("invalid connectivity.tunnel.restart_backoff_max %q: %w", t.BackoffMax, err)
 			}
+		}
+	}
+
+	// Validate fleet config: tenant_id must be a valid UUID if set.
+	if c.Fleet.TenantID != "" {
+		if len(c.Fleet.TenantID) != 36 {
+			return fmt.Errorf("invalid fleet.tenant_id %q: expected UUID format", c.Fleet.TenantID)
 		}
 	}
 
