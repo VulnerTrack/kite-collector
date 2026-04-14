@@ -82,9 +82,10 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		matches = applyLockfilePreference(matches)
 	}
 
-	// Phase 3: parse manifests and build assets.
+	// Phase 3: parse manifests, evaluate policies, and build assets.
 	var assets []model.Asset
 	now := time.Now().UTC()
+	policy := sc.policyEngine
 
 	for _, m := range matches {
 		if ctx.Err() != nil {
@@ -99,7 +100,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			continue
 		}
 
-		asset, sw := s.parseManifest(ctx, m.Path, now)
+		asset, sw, deps := s.parseManifest(ctx, m.Path, now)
 		if asset == nil {
 			continue
 		}
@@ -109,6 +110,18 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			s.mu.Lock()
 			s.software[asset.ID] = sw
 			s.mu.Unlock()
+		}
+
+		// Evaluate dependency policies.
+		if policy != nil {
+			for _, dep := range deps {
+				pf := policy.Evaluate(dep, asset.ID, now)
+				if len(pf) > 0 {
+					s.mu.Lock()
+					s.findings = append(s.findings, pf...)
+					s.mu.Unlock()
+				}
+			}
 		}
 	}
 
@@ -134,31 +147,31 @@ func (s *Source) CollectedFindings() []model.ConfigFinding {
 	return s.findings
 }
 
-func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) (*model.Asset, []model.InstalledSoftware) {
+func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) (*model.Asset, []model.InstalledSoftware, []parsers.Dependency) {
 	base := filepath.Base(path)
 	parser := s.registry.Match(base)
 	if parser == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Validate path is within configured scan roots (defence against path traversal).
 	if !isWithinRoots(path, s.scanRoots) {
 		slog.Warn("manifest scanner: path outside scan roots", "path", path)
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	content, err := os.ReadFile(path) // #nosec G304 -- path validated above
 	if err != nil {
 		slog.Warn("manifest scanner: read error",
 			"path", path, "error", err)
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	result, err := parser.Parse(ctx, path, content)
 	if err != nil {
 		slog.Warn("manifest scanner: parse error",
 			"path", path, "error", err)
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	for _, e := range result.Errors {
@@ -200,7 +213,7 @@ func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) 
 		})
 	}
 
-	return &asset, sw
+	return &asset, sw, result.Dependencies
 }
 
 func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time.Time, sc sourceConfig) *model.Asset {
@@ -378,6 +391,7 @@ func newID() uuid.UUID {
 
 // sourceConfig holds parsed configuration for the manifests source.
 type sourceConfig struct {
+	policyEngine    *PolicyEngine
 	excludeDirs     map[string]struct{}
 	scanPaths       []string
 	maxDepth        int
@@ -460,6 +474,46 @@ func parseSourceConfig(cfg map[string]any) sourceConfig {
 		if v, ok := git["detect_stale_days"].(int); ok {
 			sc.gitStaleDays = v
 		}
+	}
+
+	// Policy sub-config.
+	if policyCfg, ok := cfg["policy"].(map[string]any); ok {
+		pc := PolicyConfig{}
+		if v, ok := policyCfg["mode"].(string); ok {
+			pc.Mode = v
+		}
+		if bl, ok := policyCfg["blocklist"].([]any); ok {
+			for _, entry := range bl {
+				if m, ok := entry.(map[string]any); ok {
+					rule := BlocklistRule{}
+					if v, ok := m["name"].(string); ok {
+						rule.Name = v
+					}
+					if v, ok := m["version"].(string); ok {
+						rule.Version = v
+					}
+					if v, ok := m["reason"].(string); ok {
+						rule.Reason = v
+					}
+					if v, ok := m["remediation"].(string); ok {
+						rule.Remediation = v
+					}
+					pc.Blocklist = append(pc.Blocklist, rule)
+				}
+			}
+		}
+		if al, ok := policyCfg["allowlist"].([]any); ok {
+			for _, entry := range al {
+				if m, ok := entry.(map[string]any); ok {
+					rule := AllowlistRule{}
+					if v, ok := m["name"].(string); ok {
+						rule.Name = v
+					}
+					pc.Allowlist = append(pc.Allowlist, rule)
+				}
+			}
+		}
+		sc.policyEngine = NewPolicyEngine(pc)
 	}
 
 	return sc
