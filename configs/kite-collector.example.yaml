@@ -145,7 +145,7 @@ classification:
     # Everything else is "unknown" (never defaults to "authorized")
     allowlist_file: ./configs/authorized-assets.yaml
     # Match strategy: hostname, mac_address, ip_address, cloud_instance_id
-    match_fields: [hostname, mac_address]
+    match_fields: [hostname]
 
   managed:
     # Required controls for is_managed = "managed"
