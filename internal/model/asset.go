@@ -24,14 +24,22 @@ type Asset struct {
 	Owner           string             `json:"owner"`
 	Criticality     string             `json:"criticality"`
 	DiscoverySource string             `json:"discovery_source"`
-	Tags            string             `json:"tags"`        // JSON
-	NaturalKey      string             `json:"natural_key"` // computed dedup key
+	TenantID        string             `json:"tenant_id,omitempty"` // tenant scope for multi-tenancy (RFC-0063)
+	Tags            string             `json:"tags"`                // JSON
+	NaturalKey      string             `json:"natural_key"`         // computed dedup key
 	ID              uuid.UUID          `json:"id"`
 }
 
-// ComputeNaturalKey sets NaturalKey to the SHA-256 hex digest of "hostname|asset_type".
+// ComputeNaturalKey sets NaturalKey to the SHA-256 hex digest of the asset's
+// identifying fields. When TenantID is set, it is included as a prefix to
+// ensure tenant-scoped deduplication (RFC-0063).
 func (a *Asset) ComputeNaturalKey() {
-	raw := fmt.Sprintf("%s|%s", a.Hostname, a.AssetType)
+	var raw string
+	if a.TenantID != "" {
+		raw = fmt.Sprintf("%s|%s|%s", a.TenantID, a.Hostname, a.AssetType)
+	} else {
+		raw = fmt.Sprintf("%s|%s", a.Hostname, a.AssetType)
+	}
 	hash := sha256.Sum256([]byte(raw))
 	a.NaturalKey = fmt.Sprintf("%x", hash)
 }

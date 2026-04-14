@@ -3,6 +3,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,32 @@ import (
 
 // apiKeyHeader is the HTTP header name checked by APIKeyAuth.
 const apiKeyHeader = "X-API-Key" //#nosec G101 -- this is a header name, not a credential
+
+// contextKey is a private type for context keys in this package.
+type contextKey string
+
+const (
+	// tenantIDCtxKey stores the tenant UUID extracted from the mTLS certificate
+	// Organization field (RFC-0063 §5.1).
+	tenantIDCtxKey contextKey = "tenant_id"
+	// agentIDCtxKey stores the agent UUID extracted from the mTLS certificate
+	// Common Name field (RFC-0063 §5.1).
+	agentIDCtxKey contextKey = "agent_id"
+)
+
+// TenantIDFromContext returns the tenant_id injected by the auth middleware,
+// or an empty string if no mTLS certificate was presented.
+func TenantIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(tenantIDCtxKey).(string)
+	return v
+}
+
+// AgentIDFromContext returns the agent_id (certificate CN) injected by the
+// auth middleware, or an empty string if no mTLS certificate was presented.
+func AgentIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(agentIDCtxKey).(string)
+	return v
+}
 
 // errorBody is the JSON body returned on authentication failure.
 type errorBody struct {
@@ -44,8 +71,8 @@ func APIKeyAuth(next http.Handler, apiKey string) http.Handler {
 }
 
 // MTLSAuth returns middleware that enforces mutual TLS client certificate
-// authentication. Requests without a valid, non-expired client certificate
-// receive a 401 Unauthorized JSON response.
+// authentication. It extracts agent_id from the certificate CN and tenant_id
+// from the Organization field, injecting both into the request context.
 func MTLSAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
@@ -53,38 +80,51 @@ func MTLSAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// Extract client certificate subject for logging.
 		clientCert := r.TLS.PeerCertificates[0]
-		slog.Debug("mTLS: client authenticated", //#nosec G706 -- cert fields from TLS handshake, not user input
+		slog.Debug("mTLS: client authenticated",
 			"subject", clientCert.Subject.CommonName,
 			"issuer", clientCert.Issuer.CommonName,
 			"serial", clientCert.SerialNumber.String(),
 			"not_after", clientCert.NotAfter.Format(time.RFC3339),
 		)
 
-		// Check certificate expiry.
 		if time.Now().After(clientCert.NotAfter) {
 			writeJSONError(w, http.StatusUnauthorized, "mTLS: client certificate has expired")
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		// Inject agent_id (CN) and tenant_id (Organization) into context.
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, agentIDCtxKey, clientCert.Subject.CommonName)
+		if len(clientCert.Subject.Organization) > 0 {
+			ctx = context.WithValue(ctx, tenantIDCtxKey, clientCert.Subject.Organization[0])
+		}
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 // MTLSOrAPIKey returns middleware that accepts either a valid mTLS client
-// certificate or a matching X-API-Key header. If neither authentication
-// method succeeds, the request receives a 401 Unauthorized JSON response.
+// certificate or a matching X-API-Key header. When mTLS is used, agent_id
+// and tenant_id are extracted from the certificate and injected into context.
 func MTLSOrAPIKey(next http.Handler, apiKey string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// If mTLS client cert is present and not expired, use that.
 		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 			clientCert := r.TLS.PeerCertificates[0]
 			if time.Now().Before(clientCert.NotAfter) {
-				slog.Debug("mTLS+APIKey: authenticated via client certificate", //#nosec G706 -- cert fields from TLS handshake, not user input
+				slog.Debug("mTLS+APIKey: authenticated via client certificate",
 					"subject", clientCert.Subject.CommonName,
 				)
-				next.ServeHTTP(w, r)
+
+				// Inject agent_id (CN) and tenant_id (Organization) into context.
+				ctx := r.Context()
+				ctx = context.WithValue(ctx, agentIDCtxKey, clientCert.Subject.CommonName)
+				if len(clientCert.Subject.Organization) > 0 {
+					ctx = context.WithValue(ctx, tenantIDCtxKey, clientCert.Subject.Organization[0])
+				}
+
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 		}

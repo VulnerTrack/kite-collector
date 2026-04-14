@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/vulnertrack/kite-collector/api/middleware"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -34,6 +35,7 @@ type Handler struct {
 	panicsRecovered     *prometheus.CounterVec
 	responseTruncations prometheus.Counter
 	circuitBreaker      *safety.CircuitBreaker
+	apiKey              string // when non-empty, MTLSOrAPIKey middleware is wired
 	maxRequestBytes     int64
 	maxResponseBytes    int64
 }
@@ -57,11 +59,21 @@ func (h *Handler) SetResponseTruncations(c prometheus.Counter) { h.responseTrunc
 // SetCircuitBreaker sets the circuit breaker used to serve source health.
 func (h *Handler) SetCircuitBreaker(cb *safety.CircuitBreaker) { h.circuitBreaker = cb }
 
+// SetAPIKey enables MTLSOrAPIKey authentication on all API routes when
+// key is non-empty. This wires the middleware defined in RFC-0063.
+func (h *Handler) SetAPIKey(key string) { h.apiKey = key }
+
 // Handler returns an http.Handler that wraps all routes with safety
 // middleware. The chain (outermost first) is: recovery → response
-// bounding → request body limiting → routes.
+// bounding → request body limiting → auth → routes.
 func (h *Handler) Handler() http.Handler {
 	var handler http.Handler = h.Mux()
+
+	// Auth middleware (RFC-0063): when an API key is configured, require
+	// either a valid mTLS client certificate or the API key on every request.
+	if h.apiKey != "" {
+		handler = middleware.MTLSOrAPIKey(handler, h.apiKey)
+	}
 
 	if h.maxRequestBytes > 0 {
 		handler = MaxBytesMiddleware(h.maxRequestBytes, handler)

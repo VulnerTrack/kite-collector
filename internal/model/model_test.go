@@ -79,3 +79,42 @@ func TestComputeNaturalKey_SHA256Hex(t *testing.T) {
 	// SHA-256 hex digest is always 64 hex chars
 	assert.Len(t, a.NaturalKey, 64)
 }
+
+// ---------------------------------------------------------------------------
+// Tenant-scoped natural key (RFC-0063)
+// ---------------------------------------------------------------------------
+
+func TestComputeNaturalKey_TenantScoped(t *testing.T) {
+	// Same hostname+type but different tenants must produce different keys.
+	a := Asset{Hostname: "web-01", AssetType: AssetTypeServer, TenantID: "tenant-alpha"}
+	a.ComputeNaturalKey()
+
+	b := Asset{Hostname: "web-01", AssetType: AssetTypeServer, TenantID: "tenant-beta"}
+	b.ComputeNaturalKey()
+
+	assert.NotEqual(t, a.NaturalKey, b.NaturalKey,
+		"same hostname+type in different tenants must produce different keys")
+}
+
+func TestComputeNaturalKey_TenantEmpty_BackwardsCompatible(t *testing.T) {
+	// An asset without TenantID must produce the same key as before RFC-0063.
+	withTenant := Asset{Hostname: "web-01", AssetType: AssetTypeServer, TenantID: ""}
+	withTenant.ComputeNaturalKey()
+
+	withoutTenant := Asset{Hostname: "web-01", AssetType: AssetTypeServer}
+	withoutTenant.ComputeNaturalKey()
+
+	assert.Equal(t, withoutTenant.NaturalKey, withTenant.NaturalKey,
+		"empty TenantID must produce the same key as no TenantID (backwards compat)")
+}
+
+func TestComputeNaturalKey_TenantScoped_Deterministic(t *testing.T) {
+	a := Asset{Hostname: "db-01", AssetType: AssetTypeServer, TenantID: "tenant-x"}
+	a.ComputeNaturalKey()
+	key1 := a.NaturalKey
+
+	b := Asset{Hostname: "db-01", AssetType: AssetTypeServer, TenantID: "tenant-x"}
+	b.ComputeNaturalKey()
+
+	assert.Equal(t, key1, b.NaturalKey, "same inputs must produce the same key")
+}
