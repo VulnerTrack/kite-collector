@@ -8,7 +8,7 @@
 package tunnel
 
 import (
-	"fmt"
+	"context"
 	"log/slog"
 	"os/exec"
 	"strings"
@@ -51,12 +51,12 @@ type ProviderMeta struct {
 
 // TunnelProvider represents a detected tunnel binary on the agent host.
 type TunnelProvider struct {
-	EntityID     uuid.UUID    `json:"entity_id"`
 	Name         ProviderName `json:"name"`
 	BinaryPath   string       `json:"binary_path"`
 	Version      string       `json:"version,omitempty"`
-	AuthEnvVar   string       `json:"auth_env_var,omitempty"`
 	DetectedAt   time.Time    `json:"detected_at"`
+	AuthEnvVar   string       `json:"auth_env_var,omitempty"`
+	EntityID     uuid.UUID    `json:"entity_id"`
 	AuthRequired bool         `json:"auth_required"`
 	SupportsTCP  bool         `json:"supports_tcp"`
 	SupportsHTTP bool         `json:"supports_http"`
@@ -65,7 +65,7 @@ type TunnelProvider struct {
 // Detect scans the system PATH for known tunnel binaries and returns a list
 // of detected providers. Detection is read-only — only exec.LookPath and
 // optional version queries are performed.
-func Detect(logger *slog.Logger) []TunnelProvider {
+func Detect(ctx context.Context, logger *slog.Logger) []TunnelProvider {
 	var found []TunnelProvider
 	now := time.Now()
 
@@ -88,7 +88,7 @@ func Detect(logger *slog.Logger) []TunnelProvider {
 		}
 
 		// Best-effort version detection.
-		provider.Version = detectVersion(path, meta.Name)
+		provider.Version = detectVersion(ctx, path, meta.Name)
 
 		logger.Info("tunnel provider detected",
 			"provider", meta.Name,
@@ -102,8 +102,8 @@ func Detect(logger *slog.Logger) []TunnelProvider {
 }
 
 // DetectProvider looks up a single provider by name. Returns nil if not found.
-func DetectProvider(name ProviderName, logger *slog.Logger) *TunnelProvider {
-	for _, p := range Detect(logger) {
+func DetectProvider(ctx context.Context, name ProviderName, logger *slog.Logger) *TunnelProvider {
+	for _, p := range Detect(ctx, logger) {
 		if p.Name == name {
 			return &p
 		}
@@ -113,7 +113,7 @@ func DetectProvider(name ProviderName, logger *slog.Logger) *TunnelProvider {
 
 // detectVersion runs `<binary> version` (or provider-specific variant) and
 // extracts the version string. Returns empty string on any failure.
-func detectVersion(binaryPath string, name ProviderName) string {
+func detectVersion(ctx context.Context, binaryPath string, name ProviderName) string {
 	var args []string
 	switch name {
 	case ProviderNgrok:
@@ -132,7 +132,7 @@ func detectVersion(binaryPath string, name ProviderName) string {
 		return ""
 	}
 
-	out, err := exec.Command(binaryPath, args...).Output() //#nosec G204 -- binaryPath from LookPath, args are static
+	out, err := exec.CommandContext(ctx, binaryPath, args...).Output() //#nosec G204 -- binaryPath from LookPath, args are static
 	if err != nil {
 		return ""
 	}
@@ -153,5 +153,5 @@ func sanitizeVersion(raw string) string {
 	if len(raw) > 128 {
 		raw = raw[:128]
 	}
-	return fmt.Sprintf("%s", strings.TrimSpace(raw))
+	return strings.TrimSpace(raw)
 }

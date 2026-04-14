@@ -830,11 +830,14 @@ func runAgent(cfgFile, dbPath, interval string, verbose, stream bool) error {
 	// addresses to route through localhost:local_port transparently.
 	var tunnelMgr *tunnel.Manager
 	if cfg.Connectivity.Tunnel.Enabled {
+		if cfg.Connectivity.Tunnel.LocalPort < 0 || cfg.Connectivity.Tunnel.LocalPort > 65535 {
+			return fmt.Errorf("tunnel local_port %d out of valid range 0-65535", cfg.Connectivity.Tunnel.LocalPort)
+		}
 		tunnelMgr = tunnel.NewManager(tunnel.ManagerConfig{
 			Enabled:      true,
 			Provider:     tunnel.ProviderName(cfg.Connectivity.Tunnel.Provider),
 			Target:       cfg.Connectivity.Tunnel.Target,
-			LocalPort:    uint16(cfg.Connectivity.Tunnel.LocalPort),
+			LocalPort:    uint16(cfg.Connectivity.Tunnel.LocalPort), //#nosec G115 -- bounds checked above
 			AuthTokenEnv: cfg.Connectivity.Tunnel.AuthTokenEnv,
 			RestartMax:   cfg.Connectivity.Tunnel.RestartMax,
 			BackoffBase:  cfg.Connectivity.Tunnel.TunnelBackoffBase(),

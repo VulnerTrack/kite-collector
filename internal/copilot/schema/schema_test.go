@@ -26,14 +26,14 @@ func TestLoadDefaultNodeCount(t *testing.T) {
 func TestLoadDefaultPresetCount(t *testing.T) {
 	s, err := LoadDefault()
 	require.NoError(t, err)
-	assert.Len(t, s.Presets, 9, "schema should define 9 presets")
+	assert.Len(t, s.Presets, 10, "schema should define 10 presets")
 }
 
 func TestPrimaryPresets(t *testing.T) {
 	s, err := LoadDefault()
 	require.NoError(t, err)
 	primary := s.PrimaryPresets()
-	assert.Len(t, primary, 4, "4 presets should be primary")
+	assert.Len(t, primary, 5, "5 presets should be primary")
 }
 
 func TestNodeByID(t *testing.T) {
