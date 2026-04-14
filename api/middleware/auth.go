@@ -7,8 +7,18 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"time"
 )
+
+// controlCharRe matches control characters that could cause log injection (CWE-117).
+var controlCharRe = regexp.MustCompile(`[\x00-\x1f\x7f]`)
+
+// sanitizeLog replaces control characters in tainted values such as
+// certificate fields to prevent log injection.
+func sanitizeLog(s string) string {
+	return controlCharRe.ReplaceAllString(s, "_")
+}
 
 // apiKeyHeader is the HTTP header name checked by APIKeyAuth.
 const apiKeyHeader = "X-API-Key" //#nosec G101 -- this is a header name, not a credential
@@ -81,11 +91,11 @@ func MTLSAuth(next http.Handler) http.Handler {
 		}
 
 		clientCert := r.TLS.PeerCertificates[0]
-		slog.Debug("mTLS: client authenticated",
-			"subject", clientCert.Subject.CommonName,
-			"issuer", clientCert.Issuer.CommonName,
-			"serial", clientCert.SerialNumber.String(),
-			"not_after", clientCert.NotAfter.Format(time.RFC3339),
+		slog.LogAttrs(r.Context(), slog.LevelDebug, "mTLS: client authenticated",
+			slog.String("subject", sanitizeLog(clientCert.Subject.CommonName)),
+			slog.String("issuer", sanitizeLog(clientCert.Issuer.CommonName)),
+			slog.String("serial", sanitizeLog(clientCert.SerialNumber.String())),
+			slog.String("not_after", clientCert.NotAfter.Format(time.RFC3339)),
 		)
 
 		if time.Now().After(clientCert.NotAfter) {
@@ -113,8 +123,8 @@ func MTLSOrAPIKey(next http.Handler, apiKey string) http.Handler {
 		if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 			clientCert := r.TLS.PeerCertificates[0]
 			if time.Now().Before(clientCert.NotAfter) {
-				slog.Debug("mTLS+APIKey: authenticated via client certificate",
-					"subject", clientCert.Subject.CommonName,
+				slog.LogAttrs(r.Context(), slog.LevelDebug, "mTLS+APIKey: authenticated via client certificate",
+					slog.String("subject", sanitizeLog(clientCert.Subject.CommonName)),
 				)
 
 				// Inject agent_id (CN) and tenant_id (Organization) into context.
