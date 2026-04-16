@@ -23,8 +23,8 @@ type Result struct {
 	JWKSURL            string
 	CACertificate      []byte
 	ClientCertificate  []byte
-	ClientKey          []byte
 	CertificateExpires string
+	ClientKey          []byte
 }
 
 // Client performs enrollment handshakes with the PKI server.
@@ -62,7 +62,7 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 	if err != nil {
 		return nil, fmt.Errorf("enroll request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
