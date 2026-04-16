@@ -161,6 +161,7 @@ lifecycle events for downstream consumption.`,
 	root.AddCommand(
 		newScanCmd(),
 		newAgentCmd(),
+		newStreamCmd(),
 		newDiffCmd(),
 		newReportCmd(),
 		newDiscoverServicesCmd(),
@@ -176,6 +177,7 @@ lifecycle events for downstream consumption.`,
 		newEndpointsCmd(),
 		newTrustCmd(),
 		newCheckOTLPCmd(),
+		newInstallCmd(),
 	)
 
 	return root
@@ -811,6 +813,47 @@ and no config file is required:
 		fmt.Sprintf("directory containing agent.pem, agent-key.pem, ca.pem (e.g. %s/<agent-code>)", defaultKiteDataDir()))
 	cmd.Flags().StringVar(&endpoint, "endpoint", "",
 		"OTLP endpoint (overrides config, default https://otel.vulnertrack.io)")
+
+	return cmd
+}
+
+// newStreamCmd is a zero-friction alias for "agent --stream".
+// Installed by `kite install` as the ExecStart of kite-stream.service.
+func newStreamCmd() *cobra.Command {
+	var (
+		cfgFile  string
+		dbPath   string
+		interval string
+		certsDir string
+		endpoint string
+		verbose  bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "stream",
+		Short: "Start continuous asset discovery (streaming mode)",
+		Long: `Start the agent in continuous streaming mode.
+
+Equivalent to 'agent --stream'. All discovered assets are emitted as OTLP
+log records to the configured collector on every scan cycle.
+
+When --certs-dir points at enrolled certificates, mTLS is enabled
+automatically and no config file is needed:
+
+  kite stream --certs-dir /var/lib/kite-collector/<agent-code>`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runAgent(cfgFile, dbPath, interval, certsDir, endpoint, verbose, true)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to configuration file")
+	cmd.Flags().StringVar(&dbPath, "db", "kite.db", "path to SQLite database")
+	cmd.Flags().StringVar(&interval, "interval", "", "scan interval (e.g. 6h)")
+	cmd.Flags().StringVar(&certsDir, "certs-dir", defaultKiteDataDir(),
+		fmt.Sprintf("directory with agent.pem, agent-key.pem, ca.pem (e.g. %s/<agent-code>)", defaultKiteDataDir()))
+	cmd.Flags().StringVar(&endpoint, "endpoint", "",
+		"OTLP endpoint (overrides config, default https://otel.vulnertrack.io)")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable debug logging")
 
 	return cmd
 }
@@ -2505,8 +2548,9 @@ func newCheckOTLPCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "check-otlp",
-		Short: "Test connectivity to the OTLP collector",
+		Use:     "check-otlp",
+		Aliases: []string{"check"},
+		Short:   "Test connectivity to the OTLP collector",
 		Long: `Run three staged connectivity checks against the OTLP collector:
 
   1. tcp-dial      — verify the host:port is reachable
