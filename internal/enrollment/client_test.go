@@ -20,26 +20,24 @@ func TestStoreCertificates(t *testing.T) {
 		ClientKey:         []byte("--- CLIENT KEY ---"),
 	}
 
-	err := StoreCertificates(dir, "test-endpoint", result)
+	err := StoreCertificates(dir, result)
 	require.NoError(t, err)
 
-	epDir := filepath.Join(dir, "test-endpoint")
-
 	// Verify files exist with correct content.
-	ca, err := os.ReadFile(filepath.Join(epDir, "ca.pem"))
+	ca, err := os.ReadFile(filepath.Join(dir, "ca.pem"))
 	require.NoError(t, err)
 	assert.Equal(t, result.CACertificate, ca)
 
-	cert, err := os.ReadFile(filepath.Join(epDir, "agent.pem"))
+	cert, err := os.ReadFile(filepath.Join(dir, "agent.pem"))
 	require.NoError(t, err)
 	assert.Equal(t, result.ClientCertificate, cert)
 
-	key, err := os.ReadFile(filepath.Join(epDir, "agent-key.pem"))
+	key, err := os.ReadFile(filepath.Join(dir, "agent-key.pem"))
 	require.NoError(t, err)
 	assert.Equal(t, result.ClientKey, key)
 
 	// Verify private key has restrictive permissions.
-	info, err := os.Stat(filepath.Join(epDir, "agent-key.pem"))
+	info, err := os.Stat(filepath.Join(dir, "agent-key.pem"))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
 }

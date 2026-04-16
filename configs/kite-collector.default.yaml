@@ -1,0 +1,191 @@
+# kite-collector.default.yaml
+#
+# Default configuration written by `kite install`.
+# Edit this file to customise behaviour; then restart the service:
+#   systemctl restart kite-collector
+#
+# Environment variables override every key below.
+# Prefix: KITE_  separator: _ (e.g. KITE_LOG_LEVEL, KITE_STREAMING_INTERVAL)
+
+# ---------------------------------------------------------------------------
+# Global
+# ---------------------------------------------------------------------------
+log_level: info          # debug | info | warn | error
+output_format: json
+data_dir: /var/lib/kite-collector
+stale_threshold: 168h    # assets unseen for this long are marked stale (7 days)
+
+# ---------------------------------------------------------------------------
+# Identity & credential storage
+# ---------------------------------------------------------------------------
+identity:
+  data_dir: /var/lib/kite-collector
+  key_backend: auto      # auto | tpm | keyring | file
+                         # "auto" picks the strongest backend available on this host
+
+# ---------------------------------------------------------------------------
+# Streaming (continuous agent mode — kite agent --stream)
+# ---------------------------------------------------------------------------
+streaming:
+  interval: 6h           # how often to run a full scan cycle
+  otlp:
+    endpoint: https://otel.vulnertrack.io
+    protocol: grpc       # grpc | http
+    tls:
+      enabled: true
+      # Paths are written by `kite install` after enrollment.
+      # Replace <agent-code> with the value passed to --agent-code.
+      ca_file:   /var/lib/kite-collector/<agent-code>/ca.pem
+      cert_file: /var/lib/kite-collector/<agent-code>/agent.pem
+      key_file:  /var/lib/kite-collector/<agent-code>/agent-key.pem
+
+# ---------------------------------------------------------------------------
+# Discovery sources
+# ---------------------------------------------------------------------------
+discovery:
+  sources:
+    # Local host inventory — always enabled; collects installed packages,
+    # network interfaces, and running services without touching the network.
+    agent:
+      enabled: true
+      collect_software: true
+      collect_interfaces: true
+
+    # Network scanner — disabled by default to avoid unintended scanning.
+    # Uncomment and set scope to enable LAN discovery.
+    network:
+      enabled: false
+      # scope:
+      #   - 192.168.1.0/24
+      tcp_ports: [22, 80, 443, 3389, 8080, 8443]
+      timeout: 5s
+      max_concurrent: 256
+
+    # Container runtime
+    docker:
+      enabled: false
+      host: unix:///var/run/docker.sock
+      # Override: KITE_DOCKER_HOST
+
+    # Vendor API connectors — all disabled; enable as needed.
+    unifi:
+      enabled: false
+      # endpoint: https://192.168.1.1:8443
+      # site: default
+      # Credentials: KITE_UNIFI_USERNAME, KITE_UNIFI_PASSWORD
+
+    proxmox:
+      enabled: false
+      # endpoint: https://pve.local:8006
+      # Credentials: KITE_PROXMOX_TOKEN_ID, KITE_PROXMOX_TOKEN_SECRET
+
+    snmp:
+      enabled: false
+      community: public
+      timeout: 5s
+      max_concurrent: 32
+      # scope: [192.168.1.0/24]
+
+    # VPS providers
+    hetzner:     { enabled: false }   # KITE_HETZNER_TOKEN
+    digitalocean: { enabled: false }  # KITE_DIGITALOCEAN_TOKEN
+    vultr:       { enabled: false }   # KITE_VULTR_TOKEN
+    linode:      { enabled: false }   # KITE_LINODE_TOKEN
+    scaleway:    { enabled: false }   # KITE_SCALEWAY_SECRET_KEY
+    ovhcloud:    { enabled: false }   # KITE_OVHCLOUD_APP_KEY / APP_SECRET / CONSUMER_KEY
+    upcloud:     { enabled: false }   # KITE_UPCLOUD_USERNAME / PASSWORD
+    hostinger:   { enabled: false }   # KITE_HOSTINGER_TOKEN
+    kamatera:    { enabled: false }   # KITE_KAMATERA_CLIENT_ID / SECRET
+
+    # MDM connectors (discovered devices are classified is_managed=managed)
+    intune:
+      enabled: false
+      # Credentials: KITE_INTUNE_TENANT_ID, KITE_INTUNE_CLIENT_ID, KITE_INTUNE_CLIENT_SECRET
+    jamf:
+      enabled: false
+      # api_url: https://myorg.jamfcloud.com
+      # Credentials: KITE_JAMF_USERNAME, KITE_JAMF_PASSWORD
+    sccm:
+      enabled: false
+      # api_url: https://sccm.corp.local
+      # Credentials: KITE_SCCM_USERNAME, KITE_SCCM_PASSWORD
+
+    # CMDB connectors (discovered CIs are classified is_authorized=authorized)
+    netbox:
+      enabled: false
+      # api_url: https://netbox.corp.local
+      # Credentials: KITE_NETBOX_TOKEN
+    servicenow:
+      enabled: false
+      # instance_url: https://myorg.service-now.com
+      # Credentials: KITE_SERVICENOW_USERNAME, KITE_SERVICENOW_PASSWORD
+
+# ---------------------------------------------------------------------------
+# Asset classification
+# ---------------------------------------------------------------------------
+classification:
+  authorization:
+    # Assets matching any entry in this file are marked "authorized".
+    # All others remain "unknown" — never default to authorized.
+    allowlist_file: ""       # set to an absolute path to enable
+    match_fields: [hostname]
+  managed:
+    required_controls: []    # empty = opt-in; add control names to enforce
+
+# ---------------------------------------------------------------------------
+# Configuration audit
+# ---------------------------------------------------------------------------
+audit:
+  enabled: true
+  profile: standard          # minimal | standard | full
+  ssh:
+    enabled: true
+    config_path: /etc/ssh/sshd_config
+  firewall:
+    enabled: true
+  kernel:
+    enabled: true
+  permissions:
+    enabled: true
+  service:
+    enabled: true
+    critical_ports: [21, 23, 111, 3306, 5432, 6379, 9200]
+
+# ---------------------------------------------------------------------------
+# Posture analysis
+# ---------------------------------------------------------------------------
+posture:
+  enabled: true
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+metrics:
+  enabled: false
+  listen: :9090              # expose /metrics on this address when enabled
+
+# ---------------------------------------------------------------------------
+# Runtime safety
+# ---------------------------------------------------------------------------
+safety:
+  scan_deadline: 30m         # abort a scan that takes longer than this
+  max_response_bytes: 10485760   # 10 MB per HTTP response
+  max_request_bytes: 1048576     # 1 MB per HTTP request body
+  circuit_breaker:
+    failure_threshold: 3     # open circuit after this many consecutive errors
+    cooldown: 5m             # closed again after this window
+    success_threshold: 1     # successes needed to close a half-open circuit
+
+# ---------------------------------------------------------------------------
+# Connectivity (auto-tunnel — disabled by default)
+# ---------------------------------------------------------------------------
+connectivity:
+  tunnel:
+    enabled: false
+    # provider: cloudflared  # ngrok | cloudflared | bore | tailscale | frp | rathole
+    # target: ""             # backend address to tunnel to
+    # auth_token_env: KITE_TUNNEL_AUTH_TOKEN
+    # local_port: 14318
+    # restart_max: 5
+    # restart_backoff_base: 5s
+    # restart_backoff_max: 5m
