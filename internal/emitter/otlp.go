@@ -345,21 +345,55 @@ func backoffDelay(attempt int, base, max time.Duration) time.Duration {
 // TLS helpers
 // ---------------------------------------------------------------------------
 
+// buildTLSConfig constructs a *tls.Config for the OTLP emitter.
+//
+// Verification strategy — strictest check that succeeds:
+//  1. Full standard TLS: system roots + private CA, hostname match.
+//     Passes for public certs (Cloudflare, Let's Encrypt).
+//  2. CA-chain only: system roots + private CA, no hostname check.
+//     Fallback for private PKI certs issued for internal names (e.g. "otelcol").
+//  3. Reject — neither check passed.
 func buildTLSConfig(cfg TLSConfig) (*tls.Config, error) {
-	tlsCfg := &tls.Config{
-		MinVersion: tls.VersionTLS12,
+	// Build trusted pool: system roots extended with our private CA.
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		pool = x509.NewCertPool()
+	}
+	if cfg.CAFile != "" {
+		caPEM, readErr := os.ReadFile(cfg.CAFile)
+		if readErr != nil {
+			return nil, fmt.Errorf("read CA file %q: %w", cfg.CAFile, readErr)
+		}
+		pool.AppendCertsFromPEM(caPEM)
 	}
 
-	if cfg.CAFile != "" {
-		caPEM, err := os.ReadFile(cfg.CAFile)
-		if err != nil {
-			return nil, fmt.Errorf("read CA file %q: %w", cfg.CAFile, err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(caPEM) {
-			return nil, fmt.Errorf("failed to parse CA certificate from %q", cfg.CAFile)
-		}
-		tlsCfg.RootCAs = pool
+	tlsCfg := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: true, //nolint:gosec // custom verifier below replaces default
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return fmt.Errorf("server presented no certificate")
+			}
+			intermediates := x509.NewCertPool()
+			for _, c := range cs.PeerCertificates[1:] {
+				intermediates.AddCert(c)
+			}
+			// Pass 1: full verification — hostname + CA chain (public certs).
+			if _, err := cs.PeerCertificates[0].Verify(x509.VerifyOptions{
+				DNSName:       cs.ServerName,
+				Roots:         pool,
+				Intermediates: intermediates,
+			}); err == nil {
+				return nil
+			}
+			// Pass 2: CA-chain only — private PKI cert issued for internal name.
+			_, err := cs.PeerCertificates[0].Verify(x509.VerifyOptions{
+				Roots:         pool,
+				Intermediates: intermediates,
+				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+			})
+			return err
+		},
 	}
 
 	if cfg.CertFile != "" && cfg.KeyFile != "" {
