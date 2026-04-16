@@ -1,36 +1,33 @@
 // Package enrollment implements the agent-side enrollment handshake.
-// It connects to a backend endpoint using bootstrap TLS (server-only auth)
-// and performs the Enroll RPC to obtain mTLS credentials.
+// It submits a token-based request to the PKI server over HTTPS.
 package enrollment
 
 import (
+	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-
-	kitev1 "github.com/vulnertrack/kite-collector/api/grpc/proto/kite/v1"
-	"github.com/vulnertrack/kite-collector/internal/identity"
 )
+
+const enrollURL = "https://pki.vulnertrack.io/pki/enroll"
 
 // Result holds the outcome of a successful enrollment.
 type Result struct {
 	Status             string
+	CertificateID      string
 	JWKSURL            string
 	CACertificate      []byte
 	ClientCertificate  []byte
 	ClientKey          []byte
-	CertificateExpires int64
+	CertificateExpires string
 }
 
-// Client performs enrollment handshakes with backend endpoints.
+// Client performs enrollment handshakes with the PKI server.
 type Client struct {
 	logger *slog.Logger
 }
@@ -43,70 +40,65 @@ func NewClient(logger *slog.Logger) *Client {
 	return &Client{logger: logger}
 }
 
-// Enroll connects to the given address using bootstrap TLS and performs
-// the enrollment handshake. If caFile is non-empty, it is used as the
-// server CA; otherwise the system CA pool is used.
-func (c *Client) Enroll(ctx context.Context, address, token, caFile string, id *identity.Identity) (*Result, error) {
-	tlsCfg := &tls.Config{
-		MinVersion: tls.VersionTLS13,
-	}
-
-	// Load custom CA if provided for bootstrap trust.
-	if caFile != "" {
-		pem, err := os.ReadFile(caFile) // #nosec G304 — path from trusted CLI flag
-		if err != nil {
-			return nil, fmt.Errorf("read CA file %q: %w", caFile, err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("CA file %q contains no valid certificates", caFile)
-		}
-		tlsCfg.RootCAs = pool
-	}
-
-	conn, err := grpc.NewClient(
-		address,
-		grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
-	)
+// Enroll submits an enrollment request to the PKI server.
+func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, error) {
+	body, err := json.Marshal(map[string]string{
+		"agent_code": agentCode,
+		"token":      token,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("connect to %s: %w", address, err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	client := kitev1.NewCollectorServiceClient(conn)
-
-	hostname, _ := os.Hostname()
-	req := &kitev1.EnrollRequest{
-		AgentId:            id.AgentID.String(),
-		PublicKey:          id.PubKeyB64,
-		Hostname:           hostname,
-		MachineFingerprint: identity.MachineFingerprint(),
-		EnrollmentToken:    token,
-		AgentVersion:       "dev",
-		OsFamily:           runtime.GOOS,
+		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	c.logger.Info("enrolling with endpoint", "address", address)
-
-	resp, err := client.Enroll(ctx, req)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, enrollURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("enroll RPC: %w", err)
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	c.logger.Info("enrolling with PKI server", "agent_code", agentCode)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("enroll request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("PKI server returned %s: %s", resp.Status, data)
+	}
+
+	var result struct {
+		Status             string `json:"status"`
+		CertificateID      string `json:"certificate_id"`
+		JWKSURL            string `json:"jwks_url"`
+		CACertificate      string `json:"ca_certificate"`
+		ClientCertificate  string `json:"client_certificate"`
+		ClientKey          string `json:"client_key"`
+		CertificateExpires string `json:"certificate_expires"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
 	return &Result{
-		Status:             resp.Status,
-		CACertificate:      resp.CaCertificate,
-		ClientCertificate:  resp.ClientCertificate,
-		ClientKey:          resp.ClientKeyEncrypted,
-		CertificateExpires: resp.CertificateExpiresAt,
-		JWKSURL:            resp.JwksUrl,
+		Status:            result.Status,
+		CertificateID:     result.CertificateID,
+		JWKSURL:           result.JWKSURL,
+		CACertificate:     []byte(result.CACertificate),
+		ClientCertificate: []byte(result.ClientCertificate),
+		ClientKey:         []byte(result.ClientKey),
+		CertificateExpires: result.CertificateExpires,
 	}, nil
 }
 
-// StoreCertificates persists the enrollment result to the endpoint's
-// credential directory under dataDir/<endpointName>/.
-func StoreCertificates(dataDir, endpointName string, result *Result) error {
-	dir := filepath.Join(dataDir, endpointName)
+// StoreCertificates persists the enrollment result to dir.
+func StoreCertificates(dir string, result *Result) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create credential dir: %w", err)
 	}
@@ -129,4 +121,3 @@ func StoreCertificates(dataDir, endpointName string, result *Result) error {
 
 	return nil
 }
-

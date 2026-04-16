@@ -319,6 +319,7 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("audit.service.critical_ports", []int{23, 21, 111, 3306, 5432, 6379, 9200})
 	v.SetDefault("posture.enabled", true)
 	v.SetDefault("streaming.interval", "6h")
+	v.SetDefault("streaming.otlp.endpoint", "https://otel.vulnertrack.io")
 	v.SetDefault("streaming.otlp.protocol", "grpc")
 	v.SetDefault("safety.scan_deadline", "30m")
 	v.SetDefault("safety.max_response_bytes", 10485760) // 10 MB
