@@ -93,7 +93,7 @@ func runInstall(cmd *cobra.Command, certsDir, binaryDir, systemdDir string, dryR
 	_, _ = fmt.Fprintf(out, "  ✓  %s\n", unitPath)
 
 	// 4. Reload daemon.
-	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil { //#nosec G204 -- args are fixed literals
+	if err := exec.CommandContext(cmd.Context(), "systemctl", "daemon-reload").Run(); err != nil { //#nosec G204 -- args are fixed literals
 		_, _ = fmt.Fprintf(out, "  ⚠  systemctl daemon-reload: %v\n", err)
 	} else {
 		_, _ = fmt.Fprintln(out, "  ✓  systemctl daemon-reload")
@@ -157,7 +157,7 @@ func installBinary(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	tmp := dst + ".tmp"
 	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755) //#nosec G306 -- binary must be executable
