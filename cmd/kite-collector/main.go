@@ -2534,9 +2534,9 @@ func defaultKiteDataDir() string {
 
 type otlpCheckStage struct {
 	Name  string `json:"stage"`
-	OK    bool   `json:"ok"`
-	DurMS int64  `json:"duration_ms"`
 	Error string `json:"error,omitempty"`
+	DurMS int64  `json:"duration_ms"`
+	OK    bool   `json:"ok"`
 }
 
 func newCheckOTLPCmd() *cobra.Command {
@@ -2605,7 +2605,9 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 	var tcpConn net.Conn
 	{
 		start := time.Now()
-		c, dialErr := net.DialTimeout("tcp", host, timeout)
+		dialCtx, dialCancel := context.WithTimeout(context.Background(), timeout)
+		defer dialCancel()
+		c, dialErr := (&net.Dialer{}).DialContext(dialCtx, "tcp", host)
 		ms := time.Since(start).Milliseconds()
 		s := otlpCheckStage{Name: "tcp-dial", DurMS: ms}
 		if dialErr != nil {
@@ -2634,7 +2636,9 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 			tlsCfg.ServerName = u.Hostname()
 			tlsConn := tls.Client(tcpConn, tlsCfg)
 			_ = tlsConn.SetDeadline(time.Now().Add(timeout))
-			handshakeErr = tlsConn.Handshake()
+			hsCtx, hsCancel := context.WithTimeout(context.Background(), timeout)
+			defer hsCancel()
+			handshakeErr = tlsConn.HandshakeContext(hsCtx)
 			_ = tlsConn.Close()
 		} else {
 			// No mTLS — close the raw connection; we'll open a fresh one for OTLP.
