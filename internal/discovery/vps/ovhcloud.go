@@ -98,7 +98,7 @@ func (o *OVHcloud) discoverDedicated(ctx context.Context, client *apiClient, bas
 
 	for _, name := range names {
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("ovhcloud dedicated: context cancelled: %w", ctx.Err())
 		}
 
 		safeName, sErr := safenet.SanitizePathSegment(name)
@@ -129,7 +129,7 @@ func (o *OVHcloud) discoverVPS(ctx context.Context, client *apiClient, base stri
 
 	for _, name := range names {
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("ovhcloud vps: context cancelled: %w", ctx.Err())
 		}
 
 		safeName, sErr := safenet.SanitizePathSegment(name)
@@ -186,12 +186,12 @@ type ovhDedicatedServer struct {
 }
 
 type ovhVPS struct {
-	Name       string `json:"name"`
-	DisplayName string `json:"displayName"`
-	NetbootMode string `json:"netbootMode"`
-	Model      ovhVPSModel `json:"model"`
-	Zone       string      `json:"zone"`
-	State      string      `json:"state"`
+	Name        string      `json:"name"`
+	DisplayName string      `json:"displayName"`
+	NetbootMode string      `json:"netbootMode"`
+	Model       ovhVPSModel `json:"model"`
+	Zone        string      `json:"zone"`
+	State       string      `json:"state"`
 }
 
 type ovhVPSModel struct {

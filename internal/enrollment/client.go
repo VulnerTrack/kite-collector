@@ -87,19 +87,19 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 	}
 
 	return &Result{
-		Status:            result.Status,
-		CertificateID:     result.CertificateID,
-		JWKSURL:           result.JWKSURL,
-		CACertificate:     []byte(result.CACertificate),
-		ClientCertificate: []byte(result.ClientCertificate),
-		ClientKey:         []byte(result.ClientKey),
+		Status:             result.Status,
+		CertificateID:      result.CertificateID,
+		JWKSURL:            result.JWKSURL,
+		CACertificate:      []byte(result.CACertificate),
+		ClientCertificate:  []byte(result.ClientCertificate),
+		ClientKey:          []byte(result.ClientKey),
 		CertificateExpires: result.CertificateExpires,
 	}, nil
 }
 
 // StoreCertificates persists the enrollment result to dir.
 func StoreCertificates(dir string, result *Result) error {
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create credential dir: %w", err)
 	}
 
@@ -107,9 +107,9 @@ func StoreCertificates(dir string, result *Result) error {
 		data []byte
 		perm os.FileMode
 	}{
-		"ca.pem":        {data: result.CACertificate, perm: 0644},
-		"agent.pem":     {data: result.ClientCertificate, perm: 0644},
-		"agent-key.pem": {data: result.ClientKey, perm: 0600},
+		"ca.pem":        {data: result.CACertificate, perm: 0o644},
+		"agent.pem":     {data: result.ClientCertificate, perm: 0o644},
+		"agent-key.pem": {data: result.ClientKey, perm: 0o600},
 	}
 
 	for name, f := range files {

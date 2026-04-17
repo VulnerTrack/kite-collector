@@ -54,7 +54,11 @@ func generateCSR(agentID string, privKey ed25519.PrivateKey) ([]byte, error) {
 		},
 		SignatureAlgorithm: x509.PureEd25519,
 	}
-	return x509.CreateCertificateRequest(rand.Reader, template, privKey)
+	csr, err := x509.CreateCertificateRequest(rand.Reader, template, privKey)
+	if err != nil {
+		return nil, fmt.Errorf("create CSR: %w", err)
+	}
+	return csr, nil
 }
 
 // CertExpiryMonitor watches certificate expiry for all endpoints and
@@ -130,7 +134,11 @@ func parseCertPEM(certPEM []byte) (*x509.Certificate, error) {
 	if block == nil {
 		return nil, fmt.Errorf("no PEM block found in certificate data")
 	}
-	return x509.ParseCertificate(block)
+	cert, err = x509.ParseCertificate(block)
+	if err != nil {
+		return nil, fmt.Errorf("parse certificate: %w", err)
+	}
+	return cert, nil
 }
 
 // decodePEM extracts the first PEM block from data, returning the decoded
@@ -154,5 +162,9 @@ func GenerateSelfSignedCert(priv ed25519.PrivateKey, pub ed25519.PublicKey, notB
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
 	}
-	return x509.CreateCertificate(rand.Reader, template, template, pub, priv)
+	der, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
+	if err != nil {
+		return nil, fmt.Errorf("create self-signed certificate: %w", err)
+	}
+	return der, nil
 }

@@ -107,8 +107,8 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	var assets []model.Asset
 
 	for _, subID := range subscriptionIDs {
-		if ctx.Err() != nil {
-			return assets, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return assets, fmt.Errorf("azure discovery cancelled: %w", err)
 		}
 
 		slog.Info("azure_vm: listing VMs for subscription", "subscription_id", subID)
@@ -256,8 +256,8 @@ func (az *Azure) listVirtualMachines(ctx context.Context, subscriptionID, token 
 	var allVMs []azureVM
 
 	for apiURL != "" {
-		if ctx.Err() != nil {
-			return allVMs, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return allVMs, fmt.Errorf("azure VM list cancelled: %w", err)
 		}
 
 		vms, nextLink, err := az.fetchVMPage(ctx, apiURL, token)
@@ -323,14 +323,14 @@ func (az *Azure) listSubscriptions(ctx context.Context, token string) ([]string,
 	var allIDs []string
 
 	for apiURL != "" {
-		if ctx.Err() != nil {
-			return allIDs, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return allIDs, fmt.Errorf("azure subscription list cancelled: %w", err)
 		}
 
 		resp, err := doWithRetry(ctx, "azure_vm", func() (*http.Response, error) {
 			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 			if reqErr != nil {
-				return nil, reqErr
+				return nil, fmt.Errorf("create azure request: %w", reqErr)
 			}
 			req.Header.Set("Authorization", "Bearer "+token)
 			req.Header.Set("Accept", "application/json")
@@ -390,7 +390,7 @@ func parseAzureVM(data json.RawMessage) (azureVM, error) {
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return azureVM{}, err
+		return azureVM{}, fmt.Errorf("unmarshal azure VM: %w", err)
 	}
 
 	return azureVM{

@@ -177,8 +177,8 @@ func (i *Intune) listManagedDevices(ctx context.Context, token string) ([]intune
 	var allDevices []intuneDevice
 
 	for apiURL != "" {
-		if ctx.Err() != nil {
-			return allDevices, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return allDevices, fmt.Errorf("intune list cancelled: %w", err)
 		}
 
 		devices, nextLink, err := i.fetchDevicePage(ctx, apiURL, token)
@@ -248,7 +248,7 @@ func parseIntuneDevice(data json.RawMessage) (intuneDevice, error) {
 		OSVersion       string `json:"osVersion"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return intuneDevice{}, err
+		return intuneDevice{}, fmt.Errorf("unmarshal intune device: %w", err)
 	}
 
 	return intuneDevice{

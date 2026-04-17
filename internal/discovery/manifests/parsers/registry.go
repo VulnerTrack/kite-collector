@@ -99,9 +99,9 @@ var LockfileOverrides = map[string]string{
 	"package-lock.json": "package.json",
 	"yarn.lock":         "package.json",
 	"pnpm-lock.yaml":    "package.json",
-	"composer.lock":      "composer.json",
-	"Cargo.lock":         "Cargo.toml",
-	"Gemfile.lock":       "Gemfile",
+	"composer.lock":     "composer.json",
+	"Cargo.lock":        "Cargo.toml",
+	"Gemfile.lock":      "Gemfile",
 }
 
 func isGlob(s string) bool {

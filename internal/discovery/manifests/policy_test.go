@@ -194,8 +194,8 @@ func TestVersionInRange(t *testing.T) {
 		{"3.0.0", ">=2.17.1", true},
 		{"2.17.1", "=2.17.1", true},
 		{"2.17.0", "=2.17.1", false},
-		{"1.0.0", "1.0.0", true},  // no operator → exact match
-		{"", "<2.0.0", true},       // empty version → assume match
+		{"1.0.0", "1.0.0", true}, // no operator → exact match
+		{"", "<2.0.0", true},     // empty version → assume match
 	}
 	for _, tc := range tests {
 		got := versionInRange(tc.version, tc.constraint)

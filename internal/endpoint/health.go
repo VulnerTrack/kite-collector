@@ -9,15 +9,15 @@ import (
 )
 
 const (
-	failuresToDegrade    = 3
+	failuresToDegrade     = 3
 	failuresToUnreachable = 3 // 3 more after degraded
-	successesToRecover   = 3
-	successesToHealthy   = 3
+	successesToRecover    = 3
+	successesToHealthy    = 3
 
-	backoffBase    = 1 * time.Second
-	backoffMax     = 5 * time.Minute
-	backoffFactor  = 2.0
-	backoffJitter  = 0.3
+	backoffBase   = 1 * time.Second
+	backoffMax    = 5 * time.Minute
+	backoffFactor = 2.0
+	backoffJitter = 0.3
 )
 
 // healthLoop runs periodic health checks for a single endpoint.

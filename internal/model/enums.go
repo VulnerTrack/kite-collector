@@ -4,16 +4,16 @@ package model
 type AssetType string
 
 const (
-	AssetTypeServer         AssetType = "server"
-	AssetTypeWorkstation    AssetType = "workstation"
-	AssetTypeNetworkDevice  AssetType = "network_device"
-	AssetTypeCloudInstance  AssetType = "cloud_instance"
-	AssetTypeContainer      AssetType = "container"
-	AssetTypeVirtualMachine AssetType = "virtual_machine"
-	AssetTypeIOTDevice        AssetType = "iot_device"
-	AssetTypeAppliance        AssetType = "appliance"
-	AssetTypeSoftwareProject  AssetType = "software_project"
-	AssetTypeRepository       AssetType = "repository"
+	AssetTypeServer          AssetType = "server"
+	AssetTypeWorkstation     AssetType = "workstation"
+	AssetTypeNetworkDevice   AssetType = "network_device"
+	AssetTypeCloudInstance   AssetType = "cloud_instance"
+	AssetTypeContainer       AssetType = "container"
+	AssetTypeVirtualMachine  AssetType = "virtual_machine"
+	AssetTypeIOTDevice       AssetType = "iot_device"
+	AssetTypeAppliance       AssetType = "appliance"
+	AssetTypeSoftwareProject AssetType = "software_project"
+	AssetTypeRepository      AssetType = "repository"
 )
 
 // Valid returns true when the AssetType is one of the recognised values.
@@ -67,12 +67,12 @@ const (
 type EventType string
 
 const (
-	EventAssetDiscovered          EventType = "AssetDiscovered"
-	EventAssetUpdated             EventType = "AssetUpdated"
+	EventAssetDiscovered           EventType = "AssetDiscovered"
+	EventAssetUpdated              EventType = "AssetUpdated"
 	EventUnauthorizedAssetDetected EventType = "UnauthorizedAssetDetected"
-	EventUnmanagedAssetDetected   EventType = "UnmanagedAssetDetected"
-	EventAssetNotSeen             EventType = "AssetNotSeen"
-	EventAssetRemoved             EventType = "AssetRemoved"
+	EventUnmanagedAssetDetected    EventType = "UnmanagedAssetDetected"
+	EventAssetNotSeen              EventType = "AssetNotSeen"
+	EventAssetRemoved              EventType = "AssetRemoved"
 )
 
 // ScanStatus tracks the lifecycle state of a scan run.

@@ -10,12 +10,12 @@ import (
 
 // WizardContext holds the accumulated state during a wizard session.
 type WizardContext struct {
-	Goal          string            // Selected preset ID
-	Resolved      map[string]any    // Accumulated key-value pairs from resolved nodes
-	AutoDiscovery []string          // Services detected by discover-services
-	SkipGroups    map[string]bool   // Groups suppressed by the selected goal preset
-	PostActions   []string          // Actions to execute after Phase 2
-	StateStack    []map[string]any  // Append-only stack for rollback support
+	Goal          string             // Selected preset ID
+	Resolved      map[string]any     // Accumulated key-value pairs from resolved nodes
+	AutoDiscovery []string           // Services detected by discover-services
+	SkipGroups    map[string]bool    // Groups suppressed by the selected goal preset
+	PostActions   []string           // Actions to execute after Phase 2
+	StateStack    []map[string]any   // Append-only stack for rollback support
 	Trace         []rules.TraceEntry // Decision audit log entries
 }
 

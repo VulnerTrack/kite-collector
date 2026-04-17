@@ -76,14 +76,14 @@ type upcloudServerList struct {
 }
 
 type upcloudServer struct {
-	UUID        string              `json:"uuid"`
-	Hostname    string              `json:"hostname"`
-	State       string              `json:"state"`
-	Plan        string              `json:"plan"`
-	Zone        string              `json:"zone"`
-	Title       string              `json:"title"`
-	IPAddresses upcloudIPAddresses  `json:"ip_addresses"`
-	Tags        upcloudTags         `json:"tags"`
+	UUID        string             `json:"uuid"`
+	Hostname    string             `json:"hostname"`
+	State       string             `json:"state"`
+	Plan        string             `json:"plan"`
+	Zone        string             `json:"zone"`
+	Title       string             `json:"title"`
+	IPAddresses upcloudIPAddresses `json:"ip_addresses"`
+	Tags        upcloudTags        `json:"tags"`
 }
 
 type upcloudIPAddresses struct {

@@ -50,7 +50,7 @@ func (h *Heroku) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			return assets, fmt.Errorf("heroku: %w", err)
 		}
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("heroku: context cancelled: %w", ctx.Err())
 		}
 
 		var apps []herokuApp

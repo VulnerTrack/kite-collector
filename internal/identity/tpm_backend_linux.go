@@ -83,7 +83,7 @@ func (b *TPMBackend) Store(label string, key crypto.PrivateKey) error {
 		return fmt.Errorf("seal key to TPM: %w", err)
 	}
 
-	if err := os.MkdirAll(b.dir, 0700); err != nil {
+	if err := os.MkdirAll(b.dir, 0o700); err != nil {
 		return fmt.Errorf("create key dir: %w", err)
 	}
 
@@ -93,10 +93,10 @@ func (b *TPMBackend) Store(label string, key crypto.PrivateKey) error {
 	pubPath := filepath.Join(b.dir, label+".tpm-pub")
 	privPath := filepath.Join(b.dir, label+".tpm-priv")
 
-	if err := os.WriteFile(pubPath, pubBytes, 0600); err != nil {
+	if err := os.WriteFile(pubPath, pubBytes, 0o600); err != nil {
 		return fmt.Errorf("write sealed pub: %w", err)
 	}
-	if err := os.WriteFile(privPath, privBytes, 0600); err != nil {
+	if err := os.WriteFile(privPath, privBytes, 0o600); err != nil {
 		return fmt.Errorf("write sealed priv: %w", err)
 	}
 

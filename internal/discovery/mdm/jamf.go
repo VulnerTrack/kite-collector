@@ -58,8 +58,8 @@ func (j *Jamf) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 	var assets []model.Asset
 
 	for _, comp := range computers {
-		if ctx.Err() != nil {
-			return assets, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return assets, fmt.Errorf("jamf discovery cancelled: %w", err)
 		}
 
 		detail, err := j.getComputerDetail(ctx, apiURL, username, password, comp.ID)

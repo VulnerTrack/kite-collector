@@ -47,7 +47,7 @@ func (h *Hetzner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 			return assets, fmt.Errorf("hetzner: %w", err)
 		}
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("hetzner: context cancelled: %w", ctx.Err())
 		}
 
 		var resp hetznerServersResponse
