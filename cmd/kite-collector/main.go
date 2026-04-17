@@ -2752,7 +2752,7 @@ func otlpBuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 		pool = x509.NewCertPool()
 	}
 	if caFile != "" {
-		caPEM, readErr := os.ReadFile(caFile)
+		caPEM, readErr := os.ReadFile(caFile) //#nosec G304 -- caFile is from trusted CLI flag / config
 		if readErr != nil {
 			return nil, fmt.Errorf("read CA %q: %w", caFile, readErr)
 		}
@@ -2760,8 +2760,8 @@ func otlpBuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 	}
 
 	tlsCfg := &tls.Config{
+		RootCAs: pool,
 		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: true, //nolint:gosec // custom verifier below replaces default
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 {
 				return fmt.Errorf("server presented no certificate")

@@ -368,8 +368,8 @@ func buildTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	}
 
 	tlsCfg := &tls.Config{
+		RootCAs: pool,
 		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: true, //nolint:gosec // custom verifier below replaces default
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 {
 				return fmt.Errorf("server presented no certificate")

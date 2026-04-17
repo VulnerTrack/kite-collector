@@ -160,7 +160,7 @@ func installBinary(src, dst string) error {
 	defer func() { _ = in.Close() }()
 
 	tmp := dst + ".tmp"
-	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755) //#nosec G306 -- binary must be executable
+	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755) //#nosec G302,G304 -- binary must be executable; dst from trusted install path
 	if err != nil {
 		return err
 	}
