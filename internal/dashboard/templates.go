@@ -53,10 +53,13 @@ func renderAssetsFragment(w io.Writer, ctx context.Context, st store.Store, rc R
 	}
 
 	tmpl := template.Must(template.New("assets").Funcs(templateFuncs).Parse(assetsTemplate))
-	return tmpl.Execute(w, map[string]any{
+	if err := tmpl.Execute(w, map[string]any{
 		"Assets":  assets,
 		"Context": rc,
-	})
+	}); err != nil {
+		return fmt.Errorf("render assets template: %w", err)
+	}
+	return nil
 }
 
 // renderSoftwareFragment renders the software table as an HTML fragment.
@@ -99,10 +102,13 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 	}
 
 	tmpl := template.Must(template.New("software").Funcs(templateFuncs).Parse(softwareTemplate))
-	return tmpl.Execute(w, map[string]any{
+	if err := tmpl.Execute(w, map[string]any{
 		"Software": rows,
 		"Context":  rc,
-	})
+	}); err != nil {
+		return fmt.Errorf("render software template: %w", err)
+	}
+	return nil
 }
 
 // renderFindingsFragment renders the findings table as an HTML fragment.
@@ -113,10 +119,13 @@ func renderFindingsFragment(w io.Writer, ctx context.Context, st store.Store, rc
 	}
 
 	tmpl := template.Must(template.New("findings").Funcs(templateFuncs).Parse(findingsTemplate))
-	return tmpl.Execute(w, map[string]any{
+	if err := tmpl.Execute(w, map[string]any{
 		"Findings": findings,
 		"Context":  rc,
-	})
+	}); err != nil {
+		return fmt.Errorf("render findings template: %w", err)
+	}
+	return nil
 }
 
 // renderScansFragment renders the scan history table as an HTML fragment.
@@ -133,10 +142,13 @@ func renderScansFragment(w io.Writer, ctx context.Context, st store.Store, rc Re
 	}
 
 	tmpl := template.Must(template.New("scans").Funcs(templateFuncs).Parse(scansTemplate))
-	return tmpl.Execute(w, map[string]any{
+	if err := tmpl.Execute(w, map[string]any{
 		"Scans":   runs,
 		"Context": rc,
-	})
+	}); err != nil {
+		return fmt.Errorf("render scans template: %w", err)
+	}
+	return nil
 }
 
 // HTML fragment templates — returned by HTMX endpoints.

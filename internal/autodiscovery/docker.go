@@ -161,7 +161,7 @@ func (c *dockerProbeClient) listContainers(ctx context.Context) ([]dockerContain
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil) //#nosec G107 -- localhost Docker API
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create docker API request: %w", err)
 	}
 
 	resp, err := c.http.Do(req)

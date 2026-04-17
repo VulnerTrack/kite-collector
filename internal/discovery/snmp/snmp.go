@@ -27,10 +27,10 @@ const (
 	oidSysUpTime   = "1.3.6.1.2.1.1.3.0"
 	oidSysLocation = "1.3.6.1.2.1.1.6.0"
 
-	defaultCommunity  = "public"
-	defaultTimeout    = 5 * time.Second
-	defaultMaxConc    = 32
-	defaultSNMPPort   = 161
+	defaultCommunity = "public"
+	defaultTimeout   = 5 * time.Second
+	defaultMaxConc   = 32
+	defaultSNMPPort  = 161
 )
 
 // SNMP implements discovery.Source for SNMPv2c network devices.
@@ -234,17 +234,17 @@ func incIP(ip net.IP) {
 
 // BER tag constants.
 const (
-	tagInteger       byte = 0x02
-	tagOctetString   byte = 0x04
-	tagNull          byte = 0x05
-	tagOID           byte = 0x06
-	tagSequence      byte = 0x30
-	tagGetRequest    byte = 0xa0
-	tagGetResponse   byte = 0xa2
-	tagTimeTicks     byte = 0x43 // APPLICATION 3
-	tagNoSuchObject  byte = 0x80
-	tagNoSuchInst    byte = 0x81
-	tagEndOfMIBView  byte = 0x82
+	tagInteger      byte = 0x02
+	tagOctetString  byte = 0x04
+	tagNull         byte = 0x05
+	tagOID          byte = 0x06
+	tagSequence     byte = 0x30
+	tagGetRequest   byte = 0xa0
+	tagGetResponse  byte = 0xa2
+	tagTimeTicks    byte = 0x43 // APPLICATION 3
+	tagNoSuchObject byte = 0x80
+	tagNoSuchInst   byte = 0x81
+	tagEndOfMIBView byte = 0x82
 )
 
 // snmpGet sends an SNMPv2c GET request for a single OID and returns the
@@ -257,20 +257,20 @@ func snmpGet(ctx context.Context, target, community, oid string, timeout time.Du
 	d := net.Dialer{Timeout: timeout}
 	conn, err := d.DialContext(ctx, "udp", target) //#nosec G704 -- target from user-configured scope
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("dial snmp %s: %w", target, err)
 	}
 	defer func() { _ = conn.Close() }()
 
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 
 	if _, err = conn.Write(pdu); err != nil {
-		return "", err
+		return "", fmt.Errorf("write snmp request: %w", err)
 	}
 
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read snmp response: %w", err)
 	}
 
 	return parseGetResponse(buf[:n])
@@ -287,8 +287,8 @@ func buildGetRequest(community, oid string, reqID uint32) []byte {
 
 	// PDU: GetRequest [0] { request-id, error-status(0), error-index(0), varbind-list }
 	pduContent := berInteger(int64(reqID))
-	pduContent = append(pduContent, berInteger(0)...)  // error-status
-	pduContent = append(pduContent, berInteger(0)...)  // error-index
+	pduContent = append(pduContent, berInteger(0)...) // error-status
+	pduContent = append(pduContent, berInteger(0)...) // error-index
 	pduContent = append(pduContent, varbindList...)
 	pdu := berTagLengthValue(tagGetRequest, pduContent)
 

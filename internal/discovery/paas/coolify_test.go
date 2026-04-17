@@ -28,17 +28,17 @@ func newMockCoolifyAPI(t *testing.T) *httptest.Server {
 			{
 				ID: 1, Name: "webapp",
 				FQDN:          "https://app.example.com",
-				Status:         "running",
-				GitRepository:  "https://github.com/example/webapp",
-				CreatedAt:      "2024-01-10T08:00:00Z",
-				UpdatedAt:      "2024-06-15T12:00:00Z",
+				Status:        "running",
+				GitRepository: "https://github.com/example/webapp",
+				CreatedAt:     "2024-01-10T08:00:00Z",
+				UpdatedAt:     "2024-06-15T12:00:00Z",
 			},
 			{
 				ID: 2, Name: "api-service",
 				FQDN:      "https://api.example.com",
-				Status:     "stopped",
-				CreatedAt:  "2024-03-01T10:00:00Z",
-				UpdatedAt:  "2024-05-01T08:00:00Z",
+				Status:    "stopped",
+				CreatedAt: "2024-03-01T10:00:00Z",
+				UpdatedAt: "2024-05-01T08:00:00Z",
 			},
 		})
 	})

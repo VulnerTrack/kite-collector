@@ -88,8 +88,8 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	policy := sc.policyEngine
 
 	for _, m := range matches {
-		if ctx.Err() != nil {
-			return assets, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return assets, fmt.Errorf("manifest scan cancelled: %w", err)
 		}
 
 		if m.IsGitDir {

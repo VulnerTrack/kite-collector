@@ -181,11 +181,11 @@ func runCopilot(cmd *cobra.Command, f copilotFlags) error {
 	// Run wizard.
 	if f.nonInteractive || f.acceptDefaults {
 		if err := wiz.RunNonInteractive(wc); err != nil {
-			return err
+			return fmt.Errorf("run non-interactive wizard: %w", err)
 		}
 	} else {
 		if err := wiz.Run(wc); err != nil {
-			return err
+			return fmt.Errorf("run wizard: %w", err)
 		}
 	}
 
@@ -289,7 +289,7 @@ func printGoals(w io.Writer, s *schema.Schema) error {
 func loadConfig(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path) //#nosec G304 -- path is user-provided CLI flag
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
 	var cfg map[string]any
 	if err := yaml.Unmarshal(data, &cfg); err != nil {

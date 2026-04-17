@@ -298,9 +298,9 @@ func TestWazuh_Discover_Success(t *testing.T) {
 	assets, err := w.Discover(context.Background(), map[string]any{
 		"collect_packages":        true,
 		"collect_vulnerabilities": true,
-		"collect_sca":            true,
-		"collect_ports":          true,
-		"collect_interfaces":     true,
+		"collect_sca":             true,
+		"collect_ports":           true,
+		"collect_interfaces":      true,
 	})
 	require.NoError(t, err)
 	assert.Len(t, assets, 3, "3 agents = 3 assets")

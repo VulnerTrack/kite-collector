@@ -39,7 +39,7 @@ func TestStoreCertificates(t *testing.T) {
 	// Verify private key has restrictive permissions.
 	info, err := os.Stat(filepath.Join(dir, "agent-key.pem"))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
 func TestMachineFingerprint(t *testing.T) {

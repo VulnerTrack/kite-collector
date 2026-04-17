@@ -59,9 +59,9 @@ func TestParseFlatpakOutput_LongAppID(t *testing.T) {
 
 func TestParseFlatpakID(t *testing.T) {
 	tests := []struct {
-		input           string
-		wantVendor      string
-		wantProduct     string
+		input       string
+		wantVendor  string
+		wantProduct string
 	}{
 		{"org.mozilla.firefox", "mozilla", "firefox"},
 		{"org.gimp.GIMP", "gimp", "GIMP"},

@@ -121,7 +121,7 @@ func (s *Server) Serve() error {
 	var lc net.ListenConfig
 	lis, err := lc.Listen(context.Background(), "tcp", s.addr)
 	if err != nil {
-		return err
+		return fmt.Errorf("listen %s: %w", s.addr, err)
 	}
 
 	opts := []grpc.ServerOption{
@@ -139,7 +139,10 @@ func (s *Server) Serve() error {
 	s.grpc = grpc.NewServer(opts...)
 	kitev1.RegisterCollectorServiceServer(s.grpc, s)
 	s.logger.Info("gRPC server listening", "addr", s.addr)
-	return s.grpc.Serve(lis)
+	if err := s.grpc.Serve(lis); err != nil {
+		return fmt.Errorf("grpc serve: %w", err)
+	}
+	return nil
 }
 
 // Stop gracefully shuts down the gRPC server, draining in-flight RPCs.
@@ -161,9 +164,9 @@ func (s *Server) Stop() {
 // retains all asset data locally and only sends aggregates via OTLP.
 func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer) error {
 	if s.privacyMode == PrivacyModePrivate {
-		return status.Error(codes.PermissionDenied,
+		return fmt.Errorf("report assets: %w", status.Error(codes.PermissionDenied,
 			"ReportAssets is disabled in private privacy mode — "+
-				"asset details are retained on the agent")
+				"asset details are retained on the agent"))
 	}
 
 	ctx := stream.Context()
@@ -173,13 +176,16 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 	for {
 		snapshot, err := stream.Recv()
 		if err == io.EOF {
-			return stream.SendAndClose(&kitev1.ReportResponse{
+			if closeErr := stream.SendAndClose(&kitev1.ReportResponse{
 				Accepted: accepted,
 				Rejected: rejected,
-			})
+			}); closeErr != nil {
+				return fmt.Errorf("send and close assets: %w", closeErr)
+			}
+			return nil
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("recv asset snapshot: %w", err)
 		}
 
 		asset := snapshotToAsset(snapshot)
@@ -223,13 +229,16 @@ func (s *Server) ReportFindings(stream kitev1.CollectorService_ReportFindingsSer
 	for {
 		_, err := stream.Recv()
 		if err == io.EOF {
-			return stream.SendAndClose(&kitev1.ReportResponse{
+			if closeErr := stream.SendAndClose(&kitev1.ReportResponse{
 				Accepted: accepted,
 				Rejected: rejected,
-			})
+			}); closeErr != nil {
+				return fmt.Errorf("send and close findings: %w", closeErr)
+			}
+			return nil
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("recv finding: %w", err)
 		}
 		// Findings storage is handled by the audit subsystem; this RPC
 		// accepts and acknowledges them.
@@ -246,7 +255,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *kitev1.HeartbeatRequest) (*
 			"request_agent_id", req.AgentId,
 			"cert_cn", certCN,
 		)
-		return nil, status.Error(codes.PermissionDenied, "agent_id does not match certificate CN")
+		return nil, fmt.Errorf("heartbeat: %w", status.Error(codes.PermissionDenied, "agent_id does not match certificate CN"))
 	}
 	s.logger.Debug("gRPC: heartbeat received", "agent_id", req.AgentId)
 	return &kitev1.HeartbeatResponse{

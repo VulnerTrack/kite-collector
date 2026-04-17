@@ -59,12 +59,12 @@ func NewAuthorizer(allowlistPath string, matchFields []string) (*Authorizer, err
 		if os.IsNotExist(err) {
 			return a, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("read allowlist %s: %w", allowlistPath, err)
 	}
 
 	var f allowlistFile
 	if err := yaml.Unmarshal(data, &f); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse allowlist YAML: %w", err)
 	}
 	a.entries = f.Assets
 	return a, nil

@@ -48,7 +48,7 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			return assets, fmt.Errorf("vultr: %w", err)
 		}
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("vultr: context cancelled: %w", ctx.Err())
 		}
 
 		path := "/instances?per_page=100"
@@ -79,7 +79,7 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 // --- Vultr API response types ---
 
 type vultrInstancesResponse struct {
-	Meta      vultrMeta      `json:"meta"`
+	Meta      vultrMeta       `json:"meta"`
 	Instances []vultrInstance `json:"instances"`
 }
 

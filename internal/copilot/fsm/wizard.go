@@ -251,7 +251,11 @@ type ValidationError struct {
 
 // ExplainJSON returns the trace log as indented JSON.
 func (w *Wizard) ExplainJSON(wc *WizardContext) ([]byte, error) {
-	return json.MarshalIndent(wc.Trace, "", "  ")
+	data, err := json.MarshalIndent(wc.Trace, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal wizard trace: %w", err)
+	}
+	return data, nil
 }
 
 // promptNode dispatches to the appropriate Prompter method based on node type.
@@ -262,28 +266,48 @@ func (w *Wizard) promptNode(node *schema.Node, defaultVal any) (any, error) {
 		if b, ok := defaultVal.(bool); ok {
 			defBool = b
 		}
-		return w.prompter.PromptConfirm(*node, defBool)
+		v, err := w.prompter.PromptConfirm(*node, defBool)
+		if err != nil {
+			return nil, fmt.Errorf("prompt confirm %s: %w", node.ID, err)
+		}
+		return v, nil
 
 	case "select":
 		defStr := ""
 		if s, ok := defaultVal.(string); ok {
 			defStr = s
 		}
-		return w.prompter.PromptSelect(*node, defStr)
+		v, err := w.prompter.PromptSelect(*node, defStr)
+		if err != nil {
+			return nil, fmt.Errorf("prompt select %s: %w", node.ID, err)
+		}
+		return v, nil
 
 	case "input":
 		defStr := ""
 		if s, ok := defaultVal.(string); ok {
 			defStr = s
 		}
-		return w.prompter.PromptInput(*node, defStr)
+		v, err := w.prompter.PromptInput(*node, defStr)
+		if err != nil {
+			return nil, fmt.Errorf("prompt input %s: %w", node.ID, err)
+		}
+		return v, nil
 
 	case "multiselect":
 		defSlice := toStringSlice(defaultVal)
-		return w.prompter.PromptMultiSelect(*node, defSlice)
+		v, err := w.prompter.PromptMultiSelect(*node, defSlice)
+		if err != nil {
+			return nil, fmt.Errorf("prompt multiselect %s: %w", node.ID, err)
+		}
+		return v, nil
 
 	case "password":
-		return w.prompter.PromptPassword(*node)
+		v, err := w.prompter.PromptPassword(*node)
+		if err != nil {
+			return nil, fmt.Errorf("prompt password %s: %w", node.ID, err)
+		}
+		return v, nil
 
 	default:
 		return nil, fmt.Errorf("unknown node type %q", node.Type)

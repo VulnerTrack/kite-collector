@@ -50,7 +50,7 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			return assets, fmt.Errorf("vercel: %w", err)
 		}
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("vercel: context cancelled: %w", ctx.Err())
 		}
 
 		path := fmt.Sprintf("/v9/projects?limit=%d", vercelPageSize)

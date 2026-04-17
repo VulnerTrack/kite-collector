@@ -115,7 +115,11 @@ func Generate(asset model.Asset, software []model.InstalledSoftware) (*BOM, erro
 
 // JSON serialises the BOM to indented JSON bytes.
 func (b *BOM) JSON() ([]byte, error) {
-	return json.MarshalIndent(b, "", "  ")
+	data, err := json.MarshalIndent(b, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal BOM: %w", err)
+	}
+	return data, nil
 }
 
 // buildPURL constructs a Package URL from ecosystem, name, and version.

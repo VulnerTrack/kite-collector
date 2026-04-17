@@ -110,14 +110,14 @@ func (c *cloudClient) get(ctx context.Context, path string) ([]byte, error) {
 	url := cloudBaseURL + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create unifi cloud request: %w", err)
 	}
 	req.Header.Set("X-API-KEY", c.apiKey)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unifi cloud GET %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -386,7 +386,7 @@ func (c *localClient) login(ctx context.Context, username, password string) erro
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, //#nosec G704 -- endpoint is operator-configured, scheme-validated in newLocalClient
 			c.resolveURL(path), bytes.NewReader(payload))
 		if err != nil {
-			return err
+			return fmt.Errorf("create unifi login request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 
@@ -429,12 +429,12 @@ func (c *localClient) logout(ctx context.Context) {
 func (c *localClient) get(ctx context.Context, path string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.resolveURL(path), nil) //#nosec G704 -- endpoint is operator-configured, scheme-validated in newLocalClient
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create unifi request: %w", err)
 	}
 
 	resp, err := c.http.Do(req) //#nosec G704
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unifi GET %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

@@ -81,7 +81,7 @@ func TestLoadOrCreate_RejectsInsecurePermissions(t *testing.T) {
 
 	// Make the file world-readable.
 	idPath := filepath.Join(dir, "identity.json")
-	require.NoError(t, os.Chmod(idPath, 0644))
+	require.NoError(t, os.Chmod(idPath, 0o644))
 
 	_, err = LoadOrCreate(dir, slog.Default())
 	require.Error(t, err)

@@ -70,7 +70,7 @@ func KeyringAvailable() bool {
 	if err != nil {
 		return false
 	}
-	const keyctlUnlink = 9 // KEYCTL_UNLINK
+	const keyctlUnlink = 9                                // KEYCTL_UNLINK
 	defer unix.KeyctlInt(keyctlUnlink, id, keyring, 0, 0) //nolint:errcheck
 
 	found, err := unix.KeyctlSearch(keyring, "user", probe, 0)

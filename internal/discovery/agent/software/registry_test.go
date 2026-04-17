@@ -22,7 +22,7 @@ type availableCollector struct {
 	errs  []CollectError
 }
 
-func (c *availableCollector) Name() string   { return c.name }
+func (c *availableCollector) Name() string    { return c.name }
 func (c *availableCollector) Available() bool { return true }
 func (c *availableCollector) Collect(_ context.Context) (*Result, error) {
 	return &Result{Items: c.items, Errs: c.errs}, nil
@@ -32,7 +32,7 @@ type unavailableCollector struct {
 	name string
 }
 
-func (c *unavailableCollector) Name() string   { return c.name }
+func (c *unavailableCollector) Name() string    { return c.name }
 func (c *unavailableCollector) Available() bool { return false }
 func (c *unavailableCollector) Collect(_ context.Context) (*Result, error) {
 	panic("should not be called")
@@ -42,16 +42,18 @@ type failingCollector struct {
 	name string
 }
 
-func (c *failingCollector) Name() string   { return c.name }
+func (c *failingCollector) Name() string    { return c.name }
 func (c *failingCollector) Available() bool { return true }
 func (c *failingCollector) Collect(_ context.Context) (*Result, error) {
 	return nil, errors.New("simulated failure")
 }
 
 // Compile-time interface checks.
-var _ Collector = (*availableCollector)(nil)
-var _ Collector = (*unavailableCollector)(nil)
-var _ Collector = (*failingCollector)(nil)
+var (
+	_ Collector = (*availableCollector)(nil)
+	_ Collector = (*unavailableCollector)(nil)
+	_ Collector = (*failingCollector)(nil)
+)
 
 // ---------------------------------------------------------------------------
 // Registry tests

@@ -171,14 +171,14 @@ func tokenFromMetadata(ctx context.Context) (string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create metadata request: %w", err)
 	}
 	req.Header.Set("Metadata-Flavor", "Google")
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("metadata request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -236,7 +236,7 @@ func tokenFromCredentialsFile(ctx context.Context, path string) (string, error) 
 		strings.NewReader(form.Encode()),
 	)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
@@ -289,8 +289,8 @@ func (g *GCP) listAggregatedInstances(ctx context.Context, project, token string
 	var allInstances []gcpInstance
 
 	for apiURL != "" {
-		if ctx.Err() != nil {
-			return allInstances, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return allInstances, fmt.Errorf("gcp instance list cancelled: %w", err)
 		}
 
 		instances, nextURL, err := g.fetchInstancePage(ctx, apiURL, token)
@@ -383,7 +383,7 @@ func (g *GCP) fetchDiskSourceImage(ctx context.Context, diskURL, token string) s
 	resp, err := doWithRetry(ctx, "gcp_compute", func() (*http.Response, error) {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, diskURL, nil)
 		if reqErr != nil {
-			return nil, reqErr
+			return nil, fmt.Errorf("create gcp disk request: %w", reqErr)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Accept", "application/json")

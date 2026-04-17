@@ -60,7 +60,11 @@ func sign(payload []byte, key ed25519.PrivateKey) (string, error) {
 		return "", fmt.Errorf("sign payload: %w", err)
 	}
 
-	return jws.CompactSerialize()
+	s, err := jws.CompactSerialize()
+	if err != nil {
+		return "", fmt.Errorf("serialize JWS: %w", err)
+	}
+	return s, nil
 }
 
 func encrypt(plaintext []byte, serverJWK jose.JSONWebKey) (string, error) {
@@ -78,7 +82,11 @@ func encrypt(plaintext []byte, serverJWK jose.JSONWebKey) (string, error) {
 		return "", fmt.Errorf("encrypt payload: %w", err)
 	}
 
-	return jwe.CompactSerialize()
+	s, err := jwe.CompactSerialize()
+	if err != nil {
+		return "", fmt.Errorf("serialize JWE: %w", err)
+	}
+	return s, nil
 }
 
 func decrypt(jweCompact string, serverKey jose.JSONWebKey) ([]byte, error) {

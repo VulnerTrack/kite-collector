@@ -47,7 +47,7 @@ func (l *Linode) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			return assets, fmt.Errorf("linode: %w", err)
 		}
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("linode: context cancelled: %w", ctx.Err())
 		}
 
 		var resp linodeInstancesResponse

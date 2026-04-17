@@ -33,7 +33,7 @@ func runWithLimits(ctx context.Context, name string, args ...string) ([]byte, er
 	}
 
 	if err = cmd.Start(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("start %s: %w", name, err)
 	}
 
 	out, err := io.ReadAll(io.LimitReader(pipe, maxOutputBytes))
@@ -42,7 +42,7 @@ func runWithLimits(ctx context.Context, name string, args ...string) ([]byte, er
 	}
 
 	if err = cmd.Wait(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("wait %s: %w", name, err)
 	}
 
 	return out, nil

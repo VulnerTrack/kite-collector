@@ -54,8 +54,8 @@ func newMockNetBoxAPI(t *testing.T) *httptest.Server {
 			})
 		} else {
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"count":   3,
-				"next":    nil,
+				"count": 3,
+				"next":  nil,
 				"results": []map[string]any{
 					{
 						"name":        "fw-01",
@@ -96,7 +96,7 @@ func TestNetBox_Discover_Success(t *testing.T) {
 	assert.Equal(t, model.AssetTypeNetworkDevice, sw.AssetType)
 	assert.Equal(t, "junos", sw.OSFamily)
 	assert.Equal(t, "DC-East", sw.Environment) // site → Environment
-	assert.Equal(t, "Engineering", sw.Owner)    // tenant → Owner
+	assert.Equal(t, "Engineering", sw.Owner)   // tenant → Owner
 	assert.Equal(t, "netbox", sw.DiscoverySource)
 	assert.Equal(t, model.AuthorizationAuthorized, sw.IsAuthorized)
 	assert.Equal(t, model.ManagedUnknown, sw.IsManaged)

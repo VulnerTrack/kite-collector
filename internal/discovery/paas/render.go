@@ -51,7 +51,7 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			return assets, fmt.Errorf("render: %w", err)
 		}
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("render: context cancelled: %w", ctx.Err())
 		}
 
 		path := fmt.Sprintf("/v1/services?limit=%d", renderPageSize)

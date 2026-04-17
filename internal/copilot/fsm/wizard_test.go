@@ -35,36 +35,42 @@ func newMockPrompter() *mockPrompter {
 func (m *mockPrompter) PromptGoal(_ []schema.Preset) (string, error) {
 	return m.goalAnswer, nil
 }
+
 func (m *mockPrompter) PromptConfirm(n schema.Node, def bool) (bool, error) {
 	if v, ok := m.confirmAnswers[n.ID]; ok {
 		return v, nil
 	}
 	return def, nil
 }
+
 func (m *mockPrompter) PromptSelect(n schema.Node, def string) (string, error) {
 	if v, ok := m.selectAnswers[n.ID]; ok {
 		return v, nil
 	}
 	return def, nil
 }
+
 func (m *mockPrompter) PromptInput(n schema.Node, def string) (string, error) {
 	if v, ok := m.inputAnswers[n.ID]; ok {
 		return v, nil
 	}
 	return def, nil
 }
+
 func (m *mockPrompter) PromptMultiSelect(n schema.Node, def []string) ([]string, error) {
 	if v, ok := m.multiAnswers[n.ID]; ok {
 		return v, nil
 	}
 	return def, nil
 }
+
 func (m *mockPrompter) PromptPassword(n schema.Node) (string, error) {
 	if v, ok := m.passwordAnswers[n.ID]; ok {
 		return v, nil
 	}
 	return "", nil
 }
+
 func (m *mockPrompter) ShowProgress(_, _ int, _ string) {
 	m.progressCalls++
 }

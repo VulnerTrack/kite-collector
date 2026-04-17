@@ -58,7 +58,7 @@ func (s *Scaleway) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 			return assets, fmt.Errorf("scaleway: %w", err)
 		}
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("scaleway: context cancelled: %w", ctx.Err())
 		}
 
 		var resp scalewayServersResponse

@@ -122,12 +122,12 @@ func (c *dockerClient) get(ctx context.Context, path string) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil) //#nosec G704 -- URL from user-configured Docker host
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create docker request: %w", err)
 	}
 
 	resp, err := c.http.Do(req) //#nosec G704 -- intentional request to user-configured endpoint
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("docker API request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

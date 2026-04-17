@@ -57,7 +57,7 @@ func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 	var assets []model.Asset
 	for _, app := range appsResp.Apps {
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("flyio: context cancelled: %w", ctx.Err())
 		}
 
 		safeName, err := safenet.SanitizePathSegment(app.Name)

@@ -38,7 +38,7 @@ func newMockVultrAPI(t *testing.T) *httptest.Server {
 					{
 						ID: "inst-002", Label: "database", OS: "Debian 12 x64",
 						Plan: "vc2-4c-8gb", Region: "ams", Status: "stopped",
-						MainIP: "149.28.0.2",
+						MainIP:      "149.28.0.2",
 						DateCreated: "2024-04-15T14:00:00+00:00",
 					},
 				},
@@ -50,7 +50,7 @@ func newMockVultrAPI(t *testing.T) *httptest.Server {
 					{
 						ID: "inst-003", Label: "worker", OS: "CentOS 9 Stream x64",
 						Plan: "vc2-1c-2gb", Region: "sgp", Status: "active",
-						MainIP: "149.28.0.3",
+						MainIP:      "149.28.0.3",
 						DateCreated: "2024-05-20T09:00:00+00:00",
 					},
 				},

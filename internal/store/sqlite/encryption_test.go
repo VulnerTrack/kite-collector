@@ -17,7 +17,7 @@ func TestEncryptDecryptFile(t *testing.T) {
 	dec := filepath.Join(dir, "decrypted.db")
 
 	content := []byte("SQLite format 3\000 -- test database content here")
-	require.NoError(t, os.WriteFile(plain, content, 0600))
+	require.NoError(t, os.WriteFile(plain, content, 0o600))
 
 	key := make([]byte, 32)
 	_, err := rand.Read(key)
@@ -43,7 +43,7 @@ func TestEncryptDecryptWrongKey(t *testing.T) {
 	enc := filepath.Join(dir, "encrypted.db")
 	dec := filepath.Join(dir, "decrypted.db")
 
-	require.NoError(t, os.WriteFile(plain, []byte("secret data"), 0600))
+	require.NoError(t, os.WriteFile(plain, []byte("secret data"), 0o600))
 
 	key1 := make([]byte, 32)
 	key2 := make([]byte, 32)
@@ -65,7 +65,7 @@ func TestIsEncrypted(t *testing.T) {
 
 	// Raw SQLite file.
 	sqlitePath := filepath.Join(dir, "raw.db")
-	require.NoError(t, os.WriteFile(sqlitePath, []byte("SQLite format 3\000rest of file"), 0600))
+	require.NoError(t, os.WriteFile(sqlitePath, []byte("SQLite format 3\000rest of file"), 0o600))
 	enc, err = IsEncrypted(sqlitePath)
 	require.NoError(t, err)
 	assert.False(t, enc)

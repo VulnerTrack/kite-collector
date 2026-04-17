@@ -122,7 +122,7 @@ func (p *testPKI) issueClientCert(t *testing.T, cn string) (certPEM, keyPEM []by
 func writePEM(t *testing.T, dir, name string, data []byte) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
-	require.NoError(t, os.WriteFile(path, data, 0600))
+	require.NoError(t, os.WriteFile(path, data, 0o600))
 	return path
 }
 
@@ -170,10 +170,10 @@ func (e *enrollingServer) Enroll(_ context.Context, req *kitev1.EnrollRequest) (
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 
 	return &kitev1.EnrollResponse{
-		Status:              "enrolled",
-		CaCertificate:       e.pki.caCertPEM,
-		ClientCertificate:   certPEM,
-		ClientKeyEncrypted:  keyPEM,
+		Status:               "enrolled",
+		CaCertificate:        e.pki.caCertPEM,
+		ClientCertificate:    certPEM,
+		ClientKeyEncrypted:   keyPEM,
 		CertificateExpiresAt: expiry.Unix(),
 	}, nil
 }
@@ -188,15 +188,19 @@ func (m *memStore) UpsertAsset(_ context.Context, _ model.Asset) error { return 
 func (m *memStore) UpsertAssets(_ context.Context, a []model.Asset) (int, int, error) {
 	return len(a), 0, nil
 }
+
 func (m *memStore) GetAssetByID(_ context.Context, _ uuid.UUID) (*model.Asset, error) {
 	return nil, store.ErrNotFound
 }
+
 func (m *memStore) GetAssetByNaturalKey(_ context.Context, _ string) (*model.Asset, error) {
 	return nil, nil
 }
+
 func (m *memStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
 	return nil, nil
 }
+
 func (m *memStore) GetStaleAssets(_ context.Context, _ time.Duration) ([]model.Asset, error) {
 	return nil, nil
 }
@@ -204,6 +208,7 @@ func (m *memStore) InsertEvent(_ context.Context, _ model.AssetEvent) error { re
 func (m *memStore) InsertEvents(_ context.Context, _ []model.AssetEvent) error {
 	return nil
 }
+
 func (m *memStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.AssetEvent, error) {
 	return nil, nil
 }
@@ -215,6 +220,7 @@ func (m *memStore) GetLatestScanRun(_ context.Context) (*model.ScanRun, error) {
 func (m *memStore) UpsertSoftware(_ context.Context, _ uuid.UUID, _ []model.InstalledSoftware) error {
 	return nil
 }
+
 func (m *memStore) ListSoftware(_ context.Context, _ uuid.UUID) ([]model.InstalledSoftware, error) {
 	return nil, nil
 }
@@ -222,15 +228,19 @@ func (m *memStore) InsertFindings(_ context.Context, _ []model.ConfigFinding) er
 func (m *memStore) ListFindings(_ context.Context, _ store.FindingFilter) ([]model.ConfigFinding, error) {
 	return nil, nil
 }
+
 func (m *memStore) InsertPostureAssessments(_ context.Context, _ []model.PostureAssessment) error {
 	return nil
 }
+
 func (m *memStore) ListPostureAssessments(_ context.Context, _ store.PostureFilter) ([]model.PostureAssessment, error) {
 	return nil, nil
 }
+
 func (m *memStore) InsertRuntimeIncident(_ context.Context, _ model.RuntimeIncident) error {
 	return nil
 }
+
 func (m *memStore) ListRuntimeIncidents(_ context.Context, _ store.IncidentFilter) ([]model.RuntimeIncident, error) {
 	return nil, nil
 }
@@ -379,14 +389,14 @@ func TestEnrollment_FullRoundTrip(t *testing.T) {
 
 	// --- Step 3: Store credentials ---
 	credDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(credDir, "ca.pem"), enrollResp.CaCertificate, 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(credDir, "agent.pem"), enrollResp.ClientCertificate, 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(credDir, "agent-key.pem"), enrollResp.ClientKeyEncrypted, 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(credDir, "ca.pem"), enrollResp.CaCertificate, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(credDir, "agent.pem"), enrollResp.ClientCertificate, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(credDir, "agent-key.pem"), enrollResp.ClientKeyEncrypted, 0o600))
 
 	// Verify key file permissions.
 	info, err := os.Stat(filepath.Join(credDir, "agent-key.pem"))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
 	// --- Step 4: Reconnect with enrolled mTLS credentials ---
 	mtlsConn := dialWithMTLS(t, addr,

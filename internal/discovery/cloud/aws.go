@@ -97,8 +97,8 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 	var assets []model.Asset
 
 	for _, region := range regions {
-		if ctx.Err() != nil {
-			return assets, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return assets, fmt.Errorf("aws discovery cancelled: %w", err)
 		}
 
 		slog.Info("aws_ec2: discovering instances", "region", region)

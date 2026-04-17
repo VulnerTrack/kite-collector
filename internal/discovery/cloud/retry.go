@@ -42,8 +42,8 @@ func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, er
 	var lastErr error
 
 	for attempt := 0; attempt < defaultMaxAttempts; attempt++ {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("%s cancelled: %w", name, err)
 		}
 
 		if attempt > 0 {
@@ -54,7 +54,7 @@ func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, er
 			)
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, fmt.Errorf("%s cancelled: %w", name, ctx.Err())
 			case <-time.After(delay):
 			}
 		}
@@ -92,7 +92,7 @@ func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, er
 			if retryAfter > 0 {
 				select {
 				case <-ctx.Done():
-					return nil, ctx.Err()
+					return nil, fmt.Errorf("%s: rate-limit wait cancelled: %w", name, ctx.Err())
 				case <-time.After(retryAfter):
 				}
 			}

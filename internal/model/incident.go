@@ -10,11 +10,11 @@ import (
 type IncidentType string
 
 const (
-	IncidentPanicRecovered       IncidentType = "panic_recovered"
-	IncidentTimeoutExceeded      IncidentType = "timeout_exceeded"
-	IncidentCircuitBreakerTrip   IncidentType = "circuit_breaker_tripped"
-	IncidentResponseTruncated    IncidentType = "response_truncated"
-	IncidentBodyLimitExceeded    IncidentType = "body_limit_exceeded"
+	IncidentPanicRecovered     IncidentType = "panic_recovered"
+	IncidentTimeoutExceeded    IncidentType = "timeout_exceeded"
+	IncidentCircuitBreakerTrip IncidentType = "circuit_breaker_tripped"
+	IncidentResponseTruncated  IncidentType = "response_truncated"
+	IncidentBodyLimitExceeded  IncidentType = "body_limit_exceeded"
 )
 
 // RuntimeIncident records a single runtime safety event such as a recovered

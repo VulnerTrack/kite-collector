@@ -92,7 +92,10 @@ func (r *postActionRunner) runFirstScan() error {
 	cmd.Stdout = r.out
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run %s: %w", binary, err)
+	}
+	return nil
 }
 
 // generateSystemdUnit writes kite-collector.service and kite-collector.timer,
@@ -304,7 +307,10 @@ func (r *postActionRunner) enrollIfTokenProvided() error {
 	cmd := exec.CommandContext(r.ctx, binary, args...) //#nosec G204 -- binary is os.Executable(), token is wizard-provided
 	cmd.Stdout = r.out
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run enroll: %w", err)
+	}
+	return nil
 }
 
 // stringVal retrieves a string from the resolved wizard context, returning
@@ -355,11 +361,11 @@ func (r *postActionRunner) runSudo(args ...string) {
 func renderTemplate(tmpl string, data any) (string, error) {
 	t, err := template.New("").Parse(tmpl)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("parse template: %w", err)
 	}
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, data); err != nil {
-		return "", err
+		return "", fmt.Errorf("execute template: %w", err)
 	}
 	return buf.String(), nil
 }

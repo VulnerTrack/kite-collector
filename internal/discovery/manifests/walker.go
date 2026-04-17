@@ -2,6 +2,7 @@ package manifests
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -32,7 +33,7 @@ type WalkerConfig struct {
 func Walk(ctx context.Context, cfg WalkerConfig, fn func(WalkMatch) error) error {
 	for _, root := range cfg.ScanPaths {
 		if err := ctx.Err(); err != nil {
-			return err
+			return fmt.Errorf("walk cancelled: %w", err)
 		}
 
 		info, err := os.Lstat(root)
@@ -48,8 +49,8 @@ func Walk(ctx context.Context, cfg WalkerConfig, fn func(WalkMatch) error) error
 		}
 
 		if err := walkRoot(ctx, root, cfg, fn); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return fmt.Errorf("walk cancelled: %w", ctxErr)
 			}
 			slog.Warn("manifest walker: walk error",
 				"root", root, "error", err)
@@ -59,7 +60,7 @@ func Walk(ctx context.Context, cfg WalkerConfig, fn func(WalkMatch) error) error
 }
 
 func walkRoot(ctx context.Context, root string, cfg WalkerConfig, fn func(WalkMatch) error) error {
-	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			slog.Debug("manifest walker: entry error",
 				"path", path, "error", err)
@@ -87,6 +88,10 @@ func walkRoot(ctx context.Context, root string, cfg WalkerConfig, fn func(WalkMa
 
 		return handleFile(path, base, d, cfg, fn)
 	})
+	if err != nil {
+		return fmt.Errorf("walk root %s: %w", root, err)
+	}
+	return nil
 }
 
 func handleDir(root, path, base string, cfg WalkerConfig, fn func(WalkMatch) error) error {
@@ -126,7 +131,7 @@ func handleFile(path, base string, d fs.DirEntry, cfg WalkerConfig, fn func(Walk
 	if cfg.MaxFileSizeBytes > 0 {
 		info, err := d.Info()
 		if err != nil {
-			return nil // skip unreadable
+			return fmt.Errorf("stat %s: %w", path, err)
 		}
 		if info.Size() > cfg.MaxFileSizeBytes {
 			slog.Debug("manifest walker: skipping oversized file",

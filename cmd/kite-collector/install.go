@@ -155,24 +155,27 @@ func installBinary(src, dst string) error {
 
 	in, err := os.Open(src) //#nosec G304 -- src is os.Executable()
 	if err != nil {
-		return err
+		return fmt.Errorf("open source binary: %w", err)
 	}
 	defer func() { _ = in.Close() }()
 
 	tmp := dst + ".tmp"
 	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755) //#nosec G302,G304 -- binary must be executable; dst from trusted install path
 	if err != nil {
-		return err
+		return fmt.Errorf("create temp binary: %w", err)
 	}
 
 	if _, err := io.Copy(out, in); err != nil {
 		_ = out.Close()
 		_ = os.Remove(tmp)
-		return err
+		return fmt.Errorf("copy binary: %w", err)
 	}
 	if err := out.Close(); err != nil {
 		_ = os.Remove(tmp)
-		return err
+		return fmt.Errorf("close temp binary: %w", err)
 	}
-	return os.Rename(tmp, dst)
+	if err := os.Rename(tmp, dst); err != nil {
+		return fmt.Errorf("rename binary: %w", err)
+	}
+	return nil
 }

@@ -36,8 +36,8 @@ type ReportContext struct {
 	DBSize string
 
 	// Report
-	ReportID       string
-	GeneratedAtUTC string
+	ReportID         string
+	GeneratedAtUTC   string
 	GeneratedAtLocal string
 
 	// Latest scan
@@ -56,13 +56,13 @@ func NewReportContext(ctx context.Context, st store.Store, dbPath, version, comm
 	hostname, _ := os.Hostname()
 
 	rc := ReportContext{
-		AppName:     "kite-collector",
-		AppVersion:  version,
-		Commit:      commit,
-		Hostname:    hostname,
-		OS:          runtime.GOOS,
-		Arch:        runtime.GOARCH,
-		DBPath:      dbPath,
+		AppName:          "kite-collector",
+		AppVersion:       version,
+		Commit:           commit,
+		Hostname:         hostname,
+		OS:               runtime.GOOS,
+		Arch:             runtime.GOARCH,
+		DBPath:           dbPath,
 		ReportID:         uuid.Must(uuid.NewV7()).String(),
 		GeneratedAtUTC:   time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		GeneratedAtLocal: time.Now().Local().Format("2006-01-02 15:04:05 MST"),

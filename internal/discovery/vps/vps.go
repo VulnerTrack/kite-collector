@@ -70,17 +70,24 @@ func (c *apiClient) get(ctx context.Context, path string, out any) error {
 	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider
 		if reqErr != nil {
-			return nil, reqErr
+			return nil, fmt.Errorf("create vps request: %w", reqErr)
 		}
 		c.auth(req)
 		req.Header.Set("Accept", "application/json")
-		return c.http.Do(req) //#nosec G704 -- request built from internal base URL
+		doResp, doErr := c.http.Do(req) //#nosec G704 -- request built from internal base URL
+		if doErr != nil {
+			return nil, fmt.Errorf("execute vps request: %w", doErr)
+		}
+		return doResp, nil
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("vps GET: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	return json.NewDecoder(resp.Body).Decode(out)
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode vps response: %w", err)
+	}
+	return nil
 }
 
 // doWithRetry executes fn up to maxRetryAttempts times with exponential
@@ -95,7 +102,7 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 
 	for attempt := range maxRetryAttempts {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("%s: context cancelled: %w", c.name, ctx.Err())
 		}
 
 		if attempt > 0 {
@@ -106,7 +113,7 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 			)
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, fmt.Errorf("%s: backoff cancelled: %w", c.name, ctx.Err())
 			case <-time.After(delay):
 			}
 		}
@@ -140,7 +147,7 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 			if retryAfter > 0 {
 				select {
 				case <-ctx.Done():
-					return nil, ctx.Err()
+					return nil, fmt.Errorf("%s: rate-limit wait cancelled: %w", c.name, ctx.Err())
 				case <-time.After(retryAfter):
 				}
 			}

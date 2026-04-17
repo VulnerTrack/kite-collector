@@ -142,13 +142,13 @@ func newPVEClient(endpoint, tokenID, tokenSecret string) (*pveClient, error) {
 func (c *pveClient) get(ctx context.Context, path string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- URL from user-configured endpoint
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create proxmox request: %w", err)
 	}
 	req.Header.Set("Authorization", "PVEAPIToken="+c.tokenID+"="+c.tokenSecret)
 
 	resp, err := c.http.Do(req) //#nosec G704 -- intentional request to user-configured endpoint
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("proxmox GET %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -178,13 +178,13 @@ type pveNode struct {
 }
 
 type pveVM struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	VMID   int    `json:"vmid"`
-	CPUs   int    `json:"cpus"`
-	MaxMem int64  `json:"maxmem"`
-	MaxDisk int64 `json:"maxdisk"`
-	Uptime int64  `json:"uptime"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	VMID    int    `json:"vmid"`
+	CPUs    int    `json:"cpus"`
+	MaxMem  int64  `json:"maxmem"`
+	MaxDisk int64  `json:"maxdisk"`
+	Uptime  int64  `json:"uptime"`
 }
 
 type pveLXC struct {
@@ -321,13 +321,13 @@ func vmToAsset(node string, vm pveVM, cfg *vmConfig, snaps []snapshot, now time.
 	}
 
 	tags := map[string]any{
-		"node":       node,
-		"vmid":       vm.VMID,
-		"status":     vm.Status,
-		"cpus":       vm.CPUs,
+		"node":        node,
+		"vmid":        vm.VMID,
+		"status":      vm.Status,
+		"cpus":        vm.CPUs,
 		"max_mem_mb":  vm.MaxMem / (1024 * 1024),
 		"max_disk_mb": vm.MaxDisk / (1024 * 1024),
-		"uptime":     vm.Uptime,
+		"uptime":      vm.Uptime,
 	}
 
 	if cfg != nil {

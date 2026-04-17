@@ -215,7 +215,7 @@ func runCmd(ctx context.Context, name string, args ...string) (string, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		slog.Debug("audit: command failed", "cmd", name, "error", err)
-		return "", err
+		return "", fmt.Errorf("run %s: %w", name, err)
 	}
 	return string(out), nil
 }

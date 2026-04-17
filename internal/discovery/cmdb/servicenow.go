@@ -116,7 +116,7 @@ func (s *ServiceNow) listCIs(ctx context.Context, instanceURL, username, passwor
 
 	for {
 		if ctx.Err() != nil {
-			return allCIs, ctx.Err()
+			return allCIs, fmt.Errorf("servicenow: context cancelled: %w", ctx.Err())
 		}
 
 		cis, hasMore, err := s.fetchCIPage(ctx, instanceURL, username, password, table, offset)
@@ -203,7 +203,7 @@ func parseServiceNowCI(data json.RawMessage) (serviceNowCI, error) {
 		OperationalStatus string `json:"operational_status"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return serviceNowCI{}, err
+		return serviceNowCI{}, fmt.Errorf("unmarshal servicenow CI: %w", err)
 	}
 
 	return serviceNowCI{

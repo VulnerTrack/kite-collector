@@ -127,4 +127,3 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger) *
 func OpenBrowser(url string) {
 	openBrowser(url)
 }
-
