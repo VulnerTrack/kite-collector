@@ -32,11 +32,11 @@ type Config struct {
 
 // FleetConfig configures fleet identity and multi-tenant agent routing (RFC-0063).
 type FleetConfig struct {
-	APIKey            string `mapstructure:"api_key"`             // shared API key for admin endpoints
-	TenantID          string `mapstructure:"tenant_id"`           // pre-assigned tenant ID for this agent
-	Enabled           bool   `mapstructure:"enabled"`             // master toggle for fleet features
-	RequireEnrollment bool   `mapstructure:"require_enrollment"`  // require agents to enroll before reporting
-	MTLSRequired      bool   `mapstructure:"mtls_required"`       // require mTLS on all endpoints
+	APIKey            string `mapstructure:"api_key"`            // shared API key for admin endpoints
+	TenantID          string `mapstructure:"tenant_id"`          // pre-assigned tenant ID for this agent
+	Enabled           bool   `mapstructure:"enabled"`            // master toggle for fleet features
+	RequireEnrollment bool   `mapstructure:"require_enrollment"` // require agents to enroll before reporting
+	MTLSRequired      bool   `mapstructure:"mtls_required"`      // require mTLS on all endpoints
 }
 
 // ConnectivityConfig holds settings for network connectivity aids like tunnels.
@@ -48,15 +48,15 @@ type ConnectivityConfig struct {
 // the backend endpoint is unreachable, the agent provisions a reverse tunnel
 // using the specified provider binary.
 type TunnelConfig struct {
-	Provider        string   `mapstructure:"provider"`          // ngrok, cloudflared, bore, tailscale, frp, rathole
-	Target          string   `mapstructure:"target"`            // backend endpoint to tunnel to
-	AuthTokenEnv    string   `mapstructure:"auth_token_env"`    // env var containing auth token
-	BackoffBase     string   `mapstructure:"restart_backoff_base"` // exponential backoff base (e.g., "5s")
-	BackoffMax      string   `mapstructure:"restart_backoff_max"`  // backoff cap (e.g., "5m")
-	ExtraArgs       []string `mapstructure:"extra_args"`        // additional CLI args
-	LocalPort       int      `mapstructure:"local_port"`        // local listen port for tunnel
-	RestartMax      int      `mapstructure:"restart_max"`       // max restarts (0 = unlimited)
-	Enabled         bool     `mapstructure:"enabled"`           // master toggle (default: false)
+	Provider     string   `mapstructure:"provider"`             // ngrok, cloudflared, bore, tailscale, frp, rathole
+	Target       string   `mapstructure:"target"`               // backend endpoint to tunnel to
+	AuthTokenEnv string   `mapstructure:"auth_token_env"`       // env var containing auth token
+	BackoffBase  string   `mapstructure:"restart_backoff_base"` // exponential backoff base (e.g., "5s")
+	BackoffMax   string   `mapstructure:"restart_backoff_max"`  // backoff cap (e.g., "5m")
+	ExtraArgs    []string `mapstructure:"extra_args"`           // additional CLI args
+	LocalPort    int      `mapstructure:"local_port"`           // local listen port for tunnel
+	RestartMax   int      `mapstructure:"restart_max"`          // max restarts (0 = unlimited)
+	Enabled      bool     `mapstructure:"enabled"`              // master toggle (default: false)
 }
 
 // TunnelBackoffBase parses the BackoffBase duration string. Falls back to 5s.
@@ -188,6 +188,7 @@ type DiscoveryConfig struct {
 type SourceConfig struct {
 	Timeout           string   `mapstructure:"timeout"`
 	Scope             []string `mapstructure:"scope"`
+	Paths             []string `mapstructure:"paths"` // filesystem paths (code source)
 	Regions           []string `mapstructure:"regions"`
 	AssumeRole        string   `mapstructure:"assume_role"`
 	Project           string   `mapstructure:"project"`
@@ -197,6 +198,7 @@ type SourceConfig struct {
 	Site              string   `mapstructure:"site"`      // UniFi site name
 	Community         string   `mapstructure:"community"` // SNMP v2c community string
 	TCPPorts          []int    `mapstructure:"tcp_ports"`
+	MaxDepth          int      `mapstructure:"max_depth"` // directory recursion depth (code source)
 	MaxConcurrent     int      `mapstructure:"max_concurrent"`
 	Enabled           bool     `mapstructure:"enabled"`
 	CollectSoftware   bool     `mapstructure:"collect_software"`
@@ -250,13 +252,33 @@ type TLSConfig struct {
 
 // AuditConfig configures the configuration audit subsystem.
 type AuditConfig struct {
+	Profile     string                 `mapstructure:"profile"`
 	SSH         SSHAuditConfig         `mapstructure:"ssh"`
-	Profile     string                 `mapstructure:"profile"` // minimal, standard, full
+	SCA         SCAAuditConfig         `mapstructure:"sca"`
 	Permissions PermissionsAuditConfig `mapstructure:"permissions"`
 	Service     ServiceAuditConfig     `mapstructure:"service"`
 	Firewall    AuditorToggle          `mapstructure:"firewall"`
 	Kernel      AuditorToggle          `mapstructure:"kernel"`
+	Secrets     AuditorToggle          `mapstructure:"secrets"`
 	Enabled     bool                   `mapstructure:"enabled"`
+}
+
+// SCAAuditConfig configures the Software Composition Analysis auditor.
+type SCAAuditConfig struct {
+	Timeout string `mapstructure:"timeout"` // OSV API request timeout, e.g. "30s"
+	Enabled bool   `mapstructure:"enabled"`
+}
+
+// ParseTimeout parses the Timeout duration string. Falls back to 30s.
+func (s *SCAAuditConfig) ParseTimeout() time.Duration {
+	if s.Timeout == "" {
+		return 30 * time.Second
+	}
+	d, err := time.ParseDuration(s.Timeout)
+	if err != nil {
+		return 30 * time.Second
+	}
+	return d
 }
 
 // AuditorToggle is a simple enabled/disabled toggle for an auditor.
@@ -350,13 +372,13 @@ func Load(path string) (*Config, error) {
 	if path != "" {
 		v.SetConfigFile(path)
 		if err := v.ReadInConfig(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read config %s: %w", path, err)
 		}
 	}
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
 	return &cfg, nil

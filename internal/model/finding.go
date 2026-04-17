@@ -8,6 +8,10 @@ import (
 
 // ConfigFinding represents a single configuration weakness discovered on an asset.
 type ConfigFinding struct {
+	// FirstSeenAt records when this finding was first observed. It is
+	// preserved across scans so that mean-time-to-remediate can be computed.
+	// Zero value means the timestamp is unknown (pre-migration rows).
+	FirstSeenAt time.Time `json:"first_seen_at,omitempty"`
 	Timestamp   time.Time `json:"timestamp"`
 	Auditor     string    `json:"auditor"`
 	CheckID     string    `json:"check_id"`

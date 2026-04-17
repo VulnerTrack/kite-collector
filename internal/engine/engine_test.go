@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -481,7 +482,7 @@ func (s *slowSource) Discover(ctx context.Context, _ map[string]any) ([]model.As
 			{Hostname: "slow-host", AssetType: model.AssetTypeServer, DiscoverySource: s.name},
 		}, nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("slow source cancelled: %w", ctx.Err())
 	}
 }
 

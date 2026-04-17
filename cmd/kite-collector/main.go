@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"strconv"
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
@@ -22,6 +21,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -32,20 +32,15 @@ import (
 
 	"github.com/vulnertrack/kite-collector/api/rest"
 	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
-	"github.com/vulnertrack/kite-collector/internal/dashboard"
-	"github.com/vulnertrack/kite-collector/internal/endpoint"
-	"github.com/vulnertrack/kite-collector/internal/enrollment"
-	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
-	"github.com/vulnertrack/kite-collector/internal/identity"
-	"github.com/vulnertrack/kite-collector/internal/osutil"
-	"github.com/vulnertrack/kite-collector/internal/tunnel"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
 	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/dashboard"
 	"github.com/vulnertrack/kite-collector/internal/dedup"
 	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent"
 	"github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	"github.com/vulnertrack/kite-collector/internal/discovery/cmdb"
+	codedisc "github.com/vulnertrack/kite-collector/internal/discovery/code"
 	dockerdisc "github.com/vulnertrack/kite-collector/internal/discovery/docker"
 	"github.com/vulnertrack/kite-collector/internal/discovery/mdm"
 	"github.com/vulnertrack/kite-collector/internal/discovery/network"
@@ -56,13 +51,19 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/vps"
 	wazuhdisc "github.com/vulnertrack/kite-collector/internal/discovery/wazuh"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
+	"github.com/vulnertrack/kite-collector/internal/endpoint"
 	"github.com/vulnertrack/kite-collector/internal/engine"
+	"github.com/vulnertrack/kite-collector/internal/enrollment"
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/osutil"
 	"github.com/vulnertrack/kite-collector/internal/policy"
 	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/postgres"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/tunnel"
 )
 
 // Build-time variables set via ldflags.
@@ -91,13 +92,13 @@ func openSQLiteStore(dbPath string, identityCfg config.IdentityConfig) (*sqlite.
 	// when the default /var/lib/kite-collector is not accessible (non-root).
 	if dataDir == "" {
 		dataDir = dbDir
-	} else if err := os.MkdirAll(dataDir, 0700); err != nil {
+	} else if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		slog.Warn("configured identity.data_dir is not writable, "+
 			"falling back to database directory",
 			"configured", dataDir, "fallback", dbDir, "error", err)
 		dataDir = dbDir
 	}
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create identity dir %s: %w", dataDir, err)
 	}
 
@@ -343,6 +344,7 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(paas.NewVercel())
 	registry.Register(paas.NewCoolify())
 	registry.Register(paas.NewCapRover())
+	registry.Register(codedisc.New())
 
 	// Set up metrics.
 	met := metrics.New()
@@ -602,7 +604,10 @@ func formatDiffJSON(result DiffResult, showUnchanged bool) error {
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	return enc.Encode(out)
+	if err := enc.Encode(out); err != nil {
+		return fmt.Errorf("encode diff JSON: %w", err)
+	}
+	return nil
 }
 
 func formatDiffTable(result DiffResult, showUnchanged bool) {
@@ -715,7 +720,10 @@ func runDiscoverServices(output string, verbose bool) error {
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(discovered)
+		if err := enc.Encode(discovered); err != nil {
+			return fmt.Errorf("encode autodiscovery JSON: %w", err)
+		}
+		return nil
 	default:
 		formatDiscoveredServices(discovered)
 	}
@@ -1494,7 +1502,10 @@ func runQuery(target, dbPath string, limit int, severity string) error {
 	_ = w.Flush()
 	_, _ = fmt.Fprintf(os.Stderr, "\n%d rows\n", count)
 
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate query rows: %w", err)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1576,7 +1587,10 @@ func runDB(dbPath string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("run sqlite3: %w", err)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1704,12 +1718,15 @@ func runMigrate(dbPath string, status bool, repair string, dryRun bool) error {
 	case status:
 		return showMigrationStatus(ctx, st, dbPath)
 	case repair != "":
-		return st.RepairMigration(ctx, repair)
+		if err := st.RepairMigration(ctx, repair); err != nil {
+			return fmt.Errorf("repair migration: %w", err)
+		}
+		return nil
 	case dryRun:
 		return showPendingMigrations(ctx, st)
 	default:
 		if mErr := st.Migrate(ctx); mErr != nil {
-			return mErr
+			return fmt.Errorf("apply migrations: %w", mErr)
 		}
 		_, _ = fmt.Fprintln(os.Stderr, "all migrations applied")
 		return nil
@@ -1719,7 +1736,7 @@ func runMigrate(dbPath string, status bool, repair string, dryRun bool) error {
 func showMigrationStatus(ctx context.Context, st *sqlite.SQLiteStore, dbPath string) error {
 	infos, err := st.MigrationStatus(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("migration status: %w", err)
 	}
 
 	fmt.Printf("\n  Migration Status (SQLite: %s)\n", dbPath)
@@ -1746,7 +1763,7 @@ func showMigrationStatus(ctx context.Context, st *sqlite.SQLiteStore, dbPath str
 func showPendingMigrations(ctx context.Context, st *sqlite.SQLiteStore) error {
 	infos, err := st.MigrationStatus(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("migration status: %w", err)
 	}
 
 	pending := 0
@@ -1773,7 +1790,10 @@ func showPendingMigrations(ctx context.Context, st *sqlite.SQLiteStore) error {
 func formatJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	return enc.Encode(v)
+	if err := enc.Encode(v); err != nil {
+		return fmt.Errorf("encode JSON: %w", err)
+	}
+	return nil
 }
 
 // formatTable renders assets as a human-readable table.
@@ -1963,7 +1983,7 @@ func formatHTMLReport(ctx context.Context, st store.Store, assets []model.Asset,
 		AuthUnknownCount:  authUnk,
 		ManagedCount:      mgdCount,
 		UnmanagedCount:    unmgdCount,
-		MgmtUnknownCount: mgdUnk,
+		MgmtUnknownCount:  mgdUnk,
 		Assets:            assets,
 		EventSummary:      eventSummary,
 		LatestScan:        latestRun,
@@ -1982,7 +2002,10 @@ func formatHTMLReport(ctx context.Context, st store.Store, assets []model.Asset,
 		return fmt.Errorf("parse HTML template: %w", err)
 	}
 
-	return tmpl.Execute(os.Stdout, data)
+	if err := tmpl.Execute(os.Stdout, data); err != nil {
+		return fmt.Errorf("execute HTML report template: %w", err)
+	}
+	return nil
 }
 
 // htmlReportTemplate is the self-contained HTML compliance report template.
@@ -2238,8 +2261,8 @@ const htmlReportTemplate = `<!DOCTYPE html>
 
 func newDashboardCmd() *cobra.Command {
 	var (
-		dbPath string
-		addr   string
+		dbPath    string
+		addr      string
 		noBrowser bool
 	)
 
@@ -2651,7 +2674,12 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 			s.OK = true
 			s.Error = "skipped (no --certs-dir provided)"
 		} else if handshakeErr != nil {
-			s.Error = handshakeErr.Error()
+			msg := handshakeErr.Error()
+			if strings.Contains(msg, "ECDSA verification failure") ||
+				strings.Contains(msg, "certificate signed by unknown authority") {
+				msg += " — CA mismatch: the PKI CA was likely rotated; re-enroll this agent with 'kite-collector enroll'"
+			}
+			s.Error = msg
 		} else {
 			s.OK = true
 		}
@@ -2760,8 +2788,8 @@ func otlpBuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 	}
 
 	tlsCfg := &tls.Config{
-		RootCAs: pool,
-		MinVersion:         tls.VersionTLS12,
+		RootCAs:    pool,
+		MinVersion: tls.VersionTLS12,
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 {
 				return fmt.Errorf("server presented no certificate")
@@ -2789,7 +2817,10 @@ func otlpBuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 				Intermediates: intermediates,
 				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 			})
-			return err
+			if err != nil {
+				return fmt.Errorf("verify peer certificate: %w", err)
+			}
+			return nil
 		},
 	}
 
