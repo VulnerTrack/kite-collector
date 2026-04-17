@@ -12,19 +12,23 @@ import (
 // Metrics holds all Prometheus instruments used by kite-collector.
 // Each instance carries its own registry so nothing touches the global default.
 type Metrics struct {
-	ScanDuration    *prometheus.HistogramVec
-	AssetsTotal     *prometheus.GaugeVec
-	EventsEmitted   *prometheus.CounterVec
-	DiscoveryErrors *prometheus.CounterVec
-	ScanCoverage    *prometheus.GaugeVec
-	StaleAssets     prometheus.Gauge
-	DedupSkipped    prometheus.Counter
-	PanicsRecovered        *prometheus.CounterVec
-	CircuitBreakerTrips    *prometheus.CounterVec
-	SourceHealth           *prometheus.GaugeVec
-	ResponseTruncations    prometheus.Counter
-	ScanDeadlineExceeded   prometheus.Counter
-	registry               *prometheus.Registry
+	ScanDuration         *prometheus.HistogramVec
+	AssetsTotal          *prometheus.GaugeVec
+	EventsEmitted        *prometheus.CounterVec
+	DiscoveryErrors      *prometheus.CounterVec
+	ScanCoverage         *prometheus.GaugeVec
+	StaleAssets          prometheus.Gauge
+	DedupSkipped         prometheus.Counter
+	PanicsRecovered      *prometheus.CounterVec
+	CircuitBreakerTrips  *prometheus.CounterVec
+	SourceHealth         *prometheus.GaugeVec
+	ResponseTruncations  prometheus.Counter
+	ScanDeadlineExceeded prometheus.Counter
+	// Code scanning metrics
+	FindingsOpen    *prometheus.GaugeVec     // open findings by severity + auditor
+	FindingsTotal   *prometheus.CounterVec   // cumulative findings ever emitted
+	FindingAgeHours *prometheus.HistogramVec // age of open findings (MTTR proxy)
+	registry        *prometheus.Registry
 }
 
 // New creates a Metrics instance backed by a private registry.
@@ -91,6 +95,22 @@ func New() *Metrics {
 		Help: "Total number of scans that exceeded the deadline.",
 	})
 
+	findingsOpen := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "kite_findings_open",
+		Help: "Number of open findings from the most recent scan, by severity and auditor.",
+	}, []string{"severity", "auditor"})
+
+	findingsTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "kite_findings_total",
+		Help: "Cumulative number of findings emitted, by severity and auditor.",
+	}, []string{"severity", "auditor"})
+
+	findingAgeHours := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "kite_finding_age_hours",
+		Help:    "Age of open findings in hours (first_seen_at to now). Proxy for mean time to remediate.",
+		Buckets: []float64{1, 6, 24, 72, 168, 336, 720, 2160}, // 1h … 90d
+	}, []string{"severity", "auditor"})
+
 	reg.MustRegister(
 		scanDuration,
 		assetsTotal,
@@ -104,6 +124,9 @@ func New() *Metrics {
 		sourceHealth,
 		responseTruncations,
 		scanDeadlineExceeded,
+		findingsOpen,
+		findingsTotal,
+		findingAgeHours,
 	)
 
 	return &Metrics{
@@ -119,6 +142,9 @@ func New() *Metrics {
 		SourceHealth:         sourceHealth,
 		ResponseTruncations:  responseTruncations,
 		ScanDeadlineExceeded: scanDeadlineExceeded,
+		FindingsOpen:         findingsOpen,
+		FindingsTotal:        findingsTotal,
+		FindingAgeHours:      findingAgeHours,
 		registry:             reg,
 	}
 }

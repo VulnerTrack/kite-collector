@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -61,7 +62,10 @@ func (s *SQLiteStore) RawDB() *sql.DB {
 
 // Close releases the underlying database connection pool.
 func (s *SQLiteStore) Close() error {
-	return s.db.Close()
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("close sqlite: %w", err)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +114,7 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 		&naturalKey,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan asset: %w", err)
 	}
 
 	a.ID, err = uuid.Parse(idStr)
@@ -288,7 +292,7 @@ func (s *SQLiteStore) GetAssetByID(ctx context.Context, id uuid.UUID) (*model.As
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+assetColumns+` FROM assets WHERE id = ?`, id.String())
 	a, err := scanAsset(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
@@ -303,7 +307,7 @@ func (s *SQLiteStore) GetAssetByNaturalKey(ctx context.Context, key string) (*mo
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+assetColumns+` FROM assets WHERE natural_key = ?`, key)
 	a, err := scanAsset(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -366,7 +370,10 @@ func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) 
 		}
 		assets = append(assets, *a)
 	}
-	return assets, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate asset rows: %w", err)
+	}
+	return assets, nil
 }
 
 // GetStaleAssets returns assets whose last_seen_at is older than the given
@@ -390,7 +397,10 @@ func (s *SQLiteStore) GetStaleAssets(ctx context.Context, threshold time.Duratio
 		}
 		assets = append(assets, *a)
 	}
-	return assets, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate stale asset rows: %w", err)
+	}
+	return assets, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +429,7 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (*model.AssetEvent, err
 		&ts,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan event: %w", err)
 	}
 
 	e.ID, err = uuid.Parse(idStr)
@@ -546,7 +556,10 @@ func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) 
 		}
 		events = append(events, *e)
 	}
-	return events, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate event rows: %w", err)
+	}
+	return events, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +595,7 @@ func scanScanRun(row interface{ Scan(dest ...any) error }) (*model.ScanRun, erro
 		&discoverySources,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan scan run: %w", err)
 	}
 
 	r.ID, err = uuid.Parse(idStr)
@@ -675,7 +688,7 @@ func (s *SQLiteStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, err
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT 1`)
 	r, err := scanScanRun(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -712,7 +725,7 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 		&arch,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan software: %w", err)
 	}
 
 	s.ID, err = uuid.Parse(idStr)
@@ -747,7 +760,10 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 	}
 
 	if len(software) == 0 {
-		return tx.Commit()
+		if commitErr := tx.Commit(); commitErr != nil {
+			return fmt.Errorf("commit software tx: %w", commitErr)
+		}
+		return nil
 	}
 
 	stmt, err := tx.PrepareContext(ctx,
@@ -799,7 +815,10 @@ func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]mo
 		}
 		software = append(software, *sw)
 	}
-	return software, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate software rows: %w", err)
+	}
+	return software, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -808,19 +827,20 @@ func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]mo
 
 const findingColumns = `id, asset_id, scan_run_id, auditor, check_id, title,
 	severity, cwe_id, cwe_name, evidence, expected, remediation,
-	cis_control, timestamp`
+	cis_control, timestamp, first_seen_at`
 
 // scanFinding reads a single row into a ConfigFinding.
 func scanFinding(row interface{ Scan(dest ...any) error }) (*model.ConfigFinding, error) {
 	var f model.ConfigFinding
 	var (
-		idStr      string
-		assetIDStr string
-		scanIDStr  string
-		expected   sql.NullString
+		idStr       string
+		assetIDStr  string
+		scanIDStr   string
+		expected    sql.NullString
 		remediation sql.NullString
-		cisControl sql.NullString
-		ts         string
+		cisControl  sql.NullString
+		ts          string
+		firstSeenAt sql.NullString
 	)
 	err := row.Scan(
 		&idStr,
@@ -837,9 +857,10 @@ func scanFinding(row interface{ Scan(dest ...any) error }) (*model.ConfigFinding
 		&remediation,
 		&cisControl,
 		&ts,
+		&firstSeenAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan finding: %w", err)
 	}
 
 	f.ID, err = uuid.Parse(idStr)
@@ -858,6 +879,11 @@ func scanFinding(row interface{ Scan(dest ...any) error }) (*model.ConfigFinding
 	if err != nil {
 		return nil, fmt.Errorf("parse finding timestamp: %w", err)
 	}
+	if firstSeenAt.Valid && firstSeenAt.String != "" {
+		if t, parseErr := time.Parse(time.RFC3339, firstSeenAt.String); parseErr == nil {
+			f.FirstSeenAt = t
+		}
+	}
 	f.Expected = expected.String
 	f.Remediation = remediation.String
 	f.CISControl = cisControl.String
@@ -865,7 +891,10 @@ func scanFinding(row interface{ Scan(dest ...any) error }) (*model.ConfigFinding
 	return &f, nil
 }
 
-// InsertFindings persists a batch of config findings inside a single transaction.
+// InsertFindings persists a batch of config findings. Findings with
+// deterministic IDs (SCA, secrets) are upserted: on conflict the scan_run_id,
+// evidence, and timestamp are updated while first_seen_at is preserved.
+// Findings with random IDs (system auditors) are inserted normally.
 func (s *SQLiteStore) InsertFindings(ctx context.Context, findings []model.ConfigFinding) error {
 	if len(findings) == 0 {
 		return nil
@@ -876,15 +905,24 @@ func (s *SQLiteStore) InsertFindings(ctx context.Context, findings []model.Confi
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO config_findings (`+findingColumns+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO config_findings (`+findingColumns+`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			scan_run_id  = excluded.scan_run_id,
+			evidence     = excluded.evidence,
+			timestamp    = excluded.timestamp
+	`)
 	if err != nil {
 		return fmt.Errorf("prepare insert finding: %w", err)
 	}
 	defer func() { _ = stmt.Close() }()
 
 	for i := range findings {
+		firstSeen := findings[i].FirstSeenAt
+		if firstSeen.IsZero() {
+			firstSeen = findings[i].Timestamp
+		}
 		_, err := stmt.ExecContext(ctx,
 			findings[i].ID.String(),
 			findings[i].AssetID.String(),
@@ -900,13 +938,17 @@ func (s *SQLiteStore) InsertFindings(ctx context.Context, findings []model.Confi
 			findings[i].Remediation,
 			findings[i].CISControl,
 			findings[i].Timestamp.Format(time.RFC3339),
+			firstSeen.Format(time.RFC3339),
 		)
 		if err != nil {
 			return fmt.Errorf("insert finding %s: %w", findings[i].ID, err)
 		}
 	}
 
-	return tx.Commit()
+	if commitErr := tx.Commit(); commitErr != nil {
+		return fmt.Errorf("commit findings: %w", commitErr)
+	}
+	return nil
 }
 
 // ListFindings returns config findings matching the supplied filter.
@@ -966,7 +1008,10 @@ func (s *SQLiteStore) ListFindings(ctx context.Context, filter store.FindingFilt
 		}
 		findings = append(findings, *f)
 	}
-	return findings, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate finding rows: %w", err)
+	}
+	return findings, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -999,7 +1044,7 @@ func scanPosture(row interface{ Scan(dest ...any) error }) (*model.PostureAssess
 		&ts,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan posture: %w", err)
 	}
 
 	p.ID, err = uuid.Parse(idStr)
@@ -1077,7 +1122,10 @@ func (s *SQLiteStore) InsertPostureAssessments(ctx context.Context, assessments 
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit posture tx: %w", err)
+	}
+	return nil
 }
 
 // ListPostureAssessments returns posture assessments matching the filter.
@@ -1129,7 +1177,10 @@ func (s *SQLiteStore) ListPostureAssessments(ctx context.Context, filter store.P
 		}
 		assessments = append(assessments, *p)
 	}
-	return assessments, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate posture assessments: %w", err)
+	}
+	return assessments, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1210,7 +1261,10 @@ func (s *SQLiteStore) ListRuntimeIncidents(ctx context.Context, filter store.Inc
 		}
 		incidents = append(incidents, *inc)
 	}
-	return incidents, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate runtime incidents: %w", err)
+	}
+	return incidents, nil
 }
 
 func scanIncident(row interface{ Scan(dest ...any) error }) (*model.RuntimeIncident, error) {
@@ -1236,7 +1290,7 @@ func scanIncident(row interface{ Scan(dest ...any) error }) (*model.RuntimeIncid
 		&createdAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan incident row: %w", err)
 	}
 	inc.ID, _ = uuid.Parse(idStr)
 	inc.Recovered = recovered != 0

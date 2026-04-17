@@ -40,13 +40,13 @@ func TestEvaluateSSHSettings_InsecureRootLogin(t *testing.T) {
 
 func TestEvaluateSSHSettings_SecureConfig(t *testing.T) {
 	settings := map[string]string{
-		"PermitRootLogin":      "no",
+		"PermitRootLogin":        "no",
 		"PasswordAuthentication": "no",
-		"PermitEmptyPasswords": "no",
-		"Protocol":             "2",
-		"X11Forwarding":        "no",
-		"MaxAuthTries":         "4",
-		"AllowTcpForwarding":   "no",
+		"PermitEmptyPasswords":   "no",
+		"Protocol":               "2",
+		"X11Forwarding":          "no",
+		"MaxAuthTries":           "4",
+		"AllowTcpForwarding":     "no",
 	}
 	findings := EvaluateSSHSettings(settings, testAsset(), "/etc/ssh/sshd_config")
 	if len(findings) != 0 {
@@ -56,9 +56,9 @@ func TestEvaluateSSHSettings_SecureConfig(t *testing.T) {
 
 func TestEvaluateSSHSettings_MultipleInsecure(t *testing.T) {
 	settings := map[string]string{
-		"PermitRootLogin":    "yes",
+		"PermitRootLogin":      "yes",
 		"PermitEmptyPasswords": "yes",
-		"Protocol":           "1",
+		"Protocol":             "1",
 	}
 	findings := EvaluateSSHSettings(settings, testAsset(), "/etc/ssh/sshd_config")
 	if len(findings) != 3 {
