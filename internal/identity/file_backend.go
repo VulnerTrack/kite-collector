@@ -30,13 +30,16 @@ func (b *FileBackend) Store(label string, key crypto.PrivateKey) error {
 		return fmt.Errorf("file backend: unsupported key type %T", key)
 	}
 
-	if err := os.MkdirAll(b.dir, 0700); err != nil {
+	if err := os.MkdirAll(b.dir, 0o700); err != nil {
 		return fmt.Errorf("create key dir: %w", err)
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(edKey)
 	path := filepath.Join(b.dir, label+".key")
-	return os.WriteFile(path, []byte(encoded), 0600)
+	if err := os.WriteFile(path, []byte(encoded), 0o600); err != nil {
+		return fmt.Errorf("write key file: %w", err)
+	}
+	return nil
 }
 
 func (b *FileBackend) Load(label string) (crypto.PrivateKey, error) {

@@ -160,7 +160,7 @@ func (s *SSH) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFinding
 func ParseSSHDConfig(path string) (map[string]string, error) {
 	f, err := os.Open(path) //#nosec G304 -- path from trusted config
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open sshd config %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
 
@@ -185,7 +185,10 @@ func ParseSSHDConfig(path string) (map[string]string, error) {
 		}
 	}
 
-	return settings, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan sshd config: %w", err)
+	}
+	return settings, nil
 }
 
 // EvaluateSSHSettings checks parsed sshd_config settings against known

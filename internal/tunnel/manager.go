@@ -46,7 +46,7 @@ type ManagerConfig struct {
 	ExtraArgs    []string
 	BackoffBase  time.Duration
 	BackoffMax   time.Duration
-	RestartMax   int    // 0 = unlimited
+	RestartMax   int // 0 = unlimited
 	LocalPort    uint16
 	Enabled      bool // master toggle
 }
@@ -231,15 +231,15 @@ func (m *Manager) logOutput(stream string, r io.Reader) {
 // the timeout is reached (5s timeout, 3 retries, 1s between retries).
 func (m *Manager) waitHealthy(ctx context.Context, addr string) error {
 	const (
-		maxRetries   = 3
-		retryDelay   = time.Second
-		dialTimeout  = 5 * time.Second
+		maxRetries  = 3
+		retryDelay  = time.Second
+		dialTimeout = 5 * time.Second
 	)
 
 	for attempt := range maxRetries {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("tunnel health check cancelled: %w", ctx.Err())
 		default:
 		}
 
@@ -258,7 +258,7 @@ func (m *Manager) waitHealthy(ctx context.Context, addr string) error {
 		if attempt < maxRetries-1 {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return fmt.Errorf("tunnel health check cancelled: %w", ctx.Err())
 			case <-time.After(retryDelay):
 			}
 		}

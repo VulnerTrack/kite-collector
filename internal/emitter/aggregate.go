@@ -20,8 +20,8 @@ var _ Emitter = (*AggregateOTLPEmitter)(nil)
 //
 // See RFC-0077 §5.2.2 for the payload specification.
 type AggregateOTLPEmitter struct {
-	last time.Time      // last flush
-	otlp *OTLPEmitter   // underlying transport
+	last time.Time    // last flush
+	otlp *OTLPEmitter // underlying transport
 	agg  aggregateState
 	mu   sync.Mutex
 }
@@ -191,4 +191,3 @@ func doubleKV(key string, value float64) otlpKeyValue {
 	s := strconv.FormatFloat(value, 'f', 1, 64)
 	return otlpKeyValue{Key: key, Value: otlpAnyValue{StringValue: &s}}
 }
-

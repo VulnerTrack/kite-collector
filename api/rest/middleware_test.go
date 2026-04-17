@@ -149,7 +149,7 @@ func TestResponseBoundingMiddleware_TruncatesLargeResponse(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(50, counter, inner) // 50-byte limit
-	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -172,7 +172,7 @@ func TestResponseBoundingMiddleware_AllowsSmallResponse(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(1000, counter, inner)
-	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -191,7 +191,7 @@ func TestResponseBoundingMiddleware_ZeroLimitPassesThrough(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(0, nil, inner)
-	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -206,7 +206,7 @@ func TestResponseBoundingMiddleware_NilCounter(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(20, nil, inner)
-	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
@@ -227,7 +227,7 @@ func TestResponseBoundingMiddleware_MultipleWrites(t *testing.T) {
 	})
 
 	handler := ResponseBoundingMiddleware(8, counter, inner)
-	req := httptest.NewRequestWithContext(context.Background(),"GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)

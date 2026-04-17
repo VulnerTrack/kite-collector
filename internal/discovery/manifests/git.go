@@ -222,7 +222,7 @@ func checkDirty(ctx context.Context, repoRoot string) bool {
 func readFileString(path string) (string, error) {
 	data, err := os.ReadFile(path) // #nosec G304 -- path within .git dir
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read %s: %w", path, err)
 	}
 	return string(data), nil
 }

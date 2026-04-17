@@ -39,7 +39,7 @@ func CheckTOFU(credDir string, serverCert *x509.Certificate, logger *slog.Logger
 	stored, err := os.ReadFile(fpPath) // #nosec G304 — path from trusted config
 	if errors.Is(err, fs.ErrNotExist) {
 		// First connection — pin this fingerprint.
-		if writeErr := os.WriteFile(fpPath, []byte(actual), 0600); writeErr != nil {
+		if writeErr := os.WriteFile(fpPath, []byte(actual), 0o600); writeErr != nil {
 			return fmt.Errorf("pin server fingerprint: %w", writeErr)
 		}
 		logger.Info("TOFU: pinned server certificate fingerprint",

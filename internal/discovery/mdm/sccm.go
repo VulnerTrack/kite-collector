@@ -160,7 +160,7 @@ func parseSCCMDevice(data json.RawMessage) (sccmDevice, error) {
 		IsClient                      bool   `json:"IsClient"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return sccmDevice{}, err
+		return sccmDevice{}, fmt.Errorf("unmarshal sccm device: %w", err)
 	}
 
 	return sccmDevice{

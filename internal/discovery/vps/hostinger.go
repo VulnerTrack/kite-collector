@@ -47,7 +47,7 @@ func (h *Hostinger) Discover(ctx context.Context, cfg map[string]any) ([]model.A
 			return assets, fmt.Errorf("hostinger: %w", err)
 		}
 		if ctx.Err() != nil {
-			return assets, ctx.Err()
+			return assets, fmt.Errorf("hostinger: context cancelled: %w", ctx.Err())
 		}
 
 		var resp hostingerVMsResponse

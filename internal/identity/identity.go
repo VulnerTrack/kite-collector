@@ -37,11 +37,15 @@ func (id *Identity) MarshalJSON() ([]byte, error) {
 		PrivateKey string    `json:"private_key"`
 		AgentID    uuid.UUID `json:"agent_id"`
 	}
-	return json.Marshal(alias{
+	data, err := json.Marshal(alias{
 		AgentID:    id.AgentID,
 		PublicKey:  base64.StdEncoding.EncodeToString(id.PublicKey),
 		PrivateKey: base64.StdEncoding.EncodeToString(id.PrivateKey),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal identity: %w", err)
+	}
+	return data, nil
 }
 
 // UnmarshalJSON restores an Identity from its on-disk JSON representation.
@@ -53,7 +57,7 @@ func (id *Identity) UnmarshalJSON(data []byte) error {
 	}
 	var a alias
 	if err := json.Unmarshal(data, &a); err != nil {
-		return err
+		return fmt.Errorf("unmarshal identity: %w", err)
 	}
 	pub, err := base64.StdEncoding.DecodeString(a.PublicKey)
 	if err != nil {
@@ -106,7 +110,7 @@ func LoadOrCreate(dataDir string, logger *slog.Logger) (*Identity, error) {
 	idPath := filepath.Join(dataDir, "identity.json")
 
 	// Ensure data directory exists with restricted permissions.
-	if err := os.MkdirAll(dataDir, 0700); err != nil {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create identity data dir: %w", err)
 	}
 
@@ -130,7 +134,7 @@ func loadFromBytes(data []byte, path string, logger *slog.Logger) (*Identity, er
 			return nil, fmt.Errorf("stat identity file: %w", err)
 		}
 		perm := info.Mode().Perm()
-		if perm&0077 != 0 {
+		if perm&0o077 != 0 {
 			return nil, fmt.Errorf(
 				"identity file %s has insecure permissions %04o; expected 0600",
 				path, perm,
@@ -169,7 +173,7 @@ func generate(path string, logger *slog.Logger) (*Identity, error) {
 		return nil, fmt.Errorf("marshal identity: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return nil, fmt.Errorf("write identity file: %w", err)
 	}
 

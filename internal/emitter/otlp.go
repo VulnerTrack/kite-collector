@@ -368,8 +368,8 @@ func buildTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 	}
 
 	tlsCfg := &tls.Config{
-		RootCAs: pool,
-		MinVersion:         tls.VersionTLS12,
+		RootCAs:    pool,
+		MinVersion: tls.VersionTLS12,
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 {
 				return fmt.Errorf("server presented no certificate")
@@ -392,7 +392,10 @@ func buildTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 				Intermediates: intermediates,
 				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 			})
-			return err
+			if err != nil {
+				return fmt.Errorf("verify peer certificate: %w", err)
+			}
+			return nil
 		},
 	}
 

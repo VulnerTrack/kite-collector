@@ -46,8 +46,8 @@ func (d *DigitalOcean) Discover(ctx context.Context, cfg map[string]any) ([]mode
 		if err := guard.Next(); err != nil {
 			return assets, fmt.Errorf("digitalocean: %w", err)
 		}
-		if ctx.Err() != nil {
-			return assets, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return assets, fmt.Errorf("digitalocean discovery cancelled: %w", err)
 		}
 
 		var resp doDropletsResponse

@@ -112,7 +112,7 @@ func (n *NetBox) listDevices(ctx context.Context, apiURL, token string) ([]netbo
 
 	for nextURL != "" {
 		if ctx.Err() != nil {
-			return allDevices, ctx.Err()
+			return allDevices, fmt.Errorf("netbox: context cancelled: %w", ctx.Err())
 		}
 
 		devices, next, err := n.fetchDevicePage(ctx, nextURL, token)
@@ -207,7 +207,7 @@ func parseNetBoxDevice(data json.RawMessage) (netboxDevice, error) {
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return netboxDevice{}, err
+		return netboxDevice{}, fmt.Errorf("unmarshal netbox device: %w", err)
 	}
 
 	dev := netboxDevice{

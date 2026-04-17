@@ -104,23 +104,34 @@ func (q *Queue) Peek(ctx context.Context, route string, limit int) ([]QueuedItem
 		}
 		items = append(items, item)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate queue rows: %w", err)
+	}
+	return items, nil
 }
 
 // Remove deletes a successfully delivered item from the queue.
 func (q *Queue) Remove(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, "DELETE FROM queue WHERE id = ?", id)
-	return err
+	if err != nil {
+		return fmt.Errorf("remove queue item %s: %w", id, err)
+	}
+	return nil
 }
 
 // Depth returns the total number of items in the queue.
 func (q *Queue) Depth(ctx context.Context) (int, error) {
 	var count int
-	err := q.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM queue").Scan(&count)
-	return count, err
+	if err := q.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM queue").Scan(&count); err != nil {
+		return 0, fmt.Errorf("query queue depth: %w", err)
+	}
+	return count, nil
 }
 
 // Close releases the database connection.
 func (q *Queue) Close() error {
-	return q.db.Close()
+	if err := q.db.Close(); err != nil {
+		return fmt.Errorf("close queue db: %w", err)
+	}
+	return nil
 }

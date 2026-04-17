@@ -108,7 +108,7 @@ func scanAsset(row pgx.Row) (*model.Asset, error) {
 		&naturalKey,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan asset: %w", err)
 	}
 
 	a.OSFamily = derefStr(osFamily)
@@ -135,7 +135,10 @@ func scanAssets(rows pgx.Rows) ([]model.Asset, error) {
 		}
 		assets = append(assets, *a)
 	}
-	return assets, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate asset rows: %w", err)
+	}
+	return assets, nil
 }
 
 // UpsertAsset inserts a new asset or updates an existing one matched by the
@@ -375,7 +378,7 @@ func scanEvent(row pgx.Row) (*model.AssetEvent, error) {
 		&e.Timestamp,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan event: %w", err)
 	}
 	e.Details = derefStr(details)
 	return &e, nil
@@ -392,7 +395,10 @@ func scanEvents(rows pgx.Rows) ([]model.AssetEvent, error) {
 		}
 		events = append(events, *e)
 	}
-	return events, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate event rows: %w", err)
+	}
+	return events, nil
 }
 
 // InsertEvent persists a single asset lifecycle event.
@@ -522,7 +528,7 @@ func scanScanRun(row pgx.Row) (*model.ScanRun, error) {
 		&discoverySources,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan scan run: %w", err)
 	}
 	r.ScopeConfig = derefStr(scopeConfig)
 	r.DiscoverySources = derefStr(discoverySources)
@@ -631,7 +637,7 @@ func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
 		&arch,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan software: %w", err)
 	}
 	sw.CPE23 = derefStr(cpe23)
 	sw.PackageManager = derefStr(pkgMgr)
@@ -697,7 +703,10 @@ func (s *PostgresStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]
 		}
 		software = append(software, *sw)
 	}
-	return software, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate software rows: %w", err)
+	}
+	return software, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -735,7 +744,7 @@ func scanFinding(row pgx.Row) (*model.ConfigFinding, error) {
 		&f.Timestamp,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan finding: %w", err)
 	}
 	f.CWEName = derefStr(cweName)
 	f.Evidence = derefStr(evidence)
@@ -756,7 +765,10 @@ func scanFindings(rows pgx.Rows) ([]model.ConfigFinding, error) {
 		}
 		findings = append(findings, *f)
 	}
-	return findings, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate finding rows: %w", err)
+	}
+	return findings, nil
 }
 
 // InsertFindings persists a batch of config findings inside a single transaction.
@@ -882,7 +894,7 @@ func scanPosture(row pgx.Row) (*model.PostureAssessment, error) {
 		&p.Timestamp,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan posture: %w", err)
 	}
 	p.CAPECName = derefStr(capecName)
 	p.Mitigation = derefStr(mitigation)
@@ -905,7 +917,10 @@ func scanPostures(rows pgx.Rows) ([]model.PostureAssessment, error) {
 		}
 		assessments = append(assessments, *p)
 	}
-	return assessments, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate posture rows: %w", err)
+	}
+	return assessments, nil
 }
 
 // InsertPostureAssessments persists a batch of posture assessments inside a
@@ -1092,7 +1107,10 @@ func (s *PostgresStore) ListRuntimeIncidents(ctx context.Context, filter store.I
 		inc.ErrorCode = derefStr(errorCode)
 		incidents = append(incidents, inc)
 	}
-	return incidents, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate incident rows: %w", err)
+	}
+	return incidents, nil
 }
 
 // ---------------------------------------------------------------------------

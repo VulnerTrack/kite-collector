@@ -296,10 +296,10 @@ func (c *wazuhClient) listPaginated(ctx context.Context, path string) ([]json.Ra
 
 	for {
 		if err := guard.Next(); err != nil {
-			return all, err
+			return all, fmt.Errorf("wazuh pagination guard: %w", err)
 		}
-		if ctx.Err() != nil {
-			return all, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return all, fmt.Errorf("wazuh list cancelled: %w", err)
 		}
 
 		sep := "?"

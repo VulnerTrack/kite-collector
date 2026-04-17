@@ -38,7 +38,7 @@ func NewTLSStateCapture(creds credentials.TransportCredentials) *TLSStateCapture
 func (c *TLSStateCapture) ClientHandshake(ctx context.Context, authority string, rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
 	conn, auth, err := c.inner.ClientHandshake(ctx, authority, rawConn)
 	if err != nil {
-		return conn, auth, err
+		return conn, auth, fmt.Errorf("client handshake: %w", err)
 	}
 	if info, ok := auth.(credentials.TLSInfo); ok {
 		c.mu.Lock()
@@ -50,7 +50,11 @@ func (c *TLSStateCapture) ClientHandshake(ctx context.Context, authority string,
 
 // ServerHandshake delegates to the inner credentials.
 func (c *TLSStateCapture) ServerHandshake(conn net.Conn) (net.Conn, credentials.AuthInfo, error) {
-	return c.inner.ServerHandshake(conn)
+	nc, auth, err := c.inner.ServerHandshake(conn)
+	if err != nil {
+		return nc, auth, fmt.Errorf("server handshake: %w", err)
+	}
+	return nc, auth, nil
 }
 
 // Info delegates to the inner credentials.
@@ -68,7 +72,10 @@ func (c *TLSStateCapture) Clone() credentials.TransportCredentials {
 //
 //nolint:staticcheck // OverrideServerName is deprecated but required by the interface.
 func (c *TLSStateCapture) OverrideServerName(name string) error {
-	return c.inner.OverrideServerName(name) //nolint:staticcheck
+	if err := c.inner.OverrideServerName(name); err != nil { //nolint:staticcheck
+		return fmt.Errorf("override server name: %w", err)
+	}
+	return nil
 }
 
 // GetState returns the cached TLS connection state for the given

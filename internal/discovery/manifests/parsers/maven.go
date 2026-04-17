@@ -14,9 +14,9 @@ func (p *MavenParser) Ecosystem() string  { return "java" }
 
 func (p *MavenParser) Parse(_ context.Context, path string, content []byte) (*ParseResult, error) {
 	var pom struct {
-		GroupID      string              `xml:"groupId"`
-		ArtifactID   string              `xml:"artifactId"`
-		Version      string              `xml:"version"`
+		GroupID      string `xml:"groupId"`
+		ArtifactID   string `xml:"artifactId"`
+		Version      string `xml:"version"`
 		Dependencies struct {
 			Dependency []pomDependency `xml:"dependency"`
 		} `xml:"dependencies"`

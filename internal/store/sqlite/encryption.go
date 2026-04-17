@@ -51,7 +51,7 @@ func EncryptFile(srcPath, dstPath string, key []byte) error {
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
-	if err := os.WriteFile(dst, ciphertext, 0600); err != nil { // #nosec G703 -- dst validated by securePath
+	if err := os.WriteFile(dst, ciphertext, 0o600); err != nil { // #nosec G703 -- dst validated by securePath
 		return fmt.Errorf("encrypt: write output: %w", err)
 	}
 	return nil
@@ -90,7 +90,7 @@ func DecryptFile(srcPath, dstPath string, key []byte) error {
 		return fmt.Errorf("decrypt: authentication failed: %w", err)
 	}
 
-	if err := os.WriteFile(dst, plaintext, 0600); err != nil { // #nosec G703 -- dst validated by securePath
+	if err := os.WriteFile(dst, plaintext, 0o600); err != nil { // #nosec G703 -- dst validated by securePath
 		return fmt.Errorf("decrypt: write output: %w", err)
 	}
 	return nil
@@ -104,14 +104,14 @@ func IsEncrypted(path string) (bool, error) {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, err
+		return false, fmt.Errorf("open %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
 
 	header := make([]byte, 16)
 	n, err := f.Read(header)
 	if err != nil && err != io.EOF {
-		return false, err
+		return false, fmt.Errorf("read header %s: %w", path, err)
 	}
 	if n < 16 {
 		// Too short for SQLite header — could be encrypted or empty.

@@ -112,8 +112,8 @@ type railwayResponse struct {
 }
 
 type railwayProject struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
+	ID           string                           `json:"id"`
+	Name         string                           `json:"name"`
 	Services     railwayEdges[railwayService]     `json:"services"`
 	Environments railwayEdges[railwayEnvironment] `json:"environments"`
 }

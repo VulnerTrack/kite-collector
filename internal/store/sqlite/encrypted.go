@@ -22,13 +22,13 @@ import (
 //
 // See RFC-0077 §5.2.4 for the encryption protocol.
 type EncryptedStore struct {
-	store.Store                  // embedded SQLiteStore
-	encPath      string          // path to the encrypted file on disk
-	workPath     string          // path to the decrypted working copy
-	keyBackend   string          // "tpm", "keyring", or "file"
-	logger       *slog.Logger
-	key          []byte          // AES-256 key (32 bytes)
-	useRAMDisk   bool            // true if working copy is on a RAM-backed filesystem
+	store.Store        // embedded SQLiteStore
+	encPath     string // path to the encrypted file on disk
+	workPath    string // path to the decrypted working copy
+	keyBackend  string // "tpm", "keyring", or "file"
+	logger      *slog.Logger
+	key         []byte // AES-256 key (32 bytes)
+	useRAMDisk  bool   // true if working copy is on a RAM-backed filesystem
 }
 
 // ramdiskCandidates lists potential RAM-backed directories per OS.
@@ -91,7 +91,7 @@ func workingPath(encPath string, logger *slog.Logger) (path string, onRAMDisk bo
 	// Try RAM-backed directory first.
 	if ramDir := ramDirAvailable(); ramDir != "" {
 		dir := filepath.Join(ramDir, "kite-collector")
-		if err := os.MkdirAll(dir, 0700); err == nil {
+		if err := os.MkdirAll(dir, 0o700); err == nil {
 			p := filepath.Join(dir, base)
 			logger.Info("using RAM-backed directory for decrypted working copy",
 				"ramdisk_path", p, "os", runtime.GOOS)
@@ -102,7 +102,7 @@ func workingPath(encPath string, logger *slog.Logger) (path string, onRAMDisk bo
 	// Fall back to OS temp directory — not RAM but at least not next to
 	// the encrypted file.
 	tmpDir := filepath.Join(os.TempDir(), "kite-collector")
-	if err := os.MkdirAll(tmpDir, 0700); err == nil {
+	if err := os.MkdirAll(tmpDir, 0o700); err == nil {
 		p := filepath.Join(tmpDir, base)
 		logger.Warn("no RAM-backed directory available — "+
 			"using OS temp directory for decrypted working copy; "+
@@ -145,7 +145,7 @@ func NewEncrypted(encPath string, key []byte, keyBackend string, logger *slog.Lo
 	}
 
 	dir := filepath.Dir(encPath)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("encrypted store: create dir: %w", err)
 	}
 
@@ -237,11 +237,14 @@ func fileExists(path string) bool {
 func copyFile(src, dst string) error {
 	data, err := os.ReadFile(src) // #nosec G304
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w", src, err)
 	}
 	safeDst, err := securePath(dst)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(safeDst, data, 0600) // #nosec G703 -- safeDst validated by securePath
+	if err := os.WriteFile(safeDst, data, 0o600); err != nil { // #nosec G703 -- safeDst validated by securePath
+		return fmt.Errorf("write %s: %w", safeDst, err)
+	}
+	return nil
 }

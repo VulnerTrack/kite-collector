@@ -87,7 +87,10 @@ func (w *boundedResponseWriter) Write(p []byte) (int, error) {
 		slog.Warn("response truncated: size limit exceeded",
 			"max_bytes", w.maxBytes, "written", w.written)
 	}
-	return n, err
+	if err != nil {
+		return n, fmt.Errorf("bounded write: %w", err)
+	}
+	return n, nil
 }
 
 // ResponseBoundingMiddleware limits the total bytes written to the HTTP
