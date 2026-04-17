@@ -57,7 +57,7 @@ var sourceEnvVars = map[string]map[string]string{ //#nosec G101 -- values are en
 	},
 	"netbox": {
 		"api_url": "KITE_NETBOX_API_URL",
-		"token": "KITE_NETBOX_TOKEN", // #nosec G101 -- env var name, not a credential
+		"token":   "KITE_NETBOX_TOKEN", // #nosec G101 -- env var name, not a credential
 	},
 	"servicenow": {
 		"instance_url": "KITE_SERVICENOW_INSTANCE_URL",
@@ -111,22 +111,24 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		DiscoverySources: string(sourcesJSON),
 	}
 	if err := e.store.CreateScanRun(ctx, scanRun); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create scan run: %w", err)
 	}
 
 	configs := make(map[string]map[string]any)
 	for name, src := range cfg.Discovery.Sources {
 		m := map[string]any{
 			"scope":              src.Scope,
+			"paths":              src.Paths,
+			"max_depth":          src.MaxDepth,
 			"tcp_ports":          src.TCPPorts,
 			"timeout":            src.Timeout,
 			"max_concurrent":     src.MaxConcurrent,
 			"collect_software":   src.CollectSoftware,
 			"collect_interfaces": src.CollectInterfaces,
-			"host":              src.Host,
-			"endpoint":          src.Endpoint,
-			"site":              src.Site,
-			"community":         src.Community,
+			"host":               src.Host,
+			"endpoint":           src.Endpoint,
+			"site":               src.Site,
+			"community":          src.Community,
 		}
 		// Bind MDM/CMDB credential environment variables into the
 		// config map so connectors receive them via the standard
@@ -162,14 +164,14 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 
 	dedupResult, err := e.deduplicator.Deduplicate(ctx, discovered)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("deduplicate: %w", err)
 	}
 
 	assets := e.classifier.ClassifyAll(dedupResult.Assets)
 
 	inserted, updated, err := e.store.UpsertAssets(ctx, assets)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("upsert assets: %w", err)
 	}
 	slog.Info("engine: persisted assets", "inserted", inserted, "updated", updated)
 
@@ -250,6 +252,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 				} else {
 					findingsCount = len(findings)
 					slog.Info("engine: audit complete", "findings", findingsCount)
+					e.recordFindingMetrics(findings)
 				}
 
 				// Posture analysis: evaluate CWE→CAPEC mappings.
@@ -265,6 +268,48 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 						}
 					}
 				}
+			}
+		}
+	}
+
+	// Code audit phase: run SCA and secrets auditors on all repository assets.
+	// Skip if scan deadline already exceeded.
+	if scanCtx.Err() == nil && cfg.Audit.Enabled {
+		scaTimeout := cfg.Audit.SCA.ParseTimeout()
+		codeAuditReg := audit.NewRegistry()
+		if cfg.Audit.SCA.Enabled {
+			codeAuditReg.Register(audit.NewSCA(scaTimeout))
+		}
+		if cfg.Audit.Secrets.Enabled {
+			codeAuditReg.Register(audit.NewSecrets())
+		}
+
+		for _, a := range assets {
+			if a.AssetType != model.AssetTypeRepository {
+				continue
+			}
+			codeFindings, auditErr := codeAuditReg.AuditAll(scanCtx, a)
+			if auditErr != nil {
+				slog.Warn("engine: code audit failed", "asset_id", a.ID, "error", auditErr)
+				continue
+			}
+			if len(codeFindings) == 0 {
+				continue
+			}
+			for i := range codeFindings {
+				codeFindings[i].ScanRunID = scanID
+			}
+			if fErr := e.store.InsertFindings(ctx, codeFindings); fErr != nil {
+				slog.Error("engine: failed to persist code findings",
+					"error", fErr, "asset_id", a.ID, "count", len(codeFindings))
+			} else {
+				findingsCount += len(codeFindings)
+				slog.Info("engine: code audit complete",
+					"asset_id", a.ID,
+					"hostname", a.Hostname,
+					"findings", len(codeFindings),
+				)
+				e.recordFindingMetrics(codeFindings)
 			}
 		}
 	}
@@ -364,7 +409,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult
 		NewAssets:       dedupResult.NewCount,
 		UpdatedAssets:   dedupResult.UpdatedCount,
 		StaleAssets:     len(staleAssets),
-		EventsEmitted:  len(events),
+		EventsEmitted:   len(events),
 		SoftwareCount:   softwareCount,
 		SoftwareErrors:  softwareErrors,
 		FindingsCount:   findingsCount,
@@ -397,4 +442,23 @@ func findAgentAssetID(assets []model.Asset) uuid.UUID {
 		}
 	}
 	return uuid.Nil
+}
+
+// recordFindingMetrics updates the open-findings gauge, cumulative counter,
+// and finding-age histogram for a batch of findings.
+func (e *Engine) recordFindingMetrics(findings []model.ConfigFinding) {
+	if e.metrics == nil {
+		return
+	}
+	now := time.Now().UTC()
+	for _, f := range findings {
+		sev := string(f.Severity)
+		aud := f.Auditor
+		e.metrics.FindingsOpen.WithLabelValues(sev, aud).Inc()
+		e.metrics.FindingsTotal.WithLabelValues(sev, aud).Inc()
+		if !f.FirstSeenAt.IsZero() {
+			ageHours := now.Sub(f.FirstSeenAt).Hours()
+			e.metrics.FindingAgeHours.WithLabelValues(sev, aud).Observe(ageHours)
+		}
+	}
 }

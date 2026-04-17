@@ -265,7 +265,10 @@ func (s *SQLiteStore) getAppliedMigrations(ctx context.Context) (map[string]appl
 		}
 		applied[v] = appliedMigration{checksum: cs, appliedAt: at}
 	}
-	return applied, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate migration rows: %w", err)
+	}
+	return applied, nil
 }
 
 // sha256hex returns the hex-encoded SHA-256 digest of data.
