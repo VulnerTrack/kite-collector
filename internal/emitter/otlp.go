@@ -236,13 +236,61 @@ func (o *OTLPEmitter) eventToLogRecord(e *model.AssetEvent, observedNano string)
 		SeverityNumber:       severityToNumber(e.Severity),
 		SeverityText:         string(e.Severity),
 		Body:                 stringVal(e.Details),
-		Attributes: []otlpKeyValue{
-			stringKV("event_type", string(e.EventType)),
-			stringKV("asset_id", e.AssetID.String()),
-			stringKV("scan_run_id", e.ScanRunID.String()),
-			stringKV("severity", string(e.Severity)),
-		},
+		TraceID:              e.TraceID,
+		SpanID:               e.SpanID,
+		Attributes: buildAttributes(e),
 	}
+}
+
+// buildAttributes constructs the OTLP log record attribute list from an event.
+// Optional asset fields are only included when non-empty so that minimal
+// events (e.g. those not created via FromAsset) remain compact.
+func buildAttributes(e *model.AssetEvent) []otlpKeyValue {
+	attrs := []otlpKeyValue{
+		stringKV("event_type", string(e.EventType)),
+		stringKV("asset_id", e.AssetID.String()),
+		stringKV("scan_run_id", e.ScanRunID.String()),
+		stringKV("severity", string(e.Severity)),
+	}
+
+	if e.Hostname != "" {
+		attrs = append(attrs, stringKV("hostname", e.Hostname))
+	}
+	if e.AssetType != "" {
+		attrs = append(attrs, stringKV("asset_type", string(e.AssetType)))
+	}
+	if e.OSFamily != "" {
+		attrs = append(attrs, stringKV("os_family", e.OSFamily))
+	}
+	if e.OSVersion != "" {
+		attrs = append(attrs, stringKV("os_version", e.OSVersion))
+	}
+	if e.KernelVersion != "" {
+		attrs = append(attrs, stringKV("kernel_version", e.KernelVersion))
+	}
+	if e.Architecture != "" {
+		attrs = append(attrs, stringKV("architecture", e.Architecture))
+	}
+	if e.Environment != "" {
+		attrs = append(attrs, stringKV("environment", e.Environment))
+	}
+	if e.Owner != "" {
+		attrs = append(attrs, stringKV("owner", e.Owner))
+	}
+	if e.Criticality != "" {
+		attrs = append(attrs, stringKV("criticality", e.Criticality))
+	}
+	if e.DiscoverySource != "" {
+		attrs = append(attrs, stringKV("discovery_source", e.DiscoverySource))
+	}
+	if e.IsAuthorized != "" {
+		attrs = append(attrs, stringKV("is_authorized", string(e.IsAuthorized)))
+	}
+	if e.IsManaged != "" {
+		attrs = append(attrs, stringKV("is_managed", string(e.IsManaged)))
+	}
+
+	return attrs
 }
 
 // ---------------------------------------------------------------------------
