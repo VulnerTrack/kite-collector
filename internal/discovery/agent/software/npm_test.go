@@ -47,3 +47,20 @@ func TestParseNpmJSON_CPEHasTargetSW(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "cpe:2.3:a:*:typescript:5.5.0:*:*:*:*:node.js:*:*", result.Items[0].CPE23)
 }
+
+func TestParseNpmJSON_Sorted(t *testing.T) {
+	raw := `{"dependencies": {"zod": {"version": "3.0.0"}, "axios": {"version": "1.0.0"}}}`
+	result := ParseNpmJSON(raw)
+	require.Len(t, result.Items, 2)
+	assert.Equal(t, "axios", result.Items[0].SoftwareName)
+	assert.Equal(t, "zod", result.Items[1].SoftwareName)
+}
+
+func FuzzParseNpmJSON(f *testing.F) {
+	f.Add(`{"dependencies": {"typescript": {"version": "5.5.0"}}}`)
+	f.Add(`{}`)
+	f.Add(``)
+	f.Fuzz(func(t *testing.T, raw string) {
+		_ = ParseNpmJSON(raw)
+	})
+}

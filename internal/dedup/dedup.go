@@ -28,13 +28,27 @@ import (
 type Deduplicator struct {
 	store   store.Store
 	metrics *metrics.Metrics
+	clock   func() time.Time
+}
+
+// Option configures a Deduplicator.
+type Option func(*Deduplicator)
+
+// WithClock overrides the time source used during deduplication. Useful for
+// deterministic tests.
+func WithClock(fn func() time.Time) Option {
+	return func(d *Deduplicator) { d.clock = fn }
 }
 
 // New creates a Deduplicator backed by the given store. An optional
 // *metrics.Metrics can be passed to record dedup skip counters; pass nil
 // to disable metrics.
-func New(s store.Store, m *metrics.Metrics) *Deduplicator {
-	return &Deduplicator{store: s, metrics: m}
+func New(s store.Store, m *metrics.Metrics, opts ...Option) *Deduplicator {
+	d := &Deduplicator{store: s, metrics: m, clock: time.Now}
+	for _, o := range opts {
+		o(d)
+	}
+	return d
 }
 
 // Result groups deduplication output so callers can inspect what changed.
@@ -50,7 +64,7 @@ type Result struct {
 // Deduplicate reconciles incoming assets against the store and returns a
 // Result with the merged asset list and counts.
 func (d *Deduplicator) Deduplicate(ctx context.Context, assets []model.Asset) (*Result, error) {
-	now := time.Now().UTC()
+	now := d.clock().UTC()
 
 	result := &Result{
 		Assets: make([]model.Asset, 0, len(assets)),

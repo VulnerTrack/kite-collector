@@ -3,6 +3,7 @@ package software
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
@@ -54,6 +55,21 @@ type Result struct {
 func (r *Result) Merge(other *Result) {
 	r.Items = append(r.Items, other.Items...)
 	r.Errs = append(r.Errs, other.Errs...)
+	r.Sort()
+}
+
+// Sort sorts Items in-place by (SoftwareName, Version, PackageManager) for
+// deterministic output regardless of underlying command order.
+func (r *Result) Sort() {
+	sort.Slice(r.Items, func(i, j int) bool {
+		if r.Items[i].SoftwareName != r.Items[j].SoftwareName {
+			return r.Items[i].SoftwareName < r.Items[j].SoftwareName
+		}
+		if r.Items[i].Version != r.Items[j].Version {
+			return r.Items[i].Version < r.Items[j].Version
+		}
+		return r.Items[i].PackageManager < r.Items[j].PackageManager
+	})
 }
 
 // TotalErrors returns the number of parse errors collected.
