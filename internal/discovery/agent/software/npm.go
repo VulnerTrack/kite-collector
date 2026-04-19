@@ -75,6 +75,7 @@ func ParseNpmJSON(raw string) *Result {
 		})
 	}
 
+	result.Sort()
 	return result
 }
 

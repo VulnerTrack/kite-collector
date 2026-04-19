@@ -12,12 +12,13 @@ func TestParsePipJSON_ValidInput(t *testing.T) {
 	result := ParsePipJSON(raw)
 
 	require.Len(t, result.Items, 2)
-	assert.Equal(t, "requests", result.Items[0].SoftwareName)
-	assert.Equal(t, "2.31.0", result.Items[0].Version)
+	// Output is sorted alphabetically by SoftwareName for determinism.
+	assert.Equal(t, "flask", result.Items[0].SoftwareName)
+	assert.Equal(t, "3.0.3", result.Items[0].Version)
 	assert.Equal(t, "pip", result.Items[0].PackageManager)
 	assert.Contains(t, result.Items[0].CPE23, "python")
 
-	assert.Equal(t, "flask", result.Items[1].SoftwareName)
+	assert.Equal(t, "requests", result.Items[1].SoftwareName)
 	assert.False(t, result.HasErrors())
 }
 
@@ -54,4 +55,21 @@ func TestParsePipJSON_CPEHasTargetSW(t *testing.T) {
 
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "cpe:2.3:a:*:requests:2.31.0:*:*:*:*:python:*:*", result.Items[0].CPE23)
+}
+
+func TestParsePipJSON_Sorted(t *testing.T) {
+	raw := `[{"name": "zope", "version": "5.0"}, {"name": "attrs", "version": "23.0"}]`
+	result := ParsePipJSON(raw)
+	require.Len(t, result.Items, 2)
+	assert.Equal(t, "attrs", result.Items[0].SoftwareName)
+	assert.Equal(t, "zope", result.Items[1].SoftwareName)
+}
+
+func FuzzParsePipJSON(f *testing.F) {
+	f.Add(`[{"name": "requests", "version": "2.31.0"}]`)
+	f.Add(`[]`)
+	f.Add(``)
+	f.Fuzz(func(t *testing.T, raw string) {
+		_ = ParsePipJSON(raw)
+	})
 }

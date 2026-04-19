@@ -101,3 +101,35 @@ func TestCollectError_Unwrap(t *testing.T) {
 	e := &CollectError{Err: inner}
 	assert.True(t, errors.Is(e, inner))
 }
+
+// ---------------------------------------------------------------------------
+// Result.Sort
+// ---------------------------------------------------------------------------
+
+func TestResultSort_Deterministic(t *testing.T) {
+	r := &Result{
+		Items: []model.InstalledSoftware{
+			{SoftwareName: "zsh", Version: "5.9"},
+			{SoftwareName: "bash", Version: "5.2"},
+			{SoftwareName: "apt", Version: "2.6"},
+		},
+	}
+	r.Sort()
+	assert.Equal(t, "apt", r.Items[0].SoftwareName)
+	assert.Equal(t, "bash", r.Items[1].SoftwareName)
+	assert.Equal(t, "zsh", r.Items[2].SoftwareName)
+}
+
+func TestResultSort_StableOnSecondCall(t *testing.T) {
+	r := &Result{
+		Items: []model.InstalledSoftware{
+			{SoftwareName: "zsh", Version: "5.9", PackageManager: "dpkg"},
+			{SoftwareName: "bash", Version: "5.2", PackageManager: "dpkg"},
+		},
+	}
+	r.Sort()
+	first := []string{r.Items[0].SoftwareName, r.Items[1].SoftwareName}
+	r.Sort()
+	second := []string{r.Items[0].SoftwareName, r.Items[1].SoftwareName}
+	assert.Equal(t, first, second)
+}

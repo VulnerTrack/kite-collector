@@ -323,7 +323,7 @@ func (s *PostgresStore) ListAssets(ctx context.Context, filter store.AssetFilter
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
-	query += " ORDER BY last_seen_at DESC"
+	query += " ORDER BY last_seen_at DESC, id ASC"
 
 	if filter.Limit > 0 {
 		paramN++
@@ -348,7 +348,7 @@ func (s *PostgresStore) ListAssets(ctx context.Context, filter store.AssetFilter
 func (s *PostgresStore) GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error) {
 	cutoff := time.Now().UTC().Add(-threshold)
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < $1 ORDER BY last_seen_at ASC`,
+		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < $1 ORDER BY last_seen_at ASC, id ASC`,
 		cutoff,
 	)
 	if err != nil {
@@ -477,7 +477,7 @@ func (s *PostgresStore) ListEvents(ctx context.Context, filter store.EventFilter
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
-	query += " ORDER BY timestamp DESC"
+	query += " ORDER BY timestamp DESC, id ASC"
 
 	if filter.Limit > 0 {
 		paramN++
@@ -687,7 +687,7 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, s
 // ordered by software name.
 func (s *PostgresStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = $1 ORDER BY software_name`,
+		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = $1 ORDER BY software_name ASC, version ASC, id ASC`,
 		assetID,
 	)
 	if err != nil {
@@ -846,7 +846,7 @@ func (s *PostgresStore) ListFindings(ctx context.Context, filter store.FindingFi
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
-	query += " ORDER BY timestamp DESC"
+	query += " ORDER BY timestamp DESC, id ASC"
 
 	if filter.Limit > 0 {
 		paramN++
@@ -989,7 +989,7 @@ func (s *PostgresStore) ListPostureAssessments(ctx context.Context, filter store
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
-	query += " ORDER BY timestamp DESC"
+	query += " ORDER BY timestamp DESC, id ASC"
 
 	if filter.Limit > 0 {
 		paramN++

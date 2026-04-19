@@ -355,3 +355,50 @@ func TestDedup_MergesOSInfo(t *testing.T) {
 	assert.Equal(t, "linux", res.Assets[0].OSFamily, "OS family must be merged from incoming")
 	assert.Equal(t, "6.1", res.Assets[0].OSVersion, "OS version must be merged from incoming")
 }
+
+// TestDedup_Idempotent verifies that running Deduplicate twice with the same
+// input produces deterministic counts (NewCount=2 then UpdatedCount=2) and
+// preserves asset IDs across runs. Uses a fixed clock for determinism.
+func TestDedup_Idempotent(t *testing.T) {
+	ms := newMockStore()
+	fixedTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	dd := New(ms, nil, WithClock(func() time.Time { return fixedTime }))
+	ctx := context.Background()
+
+	assets := []model.Asset{
+		{Hostname: "host-a", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		{Hostname: "host-b", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+	}
+
+	// First pass: both assets are new.
+	res1, err := dd.Deduplicate(ctx, assets)
+	require.NoError(t, err)
+	require.Len(t, res1.Assets, 2)
+	assert.Equal(t, 2, res1.NewCount)
+	assert.Equal(t, 0, res1.UpdatedCount)
+
+	// Record the IDs + natural keys assigned.
+	idByKey := make(map[string]uuid.UUID, 2)
+	for _, a := range res1.Assets {
+		idByKey[a.NaturalKey] = a.ID
+		// Persist into the store so the second pass finds them.
+		require.NoError(t, ms.UpsertAsset(ctx, a))
+	}
+
+	// Second pass: same inputs (new Asset values, no IDs pre-assigned).
+	assets2 := []model.Asset{
+		{Hostname: "host-a", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		{Hostname: "host-b", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+	}
+	res2, err := dd.Deduplicate(ctx, assets2)
+	require.NoError(t, err)
+	require.Len(t, res2.Assets, 2)
+	assert.Equal(t, 0, res2.NewCount)
+	assert.Equal(t, 2, res2.UpdatedCount)
+
+	// Same IDs must be reused.
+	for _, a := range res2.Assets {
+		assert.Equal(t, idByKey[a.NaturalKey], a.ID,
+			"existing ID must be preserved on re-deduplication")
+	}
+}

@@ -60,6 +60,25 @@ func TestParseDpkgOutput_EmptyPackageName_Skipped(t *testing.T) {
 	require.Len(t, result.Errs, 1)
 }
 
+func TestParseDpkgOutput_Sorted(t *testing.T) {
+	// Items must come out sorted by name regardless of input order.
+	raw := "zsh\t5.9-6\nbash\t5.2.32-1\napt\t2.6.1\n"
+	result := ParseDpkgOutput(raw)
+	require.Len(t, result.Items, 3)
+	assert.Equal(t, "apt", result.Items[0].SoftwareName)
+	assert.Equal(t, "bash", result.Items[1].SoftwareName)
+	assert.Equal(t, "zsh", result.Items[2].SoftwareName)
+}
+
+func FuzzParseDpkgOutput(f *testing.F) {
+	f.Add("bash\t5.1-6\tamd64\n")
+	f.Add("curl\t7.88.1\n")
+	f.Add("")
+	f.Fuzz(func(t *testing.T, raw string) {
+		_ = ParseDpkgOutput(raw)
+	})
+}
+
 func TestParseDpkgOutput_SkipsBlankLines(t *testing.T) {
 	raw := "vim\t9.0\n\nnano\t7.2\n"
 	result := ParseDpkgOutput(raw)

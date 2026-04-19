@@ -345,7 +345,7 @@ func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) 
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders, values are in args
 	}
-	query += " ORDER BY last_seen_at DESC"
+	query += " ORDER BY last_seen_at DESC, id ASC"
 
 	if filter.Limit > 0 {
 		query += " LIMIT ?"
@@ -381,7 +381,7 @@ func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) 
 func (s *SQLiteStore) GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error) {
 	cutoff := time.Now().UTC().Add(-threshold).Format(time.RFC3339)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < ? ORDER BY last_seen_at ASC`,
+		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < ? ORDER BY last_seen_at ASC, id ASC`,
 		cutoff,
 	)
 	if err != nil {
@@ -531,7 +531,7 @@ func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) 
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders, values are in args
 	}
-	query += " ORDER BY timestamp DESC"
+	query += " ORDER BY timestamp DESC, id ASC"
 
 	if filter.Limit > 0 {
 		query += " LIMIT ?"
@@ -799,7 +799,7 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 // ordered by software name.
 func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = ? ORDER BY software_name`,
+		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = ? ORDER BY software_name ASC, version ASC, id ASC`,
 		assetID.String(),
 	)
 	if err != nil {
@@ -983,7 +983,7 @@ func (s *SQLiteStore) ListFindings(ctx context.Context, filter store.FindingFilt
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders
 	}
-	query += " ORDER BY timestamp DESC"
+	query += " ORDER BY timestamp DESC, id ASC"
 
 	if filter.Limit > 0 {
 		query += " LIMIT ?"
@@ -1152,7 +1152,7 @@ func (s *SQLiteStore) ListPostureAssessments(ctx context.Context, filter store.P
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders
 	}
-	query += " ORDER BY timestamp DESC"
+	query += " ORDER BY timestamp DESC, id ASC"
 
 	if filter.Limit > 0 {
 		query += " LIMIT ?"

@@ -79,6 +79,7 @@ func ParsePipJSON(raw string) *Result {
 		})
 	}
 
+	result.Sort()
 	return result
 }
 
