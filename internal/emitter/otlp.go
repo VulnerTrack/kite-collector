@@ -238,7 +238,7 @@ func (o *OTLPEmitter) eventToLogRecord(e *model.AssetEvent, observedNano string)
 		Body:                 stringVal(e.Details),
 		TraceID:              e.TraceID,
 		SpanID:               e.SpanID,
-		Attributes: buildAttributes(e),
+		Attributes:           buildAttributes(e),
 	}
 }
 
