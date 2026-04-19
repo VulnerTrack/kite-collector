@@ -77,6 +77,7 @@ func ParseDpkgOutput(raw string) *Result {
 		})
 	}
 
+	result.Sort()
 	return result
 }
 
