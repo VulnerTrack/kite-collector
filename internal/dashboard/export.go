@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -122,4 +123,67 @@ func exportFindingsCSV(w io.Writer, ctx context.Context, st store.Store, rc Repo
 	}
 
 	return nil
+}
+
+// exportTableCSV writes an arbitrary introspected table as CSV. The table name
+// is validated by Store.DescribeTable before any SQL is issued, so an unknown
+// table yields store.ErrUnknownTable without leaking the identifier into SQL.
+func exportTableCSV(w io.Writer, ctx context.Context, st store.Store, rc ReportContext, name string) error {
+	schema, err := st.DescribeTable(ctx, name)
+	if err != nil {
+		return fmt.Errorf("describe table %q: %w", name, err)
+	}
+
+	writeCSVHeader(w, rc)
+
+	cw := csv.NewWriter(w)
+	defer cw.Flush()
+
+	header := make([]string, len(schema.Columns))
+	for i, c := range schema.Columns {
+		header[i] = c.Name
+	}
+	_ = cw.Write(header)
+
+	rows, _, err := st.ListRows(ctx, store.RowsFilter{
+		Table: name,
+		Limit: store.IntrospectionRowLimit,
+	})
+	if err != nil {
+		return fmt.Errorf("list rows %q: %w", name, err)
+	}
+
+	for _, row := range rows {
+		record := make([]string, len(row.Columns))
+		for i, c := range row.Columns {
+			record[i] = stringifyCSV(c.Value)
+		}
+		_ = cw.Write(record)
+	}
+
+	return nil
+}
+
+// stringifyCSV converts a driver-returned cell value into a CSV-safe string.
+// Binary blobs are hex-encoded; timestamps use RFC3339-ish format; nil yields
+// an empty string.
+func stringifyCSV(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch x := v.(type) {
+	case string:
+		return x
+	case []byte:
+		return fmt.Sprintf("%x", x)
+	case time.Time:
+		return x.Format("2006-01-02T15:04:05Z")
+	case bool:
+		if x {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprintf("%v", x)
+	}
 }

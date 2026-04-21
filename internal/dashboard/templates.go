@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -43,6 +44,63 @@ var templateFuncs = template.FuncMap{
 		}
 		return "badge-yellow"
 	},
+	"renderCell":  renderCell,
+	"rowKeyQuery": rowKeyQuery,
+	"cellFK":      findFK,
+	"add":         func(a, b int) int { return a + b },
+}
+
+// renderCell stringifies a column value for display. Byte slices are rendered
+// as hex-shortened placeholders so binary blobs do not bloat tables.
+func renderCell(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch x := v.(type) {
+	case string:
+		return x
+	case []byte:
+		if len(x) == 0 {
+			return ""
+		}
+		if len(x) > 64 {
+			return fmt.Sprintf("<%d bytes>", len(x))
+		}
+		return fmt.Sprintf("%x", x)
+	case time.Time:
+		return x.Format("2006-01-02 15:04:05")
+	case bool:
+		if x {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprintf("%v", x)
+	}
+}
+
+// rowKeyQuery encodes primary-key values as a URL query string so a row can be
+// round-tripped into the row-report endpoint without extra lookups.
+func rowKeyQuery(pk map[string]string) string {
+	if len(pk) == 0 {
+		return ""
+	}
+	vals := url.Values{}
+	for k, v := range pk {
+		vals.Set("pk."+k, v)
+	}
+	return vals.Encode()
+}
+
+// findFK returns the ForeignKey whose FromColumn matches col, or nil if no FK
+// covers that column. Templates use this to render FK cells as clickable links.
+func findFK(fks []store.ForeignKey, col string) *store.ForeignKey {
+	for i := range fks {
+		if fks[i].FromColumn == col {
+			return &fks[i]
+		}
+	}
+	return nil
 }
 
 // renderAssetsFragment renders the assets table as an HTML fragment.
@@ -265,3 +323,189 @@ const scansTemplate = `<h2>Scan History</h2>
   {{end}}
   </tbody>
 </table>`
+
+// renderTablesFragment lists every content table discovered via introspection.
+func renderTablesFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
+	tables, err := st.ListContentTables(ctx)
+	if err != nil {
+		return fmt.Errorf("list content tables: %w", err)
+	}
+
+	tmpl := template.Must(template.New("tables").Funcs(templateFuncs).Parse(tablesTemplate))
+	if err := tmpl.Execute(w, map[string]any{
+		"Tables":  tables,
+		"Context": rc,
+	}); err != nil {
+		return fmt.Errorf("render tables template: %w", err)
+	}
+	return nil
+}
+
+// renderTableFragment renders a paginated grid of rows for a single table.
+func renderTableFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext, name string, limit, offset int) error {
+	schema, err := st.DescribeTable(ctx, name)
+	if err != nil {
+		return fmt.Errorf("describe table %q: %w", name, err)
+	}
+	rows, total, err := st.ListRows(ctx, store.RowsFilter{
+		Table:  name,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return fmt.Errorf("list rows %q: %w", name, err)
+	}
+
+	nextOffset := offset + limit
+	if int64(nextOffset) >= total {
+		nextOffset = -1
+	}
+	prevOffset := offset - limit
+	if prevOffset < 0 {
+		prevOffset = -1
+	}
+
+	tmpl := template.Must(template.New("table").Funcs(templateFuncs).Parse(tableTemplate))
+	if err := tmpl.Execute(w, map[string]any{
+		"Schema":     schema,
+		"Rows":       rows,
+		"Total":      total,
+		"Limit":      limit,
+		"Offset":     offset,
+		"NextOffset": nextOffset,
+		"PrevOffset": prevOffset,
+		"Context":    rc,
+	}); err != nil {
+		return fmt.Errorf("render table template: %w", err)
+	}
+	return nil
+}
+
+// renderRowReportFragment renders the sidebar for a single primary row.
+func renderRowReportFragment(w io.Writer, ctx context.Context, st store.Store, name string, pk map[string]string) error {
+	report, err := st.GetRowReport(ctx, name, pk)
+	if err != nil {
+		return fmt.Errorf("row report %q: %w", name, err)
+	}
+	schema, err := st.DescribeTable(ctx, name)
+	if err != nil {
+		return fmt.Errorf("describe table %q: %w", name, err)
+	}
+
+	tmpl := template.Must(template.New("rowReport").Funcs(templateFuncs).Parse(rowReportTemplate))
+	if err := tmpl.Execute(w, map[string]any{
+		"Report": report,
+		"Schema": schema,
+	}); err != nil {
+		return fmt.Errorf("render row report template: %w", err)
+	}
+	return nil
+}
+
+const tablesTemplate = `<h2>Tables ({{len .Tables}})</h2>
+<p class="muted">Every non-system content table in the live database.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Columns</th>
+      <th>Rows</th>
+      <th>Primary Key</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{range .Tables}}
+    <tr>
+      <td><a hx-get="/fragments/tables/{{.Name}}" hx-target="#content" hx-push-url="false" class="fk-link">{{.Name}}</a></td>
+      <td>{{len .Columns}}</td>
+      <td>{{if lt .RowCount 0}}<span class="muted">unknown</span>{{else}}{{.RowCount}}{{end}}</td>
+      <td>{{range $i, $c := .PrimaryKey}}{{if $i}}, {{end}}{{$c}}{{end}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>`
+
+const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows)</span></h2>
+<div class="table-actions">
+  <a href="/api/v1/tables/{{.Schema.Name}}/export.csv" class="btn">Export CSV</a>
+  <a hx-get="/fragments/tables" hx-target="#content" hx-push-url="false" class="btn btn-outline">Back to tables</a>
+</div>
+<table>
+  <thead>
+    <tr>
+    {{range .Schema.Columns}}
+      <th>{{.Name}}<br><span class="muted small">{{.Type}}</span></th>
+    {{end}}
+    </tr>
+  </thead>
+  <tbody>
+  {{$schema := .Schema}}
+  {{range .Rows}}
+    {{$pk := .PrimaryKey}}
+    <tr class="row-click" hx-get="/fragments/tables/{{$schema.Name}}/row?{{rowKeyQuery $pk}}" hx-target="#sidebar" hx-swap="innerHTML" onclick="openSidebar()">
+    {{range .Columns}}
+      {{$fk := cellFK $schema.ForeignKeys .Name}}
+      <td>{{if $fk}}<a class="fk-link" hx-get="/fragments/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="false" onclick="event.stopPropagation();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
+    {{end}}
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<div class="pager">
+  {{if ge .PrevOffset 0}}
+    <a class="btn btn-outline" hx-get="/fragments/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}" hx-target="#content" hx-push-url="false">Previous</a>
+  {{end}}
+  <span class="muted">rows {{.Offset}}&ndash;{{add .Offset (len .Rows)}}</span>
+  {{if ge .NextOffset 0}}
+    <a class="btn btn-outline" hx-get="/fragments/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.NextOffset}}" hx-target="#content" hx-push-url="false">Next</a>
+  {{end}}
+</div>`
+
+const rowReportTemplate = `<div class="sidebar-head">
+  <h3>{{.Report.Table}}</h3>
+  <button class="btn btn-outline" onclick="closeSidebar()">Close</button>
+</div>
+<h4>Row</h4>
+<table class="kv">
+  <tbody>
+  {{$fks := .Schema.ForeignKeys}}
+  {{range .Report.Row.Columns}}
+    {{$fk := cellFK $fks .Name}}
+    <tr>
+      <th>{{.Name}}</th>
+      <td>{{if $fk}}<a class="fk-link" hx-get="/fragments/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="false" onclick="closeSidebar();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{if .Report.Outbound}}
+  <h4>Parents (outbound FK)</h4>
+  {{range .Report.Outbound}}
+    <div class="related">
+      <div class="related-head"><strong>{{.Table}}</strong> via <code>{{.ViaColumn}}</code></div>
+      <table class="kv">
+        <tbody>
+        {{range .Row.Columns}}
+          <tr><th>{{.Name}}</th><td>{{renderCell .Value}}</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  {{end}}
+{{end}}
+{{if .Report.Inbound}}
+  <h4>Children (inbound FK)</h4>
+  {{range .Report.Inbound}}
+    <div class="related">
+      <div class="related-head"><strong>{{.Table}}</strong> via <code>{{.ViaColumn}}</code>{{if .Truncated}} <span class="badge badge-yellow">truncated</span>{{end}}</div>
+      <table>
+        <thead><tr>{{range (index .Rows 0).Columns}}<th>{{.Name}}</th>{{end}}</tr></thead>
+        <tbody>
+        {{range .Rows}}
+          <tr>{{range .Columns}}<td>{{renderCell .Value}}</td>{{end}}</tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  {{end}}
+{{end}}`
