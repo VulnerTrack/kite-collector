@@ -2,11 +2,14 @@ package dashboard
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -115,6 +118,41 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger) *
 		logger.Info("dashboard: scan triggered via UI")
 	})
 
+	// Tables browser — Datasette-style introspection.
+	mux.HandleFunc("GET /fragments/tables", func(w http.ResponseWriter, r *http.Request) {
+		renderFragment(w, "tables", func(buf io.Writer) error {
+			return renderTablesFragment(buf, r.Context(), st, rc)
+		})
+	})
+
+	mux.HandleFunc("GET /fragments/tables/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		limit, offset := parsePaging(r)
+		renderFragment(w, "table", func(buf io.Writer) error {
+			return renderTableFragment(buf, r.Context(), st, rc, name, limit, offset)
+		})
+	})
+
+	mux.HandleFunc("GET /fragments/tables/{name}/row", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		pk := extractPKQuery(r)
+		renderFragment(w, "row", func(buf io.Writer) error {
+			return renderRowReportFragment(buf, r.Context(), st, name, pk)
+		})
+	})
+
+	mux.HandleFunc("GET /api/v1/tables/{name}/export.csv", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s_%s.csv", name, rc.ReportID[:8]))
+		if exportErr := exportTableCSV(w, r.Context(), st, rc, name); exportErr != nil {
+			logger.Error("dashboard: export table csv", "table", name, "error", exportErr)
+			if errors.Is(exportErr, store.ErrUnknownTable) {
+				http.Error(w, "unknown table", http.StatusNotFound)
+			}
+		}
+	})
+
 	return &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -126,4 +164,36 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger) *
 // It uses platform-specific commands and silently ignores errors.
 func OpenBrowser(url string) {
 	openBrowser(url)
+}
+
+// parsePaging extracts limit/offset query parameters, clamping to the
+// introspection row cap and defaulting to store.IntrospectionDefaultPageSize.
+func parsePaging(r *http.Request) (limit, offset int) {
+	limit = store.IntrospectionDefaultPageSize
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+			if limit > store.IntrospectionRowLimit {
+				limit = store.IntrospectionRowLimit
+			}
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	return limit, offset
+}
+
+// extractPKQuery reads query parameters prefixed with "pk." and returns them
+// as a primary-key map. A row URL is shaped as ?pk.id=...&pk.version=...
+func extractPKQuery(r *http.Request) map[string]string {
+	pk := map[string]string{}
+	for k, vs := range r.URL.Query() {
+		if strings.HasPrefix(k, "pk.") && len(vs) > 0 {
+			pk[strings.TrimPrefix(k, "pk.")] = vs[0]
+		}
+	}
+	return pk
 }
