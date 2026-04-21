@@ -94,14 +94,17 @@ func listTableNames(ctx context.Context, tx pgx.Tx) ([]string, error) {
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan information_schema.tables: %w", err)
 		}
 		if isSystemTable(name) {
 			continue
 		}
 		names = append(names, name)
 	}
-	return names, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate information_schema.tables: %w", err)
+	}
+	return names, nil
 }
 
 // DescribeTable validates table against the introspected catalog and returns
@@ -182,7 +185,10 @@ func readColumns(ctx context.Context, tx pgx.Tx, table string) ([]store.ColumnSc
 			Position: ordinal,
 		})
 	}
-	return cols, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate columns %s: %w", table, err)
+	}
+	return cols, nil
 }
 
 func readPrimaryKey(ctx context.Context, tx pgx.Tx, table string) ([]string, error) {
@@ -211,7 +217,10 @@ func readPrimaryKey(ctx context.Context, tx pgx.Tx, table string) ([]string, err
 		}
 		pk = append(pk, col)
 	}
-	return pk, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pk %s: %w", table, err)
+	}
+	return pk, nil
 }
 
 func readForeignKeys(ctx context.Context, tx pgx.Tx, table string) ([]store.ForeignKey, error) {
@@ -249,7 +258,10 @@ func readForeignKeys(ctx context.Context, tx pgx.Tx, table string) ([]store.Fore
 			ToColumn:   toCol,
 		})
 	}
-	return fks, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate fk %s: %w", table, err)
+	}
+	return fks, nil
 }
 
 // rowCount prefers pg_class.reltuples (planner estimate, O(1)) and falls back
@@ -618,4 +630,3 @@ func stringifyValue(v any) string {
 		return fmt.Sprintf("%v", v)
 	}
 }
-
