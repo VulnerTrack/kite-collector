@@ -217,6 +217,11 @@ func (m *memStore) CompleteScanRun(_ context.Context, _ uuid.UUID, _ model.ScanR
 	return nil
 }
 func (m *memStore) GetLatestScanRun(_ context.Context) (*model.ScanRun, error) { return nil, nil }
+
+func (m *memStore) GetScanRun(_ context.Context, _ uuid.UUID) (*model.ScanRun, error) {
+	return nil, store.ErrNotFound
+}
+
 func (m *memStore) UpsertSoftware(_ context.Context, _ uuid.UUID, _ []model.InstalledSoftware) error {
 	return nil
 }
