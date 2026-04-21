@@ -247,6 +247,22 @@ func (m *memStore) ListRuntimeIncidents(_ context.Context, _ store.IncidentFilte
 func (m *memStore) Migrate(_ context.Context) error { return nil }
 func (m *memStore) Close() error                    { return nil }
 
+func (m *memStore) ListContentTables(_ context.Context) ([]store.TableSchema, error) {
+	return nil, nil
+}
+
+func (m *memStore) DescribeTable(_ context.Context, _ string) (*store.TableSchema, error) {
+	return nil, store.ErrUnknownTable
+}
+
+func (m *memStore) ListRows(_ context.Context, _ store.RowsFilter) ([]store.Row, int64, error) {
+	return nil, 0, store.ErrUnknownTable
+}
+
+func (m *memStore) GetRowReport(_ context.Context, _ string, _ map[string]string) (*store.RowReport, error) {
+	return nil, store.ErrUnknownTable
+}
+
 // ---------------------------------------------------------------------------
 // Helper: start an mTLS gRPC server with the enrolling service.
 // ---------------------------------------------------------------------------

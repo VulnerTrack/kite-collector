@@ -129,6 +129,22 @@ func (m *mockStore) ListRuntimeIncidents(_ context.Context, _ store.IncidentFilt
 
 func (m *mockStore) Migrate(_ context.Context) error { return nil }
 
+func (m *mockStore) ListContentTables(_ context.Context) ([]store.TableSchema, error) {
+	return nil, nil
+}
+
+func (m *mockStore) DescribeTable(_ context.Context, _ string) (*store.TableSchema, error) {
+	return nil, store.ErrUnknownTable
+}
+
+func (m *mockStore) ListRows(_ context.Context, _ store.RowsFilter) ([]store.Row, int64, error) {
+	return nil, 0, store.ErrUnknownTable
+}
+
+func (m *mockStore) GetRowReport(_ context.Context, _ string, _ map[string]string) (*store.RowReport, error) {
+	return nil, store.ErrUnknownTable
+}
+
 func (m *mockStore) Close() error { return nil }
 
 // compile-time check
