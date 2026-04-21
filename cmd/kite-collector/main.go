@@ -1080,6 +1080,8 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride string, verb
 
 	// Start REST API in background.
 	apiHandler := rest.New(st, logger)
+	apiHandler.SetScanCoordinator(coord)
+	apiHandler.SetBaseConfig(cfg)
 	apiMux := apiHandler.Mux()
 	apiMux.Handle("/metrics", met.Handler())
 

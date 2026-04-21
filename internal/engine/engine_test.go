@@ -174,6 +174,18 @@ func (m *mockStore) GetLatestScanRun(_ context.Context) (*model.ScanRun, error) 
 	return &cp, nil
 }
 
+func (m *mockStore) GetScanRun(_ context.Context, id uuid.UUID) (*model.ScanRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.scanRuns {
+		if m.scanRuns[i].ID == id {
+			cp := m.scanRuns[i]
+			return &cp, nil
+		}
+	}
+	return nil, store.ErrNotFound
+}
+
 func (m *mockStore) UpsertSoftware(_ context.Context, assetID uuid.UUID, sw []model.InstalledSoftware) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

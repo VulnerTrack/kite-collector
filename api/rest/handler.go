@@ -14,8 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vulnertrack/kite-collector/api/middleware"
+	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safety"
+	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
@@ -35,6 +37,8 @@ type Handler struct {
 	panicsRecovered     *prometheus.CounterVec
 	responseTruncations prometheus.Counter
 	circuitBreaker      *safety.CircuitBreaker
+	coordinator         *scan.Coordinator
+	baseConfig          *config.Config
 	apiKey              string // when non-empty, MTLSOrAPIKey middleware is wired
 	maxRequestBytes     int64
 	maxResponseBytes    int64
@@ -110,6 +114,8 @@ func (h *Handler) Mux() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/assets", h.handleListAssets)
 	mux.HandleFunc("GET /api/v1/events", h.handleListEvents)
 	mux.HandleFunc("GET /api/v1/scans/latest", h.handleLatestScan)
+	mux.HandleFunc("GET /api/v1/scans/{id}", h.handleGetScan)
+	mux.HandleFunc("POST /api/v1/scans", h.handleStartScan)
 	mux.HandleFunc("GET /api/v1/scans", h.handleListScans)
 	mux.HandleFunc("GET /api/v1/runtime-incidents", h.handleListIncidents)
 	mux.HandleFunc("GET /api/v1/source-health", h.handleListSourceHealth)
