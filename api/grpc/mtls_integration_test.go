@@ -222,6 +222,10 @@ func (m *memStore) GetScanRun(_ context.Context, _ uuid.UUID) (*model.ScanRun, e
 	return nil, store.ErrNotFound
 }
 
+func (m *memStore) MarkScanCancelRequested(_ context.Context, _ uuid.UUID, _ time.Time) error {
+	return store.ErrNotFound
+}
+
 func (m *memStore) UpsertSoftware(_ context.Context, _ uuid.UUID, _ []model.InstalledSoftware) error {
 	return nil
 }

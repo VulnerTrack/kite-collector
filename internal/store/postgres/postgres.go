@@ -642,6 +642,21 @@ func (s *PostgresStore) GetScanRun(ctx context.Context, id uuid.UUID) (*model.Sc
 	return r, nil
 }
 
+// MarkScanCancelRequested stamps cancel_requested_at without mutating status,
+// returning store.ErrNotFound when the row does not exist.
+func (s *PostgresStore) MarkScanCancelRequested(ctx context.Context, id uuid.UUID, at time.Time) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE scan_runs SET cancel_requested_at = $1 WHERE id = $2`,
+		at.UTC(), id)
+	if err != nil {
+		return fmt.Errorf("mark scan cancel requested %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Installed Software
 // ---------------------------------------------------------------------------

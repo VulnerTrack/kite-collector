@@ -101,6 +101,10 @@ func (m *mockStore) GetScanRun(_ context.Context, _ uuid.UUID) (*model.ScanRun, 
 	return nil, store.ErrNotFound
 }
 
+func (m *mockStore) MarkScanCancelRequested(_ context.Context, _ uuid.UUID, _ time.Time) error {
+	return store.ErrNotFound
+}
+
 func (m *mockStore) UpsertSoftware(_ context.Context, _ uuid.UUID, _ []model.InstalledSoftware) error {
 	return nil
 }
