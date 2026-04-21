@@ -137,6 +137,16 @@ func (s *fakeStore) GetLatestScanRun(_ context.Context) (*model.ScanRun, error) 
 	return nil, nil
 }
 
+func (s *fakeStore) GetScanRun(_ context.Context, id uuid.UUID) (*model.ScanRun, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if run, ok := s.created[id]; ok {
+		cp := run
+		return &cp, nil
+	}
+	return nil, store.ErrNotFound
+}
+
 func (s *fakeStore) UpsertSoftware(_ context.Context, _ uuid.UUID, _ []model.InstalledSoftware) error {
 	return nil
 }

@@ -627,6 +627,21 @@ func (s *PostgresStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, e
 	return r, nil
 }
 
+// GetScanRun returns the scan run identified by id, or store.ErrNotFound when
+// no row matches.
+func (s *PostgresStore) GetScanRun(ctx context.Context, id uuid.UUID) (*model.ScanRun, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+scanRunColumns+` FROM scan_runs WHERE id = $1`, id)
+	r, err := scanScanRun(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get scan run %s: %w", id, err)
+	}
+	return r, nil
+}
+
 // ---------------------------------------------------------------------------
 // Installed Software
 // ---------------------------------------------------------------------------

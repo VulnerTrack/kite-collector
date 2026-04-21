@@ -720,6 +720,21 @@ func (s *SQLiteStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, err
 	return r, nil
 }
 
+// GetScanRun returns the scan run identified by id, or store.ErrNotFound when
+// no row matches.
+func (s *SQLiteStore) GetScanRun(ctx context.Context, id uuid.UUID) (*model.ScanRun, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+scanRunColumns+` FROM scan_runs WHERE id = ?`, id.String())
+	r, err := scanScanRun(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get scan run %s: %w", id, err)
+	}
+	return r, nil
+}
+
 // ---------------------------------------------------------------------------
 // Installed Software
 // ---------------------------------------------------------------------------

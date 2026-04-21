@@ -176,6 +176,10 @@ type Store interface {
 	// nil when no scan runs exist.
 	GetLatestScanRun(ctx context.Context) (*model.ScanRun, error)
 
+	// GetScanRun returns the scan run identified by id, or ErrNotFound when
+	// no row matches.
+	GetScanRun(ctx context.Context, id uuid.UUID) (*model.ScanRun, error)
+
 	// UpsertSoftware replaces all installed software records for the given
 	// asset. It deletes existing rows for assetID and inserts the new set
 	// inside a single transaction (full replacement per scan).
