@@ -29,10 +29,15 @@
   <a hx-get="/fragments/tables" hx-target="#content" hx-push-url="false"
      onclick="setActive(this)">Tables</a>
   <div style="flex:1"></div>
-  <button class="btn" hx-post="/api/v1/scan" hx-target="#scan-status">Run Scan</button>
+  <button class="btn" hx-post="/api/v1/scan" hx-target="#scan-status" hx-swap="innerHTML">Run Scan</button>
 </nav>
 
-<div id="scan-status"></div>
+<div id="scan-status"
+     hx-get="/fragments/scan-status"
+     hx-trigger="load, every 3s"
+     hx-swap="innerHTML">
+  <span class="badge badge-gray">Loading scan status…</span>
+</div>
 
 <div id="content" hx-get="/fragments/assets" hx-trigger="load" hx-target="#content">
   <div class="htmx-indicator">Loading...</div>

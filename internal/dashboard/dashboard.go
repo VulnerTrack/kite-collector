@@ -12,12 +12,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
+// Options bundles the optional dependencies a dashboard server can wire in.
+// When Coordinator and BaseConfig are both non-nil, the "Run Scan" button
+// actually starts a scan through the coordinator; otherwise the button
+// renders a read-only placeholder.
+type Options struct {
+	Coordinator *scan.Coordinator
+	BaseConfig  *config.Config
+}
+
 // Serve creates and returns an HTTP server for the dashboard.
 // The caller is responsible for calling ListenAndServe.
-func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger) *http.Server {
+//
+// When opts.Coordinator is nil the dashboard runs in read-only mode:
+// fragments still render, but POST /api/v1/scan returns a "not available"
+// badge instead of starting a scan. This matches the `vie dashboard`
+// standalone inspector mode where no engine is wired up.
+func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, opts Options) *http.Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -111,11 +127,44 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger) *
 		}
 	})
 
-	// Scan trigger endpoint.
+	// Scan status fragment — the #scan-status div re-fetches this every 3s
+	// via HTMX, so the "Run Scan" button transitions through its
+	// queued → running → completed states without a manual page reload.
+	mux.HandleFunc("GET /fragments/scan-status", func(w http.ResponseWriter, r *http.Request) {
+		renderFragment(w, "scan-status", func(buf io.Writer) error {
+			return renderScanStatusFragment(buf, r.Context(), st, opts.Coordinator)
+		})
+	})
+
+	// Scan trigger endpoint. Delegates to the coordinator when one is
+	// wired in; otherwise returns a read-only placeholder so the button
+	// surfaces the right affordance.
 	mux.HandleFunc("POST /api/v1/scan", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`<div class="badge badge-yellow">Scan triggered — refresh the page to see results.</div>`))
-		logger.Info("dashboard: scan triggered via UI")
+		if opts.Coordinator == nil || opts.BaseConfig == nil {
+			renderFragment(w, "scan-trigger-unavailable", func(buf io.Writer) error {
+				return renderScanStatusFragment(buf, r.Context(), st, nil)
+			})
+			return
+		}
+		_, startErr := opts.Coordinator.Start(r.Context(), scan.StartRequest{
+			Config:        opts.BaseConfig,
+			TriggerSource: "api",
+			TriggeredBy:   "dashboard",
+		})
+		if startErr != nil {
+			// AlreadyRunningError is expected when the operator double-
+			// clicks; fall through to the status fragment either way since
+			// it will show "Scan running" for the in-flight scan.
+			var already *scan.AlreadyRunningError
+			if !errors.As(startErr, &already) {
+				logger.Error("dashboard: scan trigger failed", "error", startErr)
+			}
+		} else {
+			logger.Info("dashboard: scan triggered via UI")
+		}
+		renderFragment(w, "scan-status", func(buf io.Writer) error {
+			return renderScanStatusFragment(buf, r.Context(), st, opts.Coordinator)
+		})
 	})
 
 	// Tables browser — Datasette-style introspection.
