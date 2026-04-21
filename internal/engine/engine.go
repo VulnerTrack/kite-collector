@@ -140,12 +140,19 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 		sourcesJSON, _ := json.Marshal(sourceNames)
 
+		triggerSource := opts.TriggerSource
+		if triggerSource == "" {
+			triggerSource = "cli"
+		}
+
 		scanRun := model.ScanRun{
 			ID:               scanID,
 			StartedAt:        time.Now().UTC(),
 			Status:           model.ScanStatusRunning,
 			ScopeConfig:      string(scopeJSON),
 			DiscoverySources: string(sourcesJSON),
+			TriggerSource:    triggerSource,
+			TriggeredBy:      opts.TriggeredBy,
 		}
 		if err := e.store.CreateScanRun(ctx, scanRun); err != nil {
 			return nil, fmt.Errorf("create scan run: %w", err)
