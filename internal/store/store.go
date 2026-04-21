@@ -12,6 +12,105 @@ import (
 // ErrNotFound is returned when a requested record does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrUnknownTable is returned when an introspection method is called with a
+// table name that is not in the live content-table catalog. This protects the
+// Store from identifier injection at its boundary.
+var ErrUnknownTable = errors.New("unknown table")
+
+// ErrUnknownColumn is returned when introspection references a column that is
+// not part of the identified table's schema.
+var ErrUnknownColumn = errors.New("unknown column")
+
+// IntrospectionRowLimit is the hard cap on rows returned by ListRows and by
+// any related-row grouping inside GetRowReport. Handlers must not exceed this.
+const IntrospectionRowLimit = 1000
+
+// IntrospectionDefaultPageSize is the default page size when a caller does not
+// specify a Limit.
+const IntrospectionDefaultPageSize = 200
+
+// TableSchema describes a single content table discovered via introspection.
+// RowCount is -1 when the dialect could neither read the planner estimate nor
+// complete a fallback COUNT(*) under the per-table timeout.
+type TableSchema struct {
+	Name        string
+	Columns     []ColumnSchema
+	PrimaryKey  []string
+	ForeignKeys []ForeignKey
+	RowCount    int64
+}
+
+// ColumnSchema describes a single column of a TableSchema. Type is the
+// dialect-reported type string (e.g. "TEXT", "UUID", "TIMESTAMPTZ") and is not
+// normalized across dialects. Position is the 1-based ordinal.
+type ColumnSchema struct {
+	Name     string
+	Type     string
+	NotNull  bool
+	Position int
+}
+
+// ForeignKey describes a single foreign key relation from a column in the
+// owning TableSchema to a column of another table.
+type ForeignKey struct {
+	FromColumn string
+	ToTable    string
+	ToColumn   string
+}
+
+// RowsFilter constrains which rows are returned by ListRows. Table is required
+// and is validated against the live introspected catalog before any SQL is
+// constructed. OrderBy, when non-empty, must match a column of Table.
+type RowsFilter struct {
+	Table   string
+	Limit   int
+	Offset  int
+	OrderBy string
+}
+
+// Row is a single result row. PrimaryKey carries stringified PK column values
+// so that handlers can round-trip the row to URL query parameters without a
+// separate lookup. Columns are ordered by schema position.
+type Row struct {
+	PrimaryKey map[string]string
+	Columns    []ColumnValue
+}
+
+// ColumnValue holds one cell of a Row. Value is the native Go value returned
+// by the driver; templates are responsible for stringifying it.
+type ColumnValue struct {
+	Name  string
+	Value any
+}
+
+// RowReport is the payload rendered into the row-detail sidebar. Inbound
+// groups list child rows whose foreign keys point at the primary row. Outbound
+// entries are parent rows referenced by this row's own foreign keys.
+type RowReport struct {
+	Table    string
+	Row      Row
+	Inbound  []RelatedRowGroup
+	Outbound []RelatedRow
+}
+
+// RelatedRowGroup carries inbound related rows from a single child table via a
+// single foreign-key column. Truncated is true when the match count exceeded
+// the request limit and the returned slice was capped.
+type RelatedRowGroup struct {
+	Table     string
+	ViaColumn string
+	Rows      []Row
+	Truncated bool
+}
+
+// RelatedRow is a single outbound related parent row reached via the named FK
+// column on the primary row.
+type RelatedRow struct {
+	Table     string
+	ViaColumn string
+	Row       Row
+}
+
 // AssetFilter constrains which assets are returned by ListAssets.
 type AssetFilter struct {
 	AssetType    string
@@ -105,6 +204,32 @@ type Store interface {
 
 	// Migrate creates the schema tables and indexes if they do not exist.
 	Migrate(ctx context.Context) error
+
+	// ListContentTables returns every non-system content table present in the
+	// live schema. System and migration tables (sqlite_*, schema_migrations,
+	// pg_catalog.*, information_schema.*) are excluded. RowCount is populated
+	// with the planner estimate where available and falls back to COUNT(*)
+	// under a short per-table timeout; -1 signals an unavailable count.
+	ListContentTables(ctx context.Context) ([]TableSchema, error)
+
+	// DescribeTable returns the full schema of a single content table,
+	// including columns, primary key, and foreign keys. It returns
+	// ErrUnknownTable when table is not in the introspected catalog.
+	DescribeTable(ctx context.Context, table string) (*TableSchema, error)
+
+	// ListRows returns a page of rows from the named content table. The table
+	// and OrderBy column (if set) are validated against the introspected
+	// catalog before any SQL is constructed. Limit is capped at
+	// IntrospectionRowLimit. total is the estimated row count (same source as
+	// TableSchema.RowCount).
+	ListRows(ctx context.Context, filter RowsFilter) (rows []Row, total int64, err error)
+
+	// GetRowReport builds the full detail report for a single row addressed
+	// by its primary key. It fetches the primary row, each inbound group of
+	// children referencing it by FK, and the parent row for every outbound
+	// FK. Missing outbound parents are tolerated (reported as absent rather
+	// than error). Returns ErrUnknownTable or ErrNotFound as appropriate.
+	GetRowReport(ctx context.Context, table string, pk map[string]string) (*RowReport, error)
 
 	// Close releases all resources held by the store.
 	Close() error
