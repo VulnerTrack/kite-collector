@@ -114,6 +114,7 @@ func (h *Handler) Mux() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/assets", h.handleListAssets)
 	mux.HandleFunc("GET /api/v1/events", h.handleListEvents)
 	mux.HandleFunc("GET /api/v1/scans/latest", h.handleLatestScan)
+	mux.HandleFunc("GET /api/v1/scans/{id}/events", h.handleScanEvents)
 	mux.HandleFunc("GET /api/v1/scans/{id}", h.handleGetScan)
 	mux.HandleFunc("POST /api/v1/scans", h.handleStartScan)
 	mux.HandleFunc("GET /api/v1/scans", h.handleListScans)

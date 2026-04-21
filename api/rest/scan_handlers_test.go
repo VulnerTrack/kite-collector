@@ -48,8 +48,10 @@ func (r *handlerTestRunner) RunWithOptions(ctx context.Context, _ *config.Config
 func (r *handlerTestRunner) release() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	close(r.block)
-	r.block = nil
+	if r.block != nil {
+		close(r.block)
+		r.block = nil
+	}
 }
 
 func newHandlerWithCoord(t *testing.T) (*Handler, *mockStore, *scan.Coordinator, *handlerTestRunner) {
