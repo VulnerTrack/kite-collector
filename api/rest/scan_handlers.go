@@ -12,6 +12,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/api/middleware"
 	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -123,6 +124,93 @@ func (h *Handler) handleStartScan(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Location", "/api/v1/scans/"+id.String())
 	writeJSON(w, http.StatusAccepted, triggerResponse{ScanRunID: id.String()})
+}
+
+// handleScanEvents implements GET /api/v1/scans/{id}/events as a
+// Server-Sent Events stream. It emits an initial `event: snapshot` with the
+// current ScanRun row, then forwards every coordinator event for the given
+// scan ID until a terminal `event: done` lands or the client disconnects.
+func (h *Handler) handleScanEvents(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("request", "method", r.Method, "path", r.URL.Path)
+
+	if scanAPIDisabled() {
+		writeError(w, http.StatusServiceUnavailable, "scan API disabled via "+scanAPIKillSwitchEnv)
+		return
+	}
+	if h.coordinator == nil {
+		writeError(w, http.StatusServiceUnavailable, "scan coordinator not configured")
+		return
+	}
+
+	idStr := r.PathValue("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scan id")
+		return
+	}
+
+	run, err := h.store.GetScanRun(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "scan run not found")
+		return
+	}
+	if err != nil {
+		h.logger.Error("get scan run failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // disable nginx response buffering
+	w.WriteHeader(http.StatusOK)
+
+	if err := scan.WriteSSEEvent(w, "snapshot", run); err != nil {
+		h.logger.Warn("sse: snapshot write failed", "error", err)
+		return
+	}
+	flusher.Flush()
+
+	// If the stored row is already terminal, close the stream immediately.
+	// Subscribing after the coordinator has already published the final
+	// done event for this ID would otherwise block until the next scan.
+	if run.Status != model.ScanStatusRunning {
+		_ = scan.WriteSSEEvent(w, "done", run)
+		flusher.Flush()
+		return
+	}
+
+	events, unsubscribe := h.coordinator.Subscribe()
+	defer unsubscribe()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case ev, chanOpen := <-events:
+			if !chanOpen {
+				return
+			}
+			if ev.ScanRunID != id {
+				continue
+			}
+			if err := scan.WriteSSEEvent(w, scan.SSEEventName(ev.Type), ev); err != nil {
+				h.logger.Warn("sse: write failed", "error", err)
+				return
+			}
+			flusher.Flush()
+			if ev.Type == scan.EventDone {
+				return
+			}
+		}
+	}
 }
 
 // handleGetScan implements GET /api/v1/scans/{id}. It returns the scan run
