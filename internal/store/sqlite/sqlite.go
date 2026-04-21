@@ -735,6 +735,22 @@ func (s *SQLiteStore) GetScanRun(ctx context.Context, id uuid.UUID) (*model.Scan
 	return r, nil
 }
 
+// MarkScanCancelRequested stamps cancel_requested_at without mutating status,
+// returning store.ErrNotFound when the row does not exist.
+func (s *SQLiteStore) MarkScanCancelRequested(ctx context.Context, id uuid.UUID, at time.Time) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE scan_runs SET cancel_requested_at = ? WHERE id = ?`,
+		at.UTC().Format(time.RFC3339), id.String())
+	if err != nil {
+		return fmt.Errorf("mark scan cancel requested %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Installed Software
 // ---------------------------------------------------------------------------

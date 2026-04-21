@@ -147,6 +147,19 @@ func (s *fakeStore) GetScanRun(_ context.Context, id uuid.UUID) (*model.ScanRun,
 	return nil, store.ErrNotFound
 }
 
+func (s *fakeStore) MarkScanCancelRequested(_ context.Context, id uuid.UUID, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	run, ok := s.created[id]
+	if !ok {
+		return store.ErrNotFound
+	}
+	t := at
+	run.CancelRequestedAt = &t
+	s.created[id] = run
+	return nil
+}
+
 func (s *fakeStore) UpsertSoftware(_ context.Context, _ uuid.UUID, _ []model.InstalledSoftware) error {
 	return nil
 }

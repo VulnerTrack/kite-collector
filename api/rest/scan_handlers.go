@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -211,6 +212,87 @@ func (h *Handler) handleScanEvents(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// cancelResponse is the 202 Accepted body returned by the cancel endpoint.
+// It echoes the scan id and the cancel_requested_at timestamp so callers
+// do not have to re-fetch the row to confirm the stamp landed.
+type cancelResponse struct {
+	CancelRequestedAt time.Time `json:"cancel_requested_at"`
+	ScanRunID         string    `json:"scan_run_id"`
+}
+
+// handleCancelScan implements POST /api/v1/scans/{id}/cancel. It resolves
+// the scan, stamps cancel_requested_at, and asks the coordinator to cancel
+// the scan's context. The engine's own CompleteScanRun still owns the
+// terminal-status transition; this endpoint returns as soon as the cancel
+// request has been recorded. Idempotent repeat calls on an already-terminal
+// run return 409 Conflict so operators can tell "we cancelled" from "too
+// late, scan already finished".
+func (h *Handler) handleCancelScan(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("request", "method", r.Method, "path", r.URL.Path)
+
+	if scanAPIDisabled() {
+		writeError(w, http.StatusServiceUnavailable, "scan API disabled via "+scanAPIKillSwitchEnv)
+		return
+	}
+	if h.coordinator == nil {
+		writeError(w, http.StatusServiceUnavailable, "scan coordinator not configured")
+		return
+	}
+
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid scan id")
+		return
+	}
+
+	run, err := h.store.GetScanRun(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "scan run not found")
+		return
+	}
+	if err != nil {
+		h.logger.Error("get scan run failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if run.Status != model.ScanStatusRunning {
+		writeError(w, http.StatusConflict, "scan already terminal: "+string(run.Status))
+		return
+	}
+
+	now := time.Now().UTC()
+	if err := h.store.MarkScanCancelRequested(r.Context(), id, now); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "scan run not found")
+			return
+		}
+		h.logger.Error("mark scan cancel requested failed", "error", err, "scan_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	if err := h.coordinator.Cancel(id); err != nil {
+		// ErrUnknownRun means the scan finished between GetScanRun and
+		// Cancel. The cancel_requested_at stamp is still a correct record
+		// of the operator's intent; the engine just beat us to terminal.
+		if errors.Is(err, scan.ErrUnknownRun) {
+			writeJSON(w, http.StatusAccepted, cancelResponse{
+				ScanRunID:         id.String(),
+				CancelRequestedAt: now,
+			})
+			return
+		}
+		h.logger.Error("coordinator cancel failed", "error", err, "scan_id", id)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, cancelResponse{
+		ScanRunID:         id.String(),
+		CancelRequestedAt: now,
+	})
 }
 
 // handleGetScan implements GET /api/v1/scans/{id}. It returns the scan run
