@@ -503,7 +503,8 @@ func (s *PostgresStore) ListEvents(ctx context.Context, filter store.EventFilter
 
 const scanRunColumns = `id, started_at, completed_at, status, total_assets,
 	new_assets, updated_assets, stale_assets, coverage_percent,
-	error_count, scope_config, discovery_sources`
+	error_count, scope_config, discovery_sources,
+	trigger_source, triggered_by, cancel_requested_at`
 
 // scanScanRun reads a single row into a model.ScanRun. The column order must
 // match scanRunColumns exactly.
@@ -512,6 +513,8 @@ func scanScanRun(row pgx.Row) (*model.ScanRun, error) {
 	var (
 		scopeConfig      *string
 		discoverySources *string
+		triggerSource    string
+		triggeredBy      *string
 	)
 	err := row.Scan(
 		&r.ID,
@@ -526,20 +529,29 @@ func scanScanRun(row pgx.Row) (*model.ScanRun, error) {
 		&r.ErrorCount,
 		&scopeConfig,
 		&discoverySources,
+		&triggerSource,
+		&triggeredBy,
+		&r.CancelRequestedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan scan run: %w", err)
 	}
 	r.ScopeConfig = derefStr(scopeConfig)
 	r.DiscoverySources = derefStr(discoverySources)
+	r.TriggerSource = triggerSource
+	r.TriggeredBy = derefStr(triggeredBy)
 	return &r, nil
 }
 
 // CreateScanRun records a new scan run.
 func (s *PostgresStore) CreateScanRun(ctx context.Context, run model.ScanRun) error {
+	triggerSource := run.TriggerSource
+	if triggerSource == "" {
+		triggerSource = "cli"
+	}
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO scan_runs (`+scanRunColumns+`)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		run.ID,
 		run.StartedAt,
 		run.CompletedAt,
@@ -552,6 +564,9 @@ func (s *PostgresStore) CreateScanRun(ctx context.Context, run model.ScanRun) er
 		run.ErrorCount,
 		nullStr(run.ScopeConfig),
 		nullStr(run.DiscoverySources),
+		triggerSource,
+		nullStr(run.TriggeredBy),
+		run.CancelRequestedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("create scan run %s: %w", run.ID, err)

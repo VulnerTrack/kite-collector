@@ -568,17 +568,21 @@ func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) 
 
 const scanRunColumns = `id, started_at, completed_at, status, total_assets,
 	new_assets, updated_assets, stale_assets, coverage_percent,
-	error_count, scope_config, discovery_sources`
+	error_count, scope_config, discovery_sources,
+	trigger_source, triggered_by, cancel_requested_at`
 
 // scanScanRun reads a single row from the result set into a ScanRun.
 func scanScanRun(row interface{ Scan(dest ...any) error }) (*model.ScanRun, error) {
 	var r model.ScanRun
 	var (
-		idStr            string
-		startedAt        string
-		completedAt      sql.NullString
-		scopeConfig      sql.NullString
-		discoverySources sql.NullString
+		idStr             string
+		startedAt         string
+		completedAt       sql.NullString
+		scopeConfig       sql.NullString
+		discoverySources  sql.NullString
+		triggerSource     sql.NullString
+		triggeredBy       sql.NullString
+		cancelRequestedAt sql.NullString
 	)
 	err := row.Scan(
 		&idStr,
@@ -593,6 +597,9 @@ func scanScanRun(row interface{ Scan(dest ...any) error }) (*model.ScanRun, erro
 		&r.ErrorCount,
 		&scopeConfig,
 		&discoverySources,
+		&triggerSource,
+		&triggeredBy,
+		&cancelRequestedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan scan run: %w", err)
@@ -613,17 +620,30 @@ func scanScanRun(row interface{ Scan(dest ...any) error }) (*model.ScanRun, erro
 		}
 		r.CompletedAt = &t
 	}
+	if cancelRequestedAt.Valid {
+		t, err := time.Parse(time.RFC3339, cancelRequestedAt.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse cancel_requested_at: %w", err)
+		}
+		r.CancelRequestedAt = &t
+	}
 	r.ScopeConfig = scopeConfig.String
 	r.DiscoverySources = discoverySources.String
+	r.TriggerSource = triggerSource.String
+	r.TriggeredBy = triggeredBy.String
 
 	return &r, nil
 }
 
 // CreateScanRun records a new scan run.
 func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) error {
+	triggerSource := run.TriggerSource
+	if triggerSource == "" {
+		triggerSource = "cli"
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO scan_runs (`+scanRunColumns+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		run.ID.String(),
 		run.StartedAt.Format(time.RFC3339),
 		nullTimePtr(run.CompletedAt),
@@ -636,6 +656,9 @@ func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) erro
 		run.ErrorCount,
 		nullStr(run.ScopeConfig),
 		nullStr(run.DiscoverySources),
+		triggerSource,
+		nullStr(run.TriggeredBy),
+		nullTimePtr(run.CancelRequestedAt),
 	)
 	if err != nil {
 		return fmt.Errorf("create scan run %s: %w", run.ID, err)

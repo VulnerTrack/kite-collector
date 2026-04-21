@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -386,7 +387,10 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	// Create and run the scan engine.
 	eng := engine.New(st, registry, dd, cls, em, pol, met)
 
-	result, err := eng.Run(ctx, cfg)
+	result, err := eng.RunWithOptions(ctx, cfg, engine.RunOptions{
+		TriggerSource: "cli",
+		TriggeredBy:   currentOSUser(),
+	})
 
 	// Graceful shutdown of metrics server (if started).
 	if metricsSrv != nil {
@@ -2563,6 +2567,17 @@ func defaultKiteDataDir() string {
 		return filepath.Join(xdg, "kite-collector")
 	}
 	return "/var/lib/kite-collector"
+}
+
+// currentOSUser returns the login username stamped into scan_runs.triggered_by
+// for CLI invocations. Falls back to "" when the OS cannot resolve the
+// caller (chrooted builds, degraded nsswitch) — a NULL column is preferable
+// to a misleading default like "unknown".
+func currentOSUser() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+	return ""
 }
 
 type otlpCheckStage struct {

@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS scan_runs (
     discovery_sources JSONB
 );
 
+-- RFC-0104 phase 2: trigger provenance + operator cancel request marker.
+-- Additive, idempotent ALTERs so redeploys over existing databases are safe.
+ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS trigger_source      TEXT NOT NULL DEFAULT 'cli';
+ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS triggered_by        TEXT;
+ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS cancel_requested_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS events (
     id          UUID PRIMARY KEY,
     event_type  TEXT NOT NULL CHECK(event_type IN ('AssetDiscovered','AssetUpdated','UnauthorizedAssetDetected','UnmanagedAssetDetected','AssetNotSeen','AssetRemoved')),
@@ -121,4 +127,5 @@ CREATE INDEX IF NOT EXISTS idx_findings_severity ON config_findings(severity);
 CREATE INDEX IF NOT EXISTS idx_findings_check ON config_findings(check_id);
 CREATE INDEX IF NOT EXISTS idx_posture_asset ON posture_assessments(asset_id);
 CREATE INDEX IF NOT EXISTS idx_posture_capec ON posture_assessments(capec_id);
+CREATE INDEX IF NOT EXISTS idx_scan_runs_trigger_source ON scan_runs(trigger_source, started_at);
 `
