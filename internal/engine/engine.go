@@ -34,6 +34,32 @@ type Engine struct {
 	metrics      *metrics.Metrics
 }
 
+// RunOptions carries provenance and pre-allocated identity for a scan.
+//
+// The zero value preserves the legacy CLI-path behaviour: the engine mints
+// its own UUID v7, inserts the scan_runs row itself, and stores no trigger
+// metadata. Callers that need to surface the scan ID before the engine
+// finishes (for example the HTTP scan coordinator, which returns 202
+// Accepted immediately) set ScanID to a pre-allocated value and are
+// responsible for inserting the scan_runs row themselves; in that case the
+// engine skips its own CreateScanRun call.
+type RunOptions struct {
+	// TriggerSource is the provenance tag recorded on the ScanRun row
+	// when the engine creates it. Empty defaults to "cli". Ignored when
+	// ScanID is non-zero (the caller already wrote the row).
+	TriggerSource string
+
+	// TriggeredBy identifies the caller (OS user, mTLS CN, or API-key
+	// label). Ignored when ScanID is non-zero.
+	TriggeredBy string
+
+	// ScanID pre-allocates the scan run UUID. When non-zero the caller
+	// must have already persisted the scan_runs row; the engine will not
+	// create it and will only update the row at completion. When zero the
+	// engine mints a fresh UUID v7 and creates the row itself.
+	ScanID uuid.UUID
+}
+
 // sourceEnvVars maps discovery source names to the environment variables
 // that supply their credentials. Values are injected into the per-source
 // config map so connectors read them via cfg["key"]. Only non-empty env
@@ -87,31 +113,43 @@ func New(
 	}
 }
 
+// Run is the CLI-entry-point shim for RunWithOptions. It mints a fresh
+// scan ID, creates the ScanRun row, and records a trigger_source of "cli".
 func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult, error) {
+	return e.RunWithOptions(ctx, cfg, RunOptions{})
+}
+
+// RunWithOptions runs the scan pipeline. When opts.ScanID is non-zero the
+// caller owns the scan_runs row and the engine only issues UPDATE; when it
+// is the zero UUID the engine mints one and records the initial row.
+func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts RunOptions) (*model.ScanResult, error) {
 	// Apply scan deadline — all scan work uses scanCtx; persistence uses
 	// the original ctx so results are saved even when the deadline fires.
 	scanCtx, cancel := context.WithTimeout(ctx, cfg.ScanDeadlineDuration())
 	defer cancel()
 
-	scanID := uuid.Must(uuid.NewV7())
-	now := time.Now().UTC()
+	scanID := opts.ScanID
+	engineOwnsRow := scanID == uuid.Nil
+	if engineOwnsRow {
+		scanID = uuid.Must(uuid.NewV7())
 
-	scopeJSON, _ := json.Marshal(cfg.Discovery.Sources)
-	sourceNames := make([]string, 0, len(cfg.Discovery.Sources))
-	for name := range cfg.Discovery.Sources {
-		sourceNames = append(sourceNames, name)
-	}
-	sourcesJSON, _ := json.Marshal(sourceNames)
+		scopeJSON, _ := json.Marshal(cfg.Discovery.Sources)
+		sourceNames := make([]string, 0, len(cfg.Discovery.Sources))
+		for name := range cfg.Discovery.Sources {
+			sourceNames = append(sourceNames, name)
+		}
+		sourcesJSON, _ := json.Marshal(sourceNames)
 
-	scanRun := model.ScanRun{
-		ID:               scanID,
-		StartedAt:        now,
-		Status:           model.ScanStatusRunning,
-		ScopeConfig:      string(scopeJSON),
-		DiscoverySources: string(sourcesJSON),
-	}
-	if err := e.store.CreateScanRun(ctx, scanRun); err != nil {
-		return nil, fmt.Errorf("create scan run: %w", err)
+		scanRun := model.ScanRun{
+			ID:               scanID,
+			StartedAt:        time.Now().UTC(),
+			Status:           model.ScanStatusRunning,
+			ScopeConfig:      string(scopeJSON),
+			DiscoverySources: string(sourcesJSON),
+		}
+		if err := e.store.CreateScanRun(ctx, scanRun); err != nil {
+			return nil, fmt.Errorf("create scan run: %w", err)
+		}
 	}
 
 	configs := make(map[string]map[string]any)

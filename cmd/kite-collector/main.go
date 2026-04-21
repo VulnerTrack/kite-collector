@@ -60,6 +60,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/osutil"
 	"github.com/vulnertrack/kite-collector/internal/policy"
+	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/postgres"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
@@ -1067,6 +1068,12 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride string, verb
 
 	eng := engine.New(st, registry, dd, cls, em, pol, met)
 
+	// Scan coordinator owns engine invocations triggered via the REST API.
+	// The CLI paths below still call eng.Run directly; the coordinator is
+	// wired in here so future phases (RFC-0104) can attach HTTP handlers
+	// and so SIGTERM fans out to any in-flight API-triggered scan.
+	coord := scan.New(eng, st, ctx, logger)
+
 	// Start REST API in background.
 	apiHandler := rest.New(st, logger)
 	apiMux := apiHandler.Mux()
@@ -1130,6 +1137,9 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride string, verb
 			if metricsSrv != nil {
 				_ = metricsSrv.Shutdown(shutdownCtx)
 			}
+			// Cancel any API-triggered scan still in flight so the goroutine
+			// can finalise the ScanRun row before the process exits.
+			_ = coord.Shutdown(shutdownCtx)
 			_ = em.Shutdown(shutdownCtx)
 			return nil
 		case <-ticker.C:
