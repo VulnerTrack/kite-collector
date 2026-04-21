@@ -373,6 +373,90 @@ func TestGetLatestScanRun_Empty(t *testing.T) {
 	assert.Nil(t, latest, "no scan runs should return nil")
 }
 
+// TestScanRun_TriggerProvenanceRoundtrip covers RFC-0104 phase 2: a
+// persisted ScanRun must round-trip trigger_source, triggered_by, and the
+// optional cancel_requested_at marker. It also checks the default ("cli")
+// that CreateScanRun stamps when the caller leaves TriggerSource empty.
+func TestScanRun_TriggerProvenanceRoundtrip(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	cancelAt := time.Now().UTC().Truncate(time.Second)
+
+	run := model.ScanRun{
+		ID:                uuid.Must(uuid.NewV7()),
+		StartedAt:         time.Now().UTC().Truncate(time.Second),
+		Status:            model.ScanStatusRunning,
+		TriggerSource:     "api",
+		TriggeredBy:       "tenant-abc",
+		CancelRequestedAt: &cancelAt,
+	}
+	require.NoError(t, s.CreateScanRun(ctx, run))
+
+	latest, err := s.GetLatestScanRun(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, latest)
+
+	assert.Equal(t, "api", latest.TriggerSource)
+	assert.Equal(t, "tenant-abc", latest.TriggeredBy)
+	require.NotNil(t, latest.CancelRequestedAt)
+	assert.True(t, cancelAt.Equal(*latest.CancelRequestedAt))
+
+	// Empty TriggerSource defaults to "cli".
+	run2 := model.ScanRun{
+		ID:        uuid.Must(uuid.NewV7()),
+		StartedAt: time.Now().UTC().Add(time.Second).Truncate(time.Second),
+		Status:    model.ScanStatusRunning,
+	}
+	require.NoError(t, s.CreateScanRun(ctx, run2))
+
+	latest2, err := s.GetLatestScanRun(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, latest2)
+	assert.Equal(t, run2.ID, latest2.ID)
+	assert.Equal(t, "cli", latest2.TriggerSource,
+		"empty TriggerSource must default to 'cli'")
+	assert.Empty(t, latest2.TriggeredBy)
+	assert.Nil(t, latest2.CancelRequestedAt)
+}
+
+// TestScanRun_TriggerSourceIndex verifies the idx_scan_runs_trigger_source
+// index is created and usable. We assert it exists in sqlite_master and
+// that EXPLAIN QUERY PLAN picks it up for a typical dashboard query.
+func TestScanRun_TriggerSourceIndex(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	var name string
+	err := s.RawDB().QueryRowContext(ctx,
+		`SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?`,
+		"idx_scan_runs_trigger_source",
+	).Scan(&name)
+	require.NoError(t, err, "idx_scan_runs_trigger_source must exist")
+	assert.Equal(t, "idx_scan_runs_trigger_source", name)
+
+	var plan string
+	rows, err := s.RawDB().QueryContext(ctx,
+		`EXPLAIN QUERY PLAN
+		 SELECT id FROM scan_runs
+		 WHERE trigger_source = 'api'
+		 ORDER BY started_at DESC`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var a, b, c int
+		var detail string
+		if scanErr := rows.Scan(&a, &b, &c, &detail); scanErr != nil {
+			t.Fatalf("scan EXPLAIN row: %v", scanErr)
+		}
+		plan += detail + "\n"
+	}
+	require.NoError(t, rows.Err())
+	assert.Contains(t, plan, "idx_scan_runs_trigger_source",
+		"planner must use the trigger_source index for filtered latest-scan lookups")
+}
+
 // ---------------------------------------------------------------------------
 // Installed Software
 // ---------------------------------------------------------------------------

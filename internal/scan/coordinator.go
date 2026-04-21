@@ -190,12 +190,19 @@ func (c *Coordinator) Start(ctx context.Context, req StartRequest) (uuid.UUID, e
 	}
 	sourcesJSON, _ := json.Marshal(sourceNames)
 
+	triggerSource := req.TriggerSource
+	if triggerSource == "" {
+		triggerSource = "api"
+	}
+
 	run := model.ScanRun{
 		ID:               scanID,
 		StartedAt:        startedAt,
 		Status:           model.ScanStatusRunning,
 		ScopeConfig:      string(scopeJSON),
 		DiscoverySources: string(sourcesJSON),
+		TriggerSource:    triggerSource,
+		TriggeredBy:      req.TriggeredBy,
 	}
 	if err := c.store.CreateScanRun(ctx, run); err != nil {
 		c.mu.Unlock()
