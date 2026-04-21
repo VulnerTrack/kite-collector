@@ -150,7 +150,7 @@ func TestRenderFindingsFragment_AllSeverities(t *testing.T) {
 func TestFragmentEndpoints_NoSuperfluousWriteHeader(t *testing.T) {
 	st := testStore(t)
 	rc := testContext()
-	srv := Serve(":0", st, rc, nil)
+	srv := Serve(":0", st, rc, nil, Options{})
 
 	// Test each fragment endpoint returns 200 with no errors.
 	endpoints := []string{
@@ -158,6 +158,7 @@ func TestFragmentEndpoints_NoSuperfluousWriteHeader(t *testing.T) {
 		"/fragments/software",
 		"/fragments/findings",
 		"/fragments/scans",
+		"/fragments/scan-status",
 	}
 
 	for _, ep := range endpoints {

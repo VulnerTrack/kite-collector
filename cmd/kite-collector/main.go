@@ -2302,7 +2302,7 @@ from the local SQLite database — no external connections are made.`,
 			rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
 
 			logger := slog.Default()
-			srv := dashboard.Serve(addr, st, rc, logger)
+			srv := dashboard.Serve(addr, st, rc, logger, dashboard.Options{})
 
 			go func() {
 				logger.Info("dashboard listening", "addr", addr)
