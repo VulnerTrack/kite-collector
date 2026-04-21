@@ -186,6 +186,19 @@ func (m *mockStore) GetScanRun(_ context.Context, id uuid.UUID) (*model.ScanRun,
 	return nil, store.ErrNotFound
 }
 
+func (m *mockStore) MarkScanCancelRequested(_ context.Context, id uuid.UUID, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.scanRuns {
+		if m.scanRuns[i].ID == id {
+			t := at
+			m.scanRuns[i].CancelRequestedAt = &t
+			return nil
+		}
+	}
+	return store.ErrNotFound
+}
+
 func (m *mockStore) UpsertSoftware(_ context.Context, assetID uuid.UUID, sw []model.InstalledSoftware) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

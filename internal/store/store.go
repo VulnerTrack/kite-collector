@@ -180,6 +180,13 @@ type Store interface {
 	// no row matches.
 	GetScanRun(ctx context.Context, id uuid.UUID) (*model.ScanRun, error)
 
+	// MarkScanCancelRequested stamps cancel_requested_at on the scan run
+	// identified by id without touching its status. It returns ErrNotFound
+	// when no row matches. The engine's own CompleteScanRun still owns the
+	// terminal-status transition; this column just records that an operator
+	// asked for cancellation.
+	MarkScanCancelRequested(ctx context.Context, id uuid.UUID, at time.Time) error
+
 	// UpsertSoftware replaces all installed software records for the given
 	// asset. It deletes existing rows for assetID and inserts the new set
 	// inside a single transaction (full replacement per scan).
