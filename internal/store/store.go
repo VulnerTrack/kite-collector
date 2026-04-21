@@ -63,9 +63,9 @@ type ForeignKey struct {
 // constructed. OrderBy, when non-empty, must match a column of Table.
 type RowsFilter struct {
 	Table   string
+	OrderBy string
 	Limit   int
 	Offset  int
-	OrderBy string
 }
 
 // Row is a single result row. PrimaryKey carries stringified PK column values
@@ -79,8 +79,8 @@ type Row struct {
 // ColumnValue holds one cell of a Row. Value is the native Go value returned
 // by the driver; templates are responsible for stringifying it.
 type ColumnValue struct {
-	Name  string
 	Value any
+	Name  string
 }
 
 // RowReport is the payload rendered into the row-detail sidebar. Inbound

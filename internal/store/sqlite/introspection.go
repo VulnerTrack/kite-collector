@@ -74,13 +74,13 @@ func (s *SQLiteStore) listTableNames(ctx context.Context) ([]string, error) {
 func (s *SQLiteStore) listViaPragmaTableList(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `PRAGMA table_list`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("PRAGMA table_list: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	cols, err := rows.Columns()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("table_list columns: %w", err)
 	}
 
 	// PRAGMA table_list returns: schema, name, type, ncol, wr, strict.
@@ -110,7 +110,7 @@ func (s *SQLiteStore) listViaPragmaTableList(ctx context.Context) ([]string, err
 			dest[i] = &raw[i]
 		}
 		if err := rows.Scan(dest...); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan table_list: %w", err)
 		}
 		name := raw[nameIdx].String
 		kind := raw[typeIdx].String
@@ -125,7 +125,10 @@ func (s *SQLiteStore) listViaPragmaTableList(ctx context.Context) ([]string, err
 		}
 		names = append(names, name)
 	}
-	return names, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate table_list: %w", err)
+	}
+	return names, nil
 }
 
 func (s *SQLiteStore) listViaSQLiteSchema(ctx context.Context) ([]string, error) {
@@ -144,14 +147,17 @@ func (s *SQLiteStore) listViaSQLiteSchema(ctx context.Context) ([]string, error)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan sqlite_schema: %w", err)
 		}
 		if isSystemTable(name) {
 			continue
 		}
 		names = append(names, name)
 	}
-	return names, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate sqlite_schema: %w", err)
+	}
+	return names, nil
 }
 
 // DescribeTable returns the full schema for a single content table, validating
@@ -273,7 +279,10 @@ func (s *SQLiteStore) readForeignKeys(ctx context.Context, table string) ([]stor
 			ToColumn:   to.String,
 		})
 	}
-	return fks, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate foreign_key_list %s: %w", table, err)
+	}
+	return fks, nil
 }
 
 // readSQLiteStat1 reads the analyzer estimate for every table, keyed by name.
@@ -282,7 +291,7 @@ func (s *SQLiteStore) readForeignKeys(ctx context.Context, table string) ([]stor
 func (s *SQLiteStore) readSQLiteStat1(ctx context.Context) (map[string]int64, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT tbl, stat FROM sqlite_stat1`)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sqlite_stat1: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -290,7 +299,7 @@ func (s *SQLiteStore) readSQLiteStat1(ctx context.Context) (map[string]int64, er
 	for rows.Next() {
 		var tbl, stat string
 		if err := rows.Scan(&tbl, &stat); err != nil {
-			return stats, err
+			return stats, fmt.Errorf("scan sqlite_stat1: %w", err)
 		}
 		// stat is whitespace-separated; the first token is the row count.
 		if _, seen := stats[tbl]; seen {
@@ -306,7 +315,10 @@ func (s *SQLiteStore) readSQLiteStat1(ctx context.Context) (map[string]int64, er
 		}
 		stats[tbl] = n
 	}
-	return stats, rows.Err()
+	if err := rows.Err(); err != nil {
+		return stats, fmt.Errorf("iterate sqlite_stat1: %w", err)
+	}
+	return stats, nil
 }
 
 // rowCount returns the best available row count for table, preferring the
@@ -412,9 +424,9 @@ func (s *SQLiteStore) GetRowReport(ctx context.Context, table string, pk map[str
 
 	// Outbound: parent rows this row's FKs point at.
 	for _, fk := range schema.ForeignKeys {
-		parentSchema, err := s.describeIfKnown(ctx, fk.ToTable)
-		if err != nil {
-			return nil, err
+		parentSchema, describeErr := s.describeIfKnown(ctx, fk.ToTable)
+		if describeErr != nil {
+			return nil, describeErr
 		}
 		if parentSchema == nil {
 			continue
@@ -424,9 +436,9 @@ func (s *SQLiteStore) GetRowReport(ctx context.Context, table string, pk map[str
 			continue
 		}
 		parentPK := map[string]string{fk.ToColumn: stringifyValue(val)}
-		parent, err := s.loadRowByPK(ctx, parentSchema, parentPK)
-		if err != nil {
-			return nil, err
+		parent, loadErr := s.loadRowByPK(ctx, parentSchema, parentPK)
+		if loadErr != nil {
+			return nil, loadErr
 		}
 		if parent == nil {
 			continue
@@ -439,17 +451,17 @@ func (s *SQLiteStore) GetRowReport(ctx context.Context, table string, pk map[str
 	}
 
 	// Inbound: scan every other content table for FKs that target this table.
-	allTables, err := s.listTableNames(ctx)
-	if err != nil {
-		return nil, err
+	allTables, listErr := s.listTableNames(ctx)
+	if listErr != nil {
+		return nil, listErr
 	}
 	for _, other := range allTables {
 		if other == table {
 			continue
 		}
-		childSchema, err := s.describeTable(ctx, other)
-		if err != nil {
-			return nil, fmt.Errorf("describe %s: %w", other, err)
+		childSchema, describeErr := s.describeTable(ctx, other)
+		if describeErr != nil {
+			return nil, fmt.Errorf("describe %s: %w", other, describeErr)
 		}
 		for _, fk := range childSchema.ForeignKeys {
 			if fk.ToTable != table {
@@ -664,4 +676,3 @@ func stringifyValue(v any) string {
 		return fmt.Sprintf("%v", v)
 	}
 }
-
