@@ -792,13 +792,14 @@ func formatDiscoveredServices(services []autodiscovery.DiscoveredService) {
 
 func newAgentCmd() *cobra.Command {
 	var (
-		stream   bool
-		interval string
-		cfgFile  string
-		dbPath   string
-		verbose  bool
-		certsDir string
-		endpoint string
+		stream        bool
+		interval      string
+		cfgFile       string
+		dbPath        string
+		verbose       bool
+		certsDir      string
+		endpoint      string
+		dashboardAddr string
 	)
 
 	cmd := &cobra.Command{
@@ -813,7 +814,7 @@ and no config file is required:
 
   kite-collector agent --stream --certs-dir /var/lib/kite-collector/<agent-code>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAgent(cfgFile, dbPath, interval, certsDir, endpoint, verbose, stream)
+			return runAgent(cfgFile, dbPath, interval, certsDir, endpoint, dashboardAddr, verbose, stream)
 		},
 	}
 
@@ -826,6 +827,8 @@ and no config file is required:
 		fmt.Sprintf("directory containing agent.pem, agent-key.pem, ca.pem (e.g. %s/<agent-code>)", defaultKiteDataDir()))
 	cmd.Flags().StringVar(&endpoint, "endpoint", "",
 		"OTLP endpoint (overrides config, default https://otel.vulnertrack.io)")
+	cmd.Flags().StringVar(&dashboardAddr, "dashboard-addr", "127.0.0.1:9090",
+		"dashboard listen address (empty string disables the dashboard)")
 
 	return cmd
 }
@@ -855,7 +858,7 @@ automatically and no config file is needed:
 
   kite stream --certs-dir /var/lib/kite-collector/<agent-code>`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runAgent(cfgFile, dbPath, interval, certsDir, endpoint, verbose, true)
+			return runAgent(cfgFile, dbPath, interval, certsDir, endpoint, "", verbose, true)
 		},
 	}
 
@@ -871,7 +874,7 @@ automatically and no config file is needed:
 	return cmd
 }
 
-func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride string, verbose, stream bool) error {
+func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAddr string, verbose, stream bool) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -1098,6 +1101,23 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride string, verb
 		}
 	}()
 
+	// Dashboard with a live scan coordinator: "Run Scan" actually runs.
+	// Empty dashboardAddr disables the dashboard (useful for headless deploys).
+	var dashSrv *http.Server
+	if dashboardAddr != "" {
+		rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
+		dashSrv = dashboard.Serve(dashboardAddr, st, rc, logger, dashboard.Options{
+			Coordinator: coord,
+			BaseConfig:  cfg,
+		})
+		go func() {
+			slog.Info("starting dashboard", "addr", dashboardAddr)
+			if srvErr := dashSrv.ListenAndServe(); srvErr != nil && srvErr != http.ErrServerClosed {
+				slog.Error("dashboard server error", "error", srvErr)
+			}
+		}()
+	}
+
 	if !stream {
 		// One-shot mode via agent command (no --stream flag).
 		result, scanErr := eng.Run(ctx, cfg)
@@ -1140,6 +1160,9 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride string, verb
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
 			_ = apiSrv.Shutdown(shutdownCtx)
+			if dashSrv != nil {
+				_ = dashSrv.Shutdown(shutdownCtx)
+			}
 			if metricsSrv != nil {
 				_ = metricsSrv.Shutdown(shutdownCtx)
 			}
@@ -2298,6 +2321,10 @@ from the local SQLite database — no external connections are made.`,
 			}
 			defer func() { _ = encStore.Close() }()
 			st := encStore.Store
+
+			if err := st.Migrate(ctx); err != nil {
+				return fmt.Errorf("migrate store: %w", err)
+			}
 
 			rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
 
