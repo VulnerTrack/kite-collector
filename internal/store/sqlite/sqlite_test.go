@@ -685,6 +685,77 @@ func TestConcurrentAccess(t *testing.T) {
 	assert.Len(t, all, numAssets)
 }
 
+// TestDashboardReads_UnmigratedDB reproduces the production log spam reported
+// against the dashboard:
+//
+//	ERROR dashboard: render scan-status error="get latest scan run: ...
+//	    SQL logic error: no such table: scan_runs (1)"
+//	ERROR dashboard: render assets error="list assets: ...
+//	    SQL logic error: no such table: assets (1)"
+//	ERROR dashboard: render findings error="list findings: ...
+//	    SQL logic error: no such table: config_findings (1)"
+//
+// Today the dashboard opens the store and starts serving HTMX polls; if the
+// underlying SQLite file was never migrated (fresh install, wrong path, or
+// Migrate silently skipped) every fragment render returns HTTP 500 and a
+// raw driver error is logged twice per poll.
+//
+// Desired contract (post-fix): each read method used by the dashboard must
+// treat "no such table" the same way it already treats sql.ErrNoRows /
+// empty result — a non-error empty response. GetLatestScanRun already
+// returns (nil, nil) on ErrNoRows; it should do the same when the
+// scan_runs table is absent. ListAssets / ListSoftware / ListFindings
+// should return ([]T{}, nil) instead of bubbling the driver error. This
+// matches the UX the template already handles ("No scans yet", empty grid)
+// and collapses the log spam into silence on an un-migrated DB.
+//
+// This test pins that contract: it opens a store WITHOUT calling Migrate
+// and asserts each dashboard read returns a graceful empty response. It
+// will fail today against the bug; once the store is taught to translate
+// "no such table" into an empty result (or wrap it as a typed
+// store.ErrSchemaNotInitialized that the dashboard renders as an
+// actionable hint), the assertions below pass.
+func TestDashboardReads_UnmigratedDB(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "unmigrated.db")
+	s, err := New(dbPath)
+	require.NoError(t, err, "New must succeed even without Migrate")
+	t.Cleanup(func() { _ = s.Close() })
+
+	ctx := context.Background()
+
+	t.Run("GetLatestScanRun", func(t *testing.T) {
+		latest, err := s.GetLatestScanRun(ctx)
+		assert.NoError(t, err,
+			"un-migrated DB must not surface a raw driver error — "+
+				"GetLatestScanRun should return (nil, nil) like the empty case")
+		assert.Nil(t, latest)
+	})
+
+	t.Run("ListAssets", func(t *testing.T) {
+		assets, err := s.ListAssets(ctx, store.AssetFilter{})
+		assert.NoError(t, err,
+			"un-migrated DB must not surface a raw driver error — "+
+				"ListAssets should return an empty slice")
+		assert.Empty(t, assets)
+	})
+
+	t.Run("ListSoftware", func(t *testing.T) {
+		sw, err := s.ListSoftware(ctx, uuid.Must(uuid.NewV7()))
+		assert.NoError(t, err,
+			"un-migrated DB must not surface a raw driver error — "+
+				"ListSoftware should return an empty slice")
+		assert.Empty(t, sw)
+	})
+
+	t.Run("ListFindings", func(t *testing.T) {
+		findings, err := s.ListFindings(ctx, store.FindingFilter{})
+		assert.NoError(t, err,
+			"un-migrated DB must not surface a raw driver error — "+
+				"ListFindings should return an empty slice")
+		assert.Empty(t, findings)
+	})
+}
+
 func TestClose(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "close_test.db")
 	s, err := New(dbPath)

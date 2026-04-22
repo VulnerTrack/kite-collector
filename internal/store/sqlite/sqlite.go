@@ -60,6 +60,15 @@ func (s *SQLiteStore) RawDB() *sql.DB {
 	return s.db
 }
 
+// isNoSuchTableErr reports whether err is the modernc.org/sqlite "no such
+// table" error. Read paths used by the dashboard collapse this into an
+// empty result so an un-migrated or freshly created DB file does not spam
+// HTTP 500s and render errors on every HTMX poll. Write paths keep the
+// raw error — callers writing to a missing table deserve to know.
+func isNoSuchTableErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "no such table")
+}
+
 // Close releases the underlying database connection pool.
 func (s *SQLiteStore) Close() error {
 	if err := s.db.Close(); err != nil {
@@ -358,6 +367,9 @@ func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) 
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
+		if isNoSuchTableErr(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("list assets: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -711,7 +723,7 @@ func (s *SQLiteStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, err
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT 1`)
 	r, err := scanScanRun(row)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) || isNoSuchTableErr(err) {
 		return nil, nil
 	}
 	if err != nil {
@@ -857,6 +869,9 @@ func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]mo
 		assetID.String(),
 	)
 	if err != nil {
+		if isNoSuchTableErr(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("list software: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -1050,6 +1065,9 @@ func (s *SQLiteStore) ListFindings(ctx context.Context, filter store.FindingFilt
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
+		if isNoSuchTableErr(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("list findings: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
