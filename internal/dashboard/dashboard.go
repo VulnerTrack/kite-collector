@@ -15,15 +15,25 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
+	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
 // Options bundles the optional dependencies a dashboard server can wire in.
 // When Coordinator and BaseConfig are both non-nil, the "Run Scan" button
 // actually starts a scan through the coordinator; otherwise the button
 // renders a read-only placeholder.
+//
+// StreamController, when non-nil, enables the RFC-0112 streaming toggle
+// buttons on /onboarding. A nil controller causes the onboarding page to
+// render the streaming card as disabled (read-only banner).
+// AppVersion / Commit are surfaced in /api/v1/support-bundle; empty values
+// are rendered as the literal string "dev".
 type Options struct {
-	Coordinator *scan.Coordinator
-	BaseConfig  *config.Config
+	Coordinator      *scan.Coordinator
+	BaseConfig       *config.Config
+	StreamController StreamController
+	AppVersion       string
+	Commit           string
 }
 
 // Serve creates and returns an HTTP server for the dashboard.
@@ -201,6 +211,29 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			}
 		}
 	})
+
+	// RFC-0112 onboarding surface: enroll -> check -> stream. The SQLite-
+	// typed identity store is required; non-SQLite stores (a theoretical
+	// future alternative) skip registration with a warning so the rest of
+	// the dashboard keeps working.
+	if sqliteStore, ok := st.(*sqlite.SQLiteStore); ok {
+		wrapKey, keyErr := newOnboardingWrapKey()
+		if keyErr != nil {
+			logger.Warn("dashboard: onboarding disabled — no wrap key", "error", keyErr)
+		} else {
+			registerOnboardingRoutes(mux, onboardingDeps{
+				Store:         sqliteStore,
+				StreamCtrl:    opts.StreamController,
+				Logger:        logger,
+				WrapKey:       wrapKey,
+				AppVersion:    opts.AppVersion,
+				Commit:        opts.Commit,
+				ProbeDuration: onboardingProbeDurationHistogram(),
+			})
+		}
+	} else {
+		logger.Warn("dashboard: onboarding disabled — store is not sqlite-backed")
+	}
 
 	return &http.Server{
 		Addr:              addr,
