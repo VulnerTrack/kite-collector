@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,8 +25,13 @@ import (
 // fakeRunner is a minimal scan.Runner used by the dashboard tests. It
 // blocks indefinitely on a channel until released so the coordinator
 // reports an active scan for Active() assertions.
+//
+// released is guarded by sync.Once so release() is idempotent AND does not
+// race with RunWithOptions reading block: we only close the channel once
+// and never mutate block itself after construction.
 type fakeRunner struct {
-	block chan struct{}
+	block    chan struct{}
+	released sync.Once
 }
 
 func newFakeRunner() *fakeRunner { return &fakeRunner{block: make(chan struct{})} }
@@ -40,10 +46,7 @@ func (f *fakeRunner) RunWithOptions(ctx context.Context, _ *config.Config, _ eng
 }
 
 func (f *fakeRunner) release() {
-	if f.block != nil {
-		close(f.block)
-		f.block = nil
-	}
+	f.released.Do(func() { close(f.block) })
 }
 
 func TestRenderScanStatus_NoCoordinator(t *testing.T) {
