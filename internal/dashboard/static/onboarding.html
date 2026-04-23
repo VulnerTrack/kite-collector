@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kite-collector onboarding</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/htmx.min.js"></script>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>kite-collector onboarding</h1>
+  <div class="meta">
+    <span>Enroll &middot; Check &middot; Stream</span>
+  </div>
+</header>
+
+<nav>
+  <a href="/" class="">Dashboard</a>
+  <a href="/onboarding" class="active">Onboarding</a>
+</nav>
+
+<div id="onboarding-toasts" class="toasts"></div>
+
+<section class="card" id="enroll-card">
+  <h2>1. Enroll platform token</h2>
+  <p class="muted">Paste the platform endpoint and API key. The plaintext key is
+     never stored or echoed after this POST &mdash; only a <code>sha256[:8]</code>
+     fingerprint is shown afterwards.</p>
+  <div id="enroll-fragment"
+       hx-get="/fragments/enroll-form"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="htmx-indicator">Loading enroll form&hellip;</div>
+  </div>
+</section>
+
+<section class="card" id="check-card">
+  <h2>2. Connection check</h2>
+  <p class="muted">Six probes verify DNS, TLS, endpoint reach, token auth,
+     clock skew, and OTLP handshake. Click &ldquo;Run check&rdquo; after
+     enrolling.</p>
+  <div id="check-fragment"
+       hx-get="/fragments/connection-check"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="htmx-indicator">Loading probe panel&hellip;</div>
+  </div>
+</section>
+
+<section class="card" id="stream-card">
+  <h2>3. Streaming</h2>
+  <p class="muted">Start or stop the OTLP streaming goroutine without
+     restarting the binary. The status row polls every 3 seconds.</p>
+  <div id="stream-fragment"
+       hx-get="/fragments/stream-status"
+       hx-trigger="load, every 3s"
+       hx-swap="innerHTML">
+    <div class="htmx-indicator">Loading stream status&hellip;</div>
+  </div>
+</section>
+
+<footer>
+  kite-collector onboarding &mdash; RFC-0112
+</footer>
+
+</div>
+</body>
+</html>
