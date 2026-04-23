@@ -65,6 +65,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/postgres"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/streamctrl"
 	"github.com/vulnertrack/kite-collector/internal/tunnel"
 )
 
@@ -1038,6 +1039,8 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 	cls := classifier.New(authorizer, manager)
 
 	// Set up OTLP emitter if endpoint is configured, otherwise noop.
+	// The emitter is then wrapped by a streamctrl.Controller so the
+	// RFC-0112 onboarding dashboard can Start/Stop streaming at runtime.
 	var em emitter.Emitter
 	if cfg.Streaming.OTLP.Endpoint != "" {
 		otlpCfg := emitter.OTLPConfig{
@@ -1065,6 +1068,14 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 		em = emitter.NewNoop()
 		slog.Info("agent: OTLP not configured — events will not be streamed")
 	}
+
+	// Wrap the emitter so /api/v1/stream/{start,stop} from the dashboard
+	// can gate OTLP emission without restarting the binary.
+	streamCtrl := streamctrl.New(em)
+	// Default to running so legacy behaviour is preserved: `agent --stream`
+	// emits immediately unless the operator presses Stop from the UI.
+	_ = streamCtrl.Start(ctx)
+	em = streamCtrl
 
 	defaultRules := []model.SeverityRule{
 		{IsAuthorized: model.AuthorizationUnauthorized, IsManaged: model.ManagedUnmanaged, Severity: model.SeverityCritical},
@@ -1107,8 +1118,11 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 	if dashboardAddr != "" {
 		rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
 		dashSrv = dashboard.Serve(dashboardAddr, st, rc, logger, dashboard.Options{
-			Coordinator: coord,
-			BaseConfig:  cfg,
+			Coordinator:      coord,
+			BaseConfig:       cfg,
+			StreamController: dashboardStreamAdapter{streamCtrl},
+			AppVersion:       version,
+			Commit:           commit,
 		})
 		go func() {
 			slog.Info("starting dashboard", "addr", dashboardAddr)
@@ -2329,7 +2343,10 @@ from the local SQLite database — no external connections are made.`,
 			rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
 
 			logger := slog.Default()
-			srv := dashboard.Serve(addr, st, rc, logger, dashboard.Options{})
+			srv := dashboard.Serve(addr, st, rc, logger, dashboard.Options{
+				AppVersion: version,
+				Commit:     commit,
+			})
 
 			go func() {
 				logger.Info("dashboard listening", "addr", addr)
@@ -2924,6 +2941,39 @@ func printOTLPResults(stages []otlpCheckStage, jsonOut bool) error {
 		return fmt.Errorf("one or more connectivity checks failed")
 	}
 	return nil
+}
+
+// dashboardStreamAdapter bridges streamctrl.Controller to the dashboard
+// StreamController contract. The two packages are intentionally decoupled
+// (streamctrl belongs to the emitter plane, dashboard to the UI plane),
+// so this tiny adapter lives in main.go where both are already imported.
+type dashboardStreamAdapter struct {
+	inner *streamctrl.Controller
+}
+
+func (a dashboardStreamAdapter) Start(ctx context.Context) error {
+	if err := a.inner.Start(ctx); err != nil {
+		return fmt.Errorf("stream adapter start: %w", err)
+	}
+	return nil
+}
+
+func (a dashboardStreamAdapter) Stop(ctx context.Context) error {
+	if err := a.inner.Stop(ctx); err != nil {
+		return fmt.Errorf("stream adapter stop: %w", err)
+	}
+	return nil
+}
+
+func (a dashboardStreamAdapter) Status() dashboard.StreamStatus {
+	s := a.inner.Status()
+	return dashboard.StreamStatus{
+		LastEventAt:   s.LastEventAt,
+		State:         s.State,
+		LastErrorText: s.LastErrorText,
+		BacklogDepth:  s.BacklogDepth,
+		TotalSent:     s.TotalSent,
+	}
 }
 
 // ---------------------------------------------------------------------------
