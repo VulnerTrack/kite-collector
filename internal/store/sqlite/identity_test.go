@@ -63,7 +63,6 @@ func TestUpsertGetEnrolledIdentity(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoIdentity)
 
 	id := EnrolledIdentity{
-		PlatformEndpoint:  "https://platform.example.com",
 		ApiKeyFingerprint: APIKeyFingerprint("sk-abc"),
 		ApiKeyWrapped:     []byte("wrapped-blob"),
 	}
@@ -71,7 +70,6 @@ func TestUpsertGetEnrolledIdentity(t *testing.T) {
 
 	got, err := st.GetEnrolledIdentity(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, id.PlatformEndpoint, got.PlatformEndpoint)
 	assert.Equal(t, id.ApiKeyFingerprint, got.ApiKeyFingerprint)
 	assert.Equal(t, id.ApiKeyWrapped, got.ApiKeyWrapped)
 	assert.False(t, got.FirstEnrolledAt.IsZero())
@@ -83,7 +81,6 @@ func TestUpsertEnrolledIdentity_IsIdempotent(t *testing.T) {
 	ctx := context.Background()
 
 	id := EnrolledIdentity{
-		PlatformEndpoint:  "https://platform.example.com",
 		ApiKeyFingerprint: APIKeyFingerprint("sk-abc"),
 		ApiKeyWrapped:     []byte("blob-1"),
 	}
@@ -150,7 +147,6 @@ func TestUpdateIdentityCheckStamp(t *testing.T) {
 	ctx := context.Background()
 
 	require.NoError(t, st.UpsertEnrolledIdentity(ctx, EnrolledIdentity{
-		PlatformEndpoint:  "https://x",
 		ApiKeyFingerprint: APIKeyFingerprint("k"),
 		ApiKeyWrapped:     []byte("w"),
 	}))

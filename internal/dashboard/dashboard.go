@@ -34,6 +34,11 @@ type Options struct {
 	StreamController StreamController
 	AppVersion       string
 	Commit           string
+	// PlatformEndpoint is the collector's OTLP destination (sourced from
+	// cfg.Streaming.OTLP.Endpoint). The onboarding Enroll form shows this as
+	// read-only text and the connection-check probes dial this host. The
+	// value is NOT persisted in enrolled_identity — see RFC-0112.
+	PlatformEndpoint string
 }
 
 // Serve creates and returns an HTTP server for the dashboard.
@@ -222,13 +227,14 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			logger.Warn("dashboard: onboarding disabled — no wrap key", "error", keyErr)
 		} else {
 			registerOnboardingRoutes(mux, onboardingDeps{
-				Store:         sqliteStore,
-				StreamCtrl:    opts.StreamController,
-				Logger:        logger,
-				WrapKey:       wrapKey,
-				AppVersion:    opts.AppVersion,
-				Commit:        opts.Commit,
-				ProbeDuration: onboardingProbeDurationHistogram(),
+				Store:            sqliteStore,
+				StreamCtrl:       opts.StreamController,
+				Logger:           logger,
+				WrapKey:          wrapKey,
+				AppVersion:       opts.AppVersion,
+				Commit:           opts.Commit,
+				PlatformEndpoint: opts.PlatformEndpoint,
+				ProbeDuration:    onboardingProbeDurationHistogram(),
 			})
 		}
 	} else {

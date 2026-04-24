@@ -27,6 +27,11 @@ type onboardingTestHarness struct {
 	wrapKey []byte
 }
 
+// testPlatformEndpoint is the deterministic endpoint injected into the
+// onboarding harness. It is unreachable from the test process, which makes
+// probe-timeout behaviour testable without hitting the real OTLP collector.
+const testPlatformEndpoint = "https://otel.example.test"
+
 // newOnboardingHarness spins up an ephemeral store and registers the RFC-0112
 // routes. When streamCtrl is nil the handlers fall back to read-only
 // streaming mode per R8.
@@ -43,12 +48,13 @@ func newOnboardingHarness(t *testing.T, streamCtrl StreamController) *onboarding
 
 	mux := http.NewServeMux()
 	registerOnboardingRoutes(mux, onboardingDeps{
-		Store:       st,
-		StreamCtrl:  streamCtrl,
-		WrapKey:     key,
-		AppVersion:  "test",
-		Commit:      "deadbeef",
-		ProbeClient: &http.Client{Timeout: 500_000_000}, // 500ms
+		Store:            st,
+		StreamCtrl:       streamCtrl,
+		WrapKey:          key,
+		AppVersion:       "test",
+		Commit:           "deadbeef",
+		PlatformEndpoint: testPlatformEndpoint,
+		ProbeClient:      &http.Client{Timeout: 500_000_000}, // 500ms
 	})
 	return &onboardingTestHarness{mux: mux, store: st, wrapKey: key}
 }
@@ -127,10 +133,9 @@ func TestEnrollFragment_InitiallyEmpty(t *testing.T) {
 func TestHandleEnroll_RoundTrip(t *testing.T) {
 	h := newOnboardingHarness(t, nil)
 
-	// Valid POST: both fields present, https URL, 16+ char key.
+	// Valid POST: only api_key is supplied. Endpoint comes from config.
 	form := url.Values{
-		"platform_endpoint": {"https://platform.example.com"},
-		"api_key":           {"sk-platform-live-ABC-0123456789XYZ"},
+		"api_key": {"sk-platform-live-ABC-0123456789XYZ"},
 	}
 	rec := h.do(t, "POST", "/api/v1/identity/enroll",
 		strings.NewReader(form.Encode()),
@@ -140,27 +145,29 @@ func TestHandleEnroll_RoundTrip(t *testing.T) {
 
 	id, err := h.store.GetEnrolledIdentity(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, "https://platform.example.com", id.PlatformEndpoint)
 	assert.NotEmpty(t, id.ApiKeyWrapped, "wrapped blob must be persisted")
 	assert.NotContains(t, string(id.ApiKeyWrapped), "sk-platform-live", "plaintext key must NOT be stored")
 
 	// R4: the response HTML must NOT include the plaintext key.
 	assert.NotContains(t, rec.Body.String(), "sk-platform-live",
 		"R4: plaintext api_key must never appear in the response after enroll")
+
+	// The config-sourced endpoint should be rendered read-only.
+	assert.Contains(t, rec.Body.String(), testPlatformEndpoint,
+		"enroll response should render the config-sourced endpoint as read-only text")
 }
 
-func TestHandleEnroll_RejectsBadURL(t *testing.T) {
+func TestHandleEnroll_RejectsMissingAPIKey(t *testing.T) {
 	h := newOnboardingHarness(t, nil)
 	form := url.Values{
-		"platform_endpoint": {"not-a-url"},
-		"api_key":           {"sk-0123456789ABCDEF01"},
+		"api_key": {""},
 	}
 	rec := h.do(t, "POST", "/api/v1/identity/enroll",
 		strings.NewReader(form.Encode()),
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	)
 	assert.Equal(t, http.StatusOK, rec.Code, "validation errors render inline, not 4xx")
-	assert.Contains(t, rec.Body.String(), "http")
+	assert.Contains(t, rec.Body.String(), "API key is required")
 }
 
 func TestHandleEnroll_NoPlaintextLeaksInResponses(t *testing.T) {
@@ -168,8 +175,7 @@ func TestHandleEnroll_NoPlaintextLeaksInResponses(t *testing.T) {
 
 	// Enroll
 	form := url.Values{
-		"platform_endpoint": {"https://platform.example.com"},
-		"api_key":           {"sk-super-secret-key-0123456789ABCDEF"},
+		"api_key": {"sk-super-secret-key-0123456789ABCDEF"},
 	}
 	_ = h.do(t, "POST", "/api/v1/identity/enroll",
 		strings.NewReader(form.Encode()),
@@ -192,7 +198,7 @@ func TestHandleEnroll_NoPlaintextLeaksInResponses(t *testing.T) {
 // Connection check
 // ---------------------------------------------------------------------------
 
-func TestHandleConnectionCheck_SkipsWithoutIdentity(t *testing.T) {
+func TestHandleConnectionCheck_SkipsAuthWithoutIdentity(t *testing.T) {
 	h := newOnboardingHarness(t, nil)
 
 	rec := h.do(t, "GET", "/api/v1/connection/check", nil, nil)
@@ -202,14 +208,59 @@ func TestHandleConnectionCheck_SkipsWithoutIdentity(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Len(t, resp.Probes, 6, "all six probes always reported")
 
-	// With no identity: DNS + TLS + reach + auth + clock + otlp must all
-	// SKIP — we never hit the network from the test process.
-	for _, p := range resp.Probes {
-		assert.Equal(t, "skip", p.Result,
-			"probe %s should SKIP when no identity is enrolled, got %q (diag %q)",
-			p.Name, p.Result, p.Diagnostic)
+	// With no identity enrolled but a config endpoint set, probes 3–6
+	// (reach/auth/clock/otlp) must SKIP with the "no identity enrolled"
+	// diagnostic. Probes 1–2 (DNS/TLS) will execute against the test
+	// endpoint; we don't assert a specific outcome for them, only that
+	// the auth-dependent probes do not leak partial state.
+	skipProbes := map[probeName]bool{
+		probeReach: true,
+		probeAuth:  true,
+		probeClock: true,
+		probeOTLP:  true,
 	}
-	assert.False(t, resp.AllPass, "all_pass=false when every probe skipped")
+	for _, p := range resp.Probes {
+		if skipProbes[p.Name] {
+			assert.Equal(t, "skip", p.Result,
+				"probe %s should SKIP when no identity is enrolled, got %q (diag %q)",
+				p.Name, p.Result, p.Diagnostic)
+		}
+	}
+	assert.False(t, resp.AllPass, "all_pass=false when auth probes skipped")
+}
+
+// TestHandleConnectionCheck_ProbesHitInjectedEndpoint verifies that the
+// endpoint plumbed into onboardingDeps is the one the probes dial. We use
+// the reserved example.test TLD so the DNS probe fails with a hostname
+// that includes our injected string — no live endpoint is contacted.
+func TestHandleConnectionCheck_ProbesHitInjectedEndpoint(t *testing.T) {
+	h := newOnboardingHarness(t, nil)
+
+	// Enroll so probes 3–6 run instead of SKIPping; they will all fail
+	// against example.test, but the failure diagnostics should mention
+	// the injected host.
+	form := url.Values{"api_key": {"sk-test-0123456789ABCDEF"}}
+	_ = h.do(t, "POST", "/api/v1/identity/enroll",
+		strings.NewReader(form.Encode()),
+		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
+	)
+
+	rec := h.do(t, "GET", "/api/v1/connection/check", nil, nil)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp connectionCheckResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+	// The DNS probe diagnostic should reference example.test (the host of
+	// testPlatformEndpoint) as proof the injected endpoint was used.
+	var dnsDiag string
+	for _, p := range resp.Probes {
+		if p.Name == probeDNS {
+			dnsDiag = p.Diagnostic
+		}
+	}
+	assert.Contains(t, dnsDiag, "example.test",
+		"DNS probe should target the injected endpoint host; got diag %q", dnsDiag)
 }
 
 // ---------------------------------------------------------------------------
