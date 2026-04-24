@@ -1123,6 +1123,7 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 			StreamController: dashboardStreamAdapter{streamCtrl},
 			AppVersion:       version,
 			Commit:           commit,
+			PlatformEndpoint: cfg.Streaming.OTLP.Endpoint,
 		})
 		go func() {
 			slog.Info("starting dashboard", "addr", dashboardAddr)
@@ -2343,9 +2344,19 @@ from the local SQLite database — no external connections are made.`,
 			rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
 
 			logger := slog.Default()
+			// Read-only inspector mode: load config with defaults so the
+			// onboarding page can show the OTLP endpoint from config (or the
+			// built-in https://otel.vulnertrack.io default when no config
+			// file is present). A load failure is not fatal here — the
+			// dashboard still renders, just without a live endpoint.
+			platformEndpoint := ""
+			if inspectorCfg, loadErr := config.Load(""); loadErr == nil && inspectorCfg != nil {
+				platformEndpoint = inspectorCfg.Streaming.OTLP.Endpoint
+			}
 			srv := dashboard.Serve(addr, st, rc, logger, dashboard.Options{
-				AppVersion: version,
-				Commit:     commit,
+				AppVersion:       version,
+				Commit:           commit,
+				PlatformEndpoint: platformEndpoint,
 			})
 
 			go func() {

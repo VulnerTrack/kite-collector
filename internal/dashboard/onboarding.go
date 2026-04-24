@@ -33,14 +33,15 @@ import (
 // because identity + probe_result persistence is onboarding-specific and
 // does not belong on the generic Store contract.
 type onboardingDeps struct {
-	Store         *sqlite.SQLiteStore
-	StreamCtrl    StreamController
-	Logger        *slog.Logger
-	ProbeClient   *http.Client
-	ProbeDuration *prometheus.HistogramVec
-	AppVersion    string
-	Commit        string
-	WrapKey       []byte // 32-byte AEAD key for api_key_wrapped
+	Store            *sqlite.SQLiteStore
+	StreamCtrl       StreamController
+	Logger           *slog.Logger
+	ProbeClient      *http.Client
+	ProbeDuration    *prometheus.HistogramVec
+	AppVersion       string
+	Commit           string
+	PlatformEndpoint string // from config (streaming.otlp.endpoint)
+	WrapKey          []byte // 32-byte AEAD key for api_key_wrapped
 }
 
 // registerOnboardingRoutes mounts every RFC-0112 dashboard route onto mux.
@@ -138,23 +139,16 @@ var enrollFragmentTmpl = template.Must(template.New("enroll").Parse(`
 <div class="enroll-status">
   <p>
     <span class="badge badge-green">enrolled</span>
-    <code>{{.Endpoint}}</code>
     &mdash; fingerprint <code title="{{.FingerprintFull}}">{{.FingerprintShort}}</code>
   </p>
   <p class="muted small">first enrolled {{.FirstEnrolledAt}} &middot; last refreshed {{.LastEnrolledAt}}</p>
 </div>
 {{- end}}
+<p>Platform endpoint: <code>{{.Endpoint}}</code> <span class="muted small">(from collector config)</span></p>
 <form id="enroll-form"
       hx-post="/api/v1/identity/enroll"
       hx-target="#enroll-fragment"
       hx-swap="innerHTML">
-  <div class="form-row">
-    <label for="platform_endpoint">Platform endpoint</label>
-    <input id="platform_endpoint" name="platform_endpoint" type="url"
-           placeholder="https://platform.example.com"
-           value="{{.Endpoint}}"
-           required {{if .ReadOnly}}disabled{{end}}>
-  </div>
   <div class="form-row">
     <label for="api_key">API key</label>
     <input id="api_key" name="api_key" type="password"
@@ -173,7 +167,7 @@ var enrollFragmentTmpl = template.Must(template.New("enroll").Parse(`
 `))
 
 func renderEnrollFragment(w io.Writer, ctx context.Context, deps onboardingDeps) error {
-	view := enrollView{ReadOnly: deps.Store == nil}
+	view := enrollView{ReadOnly: deps.Store == nil, Endpoint: deps.PlatformEndpoint}
 	if deps.Store != nil {
 		id, err := deps.Store.GetEnrolledIdentity(ctx)
 		if err != nil && !errors.Is(err, sqlite.ErrNoIdentity) {
@@ -181,7 +175,6 @@ func renderEnrollFragment(w io.Writer, ctx context.Context, deps onboardingDeps)
 		}
 		if err == nil {
 			view.Enrolled = true
-			view.Endpoint = id.PlatformEndpoint
 			view.FingerprintFull = id.ApiKeyFingerprint
 			view.FingerprintShort = shortFingerprint(id.ApiKeyFingerprint)
 			view.FirstEnrolledAt = id.FirstEnrolledAt.Format(time.RFC3339)
@@ -206,7 +199,7 @@ func shortFingerprint(fp string) string {
 
 func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 	ctx := r.Context()
-	view := enrollView{}
+	view := enrollView{Endpoint: deps.PlatformEndpoint}
 
 	if deps.Store == nil {
 		view.ReadOnly = true
@@ -227,19 +220,10 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 		return
 	}
 
-	endpoint := strings.TrimSpace(r.PostFormValue("platform_endpoint"))
 	apiKey := r.PostFormValue("api_key")
 
-	if endpoint == "" || apiKey == "" {
-		view.Endpoint = endpoint
-		view.Error = "platform endpoint and API key are both required"
-		writeEnrollFragment(w, deps.Logger, view)
-		return
-	}
-	u, err := url.Parse(endpoint)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		view.Endpoint = endpoint
-		view.Error = "platform endpoint must be an http:// or https:// URL"
+	if strings.TrimSpace(apiKey) == "" {
+		view.Error = "API key is required"
 		writeEnrollFragment(w, deps.Logger, view)
 		return
 	}
@@ -251,7 +235,6 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 			"fingerprint", shortFingerprint(fingerprint),
 			"error", wrapErr,
 		)
-		view.Endpoint = endpoint
 		view.Error = "internal error wrapping API key"
 		writeEnrollFragment(w, deps.Logger, view)
 		return
@@ -259,7 +242,6 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 
 	now := time.Now().UTC()
 	if upsertErr := deps.Store.UpsertEnrolledIdentity(ctx, sqlite.EnrolledIdentity{
-		PlatformEndpoint:  endpoint,
 		ApiKeyFingerprint: fingerprint,
 		ApiKeyWrapped:     wrapped,
 		LastEnrolledAt:    now,
@@ -268,14 +250,13 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 			"fingerprint", shortFingerprint(fingerprint),
 			"error", upsertErr,
 		)
-		view.Endpoint = endpoint
 		view.Error = "failed to persist enrollment"
 		writeEnrollFragment(w, deps.Logger, view)
 		return
 	}
 
 	deps.Logger.Info("dashboard: enrolled platform identity",
-		"endpoint", endpoint,
+		"endpoint", deps.PlatformEndpoint,
 		"fingerprint", shortFingerprint(fingerprint),
 	)
 
@@ -287,7 +268,7 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 	}
 	view = enrollView{
 		Enrolled:         true,
-		Endpoint:         id.PlatformEndpoint,
+		Endpoint:         deps.PlatformEndpoint,
 		FingerprintFull:  id.ApiKeyFingerprint,
 		FingerprintShort: shortFingerprint(id.ApiKeyFingerprint),
 		FirstEnrolledAt:  id.FirstEnrolledAt.Format(time.RFC3339),
@@ -362,17 +343,18 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 	results := make([]probeResult, 0, 6)
 
 	var (
-		endpoint    string
+		endpoint    = deps.PlatformEndpoint
 		apiKey      string
 		haveID      bool
 		readOnly    = deps.Store == nil
 		enrolledURL *url.URL
 	)
+	if endpoint != "" {
+		enrolledURL, _ = url.Parse(endpoint)
+	}
 	if !readOnly {
 		id, err := deps.Store.GetEnrolledIdentity(ctx)
 		if err == nil {
-			endpoint = id.PlatformEndpoint
-			enrolledURL, _ = url.Parse(endpoint)
 			if len(deps.WrapKey) == 32 {
 				if pt, unwrapErr := sqlite.AEADUnwrap(deps.WrapKey, id.ApiKeyWrapped); unwrapErr == nil {
 					apiKey = string(pt)
@@ -898,10 +880,10 @@ func handleSupportBundle(w http.ResponseWriter, r *http.Request, deps onboarding
 		GoVersion:   runtime.Version(),
 		GOOS:        runtime.GOOS,
 		GOARCH:      runtime.GOARCH,
+		Endpoint:    deps.PlatformEndpoint,
 	}
 	if deps.Store != nil {
 		if id, err := deps.Store.GetEnrolledIdentity(r.Context()); err == nil {
-			m.Endpoint = id.PlatformEndpoint
 			m.KeyFinger8 = shortFingerprint(id.ApiKeyFingerprint)
 			if id.LastCheckPassedAt != nil {
 				m.LastPassed = id.LastCheckPassedAt.Format(time.RFC3339)

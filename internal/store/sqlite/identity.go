@@ -20,15 +20,14 @@ import (
 var ErrNoIdentity = errors.New("no enrolled identity")
 
 // EnrolledIdentity is the singleton row of the enrolled_identity table.
-// It holds the platform endpoint plus the AEAD-wrapped API key blob;
-// callers must never log or echo the plaintext key that lives inside
-// ApiKeyWrapped.
+// It holds the AEAD-wrapped API key blob; the platform endpoint is no longer
+// persisted — callers read it from the loaded collector config. Callers must
+// never log or echo the plaintext key that lives inside ApiKeyWrapped.
 type EnrolledIdentity struct {
 	FirstEnrolledAt   time.Time
 	LastEnrolledAt    time.Time
 	LastCheckPassedAt *time.Time
 	LastCheckFailedAt *time.Time
-	PlatformEndpoint  string
 	ApiKeyFingerprint string
 	ApiKeyWrapped     []byte
 }
@@ -117,16 +116,14 @@ func (s *SQLiteStore) UpsertEnrolledIdentity(ctx context.Context, id EnrolledIde
 	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO enrolled_identity (
-			id, platform_endpoint, api_key_fingerprint, api_key_wrapped,
+			id, api_key_fingerprint, api_key_wrapped,
 			first_enrolled_at, last_enrolled_at
-		) VALUES (1, ?, ?, ?, ?, ?)
+		) VALUES (1, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			platform_endpoint    = excluded.platform_endpoint,
 			api_key_fingerprint  = excluded.api_key_fingerprint,
 			api_key_wrapped      = excluded.api_key_wrapped,
 			last_enrolled_at     = excluded.last_enrolled_at
 	`,
-		id.PlatformEndpoint,
 		id.ApiKeyFingerprint,
 		id.ApiKeyWrapped,
 		first.UnixMilli(),
@@ -142,7 +139,7 @@ func (s *SQLiteStore) UpsertEnrolledIdentity(ctx context.Context, id EnrolledIde
 // collector has never been enrolled.
 func (s *SQLiteStore) GetEnrolledIdentity(ctx context.Context) (*EnrolledIdentity, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT platform_endpoint, api_key_fingerprint, api_key_wrapped,
+		SELECT api_key_fingerprint, api_key_wrapped,
 		       first_enrolled_at, last_enrolled_at,
 		       last_check_passed_at, last_check_failed_at
 		FROM enrolled_identity WHERE id = 1
@@ -154,7 +151,6 @@ func (s *SQLiteStore) GetEnrolledIdentity(ctx context.Context) (*EnrolledIdentit
 		failedMS        sql.NullInt64
 	)
 	err := row.Scan(
-		&id.PlatformEndpoint,
 		&id.ApiKeyFingerprint,
 		&id.ApiKeyWrapped,
 		&firstMS,

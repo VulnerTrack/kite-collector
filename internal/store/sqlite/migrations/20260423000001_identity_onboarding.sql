@@ -4,7 +4,6 @@
 
 CREATE TABLE IF NOT EXISTS enrolled_identity (
     id                      INTEGER PRIMARY KEY CHECK (id = 1),
-    platform_endpoint       TEXT NOT NULL,
     api_key_fingerprint     TEXT NOT NULL,
     api_key_wrapped         BLOB NOT NULL,
     first_enrolled_at       INTEGER NOT NULL,
