@@ -7,12 +7,16 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -83,12 +87,10 @@ func NewOTLP(cfg OTLPConfig, serviceVersion string) (*OTLPEmitter, error) {
 		transport.TLSClientConfig = tlsCfg
 	}
 
-	endpoint := cfg.Endpoint
-	// Ensure the path ends with /v1/logs.
-	if last := len(endpoint) - 1; last >= 0 && endpoint[last] == '/' {
-		endpoint = endpoint[:last]
+	endpoint, err := normalizeOTLPEndpoint(cfg.Endpoint)
+	if err != nil {
+		return nil, err
 	}
-	endpoint += "/v1/logs"
 
 	return &OTLPEmitter{
 		client: &http.Client{
@@ -104,6 +106,52 @@ func NewOTLP(cfg OTLPConfig, serviceVersion string) (*OTLPEmitter, error) {
 			maxDelay:    30 * time.Second,
 		},
 	}, nil
+}
+
+// normalizeOTLPEndpoint validates and normalizes the operator-supplied OTLP
+// endpoint. It accepts:
+//   - host-only strings ("otel.example.com") — defaults the scheme to https.
+//   - full URLs with scheme http/https.
+//
+// It rejects empty endpoints, unsupported schemes (anything other than http
+// or https), URLs with no host, and unparseable inputs. The returned URL
+// always has its path replaced with /v1/logs (existing paths are dropped to
+// avoid producing /custom/v1/logs when the operator already supplied one).
+func normalizeOTLPEndpoint(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("otlp: invalid endpoint %q: %w", raw, err)
+	}
+
+	// url.Parse treats a scheme-less host like "otel.example.com" as a
+	// relative path with the host living in u.Path. Detect that case and
+	// re-parse with an explicit https:// prefix.
+	if u.Scheme == "" && u.Host == "" {
+		normalized := "https://" + raw
+		reparsed, perr := url.Parse(normalized)
+		if perr != nil {
+			return "", fmt.Errorf("otlp: invalid endpoint %q: %w", raw, perr)
+		}
+		slog.Warn(
+			"otlp: endpoint missing scheme; defaulting to https",
+			"endpoint", raw,
+			"normalized", normalized,
+		)
+		u = reparsed
+	}
+
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", fmt.Errorf(
+			"otlp: unsupported endpoint scheme %q (want http or https)", u.Scheme,
+		)
+	}
+
+	if u.Host == "" {
+		return "", fmt.Errorf("otlp: endpoint %q has no host", raw)
+	}
+
+	u.Path = "/v1/logs"
+	return u.String(), nil
 }
 
 // Emit sends a single event as an OTLP log record.
@@ -367,6 +415,15 @@ func (o *OTLPEmitter) doSend(ctx context.Context, body []byte) error {
 
 	resp, err := o.client.Do(req)
 	if err != nil {
+		// URL-shape errors (e.g. "unsupported protocol scheme") are
+		// terminal: no amount of retrying will make a malformed URL
+		// valid. Return the bare error so the retry loop exits
+		// immediately. Connection errors remain transient.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) &&
+			strings.Contains(urlErr.Err.Error(), "unsupported protocol scheme") {
+			return fmt.Errorf("otlp: send request: %w", err)
+		}
 		return &transientError{err: fmt.Errorf("otlp: send request: %w", err)}
 	}
 	defer func() {

@@ -2,11 +2,13 @@ package emitter
 
 import (
 	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -77,4 +79,61 @@ func TestEventToLogRecord_EmptyWhenIDsUnset(t *testing.T) {
 
 	assert.Equal(t, "", rec.TraceID)
 	assert.Equal(t, "", rec.SpanID)
+}
+
+// ---------------------------------------------------------------------------
+// Endpoint URL normalization
+// ---------------------------------------------------------------------------
+
+func TestNewOTLP_RejectsEmptyEndpoint(t *testing.T) {
+	_, err := NewOTLP(OTLPConfig{Endpoint: ""}, "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "endpoint must not be empty")
+}
+
+func TestNewOTLP_DefaultsToHTTPSWhenSchemeMissing(t *testing.T) {
+	o, err := NewOTLP(OTLPConfig{Endpoint: "otel.vulnertrack.io"}, "test")
+	require.NoError(t, err)
+	assert.Equal(t, "https://otel.vulnertrack.io/v1/logs", o.endpoint)
+}
+
+func TestNewOTLP_RejectsUnsupportedScheme(t *testing.T) {
+	_, err := NewOTLP(OTLPConfig{Endpoint: "ftp://otel.example/v1/logs"}, "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported endpoint scheme")
+}
+
+func TestNewOTLP_RejectsHostOnlyWhenNoHost(t *testing.T) {
+	_, err := NewOTLP(OTLPConfig{Endpoint: "https:///v1/logs"}, "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "has no host")
+}
+
+func TestNewOTLP_ReplacesExistingPath(t *testing.T) {
+	o, err := NewOTLP(OTLPConfig{Endpoint: "https://otel.example/custom"}, "test")
+	require.NoError(t, err)
+	assert.Equal(t, "https://otel.example/v1/logs", o.endpoint)
+	assert.False(t, strings.Contains(o.endpoint, "custom"),
+		"existing path component must be replaced, not appended")
+}
+
+func TestNewOTLP_PreservesExplicitHTTPS(t *testing.T) {
+	o, err := NewOTLP(OTLPConfig{Endpoint: "https://otel.example"}, "test")
+	require.NoError(t, err)
+	assert.Equal(t, "https://otel.example/v1/logs", o.endpoint)
+}
+
+func TestNewOTLP_PreservesExplicitHTTP(t *testing.T) {
+	o, err := NewOTLP(OTLPConfig{Endpoint: "http://localhost:4318"}, "test")
+	require.NoError(t, err)
+	assert.Equal(t, "http://localhost:4318/v1/logs", o.endpoint)
+}
+
+// TestNewOTLP_TrailingSlashStripped covers the original behavior
+// (operator supplies "http://host:4318/") to confirm normalization
+// still produces a single, well-formed /v1/logs path.
+func TestNewOTLP_TrailingSlashStripped(t *testing.T) {
+	o, err := NewOTLP(OTLPConfig{Endpoint: "http://localhost:4318/"}, "test")
+	require.NoError(t, err)
+	assert.Equal(t, "http://localhost:4318/v1/logs", o.endpoint)
 }
