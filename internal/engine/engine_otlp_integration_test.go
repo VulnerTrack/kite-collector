@@ -346,11 +346,13 @@ func TestEngineToOTLP_DiscoveredEvent_FullWirePayload(t *testing.T) {
 	assert.Equal(t, "medium", stringField(rec, "severityText"))
 	assert.Equal(t, 9, numberField(rec, "severityNumber"))
 
-	// NOTE: engine-produced events currently have no Details payload, so
-	// body.stringValue lands on the wire as the empty string. Surfacing
-	// this gap explicitly here so future work can decide whether to add a
-	// human-readable summary or a JSON details blob.
-	assert.Equal(t, "", bodyString(t, rec))
+	body := bodyString(t, rec)
+	require.NotEmpty(t, body, "body.stringValue must be a populated JSON details blob")
+	var parsedBody map[string]any
+	require.NoError(t, json.Unmarshal([]byte(body), &parsedBody),
+		"body.stringValue must parse as JSON")
+	assert.Equal(t, string(model.EventAssetDiscovered), parsedBody["event_type"])
+	assert.Equal(t, persisted.AssetID.String(), parsedBody["asset_id"])
 
 	traceID := stringField(rec, "traceId")
 	spanID := stringField(rec, "spanId")
@@ -661,16 +663,18 @@ func TestEngineToOTLP_AllEngineEventTypes_SeverityNumberMapping(t *testing.T) {
 		assertSingleEvent(t, h.getReqs(), expect{model.EventUnmanagedAssetDetected, model.SeverityCritical, 17})
 	})
 
-	t.Run("NotSeen=medium(9)", func(t *testing.T) {
-		// Engine hardcodes SeverityMedium for AssetNotSeen events
-		// regardless of policy rules — the policy stub here has a rule
-		// that would score low if it were consulted, but the engine
-		// bypasses the policy for stale assets. This subtest pins that
-		// behaviour.
+	t.Run("NotSeen=critical(17)", func(t *testing.T) {
+		// AssetNotSeen events MUST flow through the policy engine like every
+		// other event. Configure a policy rule keyed on the stale asset's
+		// production environment that returns critical, and assert the wire
+		// severity matches — proving the engine no longer hardcodes medium
+		// for stale assets.
 		stale := model.Asset{
 			ID:              uuid.Must(uuid.NewV7()),
 			Hostname:        "ns-host",
 			AssetType:       model.AssetTypeServer,
+			Environment:     "production",
+			Criticality:     "tier-1",
 			DiscoverySource: "test",
 			IsAuthorized:    model.AuthorizationUnknown,
 			IsManaged:       model.ManagedUnknown,
@@ -681,14 +685,14 @@ func TestEngineToOTLP_AllEngineEventTypes_SeverityNumberMapping(t *testing.T) {
 		reg := discovery.NewRegistry()
 		reg.Register(&mockSource{name: "test", assets: nil})
 		pol := policy.New([]model.SeverityRule{
-			{Environment: "", Severity: model.SeverityLow}, // would catch all if consulted
+			{Environment: "production", Severity: model.SeverityCritical},
 		}, 168*time.Hour)
 		h := newEngineHarness(t, harnessOpts{registry: reg, policy: pol})
 		h.store.assets[stale.NaturalKey] = stale
 
 		_, err := h.engine.Run(context.Background(), newTestConfig())
 		require.NoError(t, err)
-		assertSingleEvent(t, h.getReqs(), expect{model.EventAssetNotSeen, model.SeverityMedium, 9})
+		assertSingleEvent(t, h.getReqs(), expect{model.EventAssetNotSeen, model.SeverityCritical, 17})
 	})
 }
 

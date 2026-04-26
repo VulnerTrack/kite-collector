@@ -391,6 +391,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			ScanRunID: scanID,
 			Severity:  severity,
 			Timestamp: time.Now().UTC(),
+			Details:   model.BuildEventDetails(assets[i], evtType),
 		}
 		evt.FromAsset(assets[i])
 		events = append(events, evt)
@@ -401,8 +402,9 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			ID:        uuid.Must(uuid.NewV7()),
 			EventType: model.EventAssetNotSeen,
 			ScanRunID: scanID,
-			Severity:  model.SeverityMedium,
+			Severity:  e.policy.EvaluateSeverity(staleAssets[i]),
 			Timestamp: time.Now().UTC(),
+			Details:   model.BuildEventDetails(staleAssets[i], model.EventAssetNotSeen),
 		}
 		evt.FromAsset(staleAssets[i])
 		events = append(events, evt)
