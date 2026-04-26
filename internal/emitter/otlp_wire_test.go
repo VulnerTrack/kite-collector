@@ -195,8 +195,13 @@ func TestOTLP_WireShape_CanonicalEvent(t *testing.T) {
 	require.NotNil(t, rec.Body.StringValue)
 	assert.Equal(t, evt.Details, *rec.Body.StringValue)
 
+	assert.Equal(t, "kite.asset.discovered", rec.EventName,
+		"top-level eventName must mirror EventType.Name()")
+
 	attrs := attrMap(rec.Attributes)
 	assert.Equal(t, string(evt.EventType), attrs["event_type"])
+	assert.Equal(t, "kite.asset.discovered", attrs["event_name"],
+		"event_name attribute must mirror EventType.Name()")
 	assert.Equal(t, evt.AssetID.String(), attrs["asset_id"])
 	assert.Equal(t, evt.ScanRunID.String(), attrs["scan_run_id"])
 	assert.Equal(t, string(evt.Severity), attrs["severity"])
@@ -236,8 +241,12 @@ func TestOTLP_WireShape_AllEventTypes(t *testing.T) {
 			require.Len(t, payload.ResourceLogs[0].ScopeLogs, 1)
 			require.Len(t, payload.ResourceLogs[0].ScopeLogs[0].LogRecords, 1)
 
-			attrs := attrMap(payload.ResourceLogs[0].ScopeLogs[0].LogRecords[0].Attributes)
+			rec := payload.ResourceLogs[0].ScopeLogs[0].LogRecords[0]
+			attrs := attrMap(rec.Attributes)
 			assert.Equal(t, string(et), attrs["event_type"])
+			assert.Equal(t, et.Name(), attrs["event_name"])
+			assert.Equal(t, et.Name(), rec.EventName,
+				"top-level eventName must match EventType.Name()")
 		})
 	}
 }

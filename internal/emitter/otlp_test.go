@@ -81,6 +81,22 @@ func TestEventToLogRecord_EmptyWhenIDsUnset(t *testing.T) {
 	assert.Equal(t, "", rec.SpanID)
 }
 
+// TestEventToLogRecord_PopulatesEventName ensures the OTLP LogRecord.eventName
+// proto field carries the namespaced event name derived from EventType.Name().
+// Backends that index the v1.5+ eventName field rely on this rather than the
+// snake_case attribute mirror.
+func TestEventToLogRecord_PopulatesEventName(t *testing.T) {
+	o := newTestEmitter(t)
+	e := &model.AssetEvent{
+		EventType: model.EventAssetDiscovered,
+		Timestamp: time.Unix(0, 0),
+	}
+
+	rec := o.eventToLogRecord(e, "0")
+
+	assert.Equal(t, "kite.asset.discovered", rec.EventName)
+}
+
 // ---------------------------------------------------------------------------
 // Endpoint URL normalization
 // ---------------------------------------------------------------------------

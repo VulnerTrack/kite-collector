@@ -231,6 +231,7 @@ type otlpLogRecord struct {
 	Body                 otlpAnyValue   `json:"body"`
 	TimeUnixNano         string         `json:"timeUnixNano"`
 	SeverityText         string         `json:"severityText"`
+	EventName            string         `json:"eventName,omitempty"`
 	ObservedTimeUnixNano string         `json:"observedTimeUnixNano"`
 	TraceID              string         `json:"traceId,omitempty"`
 	SpanID               string         `json:"spanId,omitempty"`
@@ -293,6 +294,7 @@ func (o *OTLPEmitter) eventToLogRecord(e *model.AssetEvent, observedNano string)
 		ObservedTimeUnixNano: observedNano,
 		SeverityNumber:       severityToNumber(e.Severity),
 		SeverityText:         string(e.Severity),
+		EventName:            e.EventType.Name(),
 		Body:                 stringVal(e.Details),
 		TraceID:              traceID,
 		SpanID:               spanID,
@@ -330,6 +332,7 @@ func deriveSpanID(e *model.AssetEvent) string {
 func buildAttributes(e *model.AssetEvent) []otlpKeyValue {
 	attrs := []otlpKeyValue{
 		stringKV("event_type", string(e.EventType)),
+		stringKV("event_name", e.EventType.Name()),
 		stringKV("asset_id", e.AssetID.String()),
 		stringKV("scan_run_id", e.ScanRunID.String()),
 		stringKV("severity", string(e.Severity)),

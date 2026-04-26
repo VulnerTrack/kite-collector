@@ -26,6 +26,8 @@ func TestBuildEventDetails_IncludesEventTypeAndAssetID(t *testing.T) {
 	parsed := decodeDetails(t, got)
 
 	assert.Equal(t, string(EventAssetDiscovered), parsed["event_type"])
+	assert.Equal(t, EventAssetDiscovered.Name(), parsed["event_name"])
+	assert.Equal(t, "kite.asset.discovered", parsed["event_name"])
 	assert.Equal(t, a.ID.String(), parsed["asset_id"])
 }
 
@@ -115,4 +117,29 @@ func TestBuildEventDetails_OmitsZeroTimestamps(t *testing.T) {
 	_, hasLast := parsed["last_seen_at"]
 	assert.False(t, hasFirst, "first_seen_at must be absent when zero")
 	assert.False(t, hasLast, "last_seen_at must be absent when zero")
+}
+
+// TestEventType_Name_AllEventTypes pins the namespaced wire names returned by
+// EventType.Name() for every known event type. These strings are part of the
+// public OTLP schema (they appear on the wire as LogRecord.eventName and as
+// the "event_name" attribute) so accidental drift here would be a backend
+// breakage. The unknown-row asserts the documented fallback shape.
+func TestEventType_Name_AllEventTypes(t *testing.T) {
+	cases := []struct {
+		eventType EventType
+		want      string
+	}{
+		{EventAssetDiscovered, "kite.asset.discovered"},
+		{EventAssetUpdated, "kite.asset.updated"},
+		{EventUnauthorizedAssetDetected, "kite.asset.unauthorized_detected"},
+		{EventUnmanagedAssetDetected, "kite.asset.unmanaged_detected"},
+		{EventAssetNotSeen, "kite.asset.not_seen"},
+		{EventAssetRemoved, "kite.asset.removed"},
+		{EventType("FooBar"), "kite.asset.unknown.foobar"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.eventType), func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.eventType.Name())
+		})
+	}
 }

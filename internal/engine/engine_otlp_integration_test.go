@@ -329,6 +329,10 @@ func TestEngineToOTLP_DiscoveredEvent_FullWirePayload(t *testing.T) {
 
 	attrs := recordAttrs(t, rec)
 	assert.Equal(t, string(model.EventAssetDiscovered), attrs["event_type"])
+	assert.Equal(t, "kite.asset.discovered", attrs["event_name"],
+		"event_name attribute must mirror EventType.Name() on the wire")
+	assert.Equal(t, "kite.asset.discovered", stringField(rec, "eventName"),
+		"top-level eventName proto field must mirror EventType.Name()")
 
 	// Resolve the engine-assigned scan_run_id and asset_id by reading the
 	// persisted event row from the mock store.
@@ -352,6 +356,8 @@ func TestEngineToOTLP_DiscoveredEvent_FullWirePayload(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(body), &parsedBody),
 		"body.stringValue must parse as JSON")
 	assert.Equal(t, string(model.EventAssetDiscovered), parsedBody["event_type"])
+	assert.Equal(t, "kite.asset.discovered", parsedBody["event_name"],
+		"body JSON must include event_name alongside event_type")
 	assert.Equal(t, persisted.AssetID.String(), parsedBody["asset_id"])
 
 	traceID := stringField(rec, "traceId")

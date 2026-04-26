@@ -44,8 +44,9 @@ type AssetEvent struct {
 // minimal hand-written JSON document so that consumers always receive a valid
 // JSON body.
 func BuildEventDetails(a Asset, eventType EventType) string {
-	details := make(map[string]string, 13)
+	details := make(map[string]string, 14)
 	details["event_type"] = string(eventType)
+	details["event_name"] = eventType.Name()
 	details["asset_id"] = a.ID.String()
 
 	if a.Hostname != "" {
