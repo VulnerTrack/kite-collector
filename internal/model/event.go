@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,6 +30,64 @@ type AssetEvent struct {
 	ID              uuid.UUID          `json:"id"`
 	AssetID         uuid.UUID          `json:"asset_id"`
 	ScanRunID       uuid.UUID          `json:"scan_run_id"`
+}
+
+// BuildEventDetails returns a compact JSON-encoded summary of an asset event
+// suitable for placement in AssetEvent.Details and surfacing as the OTLP log
+// record body for human triage. Only fields that are non-empty (or non-zero
+// for timestamps) on the asset are included; event_type and asset_id are
+// always present.
+//
+// The helper deliberately returns only a string (no error) — the encoded
+// payload is a flat map[string]string and json.Marshal cannot fail for that
+// shape. In the unlikely event the marshal somehow errors, we fall back to a
+// minimal hand-written JSON document so that consumers always receive a valid
+// JSON body.
+func BuildEventDetails(a Asset, eventType EventType) string {
+	details := make(map[string]string, 13)
+	details["event_type"] = string(eventType)
+	details["asset_id"] = a.ID.String()
+
+	if a.Hostname != "" {
+		details["hostname"] = a.Hostname
+	}
+	if a.AssetType != "" {
+		details["asset_type"] = string(a.AssetType)
+	}
+	if a.OSFamily != "" {
+		details["os_family"] = a.OSFamily
+	}
+	if a.Environment != "" {
+		details["environment"] = a.Environment
+	}
+	if a.Owner != "" {
+		details["owner"] = a.Owner
+	}
+	if a.Criticality != "" {
+		details["criticality"] = a.Criticality
+	}
+	if a.DiscoverySource != "" {
+		details["discovery_source"] = a.DiscoverySource
+	}
+	if a.IsAuthorized != "" {
+		details["is_authorized"] = string(a.IsAuthorized)
+	}
+	if a.IsManaged != "" {
+		details["is_managed"] = string(a.IsManaged)
+	}
+	if !a.FirstSeenAt.IsZero() {
+		details["first_seen_at"] = a.FirstSeenAt.Format(time.RFC3339)
+	}
+	if !a.LastSeenAt.IsZero() {
+		details["last_seen_at"] = a.LastSeenAt.Format(time.RFC3339)
+	}
+
+	encoded, err := json.Marshal(details)
+	if err != nil {
+		// json.Marshal cannot fail for map[string]string, but stay safe.
+		return `{"event_type":"` + string(eventType) + `","asset_id":"` + a.ID.String() + `"}`
+	}
+	return string(encoded)
 }
 
 // FromAsset copies identifying fields from an Asset into the event so that
