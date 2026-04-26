@@ -458,6 +458,34 @@ func TestOTLP_NoRetryOn4xx(t *testing.T) {
 // 10. Trace/span ids omitted when ids are nil
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 11. URL-shape errors are terminal (no retry storm on malformed endpoint)
+// ---------------------------------------------------------------------------
+
+// TestOTLP_NoRetryOnURLError mutates the emitter's endpoint post-construction
+// to a syntactically scheme-less URL — the same shape that would have come
+// from KITE_STREAMING_OTLP_ENDPOINT="otel.vulnertrack.io" before the
+// normalizer existed. doSend should return a terminal error after the first
+// attempt rather than wrapping it in *transientError and retrying three times.
+func TestOTLP_NoRetryOnURLError(t *testing.T) {
+	em := newWireTestEmitter(t, "http://127.0.0.1:1")
+	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
+
+	// Inject a URL with no scheme — http.Client.Do will fail with
+	// "unsupported protocol scheme \"\"". The retry loop must NOT retry.
+	em.endpoint = "otel.vulnertrack.io/v1/logs"
+
+	evt := makeEvent(t, model.EventAssetDiscovered, model.SeverityMedium)
+	err := em.Emit(context.Background(), evt)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported protocol scheme")
+	// Critical assertion: error must NOT include "exhausted N retry attempts"
+	// — that would mean the retry loop ran instead of returning immediately.
+	assert.NotContains(t, err.Error(), "exhausted",
+		"URL-shape error must be terminal; retry loop should not have run")
+}
+
 func TestOTLP_OmitsOptionalTraceIDWhenScanRunIDIsNil(t *testing.T) {
 	endpoint, reqs := startCaptureServer(t, http.StatusOK)
 	em := newWireTestEmitter(t, endpoint)
