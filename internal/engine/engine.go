@@ -385,25 +385,27 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		} else if assets[i].IsManaged == model.ManagedUnmanaged {
 			evtType = model.EventUnmanagedAssetDetected
 		}
-		events = append(events, model.AssetEvent{
+		evt := model.AssetEvent{
 			ID:        uuid.Must(uuid.NewV7()),
 			EventType: evtType,
-			AssetID:   assets[i].ID,
 			ScanRunID: scanID,
 			Severity:  severity,
 			Timestamp: time.Now().UTC(),
-		})
+		}
+		evt.FromAsset(assets[i])
+		events = append(events, evt)
 	}
 
 	for i := range staleAssets {
-		events = append(events, model.AssetEvent{
+		evt := model.AssetEvent{
 			ID:        uuid.Must(uuid.NewV7()),
 			EventType: model.EventAssetNotSeen,
-			AssetID:   staleAssets[i].ID,
 			ScanRunID: scanID,
 			Severity:  model.SeverityMedium,
 			Timestamp: time.Now().UTC(),
-		})
+		}
+		evt.FromAsset(staleAssets[i])
+		events = append(events, evt)
 	}
 
 	if len(events) > 0 {
