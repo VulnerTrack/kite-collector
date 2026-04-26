@@ -568,6 +568,116 @@ func TestEngine_ScanDeadlineNotExceeded(t *testing.T) {
 	assert.Equal(t, 0, result.ErrorCount)
 }
 
+func TestEngine_EmitsEventsWithAssetMetadata(t *testing.T) {
+	ms := newMockStore()
+	reg := discovery.NewRegistry()
+	reg.Register(&mockSource{
+		name: "test",
+		assets: []model.Asset{
+			{
+				Hostname:        "web-meta-01",
+				AssetType:       model.AssetTypeServer,
+				OSFamily:        "linux",
+				OSVersion:       "ubuntu-22.04",
+				KernelVersion:   "5.15.0-101-generic",
+				Architecture:    "amd64",
+				Environment:     "production",
+				Owner:           "platform-team",
+				Criticality:     "high",
+				DiscoverySource: "test",
+			},
+		},
+	})
+
+	em := &recordingEmitter{}
+	eng := newTestEngine(ms, reg, em)
+	cfg := newTestConfig()
+
+	_, err := eng.Run(context.Background(), cfg)
+	require.NoError(t, err)
+
+	em.mu.Lock()
+	defer em.mu.Unlock()
+
+	require.NotEmpty(t, em.events, "engine must emit at least one event")
+	var found bool
+	for _, evt := range em.events {
+		if evt.EventType != model.EventAssetDiscovered {
+			continue
+		}
+		found = true
+		assert.Equal(t, "web-meta-01", evt.Hostname, "Hostname must be copied from asset")
+		assert.Equal(t, model.AssetTypeServer, evt.AssetType, "AssetType must be copied from asset")
+		assert.Equal(t, "linux", evt.OSFamily, "OSFamily must be copied from asset")
+		assert.Equal(t, "ubuntu-22.04", evt.OSVersion, "OSVersion must be copied from asset")
+		assert.Equal(t, "5.15.0-101-generic", evt.KernelVersion, "KernelVersion must be copied from asset")
+		assert.Equal(t, "amd64", evt.Architecture, "Architecture must be copied from asset")
+		assert.Equal(t, "production", evt.Environment, "Environment must be copied from asset")
+		assert.Equal(t, "platform-team", evt.Owner, "Owner must be copied from asset")
+		assert.Equal(t, "high", evt.Criticality, "Criticality must be copied from asset")
+		assert.Equal(t, "test", evt.DiscoverySource, "DiscoverySource must be copied from asset")
+		assert.NotEqual(t, uuid.Nil, evt.AssetID, "AssetID must be set")
+	}
+	assert.True(t, found, "expected an EventAssetDiscovered event in the emitted batch")
+}
+
+func TestEngine_StaleAssetEventsIncludeAssetMetadata(t *testing.T) {
+	ms := newMockStore()
+
+	staleAsset := model.Asset{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        "stale-meta-host",
+		AssetType:       model.AssetTypeWorkstation,
+		OSFamily:        "darwin",
+		OSVersion:       "14.4",
+		Environment:     "staging",
+		Owner:           "ops",
+		Criticality:     "medium",
+		DiscoverySource: "test",
+		IsAuthorized:    model.AuthorizationUnknown,
+		IsManaged:       model.ManagedUnknown,
+		FirstSeenAt:     time.Now().UTC().Add(-300 * time.Hour),
+		LastSeenAt:      time.Now().UTC().Add(-300 * time.Hour),
+	}
+	staleAsset.ComputeNaturalKey()
+	ms.assets[staleAsset.NaturalKey] = staleAsset
+
+	reg := discovery.NewRegistry()
+	reg.Register(&mockSource{
+		name: "test",
+		assets: []model.Asset{
+			{Hostname: "current-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		},
+	})
+
+	em := &recordingEmitter{}
+	eng := newTestEngine(ms, reg, em)
+	cfg := newTestConfig()
+
+	_, err := eng.Run(context.Background(), cfg)
+	require.NoError(t, err)
+
+	em.mu.Lock()
+	defer em.mu.Unlock()
+
+	var found bool
+	for _, evt := range em.events {
+		if evt.EventType != model.EventAssetNotSeen {
+			continue
+		}
+		found = true
+		assert.Equal(t, "stale-meta-host", evt.Hostname, "Hostname must be propagated for stale-asset events")
+		assert.Equal(t, model.AssetTypeWorkstation, evt.AssetType, "AssetType must be propagated for stale-asset events")
+		assert.Equal(t, "darwin", evt.OSFamily, "OSFamily must be propagated for stale-asset events")
+		assert.Equal(t, "staging", evt.Environment, "Environment must be propagated for stale-asset events")
+		assert.Equal(t, "ops", evt.Owner, "Owner must be propagated for stale-asset events")
+		assert.Equal(t, "medium", evt.Criticality, "Criticality must be propagated for stale-asset events")
+		assert.Equal(t, "test", evt.DiscoverySource, "DiscoverySource must be propagated for stale-asset events")
+		assert.Equal(t, staleAsset.ID, evt.AssetID, "AssetID must reference the stale asset")
+	}
+	assert.True(t, found, "expected an EventAssetNotSeen event in the emitted batch")
+}
+
 func TestEngine_EmptyDiscovery(t *testing.T) {
 	ms := newMockStore()
 	reg := discovery.NewRegistry()
