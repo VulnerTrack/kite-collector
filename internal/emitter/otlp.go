@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -230,16 +232,48 @@ func (o *OTLPEmitter) buildPayload(events []model.AssetEvent) otlpLogsPayload {
 }
 
 func (o *OTLPEmitter) eventToLogRecord(e *model.AssetEvent, observedNano string) otlpLogRecord {
+	traceID := e.TraceID
+	if traceID == "" {
+		traceID = deriveTraceID(e)
+	}
+	spanID := e.SpanID
+	if spanID == "" {
+		spanID = deriveSpanID(e)
+	}
 	return otlpLogRecord{
 		TimeUnixNano:         strconv.FormatInt(e.Timestamp.UnixNano(), 10),
 		ObservedTimeUnixNano: observedNano,
 		SeverityNumber:       severityToNumber(e.Severity),
 		SeverityText:         string(e.Severity),
 		Body:                 stringVal(e.Details),
-		TraceID:              e.TraceID,
-		SpanID:               e.SpanID,
+		TraceID:              traceID,
+		SpanID:               spanID,
 		Attributes:           buildAttributes(e),
 	}
+}
+
+// deriveTraceID produces a deterministic OTLP traceId from the event's
+// ScanRunID. UUIDv7 is 16 bytes which encodes to exactly 32 hex chars,
+// matching the OTLP traceId spec. All events from the same scan share
+// the same traceId, enabling backend correlation. Returns "" when the
+// scan_run_id is unset so the omitempty JSON tag suppresses the field.
+func deriveTraceID(e *model.AssetEvent) string {
+	if e.ScanRunID == uuid.Nil {
+		return ""
+	}
+	return hex.EncodeToString(e.ScanRunID[:])
+}
+
+// deriveSpanID produces a deterministic OTLP spanId from the event's ID.
+// The first 8 bytes of a UUIDv7 encode to exactly 16 hex chars, matching
+// the OTLP spanId spec. Each event gets a unique spanId. Deterministic +
+// idempotent: replaying the same scan reproduces identical span IDs.
+// Returns "" when the event id is unset.
+func deriveSpanID(e *model.AssetEvent) string {
+	if e.ID == uuid.Nil {
+		return ""
+	}
+	return hex.EncodeToString(e.ID[:8])
 }
 
 // buildAttributes constructs the OTLP log record attribute list from an event.
