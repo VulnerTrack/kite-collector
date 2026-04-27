@@ -8,10 +8,16 @@ import (
 	"golang.org/x/term"
 )
 
-// brandANSI styles the Vulnertrack wordmark with a navy background and bright
-// white bold text. xterm-256 color 17 is a near match for the brand
-// `--vt-navy-900` (#1a1a2e) used in the dashboard CSS.
-const brandANSI = "\x1b[1;97;48;5;17m Vulnertrack \x1b[0m"
+// Vulnertrack brand: primary red #ff3131 on contrast text #f5f5f5.
+// Source of truth: internal/dashboard/static/style.css palette tokens.
+//
+// brandANSI styles the Vulnertrack wordmark with the brand-red background
+// (--palette-primary-main) and the brand contrast-text foreground
+// (--palette-primary-contrastText), bold. We use 24-bit truecolor escapes
+// (CSI 38;2;R;G;B / 48;2;R;G;B) which are supported by every modern
+// terminal; the no-color / non-tty branch in printBrandBanner covers the
+// rest.
+const brandANSI = "\x1b[1;38;2;245;245;245;48;2;255;49;49m Vulnertrack \x1b[0m"
 
 // printBrandBanner prints a two-line startup banner identifying the build and
 // crediting Vulnertrack. The Vulnertrack wordmark is rendered with ANSI
