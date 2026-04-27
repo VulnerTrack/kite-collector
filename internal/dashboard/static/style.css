@@ -3,10 +3,18 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 :root {
-  --bg: #f4f6f9;
-  --fg: #1a1a2e;
+  /* Vulnertrack brand palette — keep in sync with go banner colors. */
+  --vt-navy-900:  #1a1a2e;   /* primary */
+  --vt-navy-700:  #16213e;   /* gradient secondary */
+  --vt-ink:       #0e1424;   /* deep accent (hover/active) */
+  --vt-paper:     #f4f6f9;   /* surface bg */
+  --vt-text:      #1a1a2e;   /* default fg */
+  --vt-on-navy:   #ffffff;   /* text on navy */
+
+  --bg: var(--vt-paper);
+  --fg: var(--vt-text);
   --card-bg: #fff;
-  --header-bg: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  --header-bg: linear-gradient(135deg, var(--vt-navy-900) 0%, var(--vt-navy-700) 100%);
   --border: #e0e0e0;
   --hover: #f0f4ff;
   --muted: #666;
@@ -110,11 +118,32 @@ tr:hover td { background: var(--hover); }
 
 /* Footer */
 footer {
-  text-align: center; padding: 16px;
   font-size: 0.8rem; color: var(--muted);
-  border-top: 1px solid var(--border);
   margin-top: 24px;
 }
+.vt-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.vt-footer-meta { opacity: 0.85; }
+.vt-powered { display: inline-flex; align-items: center; gap: 6px; }
+.vt-brand {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: linear-gradient(135deg, var(--vt-navy-900) 0%, var(--vt-navy-700) 100%);
+  color: var(--vt-on-navy);
+}
+.vt-brand:hover { background: var(--vt-ink); }
 
 /* Print styles */
 @media print {
