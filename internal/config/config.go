@@ -203,6 +203,22 @@ type SourceConfig struct {
 	Enabled           bool     `mapstructure:"enabled"`
 	CollectSoftware   bool     `mapstructure:"collect_software"`
 	CollectInterfaces bool     `mapstructure:"collect_interfaces"`
+
+	// LDAP / Active Directory (RFC-0121).
+	TLSMode            string   `mapstructure:"tls_mode"`
+	TLSCAFile          string   `mapstructure:"tls_ca_file"`
+	TLSSkipVerify      bool     `mapstructure:"tls_skip_verify"`
+	BindDN             string   `mapstructure:"bind_dn"`
+	BindPasswordEnv    string   `mapstructure:"bind_password_env"`
+	BaseDN             string   `mapstructure:"base_dn"`
+	DomainControllers  []string `mapstructure:"domain_controllers"`
+	PageSize           int      `mapstructure:"page_size"`
+	StaleThresholdDays int      `mapstructure:"stale_threshold_days"`
+	MaxObjects         int      `mapstructure:"max_objects"`
+	CollectUsers       bool     `mapstructure:"collect_users"`
+	CollectGroups      bool     `mapstructure:"collect_groups"`
+	CollectOUs         bool     `mapstructure:"collect_ous"`
+	CollectGPOs        bool     `mapstructure:"collect_gpos"`
 }
 
 // ClassificationConfig holds authorization and managed-status classification settings.
@@ -260,6 +276,7 @@ type AuditConfig struct {
 	Firewall    AuditorToggle          `mapstructure:"firewall"`
 	Kernel      AuditorToggle          `mapstructure:"kernel"`
 	Secrets     AuditorToggle          `mapstructure:"secrets"`
+	LDAP        AuditorToggle          `mapstructure:"ldap"`
 	Enabled     bool                   `mapstructure:"enabled"`
 }
 
