@@ -34,6 +34,70 @@ type Docker struct{}
 // New returns a new Docker discovery source.
 func New() *Docker { return &Docker{} }
 
+// ContainerEnv carries the Docker `Config.Env` array of a single running
+// container along with enough identifying metadata for downstream auditors
+// to attribute findings without re-querying the Docker API. Values are
+// returned read-only; callers must not mutate the slice.
+type ContainerEnv struct {
+	ID    string   // full container ID
+	Name  string   // container name (without leading slash)
+	Image string   // image reference (e.g. "redis:7-alpine")
+	State string   // Docker state (e.g. "running")
+	Env   []string // Config.Env, "KEY=VALUE" entries
+}
+
+// ListContainerEnvs returns the Config.Env array for every running container
+// reachable via the Docker/Podman Engine API. The host is resolved via the
+// same precedence used by Discover: cfg["host"] → KITE_DOCKER_HOST → socket
+// auto-detection. Containers that cannot be inspected are logged at WARN
+// and skipped; the function never returns a partial-failure error so the
+// auditor degrades gracefully when Docker is unavailable.
+func (d *Docker) ListContainerEnvs(ctx context.Context, cfg map[string]any) ([]ContainerEnv, error) {
+	host := toString(cfg["host"])
+	if host == "" {
+		host = os.Getenv("KITE_DOCKER_HOST")
+	}
+	if host == "" {
+		host = detectSocket()
+	}
+	if host == "" {
+		return nil, fmt.Errorf("docker: no socket found; set KITE_DOCKER_HOST or ensure Docker/Podman is running")
+	}
+
+	client := newClient(host)
+	containers, err := client.listContainers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("docker: list containers: %w", err)
+	}
+
+	out := make([]ContainerEnv, 0, len(containers))
+	for _, c := range containers {
+		if !strings.EqualFold(c.State, "running") {
+			continue
+		}
+		detail, inspErr := client.inspectContainer(ctx, c.ID)
+		if inspErr != nil {
+			slog.Warn("docker: env inspect failed", "container", truncate(c.ID, 12), "error", inspErr)
+			continue
+		}
+		if detail == nil || len(detail.Config.Env) == 0 {
+			continue
+		}
+		name := ""
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+		out = append(out, ContainerEnv{
+			ID:    c.ID,
+			Name:  name,
+			Image: c.Image,
+			State: c.State,
+			Env:   detail.Config.Env,
+		})
+	}
+	return out, nil
+}
+
 // Name returns the stable identifier for this source.
 func (d *Docker) Name() string { return "docker" }
 
@@ -172,7 +236,8 @@ type containerDetail struct {
 		Healthcheck *struct {
 			Test []string `json:"Test"`
 		} `json:"Healthcheck"`
-		User string `json:"User"`
+		User string   `json:"User"`
+		Env  []string `json:"Env"`
 	} `json:"Config"`
 	HostConfig struct {
 		NetworkMode   string `json:"NetworkMode"`
