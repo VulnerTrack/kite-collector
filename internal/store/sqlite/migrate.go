@@ -17,6 +17,24 @@ import (
 // migrationNameRe enforces the YYYYMMDDHHMMSS_ timestamp prefix convention.
 var migrationNameRe = regexp.MustCompile(`^\d{14}_`)
 
+// tolerateDuplicateColumnDirective opts a migration into per-statement
+// "duplicate column name" error tolerance. A migration file declares it by
+// including a comment line like:
+//
+//	-- @tolerate: duplicate column name
+//
+// anywhere in its body. Used by recovery migrations whose ADD COLUMN
+// statements may already have been applied -- without this, re-running them
+// would abort the migration on a healthy DB. The tolerance is intentionally
+// scoped to the migration runner only; normal queries never receive it.
+const tolerateDuplicateColumnDirective = "@tolerate: duplicate column name"
+
+// duplicateColumnPhrase is the exact substring (case-insensitive) returned
+// by modernc.org/sqlite when ALTER TABLE ADD COLUMN finds an existing
+// column. Matching against the message is acceptable because the engine
+// returns this phrase verbatim from the SQLite C source.
+const duplicateColumnPhrase = "duplicate column name"
+
 // appliedMigration holds the recorded state of a previously applied migration.
 type appliedMigration struct {
 	checksum  string
@@ -116,7 +134,30 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 			return fmt.Errorf("begin tx for %s: %w", version, txErr)
 		}
 
-		if _, execErr := tx.ExecContext(ctx, string(sqlBytes)); execErr != nil {
+		sqlText := string(sqlBytes)
+		tolerate := strings.Contains(sqlText, tolerateDuplicateColumnDirective)
+
+		// Most migrations are executed as a single ExecContext over the
+		// whole file. When the file opts into duplicate-column tolerance
+		// (via the @tolerate header), split on `;` and execute statements
+		// individually so that a single "duplicate column" error in one
+		// ALTER does not abort the remaining statements in the file.
+		if tolerate {
+			for i, stmt := range splitSQLStatements(sqlText) {
+				if _, execErr := tx.ExecContext(ctx, stmt); execErr != nil {
+					if isDuplicateColumnErr(execErr) {
+						slog.Warn("migrate: column already exists; treating as recovery no-op",
+							"migration", file,
+							"statement_index", i,
+							"error", execErr.Error(),
+						)
+						continue
+					}
+					_ = tx.Rollback()
+					return fmt.Errorf("migration %s stmt %d failed: %w", version, i, execErr)
+				}
+			}
+		} else if _, execErr := tx.ExecContext(ctx, sqlText); execErr != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("migration %s failed: %w", version, execErr)
 		}
@@ -275,4 +316,53 @@ func (s *SQLiteStore) getAppliedMigrations(ctx context.Context) (map[string]appl
 func sha256hex(data []byte) string {
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
+}
+
+// isDuplicateColumnErr reports whether err is a SQLite "duplicate column
+// name" error returned by ALTER TABLE ADD COLUMN against an existing
+// column. Matching is case-insensitive substring against the engine's
+// verbatim message ("duplicate column name: <col>").
+func isDuplicateColumnErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), duplicateColumnPhrase)
+}
+
+// splitSQLStatements splits a SQL file on top-level `;` boundaries while
+// tolerating `--` line comments (the only comment style our migrations
+// use). It returns trimmed, non-empty statements suitable for individual
+// ExecContext calls. The splitter is intentionally minimal: it does not
+// handle string literals containing `;` because no migration in this repo
+// uses such literals. If that ever changes, replace with a real tokenizer.
+func splitSQLStatements(sqlText string) []string {
+	var (
+		out []string
+		cur strings.Builder
+	)
+	for _, line := range strings.Split(sqlText, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "--") || trimmed == "" {
+			cur.WriteString(line)
+			cur.WriteByte('\n')
+			continue
+		}
+		// Split on every `;` in non-comment lines.
+		parts := strings.Split(line, ";")
+		for i, p := range parts {
+			cur.WriteString(p)
+			if i < len(parts)-1 {
+				stmt := strings.TrimSpace(cur.String())
+				if stmt != "" {
+					out = append(out, stmt)
+				}
+				cur.Reset()
+			}
+		}
+		cur.WriteByte('\n')
+	}
+	if tail := strings.TrimSpace(cur.String()); tail != "" {
+		out = append(out, tail)
+	}
+	return out
 }
