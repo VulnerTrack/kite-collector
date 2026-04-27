@@ -2,7 +2,9 @@
 
 Cybersecurity asset discovery, configuration audit, and posture analysis agent.
 
-A single binary that scans your network, inventories installed software, audits system configuration for security weaknesses (CWE), and recommends mitigations based on attack patterns (CAPEC). Results are stored in a local SQLite database -- no servers, no dependencies, fully offline.
+A single binary that scans your network, inventories installed software, audits system configuration for security weaknesses (CWE), and recommends mitigations based on attack patterns (CAPEC). 
+
+Results are stored in a local SQLite database. It doesn't require servers, dependencies, fully offline.
 
 ## Install
 
