@@ -497,6 +497,11 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		if src := e.registry.Get(entrasrc.SourceName); src != nil {
 			if entraSrc, ok := src.(*entrasrc.EntraID); ok {
 				snap := entraSrc.Snapshot()
+				if pErr := e.store.UpsertEntraSnapshot(ctx, snap); pErr != nil {
+					slog.Warn("engine: failed to persist entra snapshot to SQLite",
+						"error", pErr,
+					)
+				}
 				tenantFindings, auditErr := entraAuditor.AuditTenant(scanCtx, snap)
 				if auditErr != nil {
 					slog.Warn("engine: entra tenant audit failed", "error", auditErr)

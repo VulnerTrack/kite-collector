@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -227,6 +229,13 @@ type Store interface {
 
 	// Migrate creates the schema tables and indexes if they do not exist.
 	Migrate(ctx context.Context) error
+
+	// UpsertEntraSnapshot persists the in-memory Entra discovery snapshot
+	// into the source-of-truth SQLite tables created by migration
+	// 20260429000000. Implementations may return nil for backends that do
+	// not host the entra_* tables (e.g. Postgres, where Phase 3 ontology
+	// sync is skipped because the Python bridge reads SQLite directly).
+	UpsertEntraSnapshot(ctx context.Context, snap *entra.Snapshot) error
 
 	// ListContentTables returns every non-system content table present in the
 	// live schema. System and migration tables (sqlite_*, schema_migrations,

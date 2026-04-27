@@ -17,6 +17,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/dedup"
 	"github.com/vulnertrack/kite-collector/internal/discovery"
+	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/policy"
@@ -289,6 +290,10 @@ func (m *mockStore) ListRows(_ context.Context, _ store.RowsFilter) ([]store.Row
 
 func (m *mockStore) GetRowReport(_ context.Context, _ string, _ map[string]string) (*store.RowReport, error) {
 	return nil, store.ErrUnknownTable
+}
+
+func (m *mockStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
 }
 
 var _ store.Store = (*mockStore)(nil)

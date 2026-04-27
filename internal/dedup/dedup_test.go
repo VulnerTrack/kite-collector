@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -173,6 +174,10 @@ func (m *mockStore) GetRowReport(_ context.Context, _ string, _ map[string]strin
 }
 
 func (m *mockStore) Close() error { return nil }
+
+func (m *mockStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
+}
 
 // compile-time check
 var _ store.Store = (*mockStore)(nil)

@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -1240,4 +1242,12 @@ func derefStr(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// UpsertEntraSnapshot is a no-op for the Postgres backend. The Entra
+// discovery source persists into SQLite only (RFC-0121 §5.3); the
+// Postgres backend is used for centralized aggregation and does not
+// own the entra_* tables.
+func (s *PostgresStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
 }
