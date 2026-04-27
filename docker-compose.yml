@@ -20,7 +20,7 @@ services:
       - kite
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: kite
       POSTGRES_PASSWORD: kite
