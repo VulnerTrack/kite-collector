@@ -71,6 +71,7 @@ type EventType string
 const (
 	EventAssetDiscovered           EventType = "AssetDiscovered"
 	EventAssetUpdated              EventType = "AssetUpdated"
+	EventAssetAnalyzed             EventType = "AssetAnalyzed"
 	EventUnauthorizedAssetDetected EventType = "UnauthorizedAssetDetected"
 	EventUnmanagedAssetDetected    EventType = "UnmanagedAssetDetected"
 	EventAssetNotSeen              EventType = "AssetNotSeen"
@@ -91,6 +92,8 @@ func (e EventType) Name() string {
 		return "kite.asset.discovered"
 	case EventAssetUpdated:
 		return "kite.asset.updated"
+	case EventAssetAnalyzed:
+		return "kite.asset.analyzed"
 	case EventUnauthorizedAssetDetected:
 		return "kite.asset.unauthorized_detected"
 	case EventUnmanagedAssetDetected:

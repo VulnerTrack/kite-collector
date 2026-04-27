@@ -61,6 +61,21 @@ func (m *mockStore) GetAssetByNaturalKey(_ context.Context, key string) (*model.
 	return &cp, nil
 }
 
+func (m *mockStore) GetAssetsByNaturalKeys(_ context.Context, keys []string) (map[string]model.Asset, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]model.Asset, len(keys))
+	for _, k := range keys {
+		if a, ok := m.assets[k]; ok {
+			out[k] = a
+		}
+	}
+	return out, nil
+}
+
 func (m *mockStore) GetAssetByID(_ context.Context, id uuid.UUID) (*model.Asset, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

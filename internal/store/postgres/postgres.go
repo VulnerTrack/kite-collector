@@ -289,6 +289,36 @@ func (s *PostgresStore) GetAssetByNaturalKey(ctx context.Context, key string) (*
 	return a, nil
 }
 
+// GetAssetsByNaturalKeys batch-fetches assets matching the supplied natural
+// keys. The returned map is keyed by NaturalKey; keys with no matching row are
+// absent. An empty input slice returns (nil, nil).
+func (s *PostgresStore) GetAssetsByNaturalKeys(
+	ctx context.Context, keys []string,
+) (map[string]model.Asset, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE natural_key = ANY($1)`, keys)
+	if err != nil {
+		return nil, fmt.Errorf("get assets by natural keys: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]model.Asset, len(keys))
+	for rows.Next() {
+		a, err := scanAsset(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan asset row: %w", err)
+		}
+		out[a.NaturalKey] = *a
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate asset rows: %w", err)
+	}
+	return out, nil
+}
+
 // ListAssets returns assets matching the supplied filter. An empty filter
 // returns all assets (subject to Limit/Offset).
 func (s *PostgresStore) ListAssets(ctx context.Context, filter store.AssetFilter) ([]model.Asset, error) {
