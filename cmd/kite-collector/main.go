@@ -816,6 +816,7 @@ and no config file is required:
 
   kite-collector agent --stream --certs-dir /var/lib/kite-collector/<agent-code>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			printBrandBanner(cmd.ErrOrStderr(), version, commit)
 			return runAgent(cfgFile, dbPath, interval, certsDir, endpoint, dashboardAddr, verbose, stream)
 		},
 	}
@@ -2351,6 +2352,8 @@ func newDashboardCmd() *cobra.Command {
 software inventory, findings, and scan history. Data is read directly
 from the local SQLite database — no external connections are made.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			printBrandBanner(cmd.ErrOrStderr(), version, commit)
+
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 
