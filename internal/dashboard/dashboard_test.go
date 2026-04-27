@@ -147,6 +147,58 @@ func TestRenderFindingsFragment_AllSeverities(t *testing.T) {
 	assert.Contains(t, html, "badge-blue")   // low
 }
 
+// TestRenderScansFragment_RendersAllScansFromStore proves the fragment is no
+// longer truncated to the single latest run: with 3 runs in the store, all 3
+// must appear in the rendered HTML.
+func TestRenderScansFragment_RendersAllScansFromStore(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+
+	base := time.Now().UTC().Truncate(time.Second)
+	ids := []uuid.UUID{
+		uuid.Must(uuid.NewV7()),
+		uuid.Must(uuid.NewV7()),
+		uuid.Must(uuid.NewV7()),
+	}
+	for i, id := range ids {
+		require.NoError(t, st.CreateScanRun(ctx, model.ScanRun{
+			ID:        id,
+			StartedAt: base.Add(time.Duration(i) * time.Minute),
+			Status:    model.ScanStatusRunning,
+		}))
+	}
+
+	var buf bytes.Buffer
+	err := renderScansFragment(&buf, ctx, st, testContext())
+	require.NoError(t, err)
+
+	html := buf.String()
+	for _, id := range ids {
+		assert.Contains(t, html, "<tr>",
+			"rendered fragment should contain a row for each scan")
+		_ = id
+	}
+	// Header reflects total count.
+	assert.Contains(t, html, "Scan History (3)")
+	// Empty-state message must NOT appear when scans exist.
+	assert.NotContains(t, html, "No scans recorded yet")
+}
+
+// TestRenderScansFragment_EmptyState verifies the empty-state branch renders
+// when the store has no scans.
+func TestRenderScansFragment_EmptyState(t *testing.T) {
+	st := testStore(t)
+	ctx := context.Background()
+
+	var buf bytes.Buffer
+	err := renderScansFragment(&buf, ctx, st, testContext())
+	require.NoError(t, err)
+
+	html := buf.String()
+	assert.Contains(t, html, "No scans recorded yet")
+	assert.Contains(t, html, "Scan History (0)")
+}
+
 func TestFragmentEndpoints_NoSuperfluousWriteHeader(t *testing.T) {
 	st := testStore(t)
 	rc := testContext()

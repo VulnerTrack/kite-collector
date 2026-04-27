@@ -627,6 +627,39 @@ func (s *PostgresStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, e
 	return r, nil
 }
 
+// ListScanRuns returns scan runs ordered by started_at DESC, capped at limit.
+// limit <= 0 uses the default (50); limit is hard-capped at 1000. Returns an
+// empty slice (not nil) when no runs exist.
+func (s *PostgresStore) ListScanRuns(ctx context.Context, limit int) ([]model.ScanRun, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list scan runs: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]model.ScanRun, 0, limit)
+	for rows.Next() {
+		r, err := scanScanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list scan runs: %w", err)
+	}
+	return out, nil
+}
+
 // GetScanRun returns the scan run identified by id, or store.ErrNotFound when
 // no row matches.
 func (s *PostgresStore) GetScanRun(ctx context.Context, id uuid.UUID) (*model.ScanRun, error) {

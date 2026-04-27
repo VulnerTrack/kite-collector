@@ -186,6 +186,20 @@ func (m *mockStore) GetScanRun(_ context.Context, id uuid.UUID) (*model.ScanRun,
 	return nil, store.ErrNotFound
 }
 
+func (m *mockStore) ListScanRuns(_ context.Context, limit int) ([]model.ScanRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if limit <= 0 {
+		limit = 50
+	}
+	out := make([]model.ScanRun, 0, len(m.scanRuns))
+	// Newest-first: iterate stored slice in reverse (CompleteScanRun appends).
+	for i := len(m.scanRuns) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, m.scanRuns[i])
+	}
+	return out, nil
+}
+
 func (m *mockStore) MarkScanCancelRequested(_ context.Context, id uuid.UUID, at time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

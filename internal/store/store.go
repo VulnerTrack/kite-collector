@@ -176,6 +176,11 @@ type Store interface {
 	// nil when no scan runs exist.
 	GetLatestScanRun(ctx context.Context) (*model.ScanRun, error)
 
+	// ListScanRuns returns scan runs ordered by started_at DESC, capped at
+	// the given limit. Pass limit <= 0 to use the default (50). Returns an
+	// empty slice (not nil) when no runs exist.
+	ListScanRuns(ctx context.Context, limit int) ([]model.ScanRun, error)
+
 	// GetScanRun returns the scan run identified by id, or ErrNotFound when
 	// no row matches.
 	GetScanRun(ctx context.Context, id uuid.UUID) (*model.ScanRun, error)

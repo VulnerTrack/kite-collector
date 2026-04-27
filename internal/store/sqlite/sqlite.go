@@ -732,6 +732,42 @@ func (s *SQLiteStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, err
 	return r, nil
 }
 
+// ListScanRuns returns scan runs ordered by started_at DESC, capped at limit.
+// limit <= 0 uses the default (50); limit is hard-capped at 1000. Returns an
+// empty slice (not nil) when no runs exist or the table is missing.
+func (s *SQLiteStore) ListScanRuns(ctx context.Context, limit int) ([]model.ScanRun, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		if isNoSuchTableErr(err) {
+			return []model.ScanRun{}, nil
+		}
+		return nil, fmt.Errorf("list scan runs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]model.ScanRun, 0, limit)
+	for rows.Next() {
+		r, err := scanScanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list scan runs: %w", err)
+	}
+	return out, nil
+}
+
 // GetScanRun returns the scan run identified by id, or store.ErrNotFound when
 // no row matches.
 func (s *SQLiteStore) GetScanRun(ctx context.Context, id uuid.UUID) (*model.ScanRun, error) {

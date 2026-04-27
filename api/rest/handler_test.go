@@ -130,6 +130,16 @@ func (m *mockStore) GetScanRun(_ context.Context, id uuid.UUID) (*model.ScanRun,
 	return &cp, nil
 }
 
+func (m *mockStore) ListScanRuns(_ context.Context, _ int) ([]model.ScanRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.scanRun == nil {
+		return []model.ScanRun{}, nil
+	}
+	cp := *m.scanRun
+	return []model.ScanRun{cp}, nil
+}
+
 func (m *mockStore) MarkScanCancelRequested(_ context.Context, id uuid.UUID, at time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
