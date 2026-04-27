@@ -23,12 +23,15 @@ func mustWriteFile(t *testing.T, path, contents string) {
 	}
 }
 
-// fakeProcRoot builds a synthetic /proc tree under tmp. Each entry maps
-// pid -> (comm, environ block as NUL-separated KEY=VALUE entries).
-func fakeProcRoot(t *testing.T, entries map[string]struct {
+// procEntry models a synthetic /proc/<pid> directory used by fakeProcRoot.
+type procEntry struct {
 	comm    string
 	environ string
-}) string {
+}
+
+// fakeProcRoot builds a synthetic /proc tree under tmp. Each entry maps
+// pid -> (comm, environ block as NUL-separated KEY=VALUE entries).
+func fakeProcRoot(t *testing.T, entries map[string]procEntry) string {
 	t.Helper()
 	root := t.TempDir()
 	for pid, e := range entries {
@@ -49,10 +52,7 @@ func TestProcessEnvSecrets_DetectsAWSKey(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process_env_secrets is linux-only")
 	}
-	root := fakeProcRoot(t, map[string]struct {
-		comm    string
-		environ string
-	}{
+	root := fakeProcRoot(t, map[string]procEntry{
 		"1234": {
 			comm:    "postgres\n",
 			environ: "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\x00PATH=/usr/bin\x00",
@@ -91,10 +91,7 @@ func TestProcessEnvSecrets_SkipsKernelThreads(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process_env_secrets is linux-only")
 	}
-	root := fakeProcRoot(t, map[string]struct {
-		comm    string
-		environ string
-	}{
+	root := fakeProcRoot(t, map[string]procEntry{
 		"2": {
 			// kernel thread: empty comm
 			comm:    "",
@@ -116,10 +113,7 @@ func TestProcessEnvSecrets_SkipsSelfPID(t *testing.T) {
 		t.Skip("process_env_secrets is linux-only")
 	}
 	selfPID := os.Getpid()
-	root := fakeProcRoot(t, map[string]struct {
-		comm    string
-		environ string
-	}{
+	root := fakeProcRoot(t, map[string]procEntry{
 		// our own pid is intentionally listed — auditor must skip it
 		filenameForPID(selfPID): {
 			comm:    "kite-collector\n",
@@ -158,10 +152,7 @@ func TestProcessEnvSecrets_ProcessFilter(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process_env_secrets is linux-only")
 	}
-	root := fakeProcRoot(t, map[string]struct {
-		comm    string
-		environ string
-	}{
+	root := fakeProcRoot(t, map[string]procEntry{
 		"1234": {
 			comm:    "postgres\n",
 			environ: "PG_KEY=AKIAIOSFODNN7EXAMPLE\x00",
@@ -191,10 +182,7 @@ func TestProcessEnvSecrets_DenyListSkipsCommonNoise(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process_env_secrets is linux-only")
 	}
-	root := fakeProcRoot(t, map[string]struct {
-		comm    string
-		environ string
-	}{
+	root := fakeProcRoot(t, map[string]procEntry{
 		"1234": {
 			comm:    "node\n",
 			environ: "PATH=/AKIAIOSFODNN7EXAMPLE/bin\x00",
@@ -214,10 +202,7 @@ func TestProcessEnvSecrets_NoEnvironProducesNoFindings(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process_env_secrets is linux-only")
 	}
-	root := fakeProcRoot(t, map[string]struct {
-		comm    string
-		environ string
-	}{
+	root := fakeProcRoot(t, map[string]procEntry{
 		"1234": {comm: "node\n", environ: ""},
 	})
 	auditor := NewProcessEnvSecrets(ProcessEnvSecretsConfig{ProcRoot: root})
@@ -236,16 +221,10 @@ func TestProcessEnvSecrets_DeterministicID(t *testing.T) {
 	}
 	asset := serverAsset()
 	envBlock := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\x00"
-	root1 := fakeProcRoot(t, map[string]struct {
-		comm    string
-		environ string
-	}{
+	root1 := fakeProcRoot(t, map[string]procEntry{
 		"1234": {comm: "postgres\n", environ: envBlock},
 	})
-	root2 := fakeProcRoot(t, map[string]struct {
-		comm    string
-		environ string
-	}{
+	root2 := fakeProcRoot(t, map[string]procEntry{
 		// same process_name, different pid — IDs should still match
 		"5678": {comm: "postgres\n", environ: envBlock},
 	})
@@ -271,18 +250,15 @@ func TestProcessEnvSecrets_MaxPIDsCap(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process_env_secrets is linux-only")
 	}
-	entries := make(map[string]struct {
-		comm    string
-		environ string
-	})
+	entries := make(map[string]procEntry)
 	// Three PIDs, each carrying a unique secret; cap to 1.
-	entries["1001"] = struct{ comm, environ string }{
+	entries["1001"] = procEntry{
 		comm: "p1\n", environ: "K1=AKIAAAAAAAAAAAAAAAAA\x00",
 	}
-	entries["1002"] = struct{ comm, environ string }{
+	entries["1002"] = procEntry{
 		comm: "p2\n", environ: "K2=AKIABBBBBBBBBBBBBBBB\x00",
 	}
-	entries["1003"] = struct{ comm, environ string }{
+	entries["1003"] = procEntry{
 		comm: "p3\n", environ: "K3=AKIACCCCCCCCCCCCCCCC\x00",
 	}
 	root := fakeProcRoot(t, entries)

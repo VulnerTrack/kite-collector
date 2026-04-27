@@ -277,17 +277,17 @@ type TLSConfig struct {
 // AuditConfig configures the configuration audit subsystem.
 type AuditConfig struct {
 	Profile           string                       `mapstructure:"profile"`
-	SSH               SSHAuditConfig               `mapstructure:"ssh"`
 	SCA               SCAAuditConfig               `mapstructure:"sca"`
-	Permissions       PermissionsAuditConfig       `mapstructure:"permissions"`
+	SSH               SSHAuditConfig               `mapstructure:"ssh"`
 	Service           ServiceAuditConfig           `mapstructure:"service"`
+	EnvSecrets        EnvSecretsAuditConfig        `mapstructure:"env_secrets"`
+	Permissions       PermissionsAuditConfig       `mapstructure:"permissions"`
+	ProcessEnvSecrets ProcessEnvSecretsAuditConfig `mapstructure:"process_env_secrets"`
 	Firewall          AuditorToggle                `mapstructure:"firewall"`
 	Kernel            AuditorToggle                `mapstructure:"kernel"`
 	Secrets           AuditorToggle                `mapstructure:"secrets"`
 	LDAP              AuditorToggle                `mapstructure:"ldap"`
 	Entra             AuditorToggle                `mapstructure:"entra"`
-	EnvSecrets        EnvSecretsAuditConfig        `mapstructure:"env_secrets"`
-	ProcessEnvSecrets ProcessEnvSecretsAuditConfig `mapstructure:"process_env_secrets"`
 	Enabled           bool                         `mapstructure:"enabled"`
 }
 

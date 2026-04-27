@@ -22,14 +22,14 @@ import (
 )
 
 const (
-	processEnvSecretsAuditorName = "process_env_secrets"
+	processEnvSecretsAuditorName = "process_env_secrets" //#nosec G101 -- auditor identifier, not a credential
 
 	// CWE-526: Cleartext Storage of Sensitive Information in an Environment Variable
 	processEnvSecretsCWEID   = "CWE-526"
-	processEnvSecretsCWEName = "Cleartext Storage of Sensitive Information in an Environment Variable"
+	processEnvSecretsCWEName = "Cleartext Storage of Sensitive Information in an Environment Variable" //#nosec G101 -- CWE description text, not a credential
 
 	processEnvSecretsExpected   = "No credentials in process environment variables"
-	processEnvSecretsCISControl = "CIS 3.11, CIS 14.8"
+	processEnvSecretsCISControl = "CIS 3.11, CIS 14.8" //#nosec G101 -- CIS control reference, not a credential
 
 	// defaultMaxPIDsScanned caps the number of PIDs scanned per Audit
 	// invocation to bound execution time on busy hosts.
@@ -317,13 +317,13 @@ func readProcText(path string) string {
 func readProcCapped(path string, max int) ([]byte, error) {
 	f, err := os.Open(path) //#nosec G304 -- /proc paths are agent-internal
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(f, int64(max)))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	return data, nil
 }

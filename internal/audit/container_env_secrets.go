@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	containerEnvSecretsAuditorName = "container_env_secrets"
+	containerEnvSecretsAuditorName = "container_env_secrets" //#nosec G101 -- auditor identifier, not a credential
 
 	// CWE-526: Cleartext Storage of Sensitive Information in an Environment Variable
 	containerEnvSecretsCWEID   = "CWE-526"
-	containerEnvSecretsCWEName = "Cleartext Storage of Sensitive Information in an Environment Variable"
+	containerEnvSecretsCWEName = "Cleartext Storage of Sensitive Information in an Environment Variable" //#nosec G101 -- CWE description text, not a credential
 
 	// containerEnvSecretsExpected is the security baseline message included
 	// in every finding's Expected field.
@@ -27,7 +27,7 @@ const (
 
 	// CIS Controls 3.11 (Encrypt Sensitive Data at Rest) and 14.8 (Use of
 	// Secure Authentication Mechanism) cover this finding category.
-	containerEnvSecretsCISControl = "CIS 3.11, CIS 14.8"
+	containerEnvSecretsCISControl = "CIS 3.11, CIS 14.8" //#nosec G101 -- CIS control reference, not a credential
 
 	// maxContainersScanned caps the number of containers a single Audit
 	// invocation will inspect to bound execution time on hosts running
@@ -59,17 +59,16 @@ type ContainerEnvLister interface {
 // time so the same Audit method can run per-asset without re-issuing Docker
 // API calls. The lister is a thin wrapper around docker.Docker.
 type ContainerEnvSecrets struct {
-	lister       ContainerEnvLister
-	dockerCfg    map[string]any
-	denyPrefixes []string
-	maxScan      int
-
+	lister    ContainerEnvLister
+	dockerCfg map[string]any
 	// envByID caches the result of one ListContainerEnvs call so the
 	// engine's per-asset audit loop does not re-fetch container env data
 	// for every container asset. The cache is populated lazily on first
 	// Audit call and bounded to a single scan.
-	cache       map[string]dockerdisc.ContainerEnv
-	cacheLoaded bool
+	cache        map[string]dockerdisc.ContainerEnv
+	denyPrefixes []string
+	maxScan      int
+	cacheLoaded  bool
 }
 
 // NewContainerEnvSecrets constructs a ContainerEnvSecrets auditor.
