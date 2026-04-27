@@ -825,3 +825,40 @@ func TestClose(t *testing.T) {
 	err = s.Close()
 	assert.NoError(t, err)
 }
+
+func TestStorePathAccessor(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "path_accessor.db")
+	s, err := New(dbPath)
+	require.NoError(t, err)
+	defer func() { _ = s.Close() }()
+	assert.Equal(t, dbPath, s.Path(),
+		"Path() must return the dbPath supplied to New, "+
+			"so transient-error logs can include it")
+}
+
+// TestUpsertAssets_TransientRetryRoundtrip is the happy-path smoke
+// test that proves the withTransientRetry wrapper does not break the
+// normal UpsertAssets flow. Simulating SQLITE_IOERR_DELETE_NOENT
+// against a real DB would require racing the OS, so the unit tests on
+// withTransientRetry cover the retry logic itself.
+func TestUpsertAssets_TransientRetryRoundtrip(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	assets := []model.Asset{
+		makeAsset("retry-01", model.AssetTypeServer),
+		makeAsset("retry-02", model.AssetTypeWorkstation),
+	}
+
+	inserted, updated, err := s.UpsertAssets(ctx, assets)
+	require.NoError(t, err)
+	assert.Equal(t, 2, inserted)
+	assert.Equal(t, 0, updated)
+
+	// Repeat to exercise the existing-key code path under the retry
+	// wrapper.
+	inserted2, updated2, err := s.UpsertAssets(ctx, assets)
+	require.NoError(t, err)
+	assert.Equal(t, 0, inserted2)
+	assert.Equal(t, 2, updated2)
+}

@@ -25,6 +25,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/engine"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
+	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
 // Runner is the subset of *engine.Engine the coordinator depends on.
@@ -266,8 +267,17 @@ func (c *Coordinator) runScan(scanCtx context.Context, cancel context.CancelFunc
 	}
 	if err != nil {
 		ev.Error = err.Error()
-		c.logger.Warn("scan: engine returned error",
-			"scan_id", scanID, "error", err, "status", status)
+		if errors.Is(err, sqlite.ErrTransientStorageExhausted) {
+			c.logger.Warn("scan: engine returned error",
+				"scan_id", scanID, "error", err, "status", status,
+				"hint", "ensure the DB directory is not on a cloud-sync folder "+
+					"(Dropbox/OneDrive/iCloud), is not being scanned by antivirus, "+
+					"and is not on a network mount. The kite-collector DB needs "+
+					"exclusive local FS access.")
+		} else {
+			c.logger.Warn("scan: engine returned error",
+				"scan_id", scanID, "error", err, "status", status)
+		}
 	}
 	c.publish(ev)
 }
