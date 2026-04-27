@@ -475,6 +475,63 @@
           "default_rule": "'90'",
           "required": false,
           "skip_when": "ctx['discovery.ldap.enabled'] == false"
+        },
+        {
+          "id": "discovery.sources.entra.enabled",
+          "type": "confirm",
+          "prompt": "Enable Microsoft Entra ID identity discovery (RFC-0121)?",
+          "depends_on": [
+            "discovery.ldap.enabled"
+          ],
+          "default_rule": "false",
+          "required": true
+        },
+        {
+          "id": "discovery.sources.entra.tenant_id",
+          "type": "input",
+          "prompt": "Entra tenant (Directory) ID — GUID from Azure Portal → Entra ID → Overview",
+          "depends_on": [
+            "discovery.sources.entra.enabled"
+          ],
+          "default_rule": "''",
+          "required": true,
+          "skip_when": "ctx['discovery.sources.entra.enabled'] == false",
+          "preflight_validate": "entra:tenant_id:guid"
+        },
+        {
+          "id": "discovery.sources.entra.client_id",
+          "type": "input",
+          "prompt": "Entra application (client) ID — GUID from Azure Portal → App registrations → <app> → Overview",
+          "depends_on": [
+            "discovery.sources.entra.enabled"
+          ],
+          "default_rule": "''",
+          "required": true,
+          "skip_when": "ctx['discovery.sources.entra.enabled'] == false",
+          "preflight_validate": "entra:client_id:guid"
+        },
+        {
+          "id": "discovery.sources.entra.client_secret_env",
+          "type": "input",
+          "prompt": "Environment variable holding the Entra client_secret value",
+          "depends_on": [
+            "discovery.sources.entra.enabled"
+          ],
+          "default_rule": "'ENTRA_CLIENT_SECRET'",
+          "required": true,
+          "skip_when": "ctx['discovery.sources.entra.enabled'] == false",
+          "preflight_validate": "entra:secret:env"
+        },
+        {
+          "id": "discovery.sources.entra.stale_account_days",
+          "type": "input",
+          "prompt": "Stale-account threshold in days (ENTRA-001 trigger)",
+          "depends_on": [
+            "discovery.sources.entra.enabled"
+          ],
+          "default_rule": "'90'",
+          "required": false,
+          "skip_when": "ctx['discovery.sources.entra.enabled'] == false"
         }
       ]
     },
