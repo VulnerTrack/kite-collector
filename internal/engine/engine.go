@@ -247,7 +247,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 						}
 					}
 					if swResult.HasErrors() {
-						slog.Warn("engine: software parse errors", "count", swResult.TotalErrors())
+						logSoftwareParseErrors(swResult.Errs)
 					}
 				}
 			}
@@ -491,6 +491,46 @@ func findAgentAssetID(assets []model.Asset) uuid.UUID {
 		}
 	}
 	return uuid.Nil
+}
+
+// maxParseErrorLogs caps how many individual software parse errors are
+// logged per scan run so a malformed package-manager output cannot flood
+// the journal. The remainder is summarised in a single "truncated" line.
+const maxParseErrorLogs = 20
+
+// maxRawLineLog truncates each raw_line attribute so a multi-kilobyte JSON
+// blob doesn't blow up the log destination.
+const maxRawLineLog = 256
+
+// logSoftwareParseErrors emits one Warn record per software collector parse
+// error so operators can see exactly which line of which package manager's
+// output failed. Lines beyond maxParseErrorLogs are collapsed into a single
+// summary record. The log destination already carries run_id via the root
+// logger configured in cmd/kite-collector/main.go.
+func logSoftwareParseErrors(errs []software.CollectError) {
+	limit := len(errs)
+	if limit > maxParseErrorLogs {
+		limit = maxParseErrorLogs
+	}
+	for i := 0; i < limit; i++ {
+		e := errs[i]
+		raw := e.RawLine
+		if len(raw) > maxRawLineLog {
+			raw = raw[:maxRawLineLog] + "…"
+		}
+		slog.Warn("engine: software parse error",
+			"collector", e.Collector,
+			"line", e.Line,
+			"error", e.Err,
+			"raw_line", raw,
+		)
+	}
+	if len(errs) > maxParseErrorLogs {
+		slog.Warn("engine: software parse errors truncated",
+			"shown", maxParseErrorLogs,
+			"total", len(errs),
+		)
+	}
 }
 
 // recordFindingMetrics updates the open-findings gauge, cumulative counter,
