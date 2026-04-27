@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e test-cloud test-otlp test-all lint security vet clean vulncheck osv-scan fuzz-quick
+.PHONY: build test test-e2e test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick
 
 build:
 	CGO_ENABLED=0 go build -o bin/kite-collector ./cmd/kite-collector
@@ -48,6 +48,96 @@ clean:
 all: vet lint security test build
 
 test-all: vet lint security test test-e2e
+
+# Deterministic coverage gate for the RFC-0115 telemetry contract surface.
+#
+# Runs go test with a coverage profile over internal/telemetry/... and the
+# emitter (which is the wire layer the contract pins). Computes the total
+# statement coverage and exits non-zero if it is below COVERAGE_MIN.
+#
+# Override scope or threshold from the command line:
+#   make coverage COVERAGE_PKGS='./internal/...' COVERAGE_MIN=80
+COVERAGE_PKGS ?= ./internal/telemetry/...
+COVERAGE_MIN  ?= 90.0
+COVERAGE_OUT  ?= coverage.telemetry.out
+
+coverage:
+	@echo "=== Coverage gate ($(COVERAGE_MIN)% over $(COVERAGE_PKGS)) ==="
+	@go test -count=1 -covermode=atomic -coverprofile=$(COVERAGE_OUT) $(COVERAGE_PKGS) >/dev/null
+	@go tool cover -func=$(COVERAGE_OUT) | tail -n 20
+	@TOTAL=$$(go tool cover -func=$(COVERAGE_OUT) | awk '/^total:/ {gsub("%","",$$3); print $$3}'); \
+	awk -v total="$$TOTAL" -v min="$(COVERAGE_MIN)" 'BEGIN { \
+		if (total + 0 < min + 0) { \
+			printf "FAIL — coverage %.1f%% < %.1f%% threshold\n", total, min; \
+			exit 1; \
+		} \
+		printf "PASS — coverage %.1f%% >= %.1f%% threshold\n", total, min; \
+	}'
+
+# Deterministic code-quality gate.
+#
+# Three independent checks, each fails fast on the first violation:
+#   1. gocyclo  — per-function cyclomatic complexity (control-flow paths)
+#   2. gocognit — per-function cognitive complexity (nested-branch readability)
+#   3. dupl     — copy-pasted code blocks above N tokens
+#
+# Default scope is the RFC-0115 telemetry surface; widen by overriding
+# QUALITY_PKGS. Thresholds intentionally tight to keep new code clean —
+# raise per-tool thresholds via the env if a target subtree is legacy.
+#
+#   make quality
+#   make quality QUALITY_PKGS=./...                     CYCLO_MAX=15 COGNIT_MAX=20 DUPL_MIN=100
+#   make quality QUALITY_PKGS=./internal/dashboard/...  CYCLO_MAX=20
+QUALITY_PKGS  ?= ./internal/telemetry/...
+CYCLO_MAX     ?= 10
+COGNIT_MAX    ?= 15
+DUPL_MIN      ?= 80
+
+# go install paths for the standalone quality tools. Run `make quality-tools`
+# once to install them under $GOPATH/bin (or $HOME/go/bin), or rely on the
+# `quality` target which invokes them on demand.
+quality-tools:
+	@command -v gocyclo  >/dev/null 2>&1 || go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+	@command -v gocognit >/dev/null 2>&1 || go install github.com/uudashr/gocognit/cmd/gocognit@latest
+	@command -v dupl     >/dev/null 2>&1 || go install github.com/mibk/dupl@latest
+
+quality: quality-tools
+	@echo "=== Quality gate ==="
+	@DIRS=$$(go list -f '{{.Dir}}' $(QUALITY_PKGS)); \
+	echo "[1/3] gocyclo  (max $(CYCLO_MAX) cyclomatic complexity)"; \
+	if gocyclo -over $(CYCLO_MAX) $$DIRS; then \
+		echo "  PASS — no function exceeds $(CYCLO_MAX)"; \
+	else \
+		echo "FAIL — function above cyclomatic complexity $(CYCLO_MAX)"; \
+		exit 1; \
+	fi; \
+	echo "[2/3] gocognit (max $(COGNIT_MAX) cognitive complexity)"; \
+	if gocognit -over $(COGNIT_MAX) $$DIRS; then \
+		echo "  PASS — no function exceeds $(COGNIT_MAX)"; \
+	else \
+		echo "FAIL — function above cognitive complexity $(COGNIT_MAX)"; \
+		exit 1; \
+	fi; \
+	echo "[3/3] dupl     (min $(DUPL_MIN) tokens to flag duplicates)"; \
+	DUPLS=$$(dupl -t $(DUPL_MIN) -plumbing $$DIRS 2>/dev/null); \
+	if [ -z "$$DUPLS" ]; then \
+		echo "  PASS — no duplicate blocks at threshold $(DUPL_MIN)"; \
+	else \
+		echo "FAIL — duplicate blocks found:"; \
+		echo "$$DUPLS"; \
+		exit 1; \
+	fi; \
+	echo "=== Quality gate PASSED ==="
+
+# Deterministic schema check for software-parser error logs.
+#
+# Runs the binary against a minimal agent-only config, captures stderr
+# (slog JSON), and validates every "engine: software parse error" record
+# against the fixed schema (collector, line, error, raw_line, time, level).
+# Passes regardless of how many parse errors the host produces — the gate
+# is on schema, not count.
+check-parse-errors: build
+	@scripts/check-parse-errors.sh
 
 # OTLP integration test: starts an OTel Collector in Docker, runs a scan
 # in streaming mode, verifies events arrive, then cleans up.
