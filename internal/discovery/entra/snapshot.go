@@ -6,9 +6,10 @@ import "time"
 // The Phase 2 auditor (internal/audit/entra.go) consumes a Snapshot to emit
 // ENTRA-001 / ENTRA-002 / ENTRA-003 findings without re-querying Graph.
 //
-// Phase 3 will add SQLite persistence for these entities so the Python
-// ontology bridge can read them; until then the snapshot is regenerated on
-// every scan run and lives only inside the EntraID source.
+// Phase 3 adds SQLite persistence for these entities (see
+// internal/store/sqlite/entra.go) so the Python ontology bridge can
+// materialize IdentityPrincipal / ServicePrincipal / DirectoryGroup /
+// EntraDevice / DirectoryRole entities without re-querying Graph.
 type Snapshot struct {
 	TenantID                  string
 	StaleAccountDays          int
@@ -16,6 +17,8 @@ type Snapshot struct {
 
 	Users             []SnapshotUser
 	ServicePrincipals []SnapshotServicePrincipal
+	Groups            []SnapshotGroup
+	Devices           []SnapshotDevice
 	RoleAssignments   []SnapshotRoleAssignment
 }
 
@@ -55,4 +58,37 @@ type SnapshotRoleAssignment struct {
 	RoleTemplateID      string
 	RoleDisplayName     string
 	IsBuiltinPrivileged bool
+}
+
+// SnapshotGroup is the audit/persistence-friendly view of an Entra group.
+// MemberCount is a pointer because the /v1.0/groups list endpoint does not
+// return member counts by default; nil means "unknown" rather than zero.
+type SnapshotGroup struct {
+	GroupTypes        []string
+	MemberCount       *int
+	ObjectID          string
+	DisplayName       string
+	MembershipRule    string
+	SecurityEnabled   bool
+	MailEnabled       bool
+	IsRoleAssignable  bool
+	DynamicMembership bool
+}
+
+// SnapshotDevice is the audit/persistence-friendly view of an Entra-joined
+// device. Time fields are pointers so callers can distinguish "never seen"
+// from "seen at <date>"; IsCompliant / IsManaged use *bool because Graph
+// can omit these fields (returning JSON null) and the caller needs to
+// preserve "unknown" vs. "false."
+type SnapshotDevice struct {
+	RegistrationDateTime          *time.Time
+	ApproximateLastSignInDateTime *time.Time
+	IsCompliant                   *bool
+	IsManaged                     *bool
+	ObjectID                      string
+	DeviceID                      string
+	DisplayName                   string
+	OperatingSystem               string
+	OperatingSystemVersion        string
+	TrustType                     string
 }

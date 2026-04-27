@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
+	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/engine"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -222,6 +223,10 @@ func (s *fakeStore) ListRows(_ context.Context, _ store.RowsFilter) ([]store.Row
 
 func (s *fakeStore) GetRowReport(_ context.Context, _ string, _ map[string]string) (*store.RowReport, error) {
 	return nil, store.ErrUnknownTable
+}
+
+func (s *fakeStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
 }
 
 var _ store.Store = (*fakeStore)(nil)
