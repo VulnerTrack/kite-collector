@@ -181,7 +181,7 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		}
 	}
 
-	snap := buildSnapshot(conf, users, sps, roleAssignments, principalRoles, mfaByObjectID)
+	snap := buildSnapshot(conf, users, sps, groups, devices, roleAssignments, principalRoles, mfaByObjectID)
 	e.mu.Lock()
 	e.lastSnapshot = snap
 	e.mu.Unlock()
@@ -269,11 +269,14 @@ func normalisePrincipalType(odataType string) string {
 // buildSnapshot constructs a Snapshot from the per-endpoint result sets.
 // It merges role-assignment and MFA data into the SnapshotUser and
 // SnapshotServicePrincipal records so the auditor can answer ENTRA-002 /
-// ENTRA-003 from a single in-memory structure.
+// ENTRA-003 from a single in-memory structure. Groups and devices are
+// passed through to populate the SQLite-backed ontology bridge in Phase 3.
 func buildSnapshot(
 	conf *entraConfig,
 	users []entraUser,
 	sps []entraServicePrincipal,
+	groups []entraGroup,
+	devices []entraDevice,
 	assignments []SnapshotRoleAssignment,
 	principalRoles map[string][]string,
 	mfaByObjectID map[string]bool,
@@ -312,12 +315,52 @@ func buildSnapshot(
 		})
 	}
 
+	snapGroups := make([]SnapshotGroup, 0, len(groups))
+	for _, g := range groups {
+		dynamic := false
+		for _, gt := range g.GroupTypes {
+			if gt == "DynamicMembership" {
+				dynamic = true
+				break
+			}
+		}
+		snapGroups = append(snapGroups, SnapshotGroup{
+			GroupTypes:        g.GroupTypes,
+			MemberCount:       nil, // Graph /groups list does not return memberCount.
+			ObjectID:          g.ID,
+			DisplayName:       g.DisplayName,
+			MembershipRule:    g.MembershipRule,
+			SecurityEnabled:   g.SecurityEnabled,
+			MailEnabled:       g.MailEnabled,
+			IsRoleAssignable:  g.IsAssignableToRole,
+			DynamicMembership: dynamic,
+		})
+	}
+
+	snapDevices := make([]SnapshotDevice, 0, len(devices))
+	for _, d := range devices {
+		snapDevices = append(snapDevices, SnapshotDevice{
+			RegistrationDateTime:          parseGraphTimestamp(d.RegistrationDateTime),
+			ApproximateLastSignInDateTime: parseGraphTimestamp(d.ApproximateLastSignInDateTime),
+			IsCompliant:                   d.IsCompliant,
+			IsManaged:                     d.IsManaged,
+			ObjectID:                      d.ID,
+			DeviceID:                      d.DeviceID,
+			DisplayName:                   d.DisplayName,
+			OperatingSystem:               d.OperatingSystem,
+			OperatingSystemVersion:        d.OperatingSystemVersion,
+			TrustType:                     d.TrustType,
+		})
+	}
+
 	return &Snapshot{
 		TenantID:                  conf.tenantID,
 		StaleAccountDays:          conf.staleAccountDays,
 		PrivilegedRoleTemplateIDs: PrivilegedRoleTemplateIDs(),
 		Users:                     snapUsers,
 		ServicePrincipals:         snapSPs,
+		Groups:                    snapGroups,
+		Devices:                   snapDevices,
 		RoleAssignments:           assignments,
 	}
 }
