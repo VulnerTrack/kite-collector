@@ -378,4 +378,3 @@ func upsertEntraRoleAssignments(ctx context.Context, tx *sql.Tx, tenantID string
 	}
 	return nil
 }
-

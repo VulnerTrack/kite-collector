@@ -17,12 +17,6 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
-// timePtr is a tiny helper so test cases can build SnapshotDevice rows with
-// the *time.Time fields populated without per-call boilerplate.
-func timePtr(t time.Time) *time.Time {
-	return &t
-}
-
 // makeFullSnapshot builds a minimal but complete entra.Snapshot covering
 // every persisted table. The values are deterministic so assertions can
 // hard-code expectations.
@@ -51,7 +45,7 @@ func makeFullSnapshot(t *testing.T) *entra.Snapshot {
 			{
 				ObjectID:               "sp-1",
 				AppID:                  "app-1",
-				DisplayName:             "MyApp",
+				DisplayName:            "MyApp",
 				ServicePrincipalType:   "Application",
 				OAuth2PermissionScopes: []string{"User.Read"},
 				AccountEnabled:         true,
@@ -100,10 +94,10 @@ func makeFullSnapshot(t *testing.T) *entra.Snapshot {
 // countRows returns the row count for the given entra_* table. It uses the
 // underlying *sql.DB so tests can assert without going through the higher
 // level Store interface.
-func countRows(t *testing.T, s *SQLiteStore, table string) int {
+func countRows(ctx context.Context, t *testing.T, s *SQLiteStore, table string) int {
 	t.Helper()
 	var n int
-	err := s.RawDB().QueryRow("SELECT count(*) FROM " + table).Scan(&n)
+	err := s.RawDB().QueryRowContext(ctx, "SELECT count(*) FROM "+table).Scan(&n)
 	require.NoError(t, err)
 	return n
 }
@@ -114,13 +108,13 @@ func TestUpsertEntraSnapshot_NilOrEmpty(t *testing.T) {
 
 	// Nil snapshot is a no-op.
 	require.NoError(t, s.UpsertEntraSnapshot(ctx, nil))
-	assert.Equal(t, 0, countRows(t, s, "entra_users"))
+	assert.Equal(t, 0, countRows(ctx, t, s, "entra_users"))
 
 	// Empty TenantID is a no-op even with rows present.
 	require.NoError(t, s.UpsertEntraSnapshot(ctx, &entra.Snapshot{
 		Users: []entra.SnapshotUser{{ObjectID: "x"}},
 	}))
-	assert.Equal(t, 0, countRows(t, s, "entra_users"))
+	assert.Equal(t, 0, countRows(ctx, t, s, "entra_users"))
 }
 
 func TestUpsertEntraSnapshot_InsertAllFiveTables(t *testing.T) {
@@ -130,18 +124,18 @@ func TestUpsertEntraSnapshot_InsertAllFiveTables(t *testing.T) {
 	snap := makeFullSnapshot(t)
 	require.NoError(t, s.UpsertEntraSnapshot(ctx, snap))
 
-	assert.Equal(t, 1, countRows(t, s, "entra_users"))
-	assert.Equal(t, 1, countRows(t, s, "entra_service_principals"))
-	assert.Equal(t, 1, countRows(t, s, "entra_groups"))
-	assert.Equal(t, 1, countRows(t, s, "entra_devices"))
-	assert.Equal(t, 1, countRows(t, s, "entra_role_assignments"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_users"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_service_principals"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_groups"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_devices"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_role_assignments"))
 
 	// Spot-check that JSON columns and pointer-derived fields landed.
 	var (
 		assignedRoles string
 		mfaRegistered int
 	)
-	require.NoError(t, s.RawDB().QueryRow(`
+	require.NoError(t, s.RawDB().QueryRowContext(ctx, `
 		SELECT assigned_roles, mfa_registered FROM entra_users WHERE object_id = 'user-1'
 	`).Scan(&assignedRoles, &mfaRegistered))
 	assert.Contains(t, assignedRoles, "62e90394")
@@ -157,7 +151,7 @@ func TestUpsertEntraSnapshot_Idempotent(t *testing.T) {
 
 	// Capture updated_at after first insert.
 	var firstUpdatedAt int64
-	require.NoError(t, s.RawDB().QueryRow(
+	require.NoError(t, s.RawDB().QueryRowContext(ctx,
 		`SELECT updated_at FROM entra_users WHERE object_id = 'user-1'`,
 	).Scan(&firstUpdatedAt))
 
@@ -166,15 +160,15 @@ func TestUpsertEntraSnapshot_Idempotent(t *testing.T) {
 
 	// Re-upsert the same data — counts must stay at 1 per table.
 	require.NoError(t, s.UpsertEntraSnapshot(ctx, snap))
-	assert.Equal(t, 1, countRows(t, s, "entra_users"))
-	assert.Equal(t, 1, countRows(t, s, "entra_service_principals"))
-	assert.Equal(t, 1, countRows(t, s, "entra_groups"))
-	assert.Equal(t, 1, countRows(t, s, "entra_devices"))
-	assert.Equal(t, 1, countRows(t, s, "entra_role_assignments"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_users"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_service_principals"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_groups"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_devices"))
+	assert.Equal(t, 1, countRows(ctx, t, s, "entra_role_assignments"))
 
 	// updated_at must have advanced; created_at must not.
 	var secondUpdatedAt int64
-	require.NoError(t, s.RawDB().QueryRow(
+	require.NoError(t, s.RawDB().QueryRowContext(ctx,
 		`SELECT updated_at FROM entra_users WHERE object_id = 'user-1'`,
 	).Scan(&secondUpdatedAt))
 	assert.Greater(t, secondUpdatedAt, firstUpdatedAt,
@@ -214,19 +208,19 @@ func TestUpsertEntraSnapshot_DefaultsRespectChecks(t *testing.T) {
 	require.NoError(t, s.UpsertEntraSnapshot(ctx, snap))
 
 	var trustType string
-	require.NoError(t, s.RawDB().QueryRow(
+	require.NoError(t, s.RawDB().QueryRowContext(ctx,
 		`SELECT trust_type FROM entra_devices WHERE object_id = 'dev-empty-trust'`,
 	).Scan(&trustType))
 	assert.Equal(t, "AzureAD", trustType)
 
 	var spType string
-	require.NoError(t, s.RawDB().QueryRow(
+	require.NoError(t, s.RawDB().QueryRowContext(ctx,
 		`SELECT service_principal_type FROM entra_service_principals WHERE object_id = 'sp-empty-type'`,
 	).Scan(&spType))
 	assert.Equal(t, "Application", spType)
 
 	var pType string
-	require.NoError(t, s.RawDB().QueryRow(
+	require.NoError(t, s.RawDB().QueryRowContext(ctx,
 		`SELECT principal_type FROM entra_role_assignments WHERE principal_object_id = 'principal-x'`,
 	).Scan(&pType))
 	assert.Equal(t, "user", pType)
