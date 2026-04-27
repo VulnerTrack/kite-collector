@@ -155,6 +155,12 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Cross-repo write to VulnerTrack/homebrew-tap requires a PAT (or
+          # fine-grained token) with contents:write on that repo. Stored as
+          # repo secret HOMEBREW_TAP_GITHUB_TOKEN. Falls back to GITHUB_TOKEN
+          # when the secret is unset — the brew step will 403 (same symptom
+          # as before) but other release artifacts still publish.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
