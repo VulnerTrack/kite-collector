@@ -18,7 +18,8 @@ import (
 
 // SQLiteStore implements store.Store backed by a local SQLite database.
 type SQLiteStore struct {
-	db *sql.DB
+	db   *sql.DB
+	path string // filesystem path of the underlying SQLite database
 }
 
 // Compile-time interface check.
@@ -51,13 +52,19 @@ func New(dbPath string) (*SQLiteStore, error) {
 		}
 	}
 
-	return &SQLiteStore{db: db}, nil
+	return &SQLiteStore{db: db, path: dbPath}, nil
 }
 
 // RawDB returns the underlying *sql.DB connection for raw queries.
 // Use with care — this bypasses the Store interface.
 func (s *SQLiteStore) RawDB() *sql.DB {
 	return s.db
+}
+
+// Path returns the filesystem path of the underlying SQLite database
+// (as supplied to New). Useful for diagnostics and remediation hints.
+func (s *SQLiteStore) Path() string {
+	return s.path
 }
 
 // isNoSuchTableErr reports whether err is the modernc.org/sqlite "no such
@@ -201,96 +208,120 @@ func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error 
 
 // UpsertAssets atomically upserts a batch of assets inside a single
 // transaction and returns counts of newly inserted and updated rows.
+//
+// The full BeginTx → upsert loop → Commit is wrapped in
+// withTransientRetry: a transient SQLite I/O error (typically caused by
+// cloud-sync agents, antivirus, or backup tools racing the WAL/SHM
+// files) is retried with a fresh transaction. The transaction is
+// atomic, so retrying the whole operation is safe.
 func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (inserted, updated int, err error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, 0, fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	// Pre-compute natural keys for the whole batch.
+	// Pre-compute natural keys for the whole batch (idempotent — safe
+	// to do once even if the inner closure runs multiple times).
 	for i := range assets {
 		assets[i].ComputeNaturalKey()
 	}
 
-	// Batch-query existing natural keys to avoid per-row SELECT COUNT(*).
-	existingKeys := make(map[string]bool, len(assets))
-	if len(assets) > 0 {
-		placeholders := make([]string, len(assets))
-		args := make([]any, len(assets))
-		for i, a := range assets {
-			placeholders[i] = "?"
-			args[i] = a.NaturalKey
+	err = withTransientRetry(3, func() error {
+		// Reset counters on each attempt so a partial-then-retried
+		// attempt doesn't double-count.
+		inserted = 0
+		updated = 0
+
+		tx, txErr := s.db.BeginTx(ctx, nil)
+		if txErr != nil {
+			return fmt.Errorf("begin tx: %w", txErr)
 		}
-		query := `SELECT natural_key FROM assets WHERE natural_key IN (` +
-			strings.Join(placeholders, ",") + `)` //#nosec G202 -- placeholders are literal "?" strings, values are in args
-		rows, qErr := tx.QueryContext(ctx, query, args...)
-		if qErr != nil {
-			return 0, 0, fmt.Errorf("batch lookup existing keys: %w", qErr)
-		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var key string
-			if scanErr := rows.Scan(&key); scanErr != nil {
-				return 0, 0, fmt.Errorf("scan existing key: %w", scanErr)
+		defer tx.Rollback() //nolint:errcheck
+
+		// Batch-query existing natural keys to avoid per-row SELECT COUNT(*).
+		existingKeys := make(map[string]bool, len(assets))
+		if len(assets) > 0 {
+			lookupErr := func() error {
+				placeholders := make([]string, len(assets))
+				args := make([]any, len(assets))
+				for i, a := range assets {
+					placeholders[i] = "?"
+					args[i] = a.NaturalKey
+				}
+				query := `SELECT natural_key FROM assets WHERE natural_key IN (` +
+					strings.Join(placeholders, ",") + `)` //#nosec G202 -- placeholders are literal "?" strings, values are in args
+				rows, qErr := tx.QueryContext(ctx, query, args...)
+				if qErr != nil {
+					return fmt.Errorf("batch lookup existing keys: %w", qErr)
+				}
+				defer func() { _ = rows.Close() }()
+				for rows.Next() {
+					var key string
+					if scanErr := rows.Scan(&key); scanErr != nil {
+						return fmt.Errorf("scan existing key: %w", scanErr)
+					}
+					existingKeys[key] = true
+				}
+				if rowErr := rows.Err(); rowErr != nil {
+					return fmt.Errorf("batch lookup rows: %w", rowErr)
+				}
+				return nil
+			}()
+			if lookupErr != nil {
+				return lookupErr
 			}
-			existingKeys[key] = true
-		}
-		if rowErr := rows.Err(); rowErr != nil {
-			return 0, 0, fmt.Errorf("batch lookup rows: %w", rowErr)
-		}
-	}
-
-	for i := range assets {
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO assets (`+assetColumns+`)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(hostname, asset_type) DO UPDATE SET
-				os_family        = excluded.os_family,
-				os_version       = excluded.os_version,
-				kernel_version   = excluded.kernel_version,
-				architecture     = excluded.architecture,
-				is_authorized    = excluded.is_authorized,
-				is_managed       = excluded.is_managed,
-				environment      = excluded.environment,
-				owner            = excluded.owner,
-				criticality      = excluded.criticality,
-				discovery_source = excluded.discovery_source,
-				last_seen_at     = excluded.last_seen_at,
-				tags             = excluded.tags,
-				natural_key      = excluded.natural_key
-		`,
-			assets[i].ID.String(),
-			string(assets[i].AssetType),
-			assets[i].Hostname,
-			nullStr(assets[i].OSFamily),
-			nullStr(assets[i].OSVersion),
-			nullStr(assets[i].KernelVersion),
-			nullStr(assets[i].Architecture),
-			string(assets[i].IsAuthorized),
-			string(assets[i].IsManaged),
-			nullStr(assets[i].Environment),
-			nullStr(assets[i].Owner),
-			nullStr(assets[i].Criticality),
-			assets[i].DiscoverySource,
-			assets[i].FirstSeenAt.Format(time.RFC3339),
-			assets[i].LastSeenAt.Format(time.RFC3339),
-			nullStr(assets[i].Tags),
-			assets[i].NaturalKey,
-		)
-		if err != nil {
-			return 0, 0, fmt.Errorf("upsert asset %s: %w", assets[i].ID, err)
 		}
 
-		if existingKeys[assets[i].NaturalKey] {
-			updated++
-		} else {
-			inserted++
-		}
-	}
+		for i := range assets {
+			_, execErr := tx.ExecContext(ctx, `
+				INSERT INTO assets (`+assetColumns+`)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(hostname, asset_type) DO UPDATE SET
+					os_family        = excluded.os_family,
+					os_version       = excluded.os_version,
+					kernel_version   = excluded.kernel_version,
+					architecture     = excluded.architecture,
+					is_authorized    = excluded.is_authorized,
+					is_managed       = excluded.is_managed,
+					environment      = excluded.environment,
+					owner            = excluded.owner,
+					criticality      = excluded.criticality,
+					discovery_source = excluded.discovery_source,
+					last_seen_at     = excluded.last_seen_at,
+					tags             = excluded.tags,
+					natural_key      = excluded.natural_key
+			`,
+				assets[i].ID.String(),
+				string(assets[i].AssetType),
+				assets[i].Hostname,
+				nullStr(assets[i].OSFamily),
+				nullStr(assets[i].OSVersion),
+				nullStr(assets[i].KernelVersion),
+				nullStr(assets[i].Architecture),
+				string(assets[i].IsAuthorized),
+				string(assets[i].IsManaged),
+				nullStr(assets[i].Environment),
+				nullStr(assets[i].Owner),
+				nullStr(assets[i].Criticality),
+				assets[i].DiscoverySource,
+				assets[i].FirstSeenAt.Format(time.RFC3339),
+				assets[i].LastSeenAt.Format(time.RFC3339),
+				nullStr(assets[i].Tags),
+				assets[i].NaturalKey,
+			)
+			if execErr != nil {
+				return fmt.Errorf("upsert asset %s: %w", assets[i].ID, execErr)
+			}
 
-	if err := tx.Commit(); err != nil {
-		return 0, 0, fmt.Errorf("commit tx: %w", err)
+			if existingKeys[assets[i].NaturalKey] {
+				updated++
+			} else {
+				inserted++
+			}
+		}
+
+		if commitErr := tx.Commit(); commitErr != nil {
+			return fmt.Errorf("commit tx: %w", commitErr)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, 0, err
 	}
 	return inserted, updated, nil
 }
@@ -525,39 +556,45 @@ func (s *SQLiteStore) InsertEvent(ctx context.Context, event model.AssetEvent) e
 }
 
 // InsertEvents persists a batch of events inside a single transaction.
+//
+// Wrapped in withTransientRetry with a higher attempt budget (5)
+// because event loss is the most painful failure mode — events drive
+// alerting, audit trails, and downstream ingestion.
 func (s *SQLiteStore) InsertEvents(ctx context.Context, events []model.AssetEvent) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO events (`+eventColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("prepare insert event: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
-
-	for i := range events {
-		_, err := stmt.ExecContext(ctx,
-			events[i].ID.String(),
-			string(events[i].EventType),
-			events[i].AssetID.String(),
-			events[i].ScanRunID.String(),
-			string(events[i].Severity),
-			nullStr(events[i].Details),
-			events[i].Timestamp.Format(time.RFC3339),
-		)
+	return withTransientRetry(5, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
-			return fmt.Errorf("insert event %s: %w", events[i].ID, err)
+			return fmt.Errorf("begin tx: %w", err)
 		}
-	}
+		defer tx.Rollback() //nolint:errcheck
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
+		stmt, err := tx.PrepareContext(ctx,
+			`INSERT INTO events (`+eventColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return fmt.Errorf("prepare insert event: %w", err)
+		}
+		defer func() { _ = stmt.Close() }()
+
+		for i := range events {
+			_, err := stmt.ExecContext(ctx,
+				events[i].ID.String(),
+				string(events[i].EventType),
+				events[i].AssetID.String(),
+				events[i].ScanRunID.String(),
+				string(events[i].Severity),
+				nullStr(events[i].Details),
+				events[i].Timestamp.Format(time.RFC3339),
+			)
+			if err != nil {
+				return fmt.Errorf("insert event %s: %w", events[i].ID, err)
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit tx: %w", err)
+		}
+		return nil
+	})
 }
 
 // ListEvents returns events matching the supplied filter.
@@ -694,29 +731,31 @@ func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) erro
 	if triggerSource == "" {
 		triggerSource = "cli"
 	}
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO scan_runs (`+scanRunColumns+`)
+	return withTransientRetry(3, func() error {
+		_, err := s.db.ExecContext(ctx,
+			`INSERT INTO scan_runs (`+scanRunColumns+`)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		run.ID.String(),
-		run.StartedAt.Format(time.RFC3339),
-		nullTimePtr(run.CompletedAt),
-		string(run.Status),
-		run.TotalAssets,
-		run.NewAssets,
-		run.UpdatedAssets,
-		run.StaleAssets,
-		run.CoveragePercent,
-		run.ErrorCount,
-		nullStr(run.ScopeConfig),
-		nullStr(run.DiscoverySources),
-		triggerSource,
-		nullStr(run.TriggeredBy),
-		nullTimePtr(run.CancelRequestedAt),
-	)
-	if err != nil {
-		return fmt.Errorf("create scan run %s: %w", run.ID, err)
-	}
-	return nil
+			run.ID.String(),
+			run.StartedAt.Format(time.RFC3339),
+			nullTimePtr(run.CompletedAt),
+			string(run.Status),
+			run.TotalAssets,
+			run.NewAssets,
+			run.UpdatedAssets,
+			run.StaleAssets,
+			run.CoveragePercent,
+			run.ErrorCount,
+			nullStr(run.ScopeConfig),
+			nullStr(run.DiscoverySources),
+			triggerSource,
+			nullStr(run.TriggeredBy),
+			nullTimePtr(run.CancelRequestedAt),
+		)
+		if err != nil {
+			return fmt.Errorf("create scan run %s: %w", run.ID, err)
+		}
+		return nil
+	})
 }
 
 // CompleteScanRun updates an existing scan run with the final result and marks
@@ -727,7 +766,10 @@ func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result 
 	if result.Status != "" {
 		status = result.Status
 	}
-	res, err := s.db.ExecContext(ctx, `
+	var notFound bool
+	err := withTransientRetry(3, func() error {
+		notFound = false
+		res, execErr := s.db.ExecContext(ctx, `
 		UPDATE scan_runs SET
 			completed_at     = ?,
 			status           = ?,
@@ -738,21 +780,29 @@ func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result 
 			coverage_percent = ?,
 			error_count      = ?
 		WHERE id = ?`,
-		now,
-		status,
-		result.TotalAssets,
-		result.NewAssets,
-		result.UpdatedAssets,
-		result.StaleAssets,
-		result.CoveragePercent,
-		result.ErrorCount,
-		id.String(),
-	)
+			now,
+			status,
+			result.TotalAssets,
+			result.NewAssets,
+			result.UpdatedAssets,
+			result.StaleAssets,
+			result.CoveragePercent,
+			result.ErrorCount,
+			id.String(),
+		)
+		if execErr != nil {
+			return fmt.Errorf("complete scan run %s: %w", id, execErr)
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			notFound = true
+		}
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("complete scan run %s: %w", id, err)
+		return err
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
+	if notFound {
 		return fmt.Errorf("scan run %s not found", id)
 	}
 	return nil
@@ -890,52 +940,54 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 // UpsertSoftware replaces all installed software records for the given asset.
 // It deletes existing rows and inserts the new set inside a single transaction.
 func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, software []model.InstalledSoftware) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
+	return withTransientRetry(3, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin tx: %w", err)
+		}
+		defer tx.Rollback() //nolint:errcheck
 
-	_, err = tx.ExecContext(ctx,
-		`DELETE FROM installed_software WHERE asset_id = ?`, assetID.String())
-	if err != nil {
-		return fmt.Errorf("delete old software for %s: %w", assetID, err)
-	}
+		_, err = tx.ExecContext(ctx,
+			`DELETE FROM installed_software WHERE asset_id = ?`, assetID.String())
+		if err != nil {
+			return fmt.Errorf("delete old software for %s: %w", assetID, err)
+		}
 
-	if len(software) == 0 {
-		if commitErr := tx.Commit(); commitErr != nil {
-			return fmt.Errorf("commit software tx: %w", commitErr)
+		if len(software) == 0 {
+			if commitErr := tx.Commit(); commitErr != nil {
+				return fmt.Errorf("commit software tx: %w", commitErr)
+			}
+			return nil
+		}
+
+		stmt, err := tx.PrepareContext(ctx,
+			`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return fmt.Errorf("prepare insert software: %w", err)
+		}
+		defer func() { _ = stmt.Close() }()
+
+		for i := range software {
+			_, err = stmt.ExecContext(ctx,
+				software[i].ID.String(),
+				assetID.String(),
+				software[i].SoftwareName,
+				software[i].Vendor, // NOT NULL DEFAULT '' in schema
+				software[i].Version,
+				nullStr(software[i].CPE23),
+				nullStr(software[i].PackageManager),
+				nullStr(software[i].Architecture),
+			)
+			if err != nil {
+				return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit tx: %w", err)
 		}
 		return nil
-	}
-
-	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("prepare insert software: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
-
-	for i := range software {
-		_, err = stmt.ExecContext(ctx,
-			software[i].ID.String(),
-			assetID.String(),
-			software[i].SoftwareName,
-			software[i].Vendor, // NOT NULL DEFAULT '' in schema
-			software[i].Version,
-			nullStr(software[i].CPE23),
-			nullStr(software[i].PackageManager),
-			nullStr(software[i].Architecture),
-		)
-		if err != nil {
-			return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit tx: %w", err)
-	}
-	return nil
+	})
 }
 
 // ListSoftware returns all installed software records for the given asset,
@@ -1045,13 +1097,14 @@ func (s *SQLiteStore) InsertFindings(ctx context.Context, findings []model.Confi
 	if len(findings) == 0 {
 		return nil
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
+	return withTransientRetry(3, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin tx: %w", err)
+		}
+		defer tx.Rollback() //nolint:errcheck
 
-	stmt, err := tx.PrepareContext(ctx, `
+		stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO config_findings (`+findingColumns+`)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -1059,42 +1112,43 @@ func (s *SQLiteStore) InsertFindings(ctx context.Context, findings []model.Confi
 			evidence     = excluded.evidence,
 			timestamp    = excluded.timestamp
 	`)
-	if err != nil {
-		return fmt.Errorf("prepare insert finding: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
-
-	for i := range findings {
-		firstSeen := findings[i].FirstSeenAt
-		if firstSeen.IsZero() {
-			firstSeen = findings[i].Timestamp
-		}
-		_, err := stmt.ExecContext(ctx,
-			findings[i].ID.String(),
-			findings[i].AssetID.String(),
-			findings[i].ScanRunID.String(),
-			findings[i].Auditor,
-			findings[i].CheckID,
-			findings[i].Title,
-			string(findings[i].Severity),
-			findings[i].CWEID,
-			findings[i].CWEName,
-			findings[i].Evidence,
-			findings[i].Expected,
-			findings[i].Remediation,
-			findings[i].CISControl,
-			findings[i].Timestamp.Format(time.RFC3339),
-			firstSeen.Format(time.RFC3339),
-		)
 		if err != nil {
-			return fmt.Errorf("insert finding %s: %w", findings[i].ID, err)
+			return fmt.Errorf("prepare insert finding: %w", err)
 		}
-	}
+		defer func() { _ = stmt.Close() }()
 
-	if commitErr := tx.Commit(); commitErr != nil {
-		return fmt.Errorf("commit findings: %w", commitErr)
-	}
-	return nil
+		for i := range findings {
+			firstSeen := findings[i].FirstSeenAt
+			if firstSeen.IsZero() {
+				firstSeen = findings[i].Timestamp
+			}
+			_, err := stmt.ExecContext(ctx,
+				findings[i].ID.String(),
+				findings[i].AssetID.String(),
+				findings[i].ScanRunID.String(),
+				findings[i].Auditor,
+				findings[i].CheckID,
+				findings[i].Title,
+				string(findings[i].Severity),
+				findings[i].CWEID,
+				findings[i].CWEName,
+				findings[i].Evidence,
+				findings[i].Expected,
+				findings[i].Remediation,
+				findings[i].CISControl,
+				findings[i].Timestamp.Format(time.RFC3339),
+				firstSeen.Format(time.RFC3339),
+			)
+			if err != nil {
+				return fmt.Errorf("insert finding %s: %w", findings[i].ID, err)
+			}
+		}
+
+		if commitErr := tx.Commit(); commitErr != nil {
+			return fmt.Errorf("commit findings: %w", commitErr)
+		}
+		return nil
+	})
 }
 
 // ListFindings returns config findings matching the supplied filter.
@@ -1234,47 +1288,49 @@ func (s *SQLiteStore) InsertPostureAssessments(ctx context.Context, assessments 
 	if len(assessments) == 0 {
 		return nil
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback() //nolint:errcheck
-
-	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO posture_assessments (`+postureColumns+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-	if err != nil {
-		return fmt.Errorf("prepare insert posture: %w", err)
-	}
-	defer func() { _ = stmt.Close() }()
-
-	for i := range assessments {
-		ids := make([]string, len(assessments[i].FindingIDs))
-		for j, fid := range assessments[i].FindingIDs {
-			ids[j] = fid.String()
-		}
-		idsJSON, _ := json.Marshal(ids)
-
-		_, err := stmt.ExecContext(ctx,
-			assessments[i].ID.String(),
-			assessments[i].AssetID.String(),
-			assessments[i].ScanRunID.String(),
-			assessments[i].CAPECID,
-			assessments[i].CAPECName,
-			string(idsJSON),
-			string(assessments[i].Likelihood),
-			assessments[i].Mitigation,
-			assessments[i].Timestamp.Format(time.RFC3339),
-		)
+	return withTransientRetry(3, func() error {
+		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
-			return fmt.Errorf("insert posture %s: %w", assessments[i].ID, err)
+			return fmt.Errorf("begin tx: %w", err)
 		}
-	}
+		defer tx.Rollback() //nolint:errcheck
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit posture tx: %w", err)
-	}
-	return nil
+		stmt, err := tx.PrepareContext(ctx,
+			`INSERT INTO posture_assessments (`+postureColumns+`)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return fmt.Errorf("prepare insert posture: %w", err)
+		}
+		defer func() { _ = stmt.Close() }()
+
+		for i := range assessments {
+			ids := make([]string, len(assessments[i].FindingIDs))
+			for j, fid := range assessments[i].FindingIDs {
+				ids[j] = fid.String()
+			}
+			idsJSON, _ := json.Marshal(ids)
+
+			_, err := stmt.ExecContext(ctx,
+				assessments[i].ID.String(),
+				assessments[i].AssetID.String(),
+				assessments[i].ScanRunID.String(),
+				assessments[i].CAPECID,
+				assessments[i].CAPECName,
+				string(idsJSON),
+				string(assessments[i].Likelihood),
+				assessments[i].Mitigation,
+				assessments[i].Timestamp.Format(time.RFC3339),
+			)
+			if err != nil {
+				return fmt.Errorf("insert posture %s: %w", assessments[i].ID, err)
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit posture tx: %w", err)
+		}
+		return nil
+	})
 }
 
 // ListPostureAssessments returns posture assessments matching the filter.
