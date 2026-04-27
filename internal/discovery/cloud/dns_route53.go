@@ -196,7 +196,7 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 
 			ttl := uint32(300)
 			if rec.TTL > 0 {
-				ttl = uint32(rec.TTL) //nolint:gosec // Route53 TTL is bounded
+				ttl = uint32(rec.TTL) //#nosec G115 -- Route53 TTL is bounded
 			}
 
 			snap.Records = append(snap.Records, DNSRecord{
