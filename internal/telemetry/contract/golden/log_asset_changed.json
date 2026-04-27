@@ -1,0 +1,13 @@
+{
+  "event.domain": "security",
+  "event.name": "asset.changed",
+  "security.scan.uid": "01931cb6-b7c4-7c41-c000-1111aaaa2222",
+  "security.asset.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
+  "security.asset.type": "server",
+  "security.asset.name": "db-primary-01.prod",
+  "security.asset.authorization": "unauthorized",
+  "security.asset.managed_status": "managed",
+  "security.asset.change.field": "authorization",
+  "security.asset.change.before": "authorized",
+  "security.asset.change.after": "unauthorized"
+}
