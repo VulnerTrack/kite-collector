@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,10 +62,12 @@ type httpClient interface {
 
 // EntraID implements discovery.Source for Microsoft Entra ID.
 type EntraID struct {
+	httpClient   httpClient
 	tokenBaseURL string
 	graphBaseURL string
-	httpClient   httpClient
 	now          func() time.Time
+	lastSnapshot *Snapshot
+	mu           sync.Mutex
 }
 
 // New returns a new Microsoft Entra ID discovery source pointed at the
@@ -154,14 +157,169 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		return nil, fmt.Errorf("entra: listing devices: %w", err)
 	}
 
+	// Phase 2 enrichment: directory roles + MFA registration. Failures
+	// here degrade gracefully — discovery still returns the device asset
+	// set even when the audit-grade snapshot is incomplete.
+	roleAssignments, principalRoles, err := e.collectPrivilegedRoleAssignments(ctx, token)
+	if err != nil {
+		slog.Warn("entra: role-assignment enumeration failed; ENTRA-002/003 findings will be incomplete",
+			"error", err,
+		)
+		roleAssignments = nil
+		principalRoles = nil
+	}
+	mfaByObjectID := make(map[string]bool)
+	mfa, err := e.listMfaRegistrations(ctx, token, conf)
+	if err != nil {
+		slog.Warn("entra: MFA registration enumeration failed; ENTRA-002 findings will be incomplete",
+			"error", err,
+		)
+	}
+	for _, m := range mfa {
+		if m.ID != "" {
+			mfaByObjectID[m.ID] = m.IsMfaRegistered
+		}
+	}
+
+	snap := buildSnapshot(conf, users, sps, roleAssignments, principalRoles, mfaByObjectID)
+	e.mu.Lock()
+	e.lastSnapshot = snap
+	e.mu.Unlock()
+
 	slog.Info("entra: discovery complete",
 		"users", len(users),
 		"service_principals", len(sps),
 		"groups", len(groups),
 		"devices", len(devices),
+		"role_assignments", len(roleAssignments),
+		"mfa_records", len(mfa),
 		"tenant_id", conf.tenantID,
 	)
 	return e.buildDeviceAssets(devices, conf), nil
+}
+
+// Snapshot returns the most recent Discover() result for use by the
+// Phase 2 auditor. Returns nil when Discover has never run successfully.
+// The returned pointer is the live struct; callers must treat it as
+// read-only.
+func (e *EntraID) Snapshot() *Snapshot {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.lastSnapshot
+}
+
+// collectPrivilegedRoleAssignments lists all activated directory roles,
+// then enumerates members for the subset whose roleTemplateId is in the
+// privileged closed set. Returns the flat assignment list plus a map
+// keyed by principal object ID containing the role template GUIDs they
+// hold (used to enrich SnapshotUser / SnapshotServicePrincipal).
+func (e *EntraID) collectPrivilegedRoleAssignments(ctx context.Context, token string) ([]SnapshotRoleAssignment, map[string][]string, error) {
+	roles, err := e.listDirectoryRoles(ctx, token)
+	if err != nil {
+		return nil, nil, fmt.Errorf("listing directory roles: %w", err)
+	}
+
+	assignments := make([]SnapshotRoleAssignment, 0, len(roles))
+	principalRoles := make(map[string][]string)
+	for _, role := range roles {
+		if _, ok := privilegedRoleTemplateIDs[role.RoleTemplateID]; !ok {
+			continue
+		}
+		members, mErr := e.listRoleMembers(ctx, token, role.ID)
+		if mErr != nil {
+			slog.Warn("entra: failed to list members for privileged role",
+				"role_template_id", role.RoleTemplateID,
+				"role_display_name", role.DisplayName,
+				"error", mErr,
+			)
+			continue
+		}
+		for _, m := range members {
+			if m.ID == "" {
+				continue
+			}
+			assignments = append(assignments, SnapshotRoleAssignment{
+				PrincipalObjectID:   m.ID,
+				PrincipalType:       normalisePrincipalType(m.ODataType),
+				RoleTemplateID:      role.RoleTemplateID,
+				RoleDisplayName:     role.DisplayName,
+				IsBuiltinPrivileged: true,
+			})
+			principalRoles[m.ID] = append(principalRoles[m.ID], role.RoleTemplateID)
+		}
+	}
+	return assignments, principalRoles, nil
+}
+
+// normalisePrincipalType strips the "#microsoft.graph." prefix from the
+// @odata.type emitted by Graph and lower-cases the leading character so
+// the value matches the closed set documented on
+// SnapshotRoleAssignment.PrincipalType.
+func normalisePrincipalType(odataType string) string {
+	const prefix = "#microsoft.graph."
+	t := strings.TrimPrefix(odataType, prefix)
+	if t == "" {
+		return ""
+	}
+	// Lower-case the first rune to match "user" / "servicePrincipal" /
+	// "group" rather than "User" / "ServicePrincipal" / "Group".
+	return strings.ToLower(t[:1]) + t[1:]
+}
+
+// buildSnapshot constructs a Snapshot from the per-endpoint result sets.
+// It merges role-assignment and MFA data into the SnapshotUser and
+// SnapshotServicePrincipal records so the auditor can answer ENTRA-002 /
+// ENTRA-003 from a single in-memory structure.
+func buildSnapshot(
+	conf *entraConfig,
+	users []entraUser,
+	sps []entraServicePrincipal,
+	assignments []SnapshotRoleAssignment,
+	principalRoles map[string][]string,
+	mfaByObjectID map[string]bool,
+) *Snapshot {
+	snapUsers := make([]SnapshotUser, 0, len(users))
+	for _, u := range users {
+		var lastSignIn *time.Time
+		if u.SignInActivity != nil {
+			lastSignIn = parseGraphTimestamp(u.SignInActivity.LastSignInDateTime)
+		}
+		roles := principalRoles[u.ID]
+		snapUsers = append(snapUsers, SnapshotUser{
+			LastSignInAt:              lastSignIn,
+			ObjectID:                  u.ID,
+			UserPrincipalName:         u.UserPrincipalName,
+			DisplayName:               u.DisplayName,
+			AssignedPrivilegedRoleIDs: roles,
+			AccountEnabled:            u.AccountEnabled,
+			MfaRegistered:             mfaByObjectID[u.ID],
+			HoldsPrivilegedRole:       len(roles) > 0,
+		})
+	}
+
+	snapSPs := make([]SnapshotServicePrincipal, 0, len(sps))
+	for _, sp := range sps {
+		roles := principalRoles[sp.ID]
+		snapSPs = append(snapSPs, SnapshotServicePrincipal{
+			ObjectID:                  sp.ID,
+			AppID:                     sp.AppID,
+			DisplayName:               sp.DisplayName,
+			ServicePrincipalType:      sp.ServicePrincipalType,
+			AssignedPrivilegedRoleIDs: roles,
+			OAuth2PermissionScopes:    sp.OAuth2PermissionScopes,
+			AccountEnabled:            sp.AccountEnabled,
+			HoldsPrivilegedRole:       len(roles) > 0,
+		})
+	}
+
+	return &Snapshot{
+		TenantID:                  conf.tenantID,
+		StaleAccountDays:          conf.staleAccountDays,
+		PrivilegedRoleTemplateIDs: PrivilegedRoleTemplateIDs(),
+		Users:                     snapUsers,
+		ServicePrincipals:         snapSPs,
+		RoleAssignments:           assignments,
+	}
 }
 
 // acquireToken exchanges client credentials for an OAuth2 bearer token for
@@ -218,10 +376,10 @@ func (e *EntraID) acquireToken(ctx context.Context, conf *entraConfig) (string, 
 // entraUser is the typed view of a single /v1.0/users response element. Only
 // the fields RFC-0121 needs are extracted; unknown keys are dropped.
 type entraUser struct {
-	signInActivity *struct {
+	SignInActivity *struct {
 		LastSignInDateTime  string `json:"lastSignInDateTime"`
 		LastSignInRequestID string `json:"lastSignInRequestId"`
-	}
+	} `json:"signInActivity,omitempty"`
 	ID                       string `json:"id"`
 	UserPrincipalName        string `json:"userPrincipalName"`
 	DisplayName              string `json:"displayName"`
@@ -271,6 +429,36 @@ type entraDevice struct {
 	IsManaged                     *bool  `json:"isManaged,omitempty"`
 }
 
+// entraMfaRegistration is the typed view of a single
+// /v1.0/reports/authenticationMethods/userRegistrationDetails element. The
+// id field is the user's Entra object ID, which lets the auditor join MFA
+// state back to the user records returned by listUsers().
+type entraMfaRegistration struct {
+	ID                string   `json:"id"`
+	UserPrincipalName string   `json:"userPrincipalName"`
+	MethodsRegistered []string `json:"methodsRegistered"`
+	IsMfaRegistered   bool     `json:"isMfaRegistered"`
+}
+
+// entraDirectoryRole is the typed view of a single /v1.0/directoryRoles
+// response element. The roleTemplateId is the stable cross-tenant GUID
+// matched against privilegedRoleTemplateIDs; id is the per-tenant directory
+// role object ID used to enumerate role members.
+type entraDirectoryRole struct {
+	ID             string `json:"id"`
+	RoleTemplateID string `json:"roleTemplateId"`
+	DisplayName    string `json:"displayName"`
+}
+
+// entraDirectoryRoleMember is the typed view of a member returned by
+// /v1.0/directoryRoles/{role-id}/members. The @odata.type tells us whether
+// the member is a user, service principal, or group; the auditor only acts
+// on user / servicePrincipal members.
+type entraDirectoryRoleMember struct {
+	ODataType string `json:"@odata.type"`
+	ID        string `json:"id"`
+}
+
 // listUsers fetches all users from Graph /v1.0/users with pagination.
 func (e *EntraID) listUsers(ctx context.Context, token string, conf *entraConfig) ([]entraUser, error) {
 	fields := "id,userPrincipalName,displayName,accountEnabled,department,jobTitle," +
@@ -306,6 +494,76 @@ func (e *EntraID) listDevices(ctx context.Context, token string, conf *entraConf
 	apiURL := fmt.Sprintf("%s/v1.0/devices?$select=%s&$top=%d",
 		e.graphBaseURL, url.QueryEscape(fields), conf.pageSize)
 	return fetchAllPages[entraDevice](ctx, e.httpClient, apiURL, token, conf.maxDevices)
+}
+
+// listMfaRegistrations fetches the per-user MFA registration report. The
+// endpoint requires Entra ID P1 / P2 licensing and the
+// AuditLog.Read.All scope; tenants without that combination get HTTP 403
+// or 404. We treat both as "no data" rather than a hard failure so the
+// rest of the discovery pipeline keeps working — the auditor will then
+// flag every privileged user as not-MFA-registered, which is a safe
+// default. Other status codes still propagate as errors.
+func (e *EntraID) listMfaRegistrations(ctx context.Context, token string, conf *entraConfig) ([]entraMfaRegistration, error) {
+	apiURL := fmt.Sprintf("%s/v1.0/reports/authenticationMethods/userRegistrationDetails?$top=%d",
+		e.graphBaseURL, conf.pageSize)
+
+	out, err := fetchAllPages[entraMfaRegistration](ctx, e.httpClient, apiURL, token, conf.maxUsers)
+	if err != nil {
+		if isGraphLicenseGate(err) {
+			slog.Warn("entra: MFA registration report unavailable (license/permission gate); skipping ENTRA-002 enrichment",
+				"error", err,
+			)
+			return nil, nil
+		}
+		return nil, err
+	}
+	return out, nil
+}
+
+// listDirectoryRoles fetches the activated directory roles from
+// /v1.0/directoryRoles. Note: only roles that have at least one member
+// are activated; un-assigned role templates are not returned, which is
+// fine for ENTRA-003 (we only care about roles with members).
+func (e *EntraID) listDirectoryRoles(ctx context.Context, token string) ([]entraDirectoryRole, error) {
+	apiURL := fmt.Sprintf("%s/v1.0/directoryRoles", e.graphBaseURL)
+	return fetchAllPages[entraDirectoryRole](ctx, e.httpClient, apiURL, token, 0)
+}
+
+// listRoleMembers fetches the members of a specific directory role. The
+// Graph endpoint returns heterogeneous principals (users, SPs, groups);
+// the @odata.type field disambiguates them.
+func (e *EntraID) listRoleMembers(ctx context.Context, token, roleID string) ([]entraDirectoryRoleMember, error) {
+	apiURL := fmt.Sprintf("%s/v1.0/directoryRoles/%s/members", e.graphBaseURL, url.PathEscape(roleID))
+	return fetchAllPages[entraDirectoryRoleMember](ctx, e.httpClient, apiURL, token, 0)
+}
+
+// isGraphLicenseGate reports whether the Graph error wraps a 403 or 404
+// status, which Microsoft uses interchangeably for "your tenant license
+// or app permissions don't include this endpoint." The error string
+// emitted by fetchPage embeds the status code, so we substring-match.
+func isGraphLicenseGate(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "graph API returned 403") ||
+		strings.Contains(msg, "graph API returned 404")
+}
+
+// parseGraphTimestamp converts an ISO-8601 timestamp emitted by Graph
+// (e.g. "2026-04-20T14:32:11Z") into a UTC *time.Time. Empty strings
+// and unparseable values return nil so callers can distinguish
+// "never signed in" from "signed in at <date>".
+func parseGraphTimestamp(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil
+	}
+	utc := t.UTC()
+	return &utc
 }
 
 // buildDeviceAssets converts discovered Entra devices to model.Asset records
