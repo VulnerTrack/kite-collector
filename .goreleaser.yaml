@@ -53,9 +53,16 @@ nfpms:
 brews:
   - name: kite-collector
     ids: [homebrew]
+    # Publish the formula INTO this repo (Formula/ subdir, homebrew-tap
+    # convention) so the workflow's default GITHUB_TOKEN has write access.
+    # Cross-repo publishing to VulnerTrack/homebrew-tap requires a PAT with
+    # contents:write on that other repo (403 Resource not accessible by
+    # integration without it).
     repository:
       owner: VulnerTrack
-      name: homebrew-tap
+      name: kite-collector
+      branch: main
+    directory: Formula
     homepage: https://github.com/VulnerTrack/kite-collector
     description: "Cybersecurity asset discovery, configuration audit, and posture analysis agent"
     license: MIT
