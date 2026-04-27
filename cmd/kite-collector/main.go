@@ -977,6 +977,7 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 		st = pgStore
 	} else {
 		slog.Info("agent: using SQLite backend", "path", dbPath)
+		sqlite.WarnIfPathIsSuspect(slog.Default(), dbPath)
 		dataDir := filepath.Dir(dbPath)
 		if mkErr := os.MkdirAll(dataDir, 0o750); mkErr != nil {
 			return fmt.Errorf("create data dir %s: %w", dataDir, mkErr)
@@ -2357,6 +2358,7 @@ from the local SQLite database — no external connections are made.`,
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 
+			sqlite.WarnIfPathIsSuspect(slog.Default(), dbPath)
 			encStore, err := openSQLiteStore(dbPath, config.IdentityConfig{})
 			if err != nil {
 				return fmt.Errorf("open store: %w", err)
