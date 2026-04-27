@@ -130,6 +130,24 @@ func openSQLiteStore(dbPath string, identityCfg config.IdentityConfig) (*sqlite.
 	return es, nil
 }
 
+// networkScanner returns a TCP scanner that persists ScanEvent / OpenPort /
+// GuardEvent rows to the SQLite store when possible. The scanner package
+// uses a narrow EventSink interface (RFC-0124 §5.2) which only the SQLite
+// store implements; for non-SQLite backends or unenrolled tooling we fall
+// back to the legacy in-memory scanner so audit telemetry is silently
+// dropped rather than blocking the discovery run.
+func networkScanner(st store.Store, identityDir string) *network.Scanner {
+	sqliteStore, ok := st.(*sqlite.SQLiteStore)
+	if !ok {
+		return network.New()
+	}
+	var agentID string
+	if id, err := identity.LoadOrCreate(identityDir, slog.Default()); err == nil {
+		agentID = id.AgentID.String()
+	}
+	return network.NewWithSink(sqliteStore, agentID)
+}
+
 // ---------------------------------------------------------------------------
 // Diff types
 // ---------------------------------------------------------------------------
@@ -319,7 +337,7 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 
 	// Set up discovery registry.
 	registry := discovery.NewRegistry()
-	registry.Register(network.New())
+	registry.Register(networkScanner(st, dataDir))
 	registry.Register(agent.New())
 	registry.Register(cloud.NewAWS())
 	registry.Register(cloud.NewGCP())
@@ -1002,7 +1020,7 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 	}
 
 	registry := discovery.NewRegistry()
-	registry.Register(network.New())
+	registry.Register(networkScanner(st, filepath.Dir(dbPath)))
 	registry.Register(agent.New())
 	registry.Register(cloud.NewAWS())
 	registry.Register(cloud.NewGCP())
