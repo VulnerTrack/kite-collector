@@ -233,14 +233,14 @@ func TestNewLDAP_DefaultsApplied(t *testing.T) {
 
 func TestIsDefaultMachineSPN(t *testing.T) {
 	cases := map[string]bool{
-		"HOST/dc1":                true,
-		"host/dc1.corp":           true,
-		"RestrictedKrbHost/dc1":   true,
-		"MSSQLSvc/sql01:1433":     false,
-		"http/web01":              false,
-		"ldap/svc.corp":           false,
-		"":                        false,
-		"badformat":               false,
+		"HOST/dc1":              true,
+		"host/dc1.corp":         true,
+		"RestrictedKrbHost/dc1": true,
+		"MSSQLSvc/sql01:1433":   false,
+		"http/web01":            false,
+		"ldap/svc.corp":         false,
+		"":                      false,
+		"badformat":             false,
 	}
 	for spn, want := range cases {
 		if got := isDefaultMachineSPN(spn); got != want {

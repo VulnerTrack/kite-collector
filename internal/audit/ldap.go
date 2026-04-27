@@ -24,8 +24,8 @@ const (
 // discovery source agree on stale_threshold_days, the actual TLS mode
 // used for the bind, and the password environment variable.
 type LDAPAuditConfig struct {
-	StaleThresholdDays int    // 0 == use default (90 days)
 	TLSMode            string // "ldaps" | "starttls" | "none"
+	StaleThresholdDays int    // 0 == use default (90 days)
 }
 
 // LDAP audits Active Directory / LDAP-discovered assets for posture
@@ -40,8 +40,8 @@ type LDAPAuditConfig struct {
 // produced by the LDAP discovery source so registering it globally is
 // safe — non-LDAP assets short-circuit immediately.
 type LDAP struct {
-	cfg LDAPAuditConfig
 	now func() time.Time
+	cfg LDAPAuditConfig
 }
 
 // NewLDAP returns an LDAP auditor configured with the supplied policy.

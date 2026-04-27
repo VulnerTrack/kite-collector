@@ -71,6 +71,11 @@ var sourceEnvVars = map[string]map[string]string{ //#nosec G101 -- values are en
 		"client_id":     "KITE_INTUNE_CLIENT_ID",
 		"client_secret": "KITE_INTUNE_CLIENT_SECRET", // #nosec G101 -- env var name, not a credential
 	},
+	"entra": {
+		"tenant_id":     "KITE_ENTRA_TENANT_ID",
+		"client_id":     "KITE_ENTRA_CLIENT_ID",
+		"client_secret": "KITE_ENTRA_CLIENT_SECRET", // #nosec G101 -- env var name, not a credential
+	},
 	"jamf": {
 		"api_url":  "KITE_JAMF_API_URL",
 		"username": "KITE_JAMF_USERNAME",
@@ -190,6 +195,12 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			"collect_groups":       src.CollectGroups,
 			"collect_ous":          src.CollectOUs,
 			"collect_gpos":         src.CollectGPOs,
+			// Entra-specific (RFC-0121); harmless when other sources read them.
+			"stale_account_days":     src.StaleAccountDays,
+			"max_users":              src.MaxUsers,
+			"max_service_principals": src.MaxServicePrincipals,
+			"max_groups":             src.MaxGroups,
+			"max_devices":            src.MaxDevices,
 		}
 		// Bind MDM/CMDB credential environment variables into the
 		// config map so connectors receive them via the standard

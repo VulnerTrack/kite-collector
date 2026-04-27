@@ -12,10 +12,13 @@ import (
 
 // startTCPListener spins up a localhost TCP listener so the DC-connect
 // checker has something real to dial. The caller closes the listener
-// when finished; the returned address is the host:port form.
+// when finished; the returned address is the host:port form. The
+// listener uses (&net.ListenConfig{}).Listen to thread the test's
+// context, satisfying the noctx linter.
 func startTCPListener(t *testing.T) (string, func()) {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	return ln.Addr().String(), func() { _ = ln.Close() }
 }
@@ -196,14 +199,14 @@ func TestParseHostPort(t *testing.T) {
 		err  bool
 	}
 	cases := map[string]want{
-		"dc1.corp.acme.com":      {host: "dc1.corp.acme.com", port: 636},
-		"dc1.corp.acme.com:389":  {host: "dc1.corp.acme.com", port: 389},
-		"dc1.corp.acme.com:":     {host: "dc1.corp.acme.com", port: 636},
-		"":                       {err: true},
-		"  ":                     {err: true},
-		"host:99999":             {err: true},
-		"host:abc":               {err: true},
-		"[2001:db8::1]:636":      {host: "2001:db8::1", port: 636},
+		"dc1.corp.acme.com":     {host: "dc1.corp.acme.com", port: 636},
+		"dc1.corp.acme.com:389": {host: "dc1.corp.acme.com", port: 389},
+		"dc1.corp.acme.com:":    {host: "dc1.corp.acme.com", port: 636},
+		"":                      {err: true},
+		"  ":                    {err: true},
+		"host:99999":            {err: true},
+		"host:abc":              {err: true},
+		"[2001:db8::1]:636":     {host: "2001:db8::1", port: 636},
 	}
 	for in, w := range cases {
 		host, port, err := parseHostPort(in, 636)

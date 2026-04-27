@@ -8,7 +8,7 @@ import (
 // Default config values (RFC-0121 §5.4 / §10.2).
 const (
 	defaultTLSMode             = "ldaps"
-	defaultBindPasswordEnvVar  = "KITE_LDAP_BIND_PASSWORD"
+	defaultBindPasswordEnvVar  = "KITE_LDAP_BIND_PASSWORD" //#nosec G101 -- env var name, not credential value
 	defaultPageSize            = 1000
 	defaultTimeoutSeconds      = 300
 	defaultStaleThresholdDays  = 90
@@ -51,6 +51,15 @@ type ldapConfig struct {
 // into a typed ldapConfig. Unknown / missing keys fall back to the defaults
 // declared in the constant block above.
 func parseConfig(cfg map[string]any) (*ldapConfig, error) {
+	// pageSize is later validated to be in [1, maxAllowedPageSize]; clamp
+	// any negative or oversize int input to the default before the uint32
+	// cast so G115 has no chance of firing on the conversion. validate()
+	// will still reject 0 explicitly via the range check below.
+	pageSize := intCfg(cfg, "page_size", defaultPageSize)
+	if pageSize < 0 || pageSize > maxAllowedPageSize {
+		pageSize = defaultPageSize
+	}
+
 	c := &ldapConfig{
 		enabled:            boolCfg(cfg, "enabled", false),
 		tlsMode:            strCfg(cfg, "tls_mode", defaultTLSMode),
@@ -59,7 +68,7 @@ func parseConfig(cfg map[string]any) (*ldapConfig, error) {
 		bindDN:             strCfg(cfg, "bind_dn", ""),
 		bindPasswordEnvVar: strCfg(cfg, "bind_password_env", defaultBindPasswordEnvVar),
 		baseDN:             strCfg(cfg, "base_dn", ""),
-		pageSize:           uint32(intCfg(cfg, "page_size", defaultPageSize)),
+		pageSize:           uint32(pageSize), //nolint:gosec // bounded above to [0, maxAllowedPageSize]
 		timeoutSeconds:     intCfg(cfg, "timeout_seconds", defaultTimeoutSeconds),
 		staleThresholdDays: intCfg(cfg, "stale_threshold_days", defaultStaleThresholdDays),
 		maxObjects:         intCfg(cfg, "max_objects", defaultMaxObjects),

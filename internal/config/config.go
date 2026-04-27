@@ -185,36 +185,44 @@ type DiscoveryConfig struct {
 }
 
 // SourceConfig holds configuration for a single discovery source.
+//
+// Field order is intentionally optimised for the fieldalignment govet
+// analyser; the on-disk YAML order is dictated by mapstructure tags, not
+// Go declaration order.
 type SourceConfig struct {
-	Timeout           string   `mapstructure:"timeout"`
-	Scope             []string `mapstructure:"scope"`
-	Paths             []string `mapstructure:"paths"` // filesystem paths (code source)
-	Regions           []string `mapstructure:"regions"`
-	AssumeRole        string   `mapstructure:"assume_role"`
-	Project           string   `mapstructure:"project"`
-	SubscriptionID    string   `mapstructure:"subscription_id"`
-	Host              string   `mapstructure:"host"`      // Docker/Podman socket path
-	Endpoint          string   `mapstructure:"endpoint"`  // API endpoint URL (UniFi, Proxmox)
-	Site              string   `mapstructure:"site"`      // UniFi site name
-	Community         string   `mapstructure:"community"` // SNMP v2c community string
-	TCPPorts          []int    `mapstructure:"tcp_ports"`
-	MaxDepth          int      `mapstructure:"max_depth"` // directory recursion depth (code source)
-	MaxConcurrent     int      `mapstructure:"max_concurrent"`
-	Enabled           bool     `mapstructure:"enabled"`
-	CollectSoftware   bool     `mapstructure:"collect_software"`
-	CollectInterfaces bool     `mapstructure:"collect_interfaces"`
-
-	// LDAP / Active Directory (RFC-0121).
-	TLSMode            string   `mapstructure:"tls_mode"`
 	TLSCAFile          string   `mapstructure:"tls_ca_file"`
-	TLSSkipVerify      bool     `mapstructure:"tls_skip_verify"`
-	BindDN             string   `mapstructure:"bind_dn"`
 	BindPasswordEnv    string   `mapstructure:"bind_password_env"`
+	BindDN             string   `mapstructure:"bind_dn"`
 	BaseDN             string   `mapstructure:"base_dn"`
+	TLSMode            string   `mapstructure:"tls_mode"`
+	Timeout            string   `mapstructure:"timeout"`
+	AssumeRole         string   `mapstructure:"assume_role"`
+	Project            string   `mapstructure:"project"`
+	SubscriptionID     string   `mapstructure:"subscription_id"`
+	Host               string   `mapstructure:"host"`
+	Endpoint           string   `mapstructure:"endpoint"`
+	Site               string   `mapstructure:"site"`
+	Community          string   `mapstructure:"community"`
+	Regions            []string `mapstructure:"regions"`
+	Paths              []string `mapstructure:"paths"`
+	Scope              []string `mapstructure:"scope"`
 	DomainControllers  []string `mapstructure:"domain_controllers"`
+	TCPPorts           []int    `mapstructure:"tcp_ports"`
+	MaxObjects         int      `mapstructure:"max_objects"`
+	MaxConcurrent      int      `mapstructure:"max_concurrent"`
+	MaxDepth           int      `mapstructure:"max_depth"`
 	PageSize           int      `mapstructure:"page_size"`
 	StaleThresholdDays int      `mapstructure:"stale_threshold_days"`
-	MaxObjects         int      `mapstructure:"max_objects"`
+	// Entra-specific (RFC-0121 §5.4); harmless when other sources read them.
+	StaleAccountDays     int `mapstructure:"stale_account_days"`
+	MaxUsers             int `mapstructure:"max_users"`
+	MaxServicePrincipals int `mapstructure:"max_service_principals"`
+	MaxGroups            int `mapstructure:"max_groups"`
+	MaxDevices           int `mapstructure:"max_devices"`
+	Enabled            bool     `mapstructure:"enabled"`
+	CollectSoftware    bool     `mapstructure:"collect_software"`
+	CollectInterfaces  bool     `mapstructure:"collect_interfaces"`
+	TLSSkipVerify      bool     `mapstructure:"tls_skip_verify"`
 	CollectUsers       bool     `mapstructure:"collect_users"`
 	CollectGroups      bool     `mapstructure:"collect_groups"`
 	CollectOUs         bool     `mapstructure:"collect_ous"`

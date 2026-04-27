@@ -14,12 +14,12 @@ import (
 // fakeConn implements directoryConn for the unit tests. It records calls
 // and serves a canned SearchWithPaging result.
 type fakeConn struct {
-	bindDN      string
-	bindPwd     string
+	result      *ldapv3.SearchResult
 	bindErr     error
 	startTLSErr error
 	searchErr   error
-	result      *ldapv3.SearchResult
+	bindDN      string
+	bindPwd     string
 	closed      bool
 	startTLSed  bool
 }
@@ -264,10 +264,10 @@ func TestParseConfig_Defaults(t *testing.T) {
 
 func TestParseConfig_RejectsBadTLSMode(t *testing.T) {
 	_, err := parseConfig(map[string]any{
-		"enabled":  true,
-		"tls_mode": "weird",
-		"base_dn":  "DC=corp,DC=acme,DC=com",
-		"bind_dn":  "CN=svc",
+		"enabled":            true,
+		"tls_mode":           "weird",
+		"base_dn":            "DC=corp,DC=acme,DC=com",
+		"bind_dn":            "CN=svc",
 		"domain_controllers": []any{"dc"},
 	})
 	if err == nil {
@@ -428,16 +428,16 @@ func TestDomainFromBaseDN(t *testing.T) {
 func TestSplitHostPort(t *testing.T) {
 	cases := []struct {
 		in       string
-		dPort    int
 		wantHost string
+		dPort    int
 		wantPort int
 		wantErr  bool
 	}{
-		{"dc1.corp.acme.com", 636, "dc1.corp.acme.com", 636, false},
-		{"dc1.corp.acme.com:3269", 636, "dc1.corp.acme.com", 3269, false},
-		{"[::1]:636", 636, "::1", 636, false},
-		{"", 636, "", 0, true},
-		{"dc:bad", 636, "", 0, true},
+		{"dc1.corp.acme.com", "dc1.corp.acme.com", 636, 636, false},
+		{"dc1.corp.acme.com:3269", "dc1.corp.acme.com", 636, 3269, false},
+		{"[::1]:636", "::1", 636, 636, false},
+		{"", "", 636, 0, true},
+		{"dc:bad", "", 636, 0, true},
 	}
 	for _, tc := range cases {
 		host, port, err := splitHostPort(tc.in, tc.dPort)
