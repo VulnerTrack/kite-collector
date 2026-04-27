@@ -122,4 +122,8 @@ func (r *Runner) registerDefaults() {
 	r.Register("tunnel:binary:available", &TunnelBinaryChecker{})
 	r.Register("tunnel:auth:valid", &TunnelAuthChecker{})
 	r.Register("tunnel:port:free", &TunnelPortChecker{})
+	r.Register("ldap:dc:connect", &LDAPDCConnectChecker{})
+	r.Register("ldap:bind:env", &LDAPBindEnvChecker{})
+	r.Register("ldap:base_dn:syntax", &LDAPBaseDNChecker{})
+	r.Register("ldap:tls_mode:valid", &LDAPTLSModeChecker{})
 }
