@@ -47,7 +47,7 @@ clean:
 
 all: vet lint security test build
 
-test-all: vet lint security test test-e2e
+test-all: vet lint security test test-e2e build
 
 # Deterministic coverage gate for the RFC-0115 telemetry contract surface.
 #
