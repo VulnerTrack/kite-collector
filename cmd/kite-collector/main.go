@@ -829,8 +829,8 @@ and no config file is required:
 		fmt.Sprintf("directory containing agent.pem, agent-key.pem, ca.pem (e.g. %s/<agent-code>)", defaultKiteDataDir()))
 	cmd.Flags().StringVar(&endpoint, "endpoint", "",
 		"OTLP endpoint (overrides config, default https://otel.vulnertrack.io)")
-	cmd.Flags().StringVar(&dashboardAddr, "dashboard-addr", "127.0.0.1:9090",
-		"dashboard listen address (empty string disables the dashboard)")
+	cmd.Flags().StringVar(&dashboardAddr, "dashboard-addr", "",
+		"dashboard listen address (default disabled; set e.g. 127.0.0.1:9090 to enable)")
 
 	return cmd
 }
