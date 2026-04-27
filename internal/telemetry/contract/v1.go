@@ -158,7 +158,28 @@ var AllowedDiscoverySources = map[string]struct{}{
 	"vpn.netbird":     {},
 	"dns":             {},
 	"ssh-known-hosts": {},
+	"ldap":            {},
 }
+
+// LDAP/Active Directory asset tag keys per RFC-0121 §5.4. These keys are
+// emitted on EventAssetDiscovered records produced by the LDAP discovery
+// source and consumed by the Python ontology bridge to materialize
+// ActiveDirectoryDomain / ActiveDirectoryAccount / OrganizationalUnit
+// entities. Values are JSON-encoded for collection-typed fields (spns,
+// groups) so they round-trip through the OTLP string attribute layer.
+const (
+	AttrADDomainDNSName       = "ad.domain_dns_name"
+	AttrADSAMAccountName      = "ad.sam_account_name"
+	AttrADObjectSID           = "ad.object_sid"
+	AttrADOUPath              = "ad.ou_path"
+	AttrADEnabled             = "ad.enabled"
+	AttrADLastLogonTimestamp  = "ad.last_logon_timestamp"
+	AttrADPasswordLastSet     = "ad.password_last_set"
+	AttrADSPNs                = "ad.spns"
+	AttrADGroups              = "ad.groups"
+	AttrADUACFlags            = "ad.uac_flags"
+	AttrADDistinguishedName   = "ad.distinguished_name"
+)
 
 // AllowedAuditModules is the closed audit.<module> span suffix.
 var AllowedAuditModules = map[string]struct{}{
