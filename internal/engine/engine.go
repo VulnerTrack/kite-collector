@@ -16,6 +16,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/dedup"
 	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
+	entrasrc "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
@@ -450,6 +451,71 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			}
 			findingsCount += len(ldapFindings)
 			e.recordFindingMetrics(ldapFindings)
+		}
+	}
+
+	// Microsoft Entra ID audit phase: per-asset ENTRA-005 (non-compliant
+	// device) over assets discovered by the Entra source, plus the
+	// tenant-wide ENTRA-001 / 002 / 003 findings derived from the
+	// Snapshot the EntraID source caches at the end of Discover().
+	if scanCtx.Err() == nil && cfg.Audit.Enabled && cfg.Audit.Entra.Enabled {
+		entraSrcCfg := cfg.Discovery.Sources["entra"]
+		entraAuditor := audit.NewEntra(audit.EntraAuditConfig{
+			StaleAccountDays: entraSrcCfg.StaleAccountDays,
+		})
+
+		// Per-asset ENTRA-005: walk the discovered asset set and emit
+		// findings against assets whose discovery source is "entra".
+		for _, a := range assets {
+			if a.DiscoverySource != entrasrc.SourceName {
+				continue
+			}
+			entraFindings, auditErr := entraAuditor.Audit(scanCtx, a)
+			if auditErr != nil {
+				slog.Warn("engine: entra audit failed", "asset_id", a.ID, "error", auditErr)
+				continue
+			}
+			if len(entraFindings) == 0 {
+				continue
+			}
+			for i := range entraFindings {
+				entraFindings[i].ScanRunID = scanID
+			}
+			if fErr := e.store.InsertFindings(ctx, entraFindings); fErr != nil {
+				slog.Error("engine: failed to persist entra findings",
+					"error", fErr, "asset_id", a.ID, "count", len(entraFindings))
+				continue
+			}
+			findingsCount += len(entraFindings)
+			e.recordFindingMetrics(entraFindings)
+		}
+
+		// Tenant-wide ENTRA-001 / 002 / 003: pull the snapshot the
+		// EntraID source built during discovery, then emit findings.
+		// A nil snapshot means the source was disabled, never ran, or
+		// failed before producing data — silently skip in that case.
+		if src := e.registry.Get(entrasrc.SourceName); src != nil {
+			if entraSrc, ok := src.(*entrasrc.EntraID); ok {
+				snap := entraSrc.Snapshot()
+				tenantFindings, auditErr := entraAuditor.AuditTenant(scanCtx, snap)
+				if auditErr != nil {
+					slog.Warn("engine: entra tenant audit failed", "error", auditErr)
+				} else if len(tenantFindings) > 0 {
+					for i := range tenantFindings {
+						tenantFindings[i].ScanRunID = scanID
+					}
+					if fErr := e.store.InsertFindings(ctx, tenantFindings); fErr != nil {
+						slog.Error("engine: failed to persist entra tenant findings",
+							"error", fErr, "count", len(tenantFindings))
+					} else {
+						findingsCount += len(tenantFindings)
+						e.recordFindingMetrics(tenantFindings)
+						slog.Info("engine: entra tenant audit complete",
+							"findings", len(tenantFindings),
+						)
+					}
+				}
+			}
 		}
 	}
 
