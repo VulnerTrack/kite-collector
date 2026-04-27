@@ -24,9 +24,16 @@ func (c *Composer) Available() bool {
 }
 
 func (c *Composer) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "composer", "show", "--format=json")
+	// composer show exits 1 when there is no composer.json in cwd and no
+	// global vendor tree. That is a normal "this host has no composer
+	// project" state, not a parser failure — return zero items quietly
+	// instead of bubbling a parse error up.
+	out, exitCode, err := runWithLimitsTolerateExit(ctx, "composer", "show", "--format=json")
 	if err != nil {
 		return nil, fmt.Errorf("composer show: %w", err)
+	}
+	if exitCode != 0 && len(out) == 0 {
+		return &Result{}, nil
 	}
 	return ParseComposerJSON(string(out)), nil
 }
