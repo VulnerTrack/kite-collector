@@ -148,6 +148,30 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Diagnose secret presence (length only — values are masked)
+        # Confirms whether HOMEBREW_TAP_GITHUB_TOKEN is set on THIS repo at
+        # THIS workflow ref. Length-only print; GitHub redacts secret values
+        # in logs, but ${#VAR} is the integer length and is safe to log.
+        # If the secret is missing, you'll see UNSET here, which confirms
+        # the 403 is "secret not configured" rather than "PAT lacks scope".
+        run: |
+          set -u
+          if [ -n "${HOMEBREW_TAP_GITHUB_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_GITHUB_TOKEN: SET (length=${#HOMEBREW_TAP_GITHUB_TOKEN})"
+          else
+            echo "HOMEBREW_TAP_GITHUB_TOKEN: UNSET — add it as a repo secret on"
+            echo "  https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+          if [ -n "${GITHUB_TOKEN:-}" ]; then
+            echo "GITHUB_TOKEN: SET (length=${#GITHUB_TOKEN})"
+          fi
+        env:
+          # NOTE: deliberately NO `|| secrets.GITHUB_TOKEN` fallback here.
+          # We want to fail fast and visibly when the secret is missing, not
+          # silently use the wrong token and 403 in the goreleaser step.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -157,10 +181,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Cross-repo write to VulnerTrack/homebrew-tap requires a PAT (or
           # fine-grained token) with contents:write on that repo. Stored as
-          # repo secret HOMEBREW_TAP_GITHUB_TOKEN. Falls back to GITHUB_TOKEN
-          # when the secret is unset — the brew step will 403 (same symptom
-          # as before) but other release artifacts still publish.
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          # repo secret HOMEBREW_TAP_GITHUB_TOKEN.
+          # The silent `||` fallback was removed: if the secret is missing,
+          # the diagnose step above fails with a clear actionable message.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
