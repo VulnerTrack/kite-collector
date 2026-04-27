@@ -1,0 +1,8 @@
+{
+  "event.domain": "security",
+  "event.name": "scan.lifecycle",
+  "security.scan.uid": "01931cb6-b7c4-7c41-c000-1111aaaa2222",
+  "security.scan.phase": "completed",
+  "security.scan.duration_ms": 18432,
+  "security.scan.error.kind": "none"
+}

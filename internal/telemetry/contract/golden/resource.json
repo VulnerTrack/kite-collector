@@ -1,0 +1,17 @@
+{
+  "service.name": "kite-collector",
+  "service.version": "1.0.0",
+  "service.namespace": "vulnertrack",
+  "service.instance.id": "01931cb6-b7c4-7c41-a000-0123456789ab",
+  "host.id": "1a2b3c4d5e6f7890abcdef0123456789",
+  "host.name": "edge-01.acme.example",
+  "host.arch": "amd64",
+  "os.type": "linux",
+  "os.name": "ubuntu",
+  "os.version": "22.04",
+  "agent.id": "01931cb6-b7c4-7c41-a000-0123456789ab",
+  "agent.type": "kite-collector",
+  "tenant.id": "01931cb6-b7c4-7c41-b000-fedcba987654",
+  "deployment.environment": "pilot",
+  "kite.contract.version": "1.0"
+}

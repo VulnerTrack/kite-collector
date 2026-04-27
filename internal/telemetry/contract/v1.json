@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vulnertrack.io/schemas/kite-collector/telemetry-contract/v1.json",
+  "title": "kite-collector → central OTel telemetry contract",
+  "description": "Closed set of resource attributes, log event names, span names, metric instruments, and per-event attribute keys the kite-collector agent is permitted to emit. RFC-0115 v1.0.",
+  "type": "object",
+  "properties": {
+    "version": { "const": "1.0" },
+    "resource_attributes": { "$ref": "#/$defs/ResourceAttributes" },
+    "events": { "$ref": "#/$defs/Events" },
+    "spans": { "$ref": "#/$defs/Spans" },
+    "metrics": { "$ref": "#/$defs/Metrics" }
+  },
+  "required": ["version", "resource_attributes", "events", "spans", "metrics"],
+  "additionalProperties": false,
+  "$defs": {
+    "ResourceAttributes": {
+      "type": "object",
+      "description": "Resource attribute set sent on every signal (RFC-0115 §4.2).",
+      "properties": {
+        "service.name":        { "type": "string", "const": "kite-collector" },
+        "service.version":     { "type": "string", "minLength": 1 },
+        "service.namespace":   { "type": "string", "const": "vulnertrack" },
+        "service.instance.id": { "type": "string", "format": "uuid" },
+        "host.id":             { "type": "string", "minLength": 1 },
+        "host.name":           { "type": "string", "minLength": 1 },
+        "host.arch":           { "type": "string", "enum": ["amd64", "arm64", "arm", "386", "ppc64le", "s390x"] },
+        "os.type":             { "type": "string", "enum": ["linux", "darwin", "windows", "freebsd", "openbsd"] },
+        "os.name":             { "type": "string" },
+        "os.version":          { "type": "string" },
+        "agent.id":            { "type": "string", "format": "uuid" },
+        "agent.type":          { "type": "string", "const": "kite-collector" },
+        "tenant.id":           { "type": "string" },
+        "deployment.environment": { "type": "string", "enum": ["production", "staging", "pilot", "development"] },
+        "kite.contract.version":  { "type": "string", "const": "1.0" }
+      },
+      "required": [
+        "service.name", "service.version", "service.namespace", "service.instance.id",
+        "host.id", "host.name", "host.arch",
+        "os.type", "os.name", "os.version",
+        "agent.id", "agent.type", "tenant.id",
+        "deployment.environment", "kite.contract.version"
+      ],
+      "additionalProperties": false
+    },
+    "Events": {
+      "type": "object",
+      "description": "Closed set of log event records (RFC-0115 §4.4).",
+      "properties": {
+        "asset.discovered":      { "$ref": "#/$defs/EventAssetDiscovered" },
+        "asset.changed":         { "$ref": "#/$defs/EventAssetChanged" },
+        "finding.configuration": { "$ref": "#/$defs/EventFindingConfiguration" },
+        "finding.posture":       { "$ref": "#/$defs/EventFindingPosture" },
+        "scan.lifecycle":        { "$ref": "#/$defs/EventScanLifecycle" }
+      },
+      "required": ["asset.discovered", "asset.changed", "finding.configuration", "finding.posture", "scan.lifecycle"],
+      "additionalProperties": false
+    },
+    "EventCommon": {
+      "type": "object",
+      "properties": {
+        "event.domain": { "type": "string", "const": "security" },
+        "event.name":   { "type": "string" },
+        "security.scan.uid": { "type": "string", "format": "uuid" }
+      },
+      "required": ["event.domain", "event.name", "security.scan.uid"]
+    },
+    "AssetCommon": {
+      "type": "object",
+      "properties": {
+        "security.asset.uid":  { "type": "string", "format": "uuid" },
+        "security.asset.type": { "type": "string", "enum": ["server", "workstation", "container", "vm", "network-device", "iot", "unknown"] },
+        "security.asset.name": { "type": "string" },
+        "security.asset.os.name":    { "type": "string" },
+        "security.asset.os.version": { "type": "string" },
+        "security.asset.ip.v4":      { "type": "string" },
+        "security.asset.ip.v6":      { "type": "string" },
+        "security.asset.mac":        { "type": "string" },
+        "security.asset.fqdn":       { "type": "string" },
+        "security.asset.authorization":  { "type": "string", "enum": ["authorized", "unauthorized", "unknown"] },
+        "security.asset.managed_status": { "type": "string", "enum": ["managed", "unmanaged", "unknown"] },
+        "security.asset.first_seen":     { "type": "string", "format": "date-time" },
+        "security.asset.discovery.source": {
+          "type": "string",
+          "enum": [
+            "agent", "arp", "icmp", "tcp_syn", "docker",
+            "cloud.aws", "cloud.gcp", "cloud.azure",
+            "vpn.tailscale", "vpn.netbird",
+            "dns", "ssh-known-hosts"
+          ]
+        }
+      }
+    },
+    "EventAssetDiscovered": {
+      "allOf": [
+        { "$ref": "#/$defs/EventCommon" },
+        { "$ref": "#/$defs/AssetCommon" }
+      ],
+      "properties": {
+        "event.name": { "const": "asset.discovered" }
+      },
+      "required": [
+        "event.domain", "event.name", "security.scan.uid",
+        "security.asset.uid", "security.asset.type", "security.asset.name",
+        "security.asset.authorization", "security.asset.managed_status",
+        "security.asset.first_seen", "security.asset.discovery.source"
+      ],
+      "unevaluatedProperties": false
+    },
+    "EventAssetChanged": {
+      "allOf": [
+        { "$ref": "#/$defs/EventCommon" },
+        { "$ref": "#/$defs/AssetCommon" }
+      ],
+      "properties": {
+        "event.name": { "const": "asset.changed" },
+        "security.asset.change.field":  { "type": "string" },
+        "security.asset.change.before": { "type": "string" },
+        "security.asset.change.after":  { "type": "string" }
+      },
+      "required": [
+        "event.domain", "event.name", "security.scan.uid",
+        "security.asset.uid", "security.asset.type", "security.asset.name",
+        "security.asset.authorization", "security.asset.managed_status",
+        "security.asset.change.field"
+      ],
+      "unevaluatedProperties": false
+    },
+    "FindingCommon": {
+      "type": "object",
+      "properties": {
+        "security.finding.uid":              { "type": "string", "format": "uuid" },
+        "security.finding.type":             { "type": "string", "enum": ["misconfiguration", "weak-cipher", "unpatched", "permission", "policy"] },
+        "security.finding.title":            { "type": "string" },
+        "security.finding.severity":         { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] },
+        "security.finding.severity_id":      { "type": "integer", "minimum": 1, "maximum": 5 },
+        "security.finding.cwe.uid":          { "type": "string", "pattern": "^CWE-\\d+$" },
+        "security.finding.cwe.name":         { "type": "string" },
+        "security.finding.capec.uid":        { "type": "string", "pattern": "^CAPEC-\\d+$" },
+        "security.finding.cis_control":      { "type": "string", "pattern": "^\\d+(\\.\\d+){0,3}$" },
+        "security.finding.remediation.desc": { "type": "string", "maxLength": 512 },
+        "security.asset.uid":                { "type": "string", "format": "uuid" },
+        "security.asset.name":               { "type": "string" }
+      }
+    },
+    "EventFindingConfiguration": {
+      "allOf": [
+        { "$ref": "#/$defs/EventCommon" },
+        { "$ref": "#/$defs/FindingCommon" }
+      ],
+      "properties": {
+        "event.name": { "const": "finding.configuration" },
+        "security.finding.evidence": { "type": "string", "maxLength": 1024 },
+        "security.finding.expected": { "type": "string", "maxLength": 256 }
+      },
+      "required": [
+        "event.domain", "event.name", "security.scan.uid",
+        "security.finding.uid", "security.finding.type", "security.finding.title",
+        "security.finding.severity", "security.finding.severity_id",
+        "security.asset.uid", "security.asset.name"
+      ],
+      "unevaluatedProperties": false
+    },
+    "EventFindingPosture": {
+      "allOf": [
+        { "$ref": "#/$defs/EventCommon" },
+        { "$ref": "#/$defs/FindingCommon" }
+      ],
+      "properties": {
+        "event.name": { "const": "finding.posture" },
+        "security.finding.likelihood": { "type": "string", "enum": ["low", "medium", "high"] },
+        "security.finding.mitigation": { "type": "string", "maxLength": 512 }
+      },
+      "required": [
+        "event.domain", "event.name", "security.scan.uid",
+        "security.finding.uid", "security.finding.type", "security.finding.title",
+        "security.finding.severity", "security.finding.severity_id",
+        "security.finding.likelihood",
+        "security.asset.uid", "security.asset.name"
+      ],
+      "unevaluatedProperties": false
+    },
+    "EventScanLifecycle": {
+      "allOf": [
+        { "$ref": "#/$defs/EventCommon" }
+      ],
+      "properties": {
+        "event.name": { "const": "scan.lifecycle" },
+        "security.scan.phase": { "type": "string", "enum": ["started", "completed", "failed", "cancelled"] },
+        "security.scan.duration_ms": { "type": "integer", "minimum": 0 },
+        "security.scan.error.kind":  { "type": "string", "enum": ["network", "permission", "timeout", "internal", "none"] }
+      },
+      "required": ["event.domain", "event.name", "security.scan.uid", "security.scan.phase"],
+      "unevaluatedProperties": false
+    },
+    "Spans": {
+      "type": "object",
+      "description": "Closed set of trace span names (RFC-0115 §4.5).",
+      "properties": {
+        "fixed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "const": ["scan", "discover", "dedup", "classify", "audit", "posture", "policy", "persist", "emit"]
+        },
+        "discover_sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "audit_modules": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["fixed", "discover_sources", "audit_modules"],
+      "additionalProperties": false
+    },
+    "Metrics": {
+      "type": "object",
+      "description": "Closed set of metric instruments (RFC-0115 §4.6).",
+      "patternProperties": {
+        "^kite\\.[a-z._]+$": { "$ref": "#/$defs/MetricInstrument" }
+      },
+      "additionalProperties": false
+    },
+    "MetricInstrument": {
+      "type": "object",
+      "properties": {
+        "name":   { "type": "string" },
+        "kind":   { "type": "string", "enum": ["counter", "up_down_counter", "histogram"] },
+        "unit":   { "type": "string" },
+        "labels": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["name", "kind", "unit"],
+      "additionalProperties": false
+    }
+  }
+}
