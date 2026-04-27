@@ -17,7 +17,7 @@ import (
 var templateFuncs = template.FuncMap{
 	"upper": strings.ToUpper,
 	"formatTime": func(t time.Time) string {
-		return t.Format("2006-01-02 15:04:05")
+		return t.Local().Format("2006-01-02 15:04:05 MST")
 	},
 	"severityClass": func(s model.Severity) string {
 		switch s {
@@ -68,7 +68,7 @@ func renderCell(v any) string {
 		}
 		return fmt.Sprintf("%x", x)
 	case time.Time:
-		return x.Format("2006-01-02 15:04:05")
+		return x.Local().Format("2006-01-02 15:04:05 MST")
 	case bool:
 		if x {
 			return "true"
