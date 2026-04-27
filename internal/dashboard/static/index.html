@@ -30,7 +30,7 @@
      onclick="setActive(this)">Tables</a>
   <a href="/onboarding">Onboarding</a>
   <div style="flex:1"></div>
-  <button class="btn" hx-post="/api/v1/scan" hx-target="#scan-status" hx-swap="innerHTML">Run Scan</button>
+  <span hx-get="/fragments/scan-controls" hx-trigger="load" hx-swap="innerHTML"></span>
 </nav>
 
 <div id="scan-status"

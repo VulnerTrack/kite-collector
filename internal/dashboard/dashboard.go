@@ -151,6 +151,15 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		})
 	})
 
+	// Scan controls fragment — renders the "Run Scan" button enabled or
+	// disabled-with-tooltip depending on whether a coordinator is wired.
+	// The index loads this once on page load.
+	mux.HandleFunc("GET /fragments/scan-controls", func(w http.ResponseWriter, _ *http.Request) {
+		renderFragment(w, "scan-controls", func(buf io.Writer) error {
+			return renderScanControlsFragment(buf, opts.Coordinator != nil && opts.BaseConfig != nil)
+		})
+	})
+
 	// Scan trigger endpoint. Delegates to the coordinator when one is
 	// wired in; otherwise returns a read-only placeholder so the button
 	// surfaces the right affordance.
