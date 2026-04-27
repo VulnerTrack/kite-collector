@@ -276,17 +276,39 @@ type TLSConfig struct {
 
 // AuditConfig configures the configuration audit subsystem.
 type AuditConfig struct {
-	Profile     string                 `mapstructure:"profile"`
-	SSH         SSHAuditConfig         `mapstructure:"ssh"`
-	SCA         SCAAuditConfig         `mapstructure:"sca"`
-	Permissions PermissionsAuditConfig `mapstructure:"permissions"`
-	Service     ServiceAuditConfig     `mapstructure:"service"`
-	Firewall    AuditorToggle          `mapstructure:"firewall"`
-	Kernel      AuditorToggle          `mapstructure:"kernel"`
-	Secrets     AuditorToggle          `mapstructure:"secrets"`
-	LDAP        AuditorToggle          `mapstructure:"ldap"`
-	Entra       AuditorToggle          `mapstructure:"entra"`
-	Enabled     bool                   `mapstructure:"enabled"`
+	Profile           string                       `mapstructure:"profile"`
+	SSH               SSHAuditConfig               `mapstructure:"ssh"`
+	SCA               SCAAuditConfig               `mapstructure:"sca"`
+	Permissions       PermissionsAuditConfig       `mapstructure:"permissions"`
+	Service           ServiceAuditConfig           `mapstructure:"service"`
+	Firewall          AuditorToggle                `mapstructure:"firewall"`
+	Kernel            AuditorToggle                `mapstructure:"kernel"`
+	Secrets           AuditorToggle                `mapstructure:"secrets"`
+	LDAP              AuditorToggle                `mapstructure:"ldap"`
+	Entra             AuditorToggle                `mapstructure:"entra"`
+	EnvSecrets        EnvSecretsAuditConfig        `mapstructure:"env_secrets"`
+	ProcessEnvSecrets ProcessEnvSecretsAuditConfig `mapstructure:"process_env_secrets"`
+	Enabled           bool                         `mapstructure:"enabled"`
+}
+
+// EnvSecretsAuditConfig configures the container env secret scanner
+// (RFC-0123). DenyList is a list of env var name prefixes (case-insensitive)
+// to exclude from scanning. The scanner is opt-in.
+type EnvSecretsAuditConfig struct {
+	DenyList []string `mapstructure:"deny_list"`
+	Enabled  bool     `mapstructure:"enabled"`
+}
+
+// ProcessEnvSecretsAuditConfig configures the host process env secret
+// scanner (RFC-0123). ProcessFilter restricts scanning to processes whose
+// name (from /proc/<pid>/comm) appears in the list; an empty filter
+// scans every readable process. MaxPIDs caps the number of PIDs scanned;
+// 0 uses the auditor default (10,000). The scanner is opt-in.
+type ProcessEnvSecretsAuditConfig struct {
+	ProcessFilter []string `mapstructure:"process_filter"`
+	DenyList      []string `mapstructure:"deny_list"`
+	MaxPIDs       int      `mapstructure:"max_pids"`
+	Enabled       bool     `mapstructure:"enabled"`
 }
 
 // SCAAuditConfig configures the Software Composition Analysis auditor.
@@ -366,6 +388,9 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("audit.service.enabled", true)
 	v.SetDefault("audit.service.critical_ports", []int{23, 21, 111, 3306, 5432, 6379, 9200})
 	v.SetDefault("audit.entra.enabled", true)
+	v.SetDefault("audit.env_secrets.enabled", false)
+	v.SetDefault("audit.process_env_secrets.enabled", false)
+	v.SetDefault("audit.process_env_secrets.max_pids", 10000)
 	v.SetDefault("posture.enabled", true)
 	v.SetDefault("streaming.interval", "6h")
 	v.SetDefault("streaming.otlp.endpoint", "https://otel.vulnertrack.io")

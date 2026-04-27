@@ -150,6 +150,18 @@ audit:
   service:
     enabled: true
     critical_ports: [21, 23, 111, 3306, 5432, 6379, 9200]
+  # RFC-0123: container env secret scanner — opt-in. Reuses the docker
+  # discovery source's read-only Inspect API to enumerate Config.Env.
+  env_secrets:
+    enabled: false
+    deny_list: []             # extra env-name prefixes to skip (case-insensitive)
+  # RFC-0123: host process env secret scanner — opt-in, Linux-only.
+  # Walks /proc/<pid>/environ on the agent host.
+  process_env_secrets:
+    enabled: false
+    process_filter: []        # case-insensitive comm names; empty = scan all
+    deny_list: []             # extra env-name prefixes to skip
+    max_pids: 10000           # safety cap per scan
 
 # ---------------------------------------------------------------------------
 # Posture analysis
