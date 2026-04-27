@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -63,19 +64,13 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 	}
 
-	// Dashboard root — serves the main HTML page.
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		indexContent, readErr := fs.ReadFile(staticFS, "static/index.html")
-		if readErr != nil {
-			http.Error(w, "index.html not found", http.StatusInternalServerError)
-			return
-		}
-		_, _ = w.Write(indexContent)
+	// Dashboard root — redirect to /assets so reload, share-link, and
+	// browser-back land on a canonical URL the new top-level handlers know
+	// how to serve. 307 preserves the request method (no rewrite to GET on
+	// non-GET clients), which is the conservative choice even though every
+	// request to "/" is a GET in practice.
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/assets", http.StatusTemporaryRedirect)
 	})
 
 	// renderFragment renders a template to a buffer first, then writes to
@@ -91,6 +86,84 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(buf.Bytes())
 	}
+
+	// serveTabRoute serves a top-level tab URL with two modes:
+	//
+	//   - HX-Request: true   → fragment-only (HTMX swaps it into #content)
+	//   - bare GET           → full page shell with the fragment pre-
+	//                          rendered into #content and the matching nav
+	//                          link marked .active
+	//
+	// On a render error we still write a 500 — but the renderIndexPage
+	// helper buffers the fragment first, so we never leak partial HTML.
+	serveTabRoute := func(activeTab string, render func(io.Writer, context.Context) error) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("HX-Request") == "true" {
+				renderFragment(w, activeTab, func(buf io.Writer) error {
+					return render(buf, r.Context())
+				})
+				return
+			}
+			var buf bytes.Buffer
+			if renderErr := renderIndexPage(&buf, activeTab, func(fragBuf io.Writer) error {
+				return render(fragBuf, r.Context())
+			}); renderErr != nil {
+				logger.Error("dashboard: render page "+activeTab, "error", renderErr)
+				http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(buf.Bytes())
+		}
+	}
+
+	// Top-level pretty-URL routes. Each is the canonical URL for the
+	// matching tab and is what nav links push into history. The existing
+	// /fragments/* routes are kept (used by polling status divs and CSV
+	// exports' Back-button paths).
+	mux.HandleFunc("GET /assets", serveTabRoute("assets", func(w io.Writer, ctx context.Context) error {
+		return renderAssetsFragment(w, ctx, st, rc)
+	}))
+	mux.HandleFunc("GET /software", serveTabRoute("software", func(w io.Writer, ctx context.Context) error {
+		return renderSoftwareFragment(w, ctx, st, rc)
+	}))
+	mux.HandleFunc("GET /findings", serveTabRoute("findings", func(w io.Writer, ctx context.Context) error {
+		return renderFindingsFragment(w, ctx, st, rc)
+	}))
+	mux.HandleFunc("GET /scans", serveTabRoute("scans", func(w io.Writer, ctx context.Context) error {
+		return renderScansFragment(w, ctx, st, rc)
+	}))
+	mux.HandleFunc("GET /tables", serveTabRoute("tables", func(w io.Writer, ctx context.Context) error {
+		return renderTablesFragment(w, ctx, st, rc)
+	}))
+
+	// /tables/{name} mirrors the per-tab pattern. Same HX-Request branch
+	// (fragment-only) vs. plain GET (full shell) split, with ActiveTab
+	// pinned to "tables" so the nav highlight stays correct when the user
+	// drills into a specific table.
+	mux.HandleFunc("GET /tables/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		limit, offset := parsePaging(r)
+		render := func(buf io.Writer, ctx context.Context) error {
+			return renderTableFragment(buf, ctx, st, rc, name, limit, offset)
+		}
+		if r.Header.Get("HX-Request") == "true" {
+			renderFragment(w, "table", func(buf io.Writer) error {
+				return render(buf, r.Context())
+			})
+			return
+		}
+		var buf bytes.Buffer
+		if renderErr := renderIndexPage(&buf, "tables", func(fragBuf io.Writer) error {
+			return render(fragBuf, r.Context())
+		}); renderErr != nil {
+			logger.Error("dashboard: render page tables/"+name, "error", renderErr)
+			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(buf.Bytes())
+	})
 
 	// HTMX fragment endpoints — return HTML snippets for dynamic loading.
 	mux.HandleFunc("GET /fragments/assets", func(w http.ResponseWriter, r *http.Request) {
