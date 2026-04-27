@@ -378,6 +378,103 @@
           "default_rule": "'none'",
           "required": true,
           "preflight_validate": "cmdb:env:check"
+        },
+        {
+          "id": "discovery.ldap.enabled",
+          "type": "confirm",
+          "prompt": "Enable Active Directory / LDAP discovery (RFC-0121)?",
+          "depends_on": [],
+          "default_rule": "false",
+          "required": true
+        },
+        {
+          "id": "discovery.ldap.tls_mode",
+          "type": "select",
+          "prompt": "LDAP TLS mode (ldaps=636/SSL, starttls=389+upgrade, none=plaintext)",
+          "options": [
+            "ldaps",
+            "starttls",
+            "none"
+          ],
+          "depends_on": [
+            "discovery.ldap.enabled"
+          ],
+          "default_rule": "'ldaps'",
+          "required": true,
+          "skip_when": "ctx['discovery.ldap.enabled'] == false",
+          "preflight_validate": "ldap:tls_mode:valid"
+        },
+        {
+          "id": "discovery.ldap.tls_ca_file",
+          "type": "input",
+          "prompt": "Path to CA bundle pinning the LDAP server cert (blank = system store)",
+          "depends_on": [
+            "discovery.ldap.enabled",
+            "discovery.ldap.tls_mode"
+          ],
+          "default_rule": "''",
+          "required": false,
+          "skip_when": "ctx['discovery.ldap.enabled'] == false || ctx['discovery.ldap.tls_mode'] == 'none'",
+          "preflight_validate": "file:exists"
+        },
+        {
+          "id": "discovery.ldap.base_dn",
+          "type": "input",
+          "prompt": "Search base DN (e.g., DC=corp,DC=acme,DC=com)",
+          "depends_on": [
+            "discovery.ldap.enabled"
+          ],
+          "default_rule": "''",
+          "required": true,
+          "skip_when": "ctx['discovery.ldap.enabled'] == false",
+          "preflight_validate": "ldap:base_dn:syntax"
+        },
+        {
+          "id": "discovery.ldap.bind_dn",
+          "type": "input",
+          "prompt": "Bind DN for the read-only service account (e.g., CN=svc-kite,OU=ServiceAccounts,DC=corp,DC=acme,DC=com)",
+          "depends_on": [
+            "discovery.ldap.enabled"
+          ],
+          "default_rule": "''",
+          "required": true,
+          "skip_when": "ctx['discovery.ldap.enabled'] == false"
+        },
+        {
+          "id": "discovery.ldap.bind_password_env",
+          "type": "input",
+          "prompt": "Environment variable holding the bind password",
+          "depends_on": [
+            "discovery.ldap.enabled"
+          ],
+          "default_rule": "'KITE_LDAP_BIND_PASSWORD'",
+          "required": true,
+          "skip_when": "ctx['discovery.ldap.enabled'] == false",
+          "preflight_validate": "ldap:bind:env"
+        },
+        {
+          "id": "discovery.ldap.domain_controllers",
+          "type": "input",
+          "prompt": "Domain controllers (comma-separated host or host:port; e.g., dc1.corp.acme.com,dc2.corp.acme.com)",
+          "depends_on": [
+            "discovery.ldap.enabled",
+            "discovery.ldap.tls_mode"
+          ],
+          "default_rule": "''",
+          "required": true,
+          "skip_when": "ctx['discovery.ldap.enabled'] == false",
+          "preflight_validate": "ldap:dc:connect"
+        },
+        {
+          "id": "discovery.ldap.stale_threshold_days",
+          "type": "input",
+          "prompt": "Stale-account threshold in days (CWE-1002 trigger)",
+          "depends_on": [
+            "discovery.ldap.enabled"
+          ],
+          "default_rule": "'90'",
+          "required": false,
+          "skip_when": "ctx['discovery.ldap.enabled'] == false"
         }
       ]
     },
