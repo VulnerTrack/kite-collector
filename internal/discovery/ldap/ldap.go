@@ -111,8 +111,8 @@ func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 	}
 	defer func() { _ = conn.Close() }()
 
-	if err := conn.Bind(conf.bindDN, string(bindPwd)); err != nil {
-		return nil, fmt.Errorf("ldap: bind to %s:%d failed: %w", dc.host, dc.port, err)
+	if bindErr := conn.Bind(conf.bindDN, string(bindPwd)); bindErr != nil {
+		return nil, fmt.Errorf("ldap: bind to %s:%d failed: %w", dc.host, dc.port, bindErr)
 	}
 	slog.Info("ldap: bound to domain controller",
 		"host", dc.host,
@@ -156,8 +156,8 @@ func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 func (l *LDAP) dialAny(ctx context.Context, conf *ldapConfig) (directoryConn, dcEndpoint, error) {
 	var errs []error
 	for _, dc := range conf.domainControllers {
-		if ctx.Err() != nil {
-			return nil, dcEndpoint{}, ctx.Err()
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, dcEndpoint{}, fmt.Errorf("ldap: dial cancelled: %w", ctxErr)
 		}
 		conn, err := l.dial(ctx, conf, dc)
 		if err == nil {
@@ -192,7 +192,7 @@ func dialDC(ctx context.Context, conf *ldapConfig, dc dcEndpoint) (directoryConn
 			ldapv3.DialWithDialer(netDialer),
 		)
 		if dErr != nil {
-			return nil, dErr
+			return nil, fmt.Errorf("ldaps dial: %w", dErr)
 		}
 		conn.SetTimeout(timeout)
 		return conn, nil
@@ -200,7 +200,7 @@ func dialDC(ctx context.Context, conf *ldapConfig, dc dcEndpoint) (directoryConn
 		url := fmt.Sprintf("ldap://%s:%d", dc.host, dc.port)
 		conn, dErr := ldapv3.DialURL(url, ldapv3.DialWithDialer(netDialer))
 		if dErr != nil {
-			return nil, dErr
+			return nil, fmt.Errorf("starttls dial: %w", dErr)
 		}
 		conn.SetTimeout(timeout)
 		if sErr := conn.StartTLS(tlsCfg); sErr != nil {
@@ -212,7 +212,7 @@ func dialDC(ctx context.Context, conf *ldapConfig, dc dcEndpoint) (directoryConn
 		url := fmt.Sprintf("ldap://%s:%d", dc.host, dc.port)
 		conn, dErr := ldapv3.DialURL(url, ldapv3.DialWithDialer(netDialer))
 		if dErr != nil {
-			return nil, dErr
+			return nil, fmt.Errorf("ldap dial: %w", dErr)
 		}
 		conn.SetTimeout(timeout)
 		return conn, nil
@@ -227,7 +227,7 @@ func dialDC(ctx context.Context, conf *ldapConfig, dc dcEndpoint) (directoryConn
 func buildTLSConfig(conf *ldapConfig, host string) (*tls.Config, error) {
 	cfg := &tls.Config{
 		ServerName:         host,
-		InsecureSkipVerify: conf.tlsSkipVerify, //nolint:gosec // operator opt-in (RFC-0121 §5.4)
+		InsecureSkipVerify: conf.tlsSkipVerify, //#nosec G402 -- operator opt-in (RFC-0121 §5.4)
 		MinVersion:         tls.VersionTLS12,
 	}
 	if conf.tlsCAFile != "" {
@@ -248,7 +248,7 @@ func buildTLSConfig(conf *ldapConfig, host string) (*tls.Config, error) {
 // (RFC 2696) using the configured page size.
 func searchPaged(ctx context.Context, conn directoryConn, conf *ldapConfig, filter string, attrs []string) (*ldapv3.SearchResult, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ldap: search cancelled: %w", err)
 	}
 	req := ldapv3.NewSearchRequest(
 		conf.baseDN,
@@ -261,7 +261,11 @@ func searchPaged(ctx context.Context, conn directoryConn, conf *ldapConfig, filt
 		attrs,
 		nil,
 	)
-	return conn.SearchWithPaging(req, conf.pageSize)
+	result, err := conn.SearchWithPaging(req, conf.pageSize)
+	if err != nil {
+		return nil, fmt.Errorf("ldap: search with paging: %w", err)
+	}
+	return result, nil
 }
 
 // readBindPassword fetches the bind password from the configured

@@ -63,13 +63,13 @@ func extractComputer(e *ldapv3.Entry, baseDN string) (*computerEntry, error) {
 	}
 
 	c := &computerEntry{
-		dn:               e.DN,
-		samAccountName:   strings.TrimSuffix(e.GetAttributeValue("sAMAccountName"), "$"),
-		dnsHostName:      e.GetAttributeValue("dnsHostName"),
-		operatingSystem:  e.GetAttributeValue("operatingSystem"),
-		osVersion:        e.GetAttributeValue("operatingSystemVersion"),
-		domainDNSName:    domainFromBaseDN(baseDN),
-		ouPath:           parentOU(e.DN),
+		dn:                e.DN,
+		samAccountName:    strings.TrimSuffix(e.GetAttributeValue("sAMAccountName"), "$"),
+		dnsHostName:       e.GetAttributeValue("dnsHostName"),
+		operatingSystem:   e.GetAttributeValue("operatingSystem"),
+		osVersion:         e.GetAttributeValue("operatingSystemVersion"),
+		domainDNSName:     domainFromBaseDN(baseDN),
+		ouPath:            parentOU(e.DN),
 		servicePrincipals: e.GetAttributeValues("servicePrincipalName"),
 		memberOf:          e.GetAttributeValues("memberOf"),
 	}
@@ -282,5 +282,5 @@ func parseInt64(s string) int64 {
 // is unsigned, so we mask any sign bit on the way in.
 func parseUint32(s string) uint32 {
 	v := parseInt64(s)
-	return uint32(v) //nolint:gosec // userAccountControl is bit-mask interpreted as uint32
+	return uint32(v) //#nosec G115 -- userAccountControl is bit-mask interpreted as uint32
 }
