@@ -48,16 +48,21 @@ nfpms:
         dst: /etc/kite-collector/kite-collector.example.yaml
         type: config
 
-# Homebrew tap — GoReleaser auto-generates the formula and pushes it
-# to the tap repo on every v* release.
-brews:
+# Homebrew Cask — GoReleaser auto-generates the cask and pushes it to
+# the tap repo on every v* release. Migrated from the deprecated `brews:`
+# section per goreleaser's guidance (the cask path now works on both
+# macOS and Linuxbrew, and is the recommended way to publish pre-built
+# binaries via Homebrew). After the first cask release lands, delete the
+# old Formula/kite-collector.rb from the tap repo manually.
+homebrew_casks:
   - name: kite-collector
     ids: [homebrew]
-    # Publishes the formula into the canonical VulnerTrack/homebrew-tap repo.
-    # The default workflow GITHUB_TOKEN cannot write to a different repo —
-    # set HOMEBREW_TAP_GITHUB_TOKEN in the workflow env to a PAT (or fine-
-    # grained token) with `contents: write` on VulnerTrack/homebrew-tap.
-    # See: https://goreleaser.com/customization/homebrew/#repo-tokens
+    binaries: [kite-collector]
+    # Publishes the cask into VulnerTrack/homebrew-tap. The default workflow
+    # GITHUB_TOKEN cannot write to a different repo — set
+    # HOMEBREW_TAP_GITHUB_TOKEN in the workflow env to a PAT (or fine-grained
+    # token) with `contents: write` on VulnerTrack/homebrew-tap.
+    # See: https://goreleaser.com/customization/homebrew_casks/
     repository:
       owner: VulnerTrack
       name: homebrew-tap
@@ -65,11 +70,16 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/VulnerTrack/kite-collector
     description: "Cybersecurity asset discovery, configuration audit, and posture analysis agent"
-    license: MIT
-    install: |
-      bin.install "kite-collector"
-    test: |
-      system "#{bin}/kite-collector", "version"
+    # Without Apple notarization, macOS Gatekeeper quarantines the binary
+    # on first run ("App is damaged and cannot be opened"). The post-install
+    # hook strips the quarantine xattr so the binary launches cleanly.
+    # No-op on Linux. Replace with proper notarization when feasible.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/kite-collector"]
+          end
 
 changelog:
   sort: asc
