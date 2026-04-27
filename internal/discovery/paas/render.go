@@ -44,12 +44,9 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	client := newClient("render", r.baseURL, bearerAuth(token))
 	var assets []model.Asset
 	cursor := ""
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("render: %w", err)
-		}
 		if ctx.Err() != nil {
 			return assets, fmt.Errorf("render: context cancelled: %w", ctx.Err())
 		}
@@ -60,8 +57,12 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		}
 
 		var wrappers []renderServiceWrapper
-		if err := client.get(ctx, path, &wrappers); err != nil {
+		nBytes, err := client.getSized(ctx, path, &wrappers)
+		if err != nil {
 			return assets, fmt.Errorf("render: list services: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("render: %w", err)
 		}
 
 		if len(wrappers) == 0 {
@@ -73,7 +74,17 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			assets = append(assets, renderToAsset(wrappers[i].Service, now))
 		}
 
-		cursor = wrappers[len(wrappers)-1].Cursor
+		raw := wrappers[len(wrappers)-1].Cursor
+		if raw == "" {
+			break
+		}
+		clean, sanErr := safenet.SanitizeCursor(raw)
+		if sanErr != nil {
+			slog.Warn("render: pagination cursor rejected by safenet, stopping",
+				"error", sanErr)
+			break
+		}
+		cursor = clean
 	}
 
 	slog.Info("render: discovery complete", "assets", len(assets))

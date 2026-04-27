@@ -292,12 +292,9 @@ type wazuhResponse struct {
 func (c *wazuhClient) listPaginated(ctx context.Context, path string) ([]json.RawMessage, error) {
 	var all []json.RawMessage
 	offset := 0
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for {
-		if err := guard.Next(); err != nil {
-			return all, fmt.Errorf("wazuh pagination guard: %w", err)
-		}
 		if err := ctx.Err(); err != nil {
 			return all, fmt.Errorf("wazuh list cancelled: %w", err)
 		}
@@ -311,6 +308,9 @@ func (c *wazuhClient) listPaginated(ctx context.Context, path string) ([]json.Ra
 		body, err := c.doGet(ctx, pagePath)
 		if err != nil {
 			return all, err
+		}
+		if err := guard.NextPage(int64(len(body))); err != nil {
+			return all, fmt.Errorf("wazuh pagination guard: %w", err)
 		}
 
 		var resp wazuhResponse

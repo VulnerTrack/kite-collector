@@ -43,12 +43,9 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	client := newClient("vercel", v.baseURL, bearerAuth(token))
 	var assets []model.Asset
 	var until string
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("vercel: %w", err)
-		}
 		if ctx.Err() != nil {
 			return assets, fmt.Errorf("vercel: context cancelled: %w", ctx.Err())
 		}
@@ -59,8 +56,12 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		}
 
 		var resp vercelProjectsResponse
-		if err := client.get(ctx, path, &resp); err != nil {
+		nBytes, err := client.getSized(ctx, path, &resp)
+		if err != nil {
 			return assets, fmt.Errorf("vercel: list projects: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("vercel: %w", err)
 		}
 
 		now := time.Now().UTC()

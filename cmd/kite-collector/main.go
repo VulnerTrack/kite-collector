@@ -1154,6 +1154,9 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 	apiHandler := rest.New(st, logger)
 	apiHandler.SetScanCoordinator(coord)
 	apiHandler.SetBaseConfig(cfg)
+	if reader, ok := st.(rest.NetworkScanReader); ok {
+		apiHandler.SetNetworkScanReader(reader)
+	}
 	apiMux := apiHandler.Mux()
 	apiMux.Handle("/metrics", met.Handler())
 

@@ -4,6 +4,7 @@
 package rest
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -19,7 +20,19 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
+	storesqlite "github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
+
+// NetworkScanReader is the read-side projection of the RFC-0124 audit
+// tables. Implemented by *storesqlite.SQLiteStore. Other backends (Postgres
+// mocks, fakes used by older tests) do not host these tables, so the
+// REST handler treats it as optional and only registers the routes when a
+// reader is wired in via SetNetworkScanReader.
+type NetworkScanReader interface {
+	ListNetworkScanEvents(ctx context.Context, f storesqlite.NetworkScanEventFilter) ([]storesqlite.NetworkScanEventRow, error)
+	ListNetworkOpenPorts(ctx context.Context, f storesqlite.NetworkOpenPortFilter) ([]storesqlite.NetworkOpenPortRow, error)
+	ListSafetyGuardEvents(ctx context.Context, f storesqlite.SafetyGuardEventFilter) ([]storesqlite.SafetyGuardEventRow, error)
+}
 
 // defaultLimit is used when the caller omits or provides an invalid limit.
 const defaultLimit = 50
@@ -39,6 +52,7 @@ type Handler struct {
 	circuitBreaker      *safety.CircuitBreaker
 	coordinator         *scan.Coordinator
 	baseConfig          *config.Config
+	networkScanReader   NetworkScanReader
 	apiKey              string // when non-empty, MTLSOrAPIKey middleware is wired
 	maxRequestBytes     int64
 	maxResponseBytes    int64
@@ -66,6 +80,11 @@ func (h *Handler) SetCircuitBreaker(cb *safety.CircuitBreaker) { h.circuitBreake
 // SetAPIKey enables MTLSOrAPIKey authentication on all API routes when
 // key is non-empty. This wires the middleware defined in RFC-0063.
 func (h *Handler) SetAPIKey(key string) { h.apiKey = key }
+
+// SetNetworkScanReader wires the optional reader for the RFC-0124 audit
+// tables. When set, the handler exposes /api/v1/network-scan-events,
+// /api/v1/network-open-ports, and /api/v1/safety-guard-events.
+func (h *Handler) SetNetworkScanReader(r NetworkScanReader) { h.networkScanReader = r }
 
 // Handler returns an http.Handler that wraps all routes with safety
 // middleware. The chain (outermost first) is: recovery → response
@@ -122,6 +141,12 @@ func (h *Handler) Mux() *http.ServeMux {
 	mux.HandleFunc("GET /api/v1/runtime-incidents", h.handleListIncidents)
 	mux.HandleFunc("GET /api/v1/source-health", h.handleListSourceHealth)
 	mux.HandleFunc("GET /api/v1/source-health/{name}", h.handleGetSourceHealth)
+
+	if h.networkScanReader != nil {
+		mux.HandleFunc("GET /api/v1/network-scan-events", h.handleListNetworkScanEvents)
+		mux.HandleFunc("GET /api/v1/network-open-ports", h.handleListNetworkOpenPorts)
+		mux.HandleFunc("GET /api/v1/safety-guard-events", h.handleListSafetyGuardEvents)
+	}
 
 	return mux
 }
@@ -369,6 +394,100 @@ func (h *Handler) handleGetSourceHealth(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, health)
+}
+
+// --- RFC-0124 network-scan / safety-guard handlers -------------------------
+
+func (h *Handler) handleListNetworkScanEvents(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("request", "method", r.Method, "path", r.URL.Path)
+	q := r.URL.Query()
+
+	filter := storesqlite.NetworkScanEventFilter{
+		Limit:  clampLimit(parseIntParam(q.Get("limit"), defaultLimit)),
+		Offset: clampOffset(parseIntParam(q.Get("offset"), 0)),
+	}
+	if raw := q.Get("since"); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid since: expected RFC3339")
+			return
+		}
+		filter.Since = &t
+	}
+
+	events, err := h.networkScanReader.ListNetworkScanEvents(r.Context(), filter)
+	if err != nil {
+		h.logger.Error("list network_scan_events failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if len(events) == 0 {
+		writeJSON(w, http.StatusOK, emptyArray)
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
+func (h *Handler) handleListNetworkOpenPorts(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("request", "method", r.Method, "path", r.URL.Path)
+	q := r.URL.Query()
+
+	filter := storesqlite.NetworkOpenPortFilter{
+		ScanID: q.Get("scan_id"),
+		Limit:  clampLimit(parseIntParam(q.Get("limit"), defaultLimit)),
+		Offset: clampOffset(parseIntParam(q.Get("offset"), 0)),
+	}
+	if raw := q.Get("since"); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid since: expected RFC3339")
+			return
+		}
+		filter.Since = &t
+	}
+
+	ports, err := h.networkScanReader.ListNetworkOpenPorts(r.Context(), filter)
+	if err != nil {
+		h.logger.Error("list network_open_ports failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if len(ports) == 0 {
+		writeJSON(w, http.StatusOK, emptyArray)
+		return
+	}
+	writeJSON(w, http.StatusOK, ports)
+}
+
+func (h *Handler) handleListSafetyGuardEvents(w http.ResponseWriter, r *http.Request) {
+	h.logger.Info("request", "method", r.Method, "path", r.URL.Path)
+	q := r.URL.Query()
+
+	filter := storesqlite.SafetyGuardEventFilter{
+		GuardType: q.Get("guard_type"),
+		Limit:     clampLimit(parseIntParam(q.Get("limit"), defaultLimit)),
+		Offset:    clampOffset(parseIntParam(q.Get("offset"), 0)),
+	}
+	if raw := q.Get("since"); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid since: expected RFC3339")
+			return
+		}
+		filter.Since = &t
+	}
+
+	events, err := h.networkScanReader.ListSafetyGuardEvents(r.Context(), filter)
+	if err != nil {
+		h.logger.Error("list safety_guard_events failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if len(events) == 0 {
+		writeJSON(w, http.StatusOK, emptyArray)
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
 }
 
 // --- utilities --------------------------------------------------------------

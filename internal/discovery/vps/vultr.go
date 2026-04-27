@@ -41,12 +41,9 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 	client := newClient("vultr", v.baseURL, bearerAuth(token))
 	var assets []model.Asset
 	cursor := ""
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("vultr: %w", err)
-		}
 		if ctx.Err() != nil {
 			return assets, fmt.Errorf("vultr: context cancelled: %w", ctx.Err())
 		}
@@ -57,8 +54,12 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		}
 
 		var resp vultrInstancesResponse
-		if err := client.get(ctx, path, &resp); err != nil {
+		nBytes, err := client.getSized(ctx, path, &resp)
+		if err != nil {
 			return assets, fmt.Errorf("vultr: list instances: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("vultr: %w", err)
 		}
 
 		now := time.Now().UTC()
@@ -66,10 +67,17 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			assets = append(assets, vultrToAsset(resp.Instances[i], now))
 		}
 
-		cursor = resp.Meta.Links.Next
-		if cursor == "" {
+		raw := resp.Meta.Links.Next
+		if raw == "" {
 			break
 		}
+		clean, sanErr := safenet.SanitizeCursor(raw)
+		if sanErr != nil {
+			slog.Warn("vultr: pagination cursor rejected by safenet, stopping",
+				"error", sanErr)
+			break
+		}
+		cursor = clean
 	}
 
 	slog.Info("vultr: discovery complete", "assets", len(assets))
