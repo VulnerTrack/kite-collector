@@ -247,7 +247,7 @@ func parseHostPort(s string, defaultPort int) (string, int, error) {
 	}
 	host, portStr, err := net.SplitHostPort(s)
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("split host:port: %w", err)
 	}
 	if portStr == "" {
 		return host, defaultPort, nil

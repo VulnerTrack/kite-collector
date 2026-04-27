@@ -168,17 +168,17 @@ var AllowedDiscoverySources = map[string]struct{}{
 // entities. Values are JSON-encoded for collection-typed fields (spns,
 // groups) so they round-trip through the OTLP string attribute layer.
 const (
-	AttrADDomainDNSName       = "ad.domain_dns_name"
-	AttrADSAMAccountName      = "ad.sam_account_name"
-	AttrADObjectSID           = "ad.object_sid"
-	AttrADOUPath              = "ad.ou_path"
-	AttrADEnabled             = "ad.enabled"
-	AttrADLastLogonTimestamp  = "ad.last_logon_timestamp"
-	AttrADPasswordLastSet     = "ad.password_last_set"
-	AttrADSPNs                = "ad.spns"
-	AttrADGroups              = "ad.groups"
-	AttrADUACFlags            = "ad.uac_flags"
-	AttrADDistinguishedName   = "ad.distinguished_name"
+	AttrADDomainDNSName      = "ad.domain_dns_name"
+	AttrADSAMAccountName     = "ad.sam_account_name"
+	AttrADObjectSID          = "ad.object_sid"
+	AttrADOUPath             = "ad.ou_path"
+	AttrADEnabled            = "ad.enabled"
+	AttrADLastLogonTimestamp = "ad.last_logon_timestamp"
+	AttrADPasswordLastSet    = "ad.password_last_set"
+	AttrADSPNs               = "ad.spns"
+	AttrADGroups             = "ad.groups"
+	AttrADUACFlags           = "ad.uac_flags"
+	AttrADDistinguishedName  = "ad.distinguished_name"
 )
 
 // AllowedAuditModules is the closed audit.<module> span suffix.
