@@ -338,6 +338,13 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			if cfg.Audit.Service.Enabled {
 				auditReg.Register(audit.NewService(cfg.Audit.Service.CriticalPorts))
 			}
+			if cfg.Audit.ProcessEnvSecrets.Enabled {
+				auditReg.Register(audit.NewProcessEnvSecrets(audit.ProcessEnvSecretsConfig{
+					Processes:         cfg.Audit.ProcessEnvSecrets.ProcessFilter,
+					ExtraDenyPrefixes: cfg.Audit.ProcessEnvSecrets.DenyList,
+					MaxPIDs:           cfg.Audit.ProcessEnvSecrets.MaxPIDs,
+				}))
+			}
 
 			findings, auditErr := auditReg.AuditAll(scanCtx, agentAsset)
 			if auditErr != nil {
@@ -411,6 +418,58 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 				)
 				e.recordFindingMetrics(codeFindings)
 			}
+		}
+	}
+
+	// Container env secret audit phase (RFC-0123): run the container env
+	// secret scanner over every asset whose AssetType is "container". The
+	// auditor lazily fetches all container envs once via the docker source
+	// (ContainerEnvLister) and reuses the cached envs for every asset in
+	// this loop, so the Docker socket is consulted only when at least one
+	// container asset exists.
+	if scanCtx.Err() == nil && cfg.Audit.Enabled && cfg.Audit.EnvSecrets.Enabled {
+		var lister audit.ContainerEnvLister
+		if dsrc := e.registry.Get("docker"); dsrc != nil {
+			if l, ok := dsrc.(audit.ContainerEnvLister); ok {
+				lister = l
+			}
+		}
+		if lister != nil {
+			dockerCfg := configs["docker"]
+			envAuditor := audit.NewContainerEnvSecrets(
+				lister, dockerCfg, cfg.Audit.EnvSecrets.DenyList,
+			)
+			for _, a := range assets {
+				if a.AssetType != model.AssetTypeContainer {
+					continue
+				}
+				envFindings, auditErr := envAuditor.Audit(scanCtx, a)
+				if auditErr != nil {
+					slog.Warn("engine: container env audit failed",
+						"asset_id", a.ID, "error", auditErr)
+					continue
+				}
+				if len(envFindings) == 0 {
+					continue
+				}
+				for i := range envFindings {
+					envFindings[i].ScanRunID = scanID
+				}
+				if fErr := e.store.InsertFindings(ctx, envFindings); fErr != nil {
+					slog.Error("engine: failed to persist container env findings",
+						"error", fErr, "asset_id", a.ID, "count", len(envFindings))
+					continue
+				}
+				findingsCount += len(envFindings)
+				e.recordFindingMetrics(envFindings)
+				slog.Info("engine: container env audit complete",
+					"asset_id", a.ID,
+					"hostname", a.Hostname,
+					"findings", len(envFindings),
+				)
+			}
+		} else {
+			slog.Debug("engine: container env auditor enabled but docker source unavailable")
 		}
 	}
 
@@ -525,20 +584,18 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 	}
 
-	// RFC-0122 Phase 1: persist the Route53 cloud DNS snapshot the
-	// dns_route53 source built during discovery into SQLite so the
-	// Python ontology bridge can sync ClickHouse cloud_dns_zones /
-	// cloud_dns_records tables read-only. Skips silently when the
-	// source was disabled or never produced data.
-	if src := e.registry.Get(cloudsrc.DNSSourceNameRoute53); src != nil {
-		if dnsSrc, ok := src.(*cloudsrc.Route53DNS); ok {
-			if snap := dnsSrc.Snapshot(); snap != nil {
-				if pErr := e.store.UpsertCloudDNSSnapshot(ctx, snap); pErr != nil {
-					slog.Warn("engine: failed to persist cloud DNS snapshot to SQLite",
-						"provider", snap.Provider,
-						"error", pErr,
-					)
-				}
+	// RFC-0122 Phase 1+2: persist every cloud DNS snapshot the cloud DNS
+	// sources built during discovery into SQLite so the Python ontology
+	// bridge can sync ClickHouse cloud_dns_zones / cloud_dns_records
+	// tables read-only. Each source is skipped silently when it was
+	// disabled or never produced data.
+	for _, dnsSrc := range cloudDNSSnapshotSources(e.registry) {
+		if snap := dnsSrc.Snapshot(); snap != nil {
+			if pErr := e.store.UpsertCloudDNSSnapshot(ctx, snap); pErr != nil {
+				slog.Warn("engine: failed to persist cloud DNS snapshot to SQLite",
+					"provider", snap.Provider,
+					"error", pErr,
+				)
 			}
 		}
 	}
@@ -690,6 +747,35 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	)
 
 	return result, nil
+}
+
+// cloudDNSSnapshotProvider is the minimal interface every cloud DNS source
+// must satisfy for the engine to persist its snapshot. It is implemented by
+// Route53DNS, CloudflareDNS, AzureDNS and GCPDNS in internal/discovery/cloud.
+type cloudDNSSnapshotProvider interface {
+	Snapshot() *cloudsrc.DNSSnapshot
+}
+
+// cloudDNSSnapshotSources returns every registered cloud DNS source that can
+// produce a snapshot. Sources that are absent from the registry are skipped.
+func cloudDNSSnapshotSources(registry *discovery.Registry) []cloudDNSSnapshotProvider {
+	names := []string{
+		cloudsrc.DNSSourceNameRoute53,
+		cloudsrc.DNSSourceNameCloudflare,
+		cloudsrc.DNSSourceNameAzure,
+		cloudsrc.DNSSourceNameGCP,
+	}
+	out := make([]cloudDNSSnapshotProvider, 0, len(names))
+	for _, name := range names {
+		src := registry.Get(name)
+		if src == nil {
+			continue
+		}
+		if dnsSrc, ok := src.(cloudDNSSnapshotProvider); ok {
+			out = append(out, dnsSrc)
+		}
+	}
+	return out
 }
 
 // findAgentAssetID returns the ID of the first asset with DiscoverySource "agent".
