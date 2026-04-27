@@ -74,7 +74,7 @@ ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS cancel_requested_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS events (
     id          UUID PRIMARY KEY,
-    event_type  TEXT NOT NULL CHECK(event_type IN ('AssetDiscovered','AssetUpdated','UnauthorizedAssetDetected','UnmanagedAssetDetected','AssetNotSeen','AssetRemoved')),
+    event_type  TEXT NOT NULL CHECK(event_type IN ('AssetDiscovered','AssetUpdated','AssetAnalyzed','UnauthorizedAssetDetected','UnmanagedAssetDetected','AssetNotSeen','AssetRemoved')),
     asset_id    UUID NOT NULL REFERENCES assets(id),
     scan_run_id UUID NOT NULL REFERENCES scan_runs(id),
     severity    TEXT NOT NULL DEFAULT 'low',
@@ -128,4 +128,13 @@ CREATE INDEX IF NOT EXISTS idx_findings_check ON config_findings(check_id);
 CREATE INDEX IF NOT EXISTS idx_posture_asset ON posture_assessments(asset_id);
 CREATE INDEX IF NOT EXISTS idx_posture_capec ON posture_assessments(capec_id);
 CREATE INDEX IF NOT EXISTS idx_scan_runs_trigger_source ON scan_runs(trigger_source, started_at);
+
+-- Extend events.event_type CHECK to include 'AssetAnalyzed' on databases
+-- created before the inline CHECK above was widened. Drops the auto-named
+-- constraint (events_event_type_check) and re-adds it with the new value
+-- list. Idempotent: a freshly created table already has the wider list, so
+-- the DROP/ADD pair simply replaces a constraint with an equivalent one.
+ALTER TABLE events DROP CONSTRAINT IF EXISTS events_event_type_check;
+ALTER TABLE events ADD CONSTRAINT events_event_type_check
+    CHECK (event_type IN ('AssetDiscovered','AssetUpdated','AssetAnalyzed','UnauthorizedAssetDetected','UnmanagedAssetDetected','AssetNotSeen','AssetRemoved'));
 `
