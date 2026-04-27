@@ -12,8 +12,8 @@ import (
 
 // stubLister implements ContainerEnvLister for tests.
 type stubLister struct {
-	envs []dockerdisc.ContainerEnv
 	err  error
+	envs []dockerdisc.ContainerEnv
 }
 
 func (s *stubLister) ListContainerEnvs(_ context.Context, _ map[string]any) ([]dockerdisc.ContainerEnv, error) {
@@ -222,16 +222,16 @@ func TestContainerEnvSecrets_NameAndCISControl(t *testing.T) {
 func TestSplitEnvKV(t *testing.T) {
 	cases := []struct {
 		in        string
-		wantOK    bool
 		wantName  string
 		wantValue string
+		wantOK    bool
 	}{
-		{"FOO=bar", true, "FOO", "bar"},
-		{"FOO=", true, "FOO", ""},
-		{"=bar", false, "", ""},
-		{"NOEQUALS", false, "", ""},
-		{"PATH=/usr/bin:/bin", true, "PATH", "/usr/bin:/bin"},
-		{"X=Y=Z", true, "X", "Y=Z"},
+		{in: "FOO=bar", wantName: "FOO", wantValue: "bar", wantOK: true},
+		{in: "FOO=", wantName: "FOO", wantValue: "", wantOK: true},
+		{in: "=bar", wantName: "", wantValue: "", wantOK: false},
+		{in: "NOEQUALS", wantName: "", wantValue: "", wantOK: false},
+		{in: "PATH=/usr/bin:/bin", wantName: "PATH", wantValue: "/usr/bin:/bin", wantOK: true},
+		{in: "X=Y=Z", wantName: "X", wantValue: "Y=Z", wantOK: true},
 	}
 	for _, c := range cases {
 		name, value, ok := splitEnvKV(c.in)
