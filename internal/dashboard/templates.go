@@ -413,7 +413,7 @@ const tablesTemplate = `<h2>Tables ({{len .Tables}})</h2>
   <tbody>
   {{range .Tables}}
     <tr>
-      <td><a hx-get="/fragments/tables/{{.Name}}" hx-target="#content" hx-push-url="false" class="fk-link">{{.Name}}</a></td>
+      <td><a href="/tables/{{.Name}}" hx-get="/tables/{{.Name}}" hx-target="#content" hx-push-url="true" class="fk-link">{{.Name}}</a></td>
       <td>{{len .Columns}}</td>
       <td>{{if lt .RowCount 0}}<span class="muted">unknown</span>{{else}}{{.RowCount}}{{end}}</td>
       <td>{{range $i, $c := .PrimaryKey}}{{if $i}}, {{end}}{{$c}}{{end}}</td>
@@ -425,7 +425,7 @@ const tablesTemplate = `<h2>Tables ({{len .Tables}})</h2>
 const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows)</span></h2>
 <div class="table-actions">
   <a href="/api/v1/tables/{{.Schema.Name}}/export.csv" class="btn">Export CSV</a>
-  <a hx-get="/fragments/tables" hx-target="#content" hx-push-url="false" class="btn btn-outline">Back to tables</a>
+  <a href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="btn btn-outline">Back to tables</a>
 </div>
 <table>
   <thead>
@@ -442,7 +442,7 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
     <tr class="row-click" hx-get="/fragments/tables/{{$schema.Name}}/row?{{rowKeyQuery $pk}}" hx-target="#sidebar" hx-swap="innerHTML" onclick="openSidebar()">
     {{range .Columns}}
       {{$fk := cellFK $schema.ForeignKeys .Name}}
-      <td>{{if $fk}}<a class="fk-link" hx-get="/fragments/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="false" onclick="event.stopPropagation();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
+      <td>{{if $fk}}<a class="fk-link" href="/tables/{{$fk.ToTable}}" hx-get="/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="true" onclick="event.stopPropagation();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
     {{end}}
     </tr>
   {{end}}
@@ -450,11 +450,11 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
 </table>
 <div class="pager">
   {{if ge .PrevOffset 0}}
-    <a class="btn btn-outline" hx-get="/fragments/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}" hx-target="#content" hx-push-url="false">Previous</a>
+    <a class="btn btn-outline" href="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}" hx-get="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}" hx-target="#content" hx-push-url="true">Previous</a>
   {{end}}
   <span class="muted">rows {{.Offset}}&ndash;{{add .Offset (len .Rows)}}</span>
   {{if ge .NextOffset 0}}
-    <a class="btn btn-outline" hx-get="/fragments/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.NextOffset}}" hx-target="#content" hx-push-url="false">Next</a>
+    <a class="btn btn-outline" href="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.NextOffset}}" hx-get="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.NextOffset}}" hx-target="#content" hx-push-url="true">Next</a>
   {{end}}
 </div>`
 
@@ -470,7 +470,7 @@ const rowReportTemplate = `<div class="sidebar-head">
     {{$fk := cellFK $fks .Name}}
     <tr>
       <th>{{.Name}}</th>
-      <td>{{if $fk}}<a class="fk-link" hx-get="/fragments/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="false" onclick="closeSidebar();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
+      <td>{{if $fk}}<a class="fk-link" href="/tables/{{$fk.ToTable}}" hx-get="/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="true" onclick="closeSidebar();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
     </tr>
   {{end}}
   </tbody>
