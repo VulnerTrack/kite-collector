@@ -11,7 +11,15 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-    goos: [linux, darwin, windows]
+    # FreeBSD and OpenBSD are tier-2: they cross-compile cleanly with
+    # CGO_ENABLED=0 and the pure-Go modernc.org/sqlite driver, but have no
+    # CI runtime tests yet. Identity hardening (TPM, OS keyring) silently
+    # falls back to plain-disk on these platforms — same behavior as
+    # darwin/windows for the keyring backend.
+    # NetBSD + Dragonfly are intentionally excluded: modernc.org/sqlite
+    # v1.48.1 has an upstream bug on those targets (mu.enter/mu.leave
+    # undefined). Re-add when the driver is patched.
+    goos: [linux, darwin, windows, freebsd, openbsd]
     goarch: [amd64, arm64]
     ignore:
       - goos: windows
