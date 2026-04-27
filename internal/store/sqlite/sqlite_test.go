@@ -373,6 +373,66 @@ func TestGetLatestScanRun_Empty(t *testing.T) {
 	assert.Nil(t, latest, "no scan runs should return nil")
 }
 
+// TestSQLiteStore_ListScanRuns_OrderAndLimit covers the contract:
+//   - rows are returned newest-first by started_at,
+//   - an explicit limit caps the result set,
+//   - limit <= 0 falls back to the default (50), so 5 rows fit and all return,
+//   - an empty store returns a non-nil empty slice (not nil).
+func TestSQLiteStore_ListScanRuns_OrderAndLimit(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("empty store returns empty slice (not nil)", func(t *testing.T) {
+		s := newTestStore(t)
+		runs, err := s.ListScanRuns(ctx, 100)
+		require.NoError(t, err)
+		require.NotNil(t, runs, "empty result must be non-nil empty slice")
+		assert.Equal(t, 0, len(runs))
+	})
+
+	t.Run("orders newest-first and respects limit", func(t *testing.T) {
+		s := newTestStore(t)
+
+		// Insert 5 runs with deliberately interleaved started_at offsets so
+		// insertion order does not match temporal order.
+		base := time.Now().UTC().Truncate(time.Second)
+		offsets := []time.Duration{
+			2 * time.Minute,
+			0,
+			4 * time.Minute,
+			1 * time.Minute,
+			3 * time.Minute,
+		}
+		ids := make([]uuid.UUID, len(offsets))
+		for i, off := range offsets {
+			ids[i] = uuid.Must(uuid.NewV7())
+			require.NoError(t, s.CreateScanRun(ctx, model.ScanRun{
+				ID:        ids[i],
+				StartedAt: base.Add(off),
+				Status:    model.ScanStatusRunning,
+			}))
+		}
+
+		// Limit = 3 → newest three by started_at, descending.
+		// Expected order by offset: 4m, 3m, 2m → ids[2], ids[4], ids[0].
+		runs, err := s.ListScanRuns(ctx, 3)
+		require.NoError(t, err)
+		require.Len(t, runs, 3)
+		assert.Equal(t, ids[2], runs[0].ID)
+		assert.Equal(t, ids[4], runs[1].ID)
+		assert.Equal(t, ids[0], runs[2].ID)
+		// Strictly descending by StartedAt.
+		for i := 1; i < len(runs); i++ {
+			assert.False(t, runs[i].StartedAt.After(runs[i-1].StartedAt),
+				"runs must be ordered DESC by started_at")
+		}
+
+		// Limit = 0 → default cap (50) ≥ 5 inserted rows, so all 5 return.
+		all, err := s.ListScanRuns(ctx, 0)
+		require.NoError(t, err)
+		assert.Len(t, all, 5, "limit<=0 must default to 50 and return all 5 rows")
+	})
+}
+
 // TestScanRun_TriggerProvenanceRoundtrip covers RFC-0104 phase 2: a
 // persisted ScanRun must round-trip trigger_source, triggered_by, and the
 // optional cancel_requested_at marker. It also checks the default ("cli")
