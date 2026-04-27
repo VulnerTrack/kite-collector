@@ -66,6 +66,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/store/postgres"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 	"github.com/vulnertrack/kite-collector/internal/streamctrl"
+	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
 	"github.com/vulnertrack/kite-collector/internal/tunnel"
 )
 
@@ -1043,6 +1044,28 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 	// RFC-0112 onboarding dashboard can Start/Stop streaming at runtime.
 	var em emitter.Emitter
 	if cfg.Streaming.OTLP.Endpoint != "" {
+		// Build the RFC-0115 resource attribute set. Identity load is
+		// best-effort: a missing identity file means we are running before
+		// enrollment, in which case we still emit but with a zero AgentID
+		// so the Collector can identify the unenrolled state.
+		identityDir := cfg.Identity.DataDir
+		if identityDir == "" {
+			identityDir = filepath.Dir(dbPath)
+		}
+		var agentID uuid.UUID
+		if id, idErr := identity.LoadOrCreate(identityDir, slog.Default()); idErr == nil {
+			agentID = id.AgentID
+		} else {
+			slog.Warn("agent: identity unavailable; emitting telemetry with zero agent.id",
+				"error", idErr)
+		}
+		resourceAttrs := telresource.Build(telresource.Config{
+			AgentID:        agentID,
+			ServiceVersion: version,
+			TenantID:       os.Getenv("KITE_TENANT_ID"),
+			Environment:    os.Getenv("KITE_DEPLOYMENT_ENVIRONMENT"),
+		})
+
 		otlpCfg := emitter.OTLPConfig{
 			Endpoint: cfg.Streaming.OTLP.Endpoint,
 			Protocol: cfg.Streaming.OTLP.Protocol,
@@ -1052,6 +1075,7 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 				KeyFile:  cfg.Streaming.OTLP.TLS.KeyFile,
 				CAFile:   cfg.Streaming.OTLP.TLS.CAFile,
 			},
+			Resource: resourceAttrs,
 		}
 		otlpEmitter, otlpErr := emitter.NewOTLP(otlpCfg, version)
 		if otlpErr != nil {

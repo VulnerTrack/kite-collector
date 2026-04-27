@@ -158,12 +158,7 @@ func (a *AggregateOTLPEmitter) buildAggregatePayload(state aggregateState) otlpL
 	return otlpLogsPayload{
 		ResourceLogs: []otlpResourceLog{
 			{
-				Resource: otlpResource{
-					Attributes: []otlpKeyValue{
-						stringKV("service.name", a.otlp.serviceName),
-						stringKV("service.version", a.otlp.serviceVersion),
-					},
-				},
+				Resource: otlpResource{Attributes: a.otlp.resourceAttributes()},
 				ScopeLogs: []otlpScopeLog{
 					{
 						Scope:      otlpScope{Name: "kite-collector.aggregate"},

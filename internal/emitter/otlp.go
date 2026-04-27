@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/telemetry/redact"
 )
 
 // Compile-time interface check.
@@ -30,6 +31,13 @@ var _ Emitter = (*OTLPEmitter)(nil)
 // OTLPConfig holds the configuration for connecting to an OTLP-compatible
 // log collector endpoint.
 type OTLPConfig struct {
+	// Resource carries the OTel resource attributes attached to every
+	// exported batch. When empty the emitter falls back to a minimal set
+	// containing only service.name and service.version (legacy v0
+	// behaviour, kept for unit tests). Production callers should build
+	// this via internal/telemetry/resource.Build to satisfy the RFC-0115
+	// contract.
+	Resource map[string]string
 	Endpoint string
 	Protocol string // "grpc" or "http"
 	TLS      TLSConfig
@@ -60,7 +68,8 @@ type retryConfig struct {
 // adjust the collector configuration accordingly.
 type OTLPEmitter struct {
 	client         *http.Client
-	endpoint       string // full URL including /v1/logs
+	resource       map[string]string // RFC-0115 §4.2 resource attributes
+	endpoint       string            // full URL including /v1/logs
 	serviceName    string
 	serviceVersion string
 	retry          retryConfig
@@ -100,6 +109,7 @@ func NewOTLP(cfg OTLPConfig, serviceVersion string) (*OTLPEmitter, error) {
 		endpoint:       endpoint,
 		serviceName:    "kite-collector",
 		serviceVersion: serviceVersion,
+		resource:       cfg.Resource,
 		retry: retryConfig{
 			maxAttempts: 3,
 			baseDelay:   1 * time.Second,
@@ -263,12 +273,7 @@ func (o *OTLPEmitter) buildPayload(events []model.AssetEvent) otlpLogsPayload {
 	return otlpLogsPayload{
 		ResourceLogs: []otlpResourceLog{
 			{
-				Resource: otlpResource{
-					Attributes: []otlpKeyValue{
-						stringKV("service.name", o.serviceName),
-						stringKV("service.version", o.serviceVersion),
-					},
-				},
+				Resource: otlpResource{Attributes: o.resourceAttributes()},
 				ScopeLogs: []otlpScopeLog{
 					{
 						Scope:      otlpScope{Name: "kite-collector.emitter"},
@@ -277,6 +282,29 @@ func (o *OTLPEmitter) buildPayload(events []model.AssetEvent) otlpLogsPayload {
 				},
 			},
 		},
+	}
+}
+
+// resourceAttributes returns the resource attribute key/value list per the
+// RFC-0115 contract. When the emitter was constructed with a populated
+// Resource map (the production path) it is used verbatim; otherwise we fall
+// back to the legacy two-attribute set (service.name, service.version)
+// that historic unit tests still assert against.
+//
+// Forbidden keys are stripped via redact.Filter so callers cannot smuggle
+// credentials into the resource by mistake.
+func (o *OTLPEmitter) resourceAttributes() []otlpKeyValue {
+	if len(o.resource) > 0 {
+		clean := redact.Filter(o.resource)
+		out := make([]otlpKeyValue, 0, len(clean))
+		for k, v := range clean {
+			out = append(out, stringKV(k, v))
+		}
+		return out
+	}
+	return []otlpKeyValue{
+		stringKV("service.name", o.serviceName),
+		stringKV("service.version", o.serviceVersion),
 	}
 }
 
@@ -329,52 +357,46 @@ func deriveSpanID(e *model.AssetEvent) string {
 // buildAttributes constructs the OTLP log record attribute list from an event.
 // Optional asset fields are only included when non-empty so that minimal
 // events (e.g. those not created via FromAsset) remain compact.
+//
+// All keys pass through redact.IsForbidden before being emitted so the
+// RFC-0115 §4.3 forbidden-key denylist is enforced at the last layer
+// before serialization. The keys produced here are all hard-coded constants
+// that the contract permits, so the filter is a defence-in-depth check
+// against future drift rather than a hot-path cost.
 func buildAttributes(e *model.AssetEvent) []otlpKeyValue {
-	attrs := []otlpKeyValue{
-		stringKV("event_type", string(e.EventType)),
-		stringKV("event_name", e.EventType.Name()),
-		stringKV("asset_id", e.AssetID.String()),
-		stringKV("scan_run_id", e.ScanRunID.String()),
-		stringKV("severity", string(e.Severity)),
+	pairs := [][2]string{
+		{"event_type", string(e.EventType)},
+		{"event_name", e.EventType.Name()},
+		{"asset_id", e.AssetID.String()},
+		{"scan_run_id", e.ScanRunID.String()},
+		{"severity", string(e.Severity)},
 	}
+	add := func(key, value string) {
+		if value == "" {
+			return
+		}
+		pairs = append(pairs, [2]string{key, value})
+	}
+	add("hostname", e.Hostname)
+	add("asset_type", string(e.AssetType))
+	add("os_family", e.OSFamily)
+	add("os_version", e.OSVersion)
+	add("kernel_version", e.KernelVersion)
+	add("architecture", e.Architecture)
+	add("environment", e.Environment)
+	add("owner", e.Owner)
+	add("criticality", e.Criticality)
+	add("discovery_source", e.DiscoverySource)
+	add("is_authorized", string(e.IsAuthorized))
+	add("is_managed", string(e.IsManaged))
 
-	if e.Hostname != "" {
-		attrs = append(attrs, stringKV("hostname", e.Hostname))
+	attrs := make([]otlpKeyValue, 0, len(pairs))
+	for _, p := range pairs {
+		if redact.IsForbidden(p[0]) {
+			continue
+		}
+		attrs = append(attrs, stringKV(p[0], p[1]))
 	}
-	if e.AssetType != "" {
-		attrs = append(attrs, stringKV("asset_type", string(e.AssetType)))
-	}
-	if e.OSFamily != "" {
-		attrs = append(attrs, stringKV("os_family", e.OSFamily))
-	}
-	if e.OSVersion != "" {
-		attrs = append(attrs, stringKV("os_version", e.OSVersion))
-	}
-	if e.KernelVersion != "" {
-		attrs = append(attrs, stringKV("kernel_version", e.KernelVersion))
-	}
-	if e.Architecture != "" {
-		attrs = append(attrs, stringKV("architecture", e.Architecture))
-	}
-	if e.Environment != "" {
-		attrs = append(attrs, stringKV("environment", e.Environment))
-	}
-	if e.Owner != "" {
-		attrs = append(attrs, stringKV("owner", e.Owner))
-	}
-	if e.Criticality != "" {
-		attrs = append(attrs, stringKV("criticality", e.Criticality))
-	}
-	if e.DiscoverySource != "" {
-		attrs = append(attrs, stringKV("discovery_source", e.DiscoverySource))
-	}
-	if e.IsAuthorized != "" {
-		attrs = append(attrs, stringKV("is_authorized", string(e.IsAuthorized)))
-	}
-	if e.IsManaged != "" {
-		attrs = append(attrs, stringKV("is_managed", string(e.IsManaged)))
-	}
-
 	return attrs
 }
 
