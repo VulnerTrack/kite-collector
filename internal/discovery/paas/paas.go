@@ -100,6 +100,14 @@ func (c *apiClient) applyHeaders(req *http.Request) {
 // get performs an authenticated GET request and JSON-decodes the response
 // body into out. Transient errors are retried with exponential backoff.
 func (c *apiClient) get(ctx context.Context, path string, out any) error {
+	_, err := c.getSized(ctx, path, out)
+	return err
+}
+
+// getSized is like get but also returns the number of bytes read from the
+// response body. Used by paginated callers to feed PaginationGuardV2 byte
+// caps (RFC-0124 R5).
+func (c *apiClient) getSized(ctx context.Context, path string, out any) (int64, error) {
 	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider
 		if reqErr != nil {
@@ -113,19 +121,30 @@ func (c *apiClient) get(ctx context.Context, path string, out any) error {
 		return doResp, nil
 	})
 	if err != nil {
-		return fmt.Errorf("paas GET %s: %w", path, err)
+		return 0, fmt.Errorf("paas GET %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("decode paas GET response: %w", err)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return int64(len(body)), fmt.Errorf("read paas GET response: %w", readErr)
 	}
-	return nil
+	if err := json.Unmarshal(body, out); err != nil {
+		return int64(len(body)), fmt.Errorf("decode paas GET response: %w", err)
+	}
+	return int64(len(body)), nil
 }
 
 // getPage performs a GET with optional extra headers and returns the
 // response headers alongside the decoded body. Used when pagination state
 // is carried in response headers (e.g. Heroku Range pagination).
 func (c *apiClient) getPage(ctx context.Context, path string, extraHeaders map[string]string, out any) (http.Header, error) {
+	_, hdr, err := c.getPageSized(ctx, path, extraHeaders, out)
+	return hdr, err
+}
+
+// getPageSized is like getPage but also returns the number of bytes read,
+// for PaginationGuardV2 byte-cap enforcement (RFC-0124 R5).
+func (c *apiClient) getPageSized(ctx context.Context, path string, extraHeaders map[string]string, out any) (int64, http.Header, error) {
 	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider
 		if reqErr != nil {
@@ -142,13 +161,17 @@ func (c *apiClient) getPage(ctx context.Context, path string, extraHeaders map[s
 		return doResp, nil
 	})
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return nil, fmt.Errorf("decode paas page response: %w", err)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return int64(len(body)), resp.Header, fmt.Errorf("read paas page response: %w", readErr)
 	}
-	return resp.Header, nil
+	if err := json.Unmarshal(body, out); err != nil {
+		return int64(len(body)), resp.Header, fmt.Errorf("decode paas page response: %w", err)
+	}
+	return int64(len(body)), resp.Header, nil
 }
 
 // post performs an authenticated POST with a JSON body and decodes the

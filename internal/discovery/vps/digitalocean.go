@@ -40,19 +40,20 @@ func (d *DigitalOcean) Discover(ctx context.Context, cfg map[string]any) ([]mode
 
 	client := newClient("digitalocean", d.baseURL, bearerAuth(token))
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for page := 1; ; page++ {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("digitalocean: %w", err)
-		}
 		if err := ctx.Err(); err != nil {
 			return assets, fmt.Errorf("digitalocean discovery cancelled: %w", err)
 		}
 
 		var resp doDropletsResponse
-		if err := client.get(ctx, fmt.Sprintf("/droplets?page=%d&per_page=100", page), &resp); err != nil {
+		nBytes, err := client.getSized(ctx, fmt.Sprintf("/droplets?page=%d&per_page=100", page), &resp)
+		if err != nil {
 			return assets, fmt.Errorf("digitalocean: list droplets: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("digitalocean: %w", err)
 		}
 
 		now := time.Now().UTC()

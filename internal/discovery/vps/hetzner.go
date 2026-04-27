@@ -40,19 +40,20 @@ func (h *Hetzner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 
 	client := newClient("hetzner", h.baseURL, bearerAuth(token))
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for page := 1; ; page++ {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("hetzner: %w", err)
-		}
 		if ctx.Err() != nil {
 			return assets, fmt.Errorf("hetzner: context cancelled: %w", ctx.Err())
 		}
 
 		var resp hetznerServersResponse
-		if err := client.get(ctx, fmt.Sprintf("/servers?page=%d&per_page=50", page), &resp); err != nil {
+		nBytes, err := client.getSized(ctx, fmt.Sprintf("/servers?page=%d&per_page=50", page), &resp)
+		if err != nil {
 			return assets, fmt.Errorf("hetzner: list servers: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("hetzner: %w", err)
 		}
 
 		now := time.Now().UTC()

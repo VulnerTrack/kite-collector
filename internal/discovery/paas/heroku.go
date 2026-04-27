@@ -43,22 +43,22 @@ func (h *Heroku) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	var assets []model.Asset
 	rangeHeader := "id ..; max=200"
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("heroku: %w", err)
-		}
 		if ctx.Err() != nil {
 			return assets, fmt.Errorf("heroku: context cancelled: %w", ctx.Err())
 		}
 
 		var apps []herokuApp
-		headers, err := client.getPage(ctx, "/apps", map[string]string{
+		nBytes, headers, err := client.getPageSized(ctx, "/apps", map[string]string{
 			"Range": rangeHeader,
 		}, &apps)
 		if err != nil {
 			return assets, fmt.Errorf("heroku: list apps: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("heroku: %w", err)
 		}
 
 		now := time.Now().UTC()
