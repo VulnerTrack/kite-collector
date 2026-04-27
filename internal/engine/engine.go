@@ -174,6 +174,22 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			"endpoint":           src.Endpoint,
 			"site":               src.Site,
 			"community":          src.Community,
+			"enabled":            src.Enabled,
+			// LDAP-specific (RFC-0121); harmless when other sources read them.
+			"tls_mode":             src.TLSMode,
+			"tls_ca_file":          src.TLSCAFile,
+			"tls_skip_verify":      src.TLSSkipVerify,
+			"bind_dn":              src.BindDN,
+			"bind_password_env":    src.BindPasswordEnv,
+			"base_dn":              src.BaseDN,
+			"domain_controllers":   stringSliceToAny(src.DomainControllers),
+			"page_size":            src.PageSize,
+			"stale_threshold_days": src.StaleThresholdDays,
+			"max_objects":          src.MaxObjects,
+			"collect_users":        src.CollectUsers,
+			"collect_groups":       src.CollectGroups,
+			"collect_ous":          src.CollectOUs,
+			"collect_gpos":         src.CollectGPOs,
 		}
 		// Bind MDM/CMDB credential environment variables into the
 		// config map so connectors receive them via the standard
@@ -385,6 +401,47 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 	}
 
+	// LDAP / Active Directory audit phase: run the LDAP auditor over every
+	// asset whose discovery source is "ldap". The auditor inspects each
+	// asset's tags JSON for ad.* attributes and emits the RFC-0121 §6
+	// findings (stale account, kerberoastable, disabled-in-active-OU,
+	// cleartext bind). We materialise the auditor with the same TLS mode
+	// + stale_threshold the discovery source used so the cleartext finding
+	// fires consistently.
+	if scanCtx.Err() == nil && cfg.Audit.Enabled && cfg.Audit.LDAP.Enabled {
+		ldapSrc := cfg.Discovery.Sources["ldap"]
+		ldapAuditor := audit.NewLDAP(audit.LDAPAuditConfig{
+			StaleThresholdDays: ldapSrc.StaleThresholdDays,
+			TLSMode:            ldapSrc.TLSMode,
+		})
+		ldapReg := audit.NewRegistry()
+		ldapReg.Register(ldapAuditor)
+
+		for _, a := range assets {
+			if a.DiscoverySource != "ldap" {
+				continue
+			}
+			ldapFindings, auditErr := ldapReg.AuditAll(scanCtx, a)
+			if auditErr != nil {
+				slog.Warn("engine: ldap audit failed", "asset_id", a.ID, "error", auditErr)
+				continue
+			}
+			if len(ldapFindings) == 0 {
+				continue
+			}
+			for i := range ldapFindings {
+				ldapFindings[i].ScanRunID = scanID
+			}
+			if fErr := e.store.InsertFindings(ctx, ldapFindings); fErr != nil {
+				slog.Error("engine: failed to persist ldap findings",
+					"error", fErr, "asset_id", a.ID, "count", len(ldapFindings))
+				continue
+			}
+			findingsCount += len(ldapFindings)
+			e.recordFindingMetrics(ldapFindings)
+		}
+	}
+
 	// Stale asset detection and event generation — skip heavy work if
 	// the scan deadline already fired.
 	var staleAssets []model.Asset
@@ -542,6 +599,21 @@ func findAgentAssetID(assets []model.Asset) uuid.UUID {
 		}
 	}
 	return uuid.Nil
+}
+
+// stringSliceToAny converts a typed string slice into the []any shape that
+// downstream config consumers (which receive map[string]any) expect.
+// Returns nil for nil/empty input so the value disappears from JSON-style
+// debug dumps.
+func stringSliceToAny(in []string) []any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]any, len(in))
+	for i, v := range in {
+		out[i] = v
+	}
+	return out
 }
 
 // maxParseErrorLogs caps how many individual software parse errors are
