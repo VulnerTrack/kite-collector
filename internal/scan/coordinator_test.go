@@ -113,6 +113,10 @@ func (s *fakeStore) GetAssetByNaturalKey(_ context.Context, _ string) (*model.As
 	return nil, nil
 }
 
+func (s *fakeStore) GetAssetsByNaturalKeys(_ context.Context, _ []string) (map[string]model.Asset, error) {
+	return nil, nil
+}
+
 func (s *fakeStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
 	return nil, nil
 }

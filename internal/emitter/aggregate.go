@@ -62,6 +62,11 @@ func (a *AggregateOTLPEmitter) Emit(_ context.Context, event model.AssetEvent) e
 		a.agg.newAssets++
 	case model.EventAssetUpdated:
 		a.agg.totalAssets++
+	case model.EventAssetAnalyzed:
+		// AssetAnalyzed is a no-material-change rescan tick. Count it
+		// toward totalAssets (the asset is still present and analyzed)
+		// but do NOT bump newAssets — it is not a fresh sighting.
+		a.agg.totalAssets++
 	case model.EventUnauthorizedAssetDetected:
 		a.agg.unauthorizedAssets++
 	case model.EventUnmanagedAssetDetected:

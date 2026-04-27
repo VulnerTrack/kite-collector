@@ -92,6 +92,21 @@ func (m *mockStore) GetAssetByNaturalKey(_ context.Context, key string) (*model.
 	return &cp, nil
 }
 
+func (m *mockStore) GetAssetsByNaturalKeys(_ context.Context, keys []string) (map[string]model.Asset, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]model.Asset, len(keys))
+	for _, k := range keys {
+		if a, ok := m.assets[k]; ok {
+			out[k] = a
+		}
+	}
+	return out, nil
+}
+
 func (m *mockStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -690,6 +705,190 @@ func TestEngine_StaleAssetEventsIncludeAssetMetadata(t *testing.T) {
 		assert.Equal(t, staleAsset.ID, evt.AssetID, "AssetID must reference the stale asset")
 	}
 	assert.True(t, found, "expected an EventAssetNotSeen event in the emitted batch")
+}
+
+// TestEngine_RepeatedScanWithNoChange_EmitsAnalyzedNotUpdated pins the core
+// behaviour change of this PR: a rescan that brings no material delta MUST
+// produce an AssetAnalyzed event with severity low and the namespaced wire
+// name "kite.asset.analyzed". This guards against a regression where the
+// engine slips back to the old "FirstSeenAt != LastSeenAt -> Updated" rule.
+func TestEngine_RepeatedScanWithNoChange_EmitsAnalyzedNotUpdated(t *testing.T) {
+	ms := newMockStore()
+
+	// Pre-seed the asset with FirstSeenAt < LastSeenAt so the merge path
+	// in dedup is exercised. Material fields match the discovered copy
+	// below, so the engine must treat the rescan as a noise-grade tick.
+	existing := model.Asset{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        "steady-host",
+		AssetType:       model.AssetTypeServer,
+		OSVersion:       "ubuntu-22.04",
+		DiscoverySource: "test",
+		IsAuthorized:    model.AuthorizationUnknown,
+		IsManaged:       model.ManagedUnknown,
+		FirstSeenAt:     time.Now().UTC().Add(-72 * time.Hour),
+		LastSeenAt:      time.Now().UTC().Add(-72 * time.Hour),
+	}
+	existing.ComputeNaturalKey()
+	ms.assets[existing.NaturalKey] = existing
+
+	reg := discovery.NewRegistry()
+	reg.Register(&mockSource{
+		name: "test",
+		assets: []model.Asset{
+			{
+				Hostname:        "steady-host",
+				AssetType:       model.AssetTypeServer,
+				OSVersion:       "ubuntu-22.04",
+				DiscoverySource: "test",
+			},
+		},
+	})
+
+	em := &recordingEmitter{}
+	eng := newTestEngine(ms, reg, em)
+
+	_, err := eng.Run(context.Background(), newTestConfig())
+	require.NoError(t, err)
+
+	em.mu.Lock()
+	defer em.mu.Unlock()
+	require.Len(t, em.events, 1)
+	got := em.events[0]
+	assert.Equal(t, model.EventAssetAnalyzed, got.EventType)
+	assert.Equal(t, model.SeverityLow, got.Severity,
+		"Analyzed events must be forced to severity=low (noise-grade)")
+	assert.Equal(t, "kite.asset.analyzed", got.EventType.Name(),
+		"namespaced wire name must reflect the new event type")
+}
+
+// TestEngine_MaterialChange_EmitsUpdated pins the other side of the
+// classification: when a material field (here OSVersion) actually moves,
+// the engine MUST still emit AssetUpdated so triage gets the signal.
+func TestEngine_MaterialChange_EmitsUpdated(t *testing.T) {
+	ms := newMockStore()
+
+	existing := model.Asset{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        "drift-host",
+		AssetType:       model.AssetTypeServer,
+		OSVersion:       "ubuntu-22.04",
+		DiscoverySource: "test",
+		IsAuthorized:    model.AuthorizationUnknown,
+		IsManaged:       model.ManagedUnknown,
+		FirstSeenAt:     time.Now().UTC().Add(-72 * time.Hour),
+		LastSeenAt:      time.Now().UTC().Add(-72 * time.Hour),
+	}
+	existing.ComputeNaturalKey()
+	ms.assets[existing.NaturalKey] = existing
+
+	reg := discovery.NewRegistry()
+	reg.Register(&mockSource{
+		name: "test",
+		assets: []model.Asset{
+			{
+				Hostname:        "drift-host",
+				AssetType:       model.AssetTypeServer,
+				OSVersion:       "ubuntu-24.04",
+				DiscoverySource: "test",
+			},
+		},
+	})
+
+	em := &recordingEmitter{}
+	eng := newTestEngine(ms, reg, em)
+
+	_, err := eng.Run(context.Background(), newTestConfig())
+	require.NoError(t, err)
+
+	em.mu.Lock()
+	defer em.mu.Unlock()
+	require.Len(t, em.events, 1)
+	assert.Equal(t, model.EventAssetUpdated, em.events[0].EventType)
+}
+
+// TestEngine_FirstSighting_EmitsDiscovered preserves the original
+// first-sighting contract: an empty store + a single discovered asset
+// yields exactly one AssetDiscovered event, regardless of fingerprint
+// logic added in this PR.
+func TestEngine_FirstSighting_EmitsDiscovered(t *testing.T) {
+	ms := newMockStore()
+	reg := discovery.NewRegistry()
+	reg.Register(&mockSource{
+		name: "test",
+		assets: []model.Asset{
+			{Hostname: "fresh-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		},
+	})
+
+	em := &recordingEmitter{}
+	eng := newTestEngine(ms, reg, em)
+
+	_, err := eng.Run(context.Background(), newTestConfig())
+	require.NoError(t, err)
+
+	em.mu.Lock()
+	defer em.mu.Unlock()
+	require.Len(t, em.events, 1)
+	assert.Equal(t, model.EventAssetDiscovered, em.events[0].EventType)
+}
+
+// TestEngine_UnauthorizedOverride_StillAppliesEvenWhenNoMaterialChange
+// asserts that the alert-grade override still wins over the new Analyzed
+// classification: an unauthorized asset on a no-change tick must still
+// emit UnauthorizedAssetDetected, not Analyzed. This is what keeps
+// rogue-asset detection loud and per-tick visible.
+func TestEngine_UnauthorizedOverride_StillAppliesEvenWhenNoMaterialChange(t *testing.T) {
+	ms := newMockStore()
+
+	existing := model.Asset{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        "rogue-host",
+		AssetType:       model.AssetTypeServer,
+		OSVersion:       "ubuntu-22.04",
+		DiscoverySource: "test",
+		IsAuthorized:    model.AuthorizationUnauthorized,
+		IsManaged:       model.ManagedUnknown,
+		FirstSeenAt:     time.Now().UTC().Add(-72 * time.Hour),
+		LastSeenAt:      time.Now().UTC().Add(-72 * time.Hour),
+	}
+	existing.ComputeNaturalKey()
+	ms.assets[existing.NaturalKey] = existing
+
+	reg := discovery.NewRegistry()
+	reg.Register(&mockSource{
+		name: "test",
+		assets: []model.Asset{
+			{
+				Hostname:        "rogue-host",
+				AssetType:       model.AssetTypeServer,
+				OSVersion:       "ubuntu-22.04",
+				DiscoverySource: "test",
+			},
+		},
+	})
+
+	// Use a classifier whose allowlist matches no asset so the merged
+	// result remains unauthorized after classification.
+	allowlistPath := filepath.Join(t.TempDir(), "allowlist.yaml")
+	require.NoError(t, os.WriteFile(allowlistPath, []byte("assets:\n  - hostname: \"only-this-one\"\n"), 0o600))
+	auth, err := classifier.NewAuthorizer(allowlistPath, []string{"hostname"})
+	require.NoError(t, err)
+	cls := classifier.New(auth, classifier.NewManager(nil))
+
+	dd := dedup.New(ms, nil)
+	pol := policy.New(nil, 168*time.Hour)
+	em := &recordingEmitter{}
+	eng := New(ms, reg, dd, cls, em, pol, nil)
+
+	_, err = eng.Run(context.Background(), newTestConfig())
+	require.NoError(t, err)
+
+	em.mu.Lock()
+	defer em.mu.Unlock()
+	require.Len(t, em.events, 1)
+	assert.Equal(t, model.EventUnauthorizedAssetDetected, em.events[0].EventType,
+		"unauthorized override must still fire on no-change ticks")
 }
 
 func TestEngine_EmptyDiscovery(t *testing.T) {

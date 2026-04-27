@@ -2,6 +2,7 @@ package model
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -28,6 +29,67 @@ type Asset struct {
 	Tags            string             `json:"tags"`                // JSON
 	NaturalKey      string             `json:"natural_key"`         // computed dedup key
 	ID              uuid.UUID          `json:"id"`
+}
+
+// MaterialFingerprint returns a hex-encoded SHA-256 digest of the asset's
+// material attributes — every field that, when changed, represents a
+// meaningful state change worth surfacing as an AssetUpdated event.
+//
+// The fingerprint deliberately EXCLUDES:
+//   - ID (UUID is identity, not material content),
+//   - NaturalKey (a derived hash of Hostname|AssetType, already covered by
+//     the included material fields), and
+//   - FirstSeenAt / LastSeenAt (timestamps move on every scan tick and are
+//     not material — that is the whole reason this helper exists).
+//
+// Two assets with equal material fields but differing IDs / timestamps
+// MUST yield equal fingerprints. The encoding is JSON of a fixed-key
+// struct (with sorted, exported fields), which is deterministic for the
+// scalar field set we have here — no map iteration is involved, and the
+// Go json package emits struct fields in declaration order.
+func (a *Asset) MaterialFingerprint() string {
+	payload := struct {
+		Hostname        string             `json:"hostname"`
+		AssetType       AssetType          `json:"asset_type"`
+		OSFamily        string             `json:"os_family"`
+		OSVersion       string             `json:"os_version"`
+		KernelVersion   string             `json:"kernel_version"`
+		Architecture    string             `json:"architecture"`
+		Environment     string             `json:"environment"`
+		Owner           string             `json:"owner"`
+		Criticality     string             `json:"criticality"`
+		DiscoverySource string             `json:"discovery_source"`
+		TenantID        string             `json:"tenant_id"`
+		Tags            string             `json:"tags"`
+		IsAuthorized    AuthorizationState `json:"is_authorized"`
+		IsManaged       ManagedState       `json:"is_managed"`
+	}{
+		Hostname:        a.Hostname,
+		AssetType:       a.AssetType,
+		OSFamily:        a.OSFamily,
+		OSVersion:       a.OSVersion,
+		KernelVersion:   a.KernelVersion,
+		Architecture:    a.Architecture,
+		Environment:     a.Environment,
+		Owner:           a.Owner,
+		Criticality:     a.Criticality,
+		DiscoverySource: a.DiscoverySource,
+		TenantID:        a.TenantID,
+		Tags:            a.Tags,
+		IsAuthorized:    a.IsAuthorized,
+		IsManaged:       a.IsManaged,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		// json.Marshal cannot fail for a flat struct of strings; defend
+		// against future shape changes by falling back to a hash of the
+		// natural key plus hostname so we never panic.
+		fallback := fmt.Sprintf("%s|%s", a.NaturalKey, a.Hostname)
+		sum := sha256.Sum256([]byte(fallback))
+		return fmt.Sprintf("%x", sum)
+	}
+	sum := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", sum)
 }
 
 // ComputeNaturalKey sets NaturalKey to the SHA-256 hex digest of the asset's

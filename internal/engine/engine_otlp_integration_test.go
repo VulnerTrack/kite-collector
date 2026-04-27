@@ -379,16 +379,18 @@ func TestEngineToOTLP_DiscoveredEvent_FullWirePayload(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Updated event
+// 2. Updated event — material change path
 // ---------------------------------------------------------------------------
 
-func TestEngineToOTLP_UpdatedEvent_EmitsAssetUpdated(t *testing.T) {
-	// Pre-load the asset with FirstSeenAt < LastSeenAt so the merge path
-	// produces an event flagged as updated rather than discovered.
+func TestEngineToOTLP_UpdatedEvent_EmitsAssetUpdatedOnMaterialChange(t *testing.T) {
+	// Pre-load the asset; rediscovery brings a NEW OSVersion, which is a
+	// material attribute. The engine must classify this as AssetUpdated
+	// rather than AssetAnalyzed, and the wire payload must reflect that.
 	existing := model.Asset{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "updated-host",
 		AssetType:       model.AssetTypeServer,
+		OSVersion:       "ubuntu-22.04",
 		DiscoverySource: "test",
 		IsAuthorized:    model.AuthorizationUnknown,
 		IsManaged:       model.ManagedUnknown,
@@ -401,7 +403,12 @@ func TestEngineToOTLP_UpdatedEvent_EmitsAssetUpdated(t *testing.T) {
 	reg.Register(&mockSource{
 		name: "test",
 		assets: []model.Asset{
-			{Hostname: "updated-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+			{
+				Hostname:        "updated-host",
+				AssetType:       model.AssetTypeServer,
+				OSVersion:       "ubuntu-24.04",
+				DiscoverySource: "test",
+			},
 		},
 	})
 
@@ -417,6 +424,71 @@ func TestEngineToOTLP_UpdatedEvent_EmitsAssetUpdated(t *testing.T) {
 	require.Len(t, recs, 1)
 	attrs := recordAttrs(t, recs[0])
 	assert.Equal(t, string(model.EventAssetUpdated), attrs["event_type"])
+	assert.Equal(t, "kite.asset.updated", attrs["event_name"])
+	// Body content must still carry the asset-identifying fields so a
+	// downstream triager can act on the genuine update.
+	body := bodyString(t, recs[0])
+	require.NotEmpty(t, body)
+	var parsedBody map[string]any
+	require.NoError(t, json.Unmarshal([]byte(body), &parsedBody))
+	assert.Equal(t, "updated-host", parsedBody["hostname"])
+	assert.Equal(t, string(model.EventAssetUpdated), parsedBody["event_type"])
+}
+
+// TestEngineToOTLP_NoMaterialChange_EmitsAnalyzed pins the new wire-level
+// contract: when discovery returns an asset whose material fields are
+// identical to the stored copy and only timestamps move, the engine MUST
+// emit AssetAnalyzed (not AssetUpdated) with severity=low and the
+// "kite.asset.analyzed" wire name. This is the noise reduction this PR
+// exists to deliver.
+func TestEngineToOTLP_NoMaterialChange_EmitsAnalyzed(t *testing.T) {
+	existing := model.Asset{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        "steady-host",
+		AssetType:       model.AssetTypeServer,
+		OSVersion:       "ubuntu-22.04",
+		DiscoverySource: "test",
+		IsAuthorized:    model.AuthorizationUnknown,
+		IsManaged:       model.ManagedUnknown,
+		FirstSeenAt:     time.Now().UTC().Add(-72 * time.Hour),
+		LastSeenAt:      time.Now().UTC().Add(-72 * time.Hour),
+	}
+	existing.ComputeNaturalKey()
+
+	reg := discovery.NewRegistry()
+	reg.Register(&mockSource{
+		name: "test",
+		assets: []model.Asset{
+			{
+				Hostname:        "steady-host",
+				AssetType:       model.AssetTypeServer,
+				OSVersion:       "ubuntu-22.04",
+				DiscoverySource: "test",
+			},
+		},
+	})
+
+	h := newEngineHarness(t, harnessOpts{registry: reg})
+	h.store.assets[existing.NaturalKey] = existing
+
+	_, err := h.engine.Run(context.Background(), newTestConfig())
+	require.NoError(t, err)
+
+	reqs := h.getReqs()
+	require.Len(t, reqs, 1)
+	recs := logRecords(t, decodePayload(t, reqs[0].Body))
+	require.Len(t, recs, 1)
+	rec := recs[0]
+	attrs := recordAttrs(t, rec)
+	assert.Equal(t, string(model.EventAssetAnalyzed), attrs["event_type"])
+	assert.Equal(t, "kite.asset.analyzed", attrs["event_name"])
+	assert.Equal(t, "kite.asset.analyzed", stringField(rec, "eventName"))
+	// Severity must be forced to low regardless of the policy result so
+	// dashboards/backends can filter analyzed noise via a simple
+	// severityNumber threshold (low = 5).
+	assert.Equal(t, "low", attrs["severity"])
+	assert.Equal(t, "low", stringField(rec, "severityText"))
+	assert.Equal(t, 5, numberField(rec, "severityNumber"))
 }
 
 // ---------------------------------------------------------------------------
@@ -598,15 +670,18 @@ func TestEngineToOTLP_AllEngineEventTypes_SeverityNumberMapping(t *testing.T) {
 	})
 
 	t.Run("Updated=low(5)", func(t *testing.T) {
-		// Pre-load asset so dedup yields an Updated event. Use a policy
-		// rule keyed on Environment="staging" => low so the merged asset
-		// (which carries Environment="staging" from the existing record)
-		// is scored low.
+		// Pre-load the asset and have rediscovery bring a new OSVersion
+		// — that material delta is what now drives AssetUpdated (post-PR
+		// the timestamp-only path is AssetAnalyzed). The policy rule
+		// keyed on Environment="staging" still scores the merged asset
+		// as low, demonstrating that the policy engine governs severity
+		// for genuine update events.
 		existing := model.Asset{
 			ID:              uuid.Must(uuid.NewV7()),
 			Hostname:        "upd-host",
 			AssetType:       model.AssetTypeServer,
 			Environment:     "staging",
+			OSVersion:       "ubuntu-22.04",
 			DiscoverySource: "test",
 			IsAuthorized:    model.AuthorizationUnknown,
 			IsManaged:       model.ManagedUnknown,
@@ -618,7 +693,13 @@ func TestEngineToOTLP_AllEngineEventTypes_SeverityNumberMapping(t *testing.T) {
 		reg.Register(&mockSource{
 			name: "test",
 			assets: []model.Asset{
-				{Hostname: "upd-host", AssetType: model.AssetTypeServer, Environment: "staging", DiscoverySource: "test"},
+				{
+					Hostname:        "upd-host",
+					AssetType:       model.AssetTypeServer,
+					Environment:     "staging",
+					OSVersion:       "ubuntu-24.04",
+					DiscoverySource: "test",
+				},
 			},
 		})
 		pol := policy.New([]model.SeverityRule{
@@ -630,6 +711,49 @@ func TestEngineToOTLP_AllEngineEventTypes_SeverityNumberMapping(t *testing.T) {
 		_, err := h.engine.Run(context.Background(), newTestConfig())
 		require.NoError(t, err)
 		assertSingleEvent(t, h.getReqs(), expect{model.EventAssetUpdated, model.SeverityLow, 5})
+	})
+
+	t.Run("Analyzed=low(5)", func(t *testing.T) {
+		// No-material-change rescan. Even with a policy that would have
+		// returned high for this environment, the engine must override
+		// to low because Analyzed is noise-grade.
+		existing := model.Asset{
+			ID:              uuid.Must(uuid.NewV7()),
+			Hostname:        "noop-host",
+			AssetType:       model.AssetTypeServer,
+			Environment:     "production",
+			OSVersion:       "ubuntu-22.04",
+			DiscoverySource: "test",
+			IsAuthorized:    model.AuthorizationUnknown,
+			IsManaged:       model.ManagedUnknown,
+			FirstSeenAt:     time.Now().UTC().Add(-72 * time.Hour),
+			LastSeenAt:      time.Now().UTC().Add(-72 * time.Hour),
+		}
+		existing.ComputeNaturalKey()
+		reg := discovery.NewRegistry()
+		reg.Register(&mockSource{
+			name: "test",
+			assets: []model.Asset{
+				{
+					Hostname:        "noop-host",
+					AssetType:       model.AssetTypeServer,
+					Environment:     "production",
+					OSVersion:       "ubuntu-22.04",
+					DiscoverySource: "test",
+				},
+			},
+		})
+		// Policy would label this asset high by environment — engine
+		// override must clamp it to low for Analyzed events.
+		pol := policy.New([]model.SeverityRule{
+			{Environment: "production", Severity: model.SeverityHigh},
+		}, 168*time.Hour)
+		h := newEngineHarness(t, harnessOpts{registry: reg, policy: pol})
+		h.store.assets[existing.NaturalKey] = existing
+
+		_, err := h.engine.Run(context.Background(), newTestConfig())
+		require.NoError(t, err)
+		assertSingleEvent(t, h.getReqs(), expect{model.EventAssetAnalyzed, model.SeverityLow, 5})
 	})
 
 	t.Run("Unauthorized=high(13)", func(t *testing.T) {

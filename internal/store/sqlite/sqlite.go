@@ -325,6 +325,47 @@ func (s *SQLiteStore) GetAssetByNaturalKey(ctx context.Context, key string) (*mo
 	return a, nil
 }
 
+// GetAssetsByNaturalKeys batch-fetches assets matching the supplied natural
+// keys. The returned map is keyed by NaturalKey for O(1) lookup; keys with no
+// matching row are absent. An empty input slice returns (nil, nil).
+func (s *SQLiteStore) GetAssetsByNaturalKeys(
+	ctx context.Context, keys []string,
+) (map[string]model.Asset, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(keys))
+	args := make([]any, len(keys))
+	for i, k := range keys {
+		placeholders[i] = "?"
+		args[i] = k
+	}
+	//#nosec G202 -- placeholders are static "?" tokens; values flow via args.
+	query := `SELECT ` + assetColumns + ` FROM assets WHERE natural_key IN (` +
+		strings.Join(placeholders, ",") + `)`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		if isNoSuchTableErr(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get assets by natural keys: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[string]model.Asset, len(keys))
+	for rows.Next() {
+		a, err := scanAsset(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan asset row: %w", err)
+		}
+		out[a.NaturalKey] = *a
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate asset rows: %w", err)
+	}
+	return out, nil
+}
+
 // ListAssets returns assets matching the supplied filter. An empty filter
 // returns all assets (subject to Limit/Offset).
 func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) ([]model.Asset, error) {

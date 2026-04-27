@@ -65,6 +65,10 @@ func (m *mockStore) GetAssetByNaturalKey(_ context.Context, _ string) (*model.As
 	return nil, nil
 }
 
+func (m *mockStore) GetAssetsByNaturalKeys(_ context.Context, _ []string) (map[string]model.Asset, error) {
+	return nil, nil
+}
+
 func (m *mockStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
