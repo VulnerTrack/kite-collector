@@ -285,6 +285,7 @@ type AuditConfig struct {
 	Kernel      AuditorToggle          `mapstructure:"kernel"`
 	Secrets     AuditorToggle          `mapstructure:"secrets"`
 	LDAP        AuditorToggle          `mapstructure:"ldap"`
+	Entra       AuditorToggle          `mapstructure:"entra"`
 	Enabled     bool                   `mapstructure:"enabled"`
 }
 
@@ -364,6 +365,7 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("audit.permissions.enabled", true)
 	v.SetDefault("audit.service.enabled", true)
 	v.SetDefault("audit.service.critical_ports", []int{23, 21, 111, 3306, 5432, 6379, 9200})
+	v.SetDefault("audit.entra.enabled", true)
 	v.SetDefault("posture.enabled", true)
 	v.SetDefault("streaming.interval", "6h")
 	v.SetDefault("streaming.otlp.endpoint", "https://otel.vulnertrack.io")

@@ -44,6 +44,18 @@ func (r *Registry) Register(s Source) {
 	r.sources = append(r.sources, s)
 }
 
+// Get returns the registered source matching name, or nil if absent. It is
+// used by post-discovery audit phases that need to pull source-specific
+// state (e.g. the Entra auditor reaches into EntraID.Snapshot()).
+func (r *Registry) Get(name string) Source {
+	for _, src := range r.sources {
+		if src.Name() == name {
+			return src
+		}
+	}
+	return nil
+}
+
 // DiscoverAll runs every registered source in parallel using errgroup.
 // Per-source failures are logged as warnings but do not abort the overall
 // discovery; partial results from successful sources are still returned.
