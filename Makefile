@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e test-cloud test-otlp test-all lint security vet clean
+.PHONY: build test test-e2e test-cloud test-otlp test-all lint security vet clean vulncheck osv-scan fuzz-quick
 
 build:
 	CGO_ENABLED=0 go build -o bin/kite-collector ./cmd/kite-collector
@@ -15,7 +15,28 @@ test-cloud:
 lint:
 	golangci-lint run ./...
 
-security:
+# Vulnerability scanning gates.
+#
+# `vulncheck` runs Go's first-party govulncheck against the module graph,
+# matching the importer's symbols against the Go vulnerability database.
+# `osv-scan` runs Google's osv-scanner against go.sum (broader DB:
+# GHSA + OSV + CVE feeds). Findings from both surface real, actionable
+# advisories — do NOT silence with -exclude flags. Either bump the
+# offending dep or document the suppression with CVE ID, reachability
+# analysis, and sunset date in osv-scanner.toml / .govulncheck.yaml.
+#
+# `security` chains: govulncheck (cheap, network-bound) -> osv-scanner
+# (also network-bound) -> gosec (CPU-bound static analysis). Each is
+# independently runnable so you can target a specific gate while iterating.
+vulncheck:
+	@command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
+	govulncheck ./...
+
+osv-scan:
+	@command -v osv-scanner >/dev/null 2>&1 || go install github.com/google/osv-scanner/cmd/osv-scanner@latest
+	osv-scanner -r --skip-git .
+
+security: vulncheck osv-scan
 	gosec -exclude-generated ./...
 
 vet:
@@ -97,3 +118,13 @@ test-otlp: build
 	@docker rm -f $(OTEL_CONTAINER) 2>/dev/null
 	@rm -f $(OTEL_CONFIG) $(KITE_OTLP_CFG)
 	@echo "=== OTLP test passed ==="
+
+# Quick fuzz pass — 15s budget per parser. Intended for nightly/manual runs,
+# NOT part of `make all` (would dominate runtime). The seed-corpus pass IS
+# part of `make all` automatically because Go runs Fuzz* seeds during the
+# normal `go test` invocation. Crashes found here are kept under
+# testdata/fuzz/<FuzzName>/ per Go convention — fix the parser; do NOT mask.
+fuzz-quick:
+	go test -run=^$$ -fuzz=^FuzzBuildPayload -fuzztime=15s ./internal/emitter/...
+	go test -run=^$$ -fuzz=^FuzzLoadConfig    -fuzztime=15s ./internal/config/...
+	go test -run=^$$ -fuzz=^FuzzMigrate       -fuzztime=15s ./internal/store/sqlite/...

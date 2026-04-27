@@ -1,0 +1,35 @@
+# osv-scanner suppression policy for kite-collector.
+#
+# Rule: every entry MUST cite the OSV/GHSA ID, a one-line reachability
+# analysis, and a sunset (review-by) date. If the sunset elapses without a
+# new upstream fix, the entry must be re-evaluated and either renewed with
+# fresh reasoning or removed (forcing a re-scan to surface the issue).
+#
+# `make security` chains govulncheck (call-graph aware) before osv-scanner;
+# anything reachable would already trip govulncheck. Suppressions here
+# document "transitive-only, never-imported" exemptions.
+
+[[IgnoredVulns]]
+id = "GO-2026-4883"
+ignoreUntil = 2026-07-22
+reason = """
+github.com/docker/docker is a transitive dep via testcontainers-go (test-only)
+and is NOT imported anywhere in kite-collector source (verified via
+`grep -rn 'docker/docker\\|docker/client\\|moby' --include='*.go'` returning
+zero matches and `go mod why github.com/docker/docker` reporting "main
+module does not need package"). govulncheck (call-graph aware) reports zero
+findings on the same go.mod, confirming the vulnerable code path is
+unreachable from any kite-collector call site. No fix released upstream as
+of v28.5.2 (latest tag). Revisit by 2026-07-22 to bump if a fixed release
+appears or to remove the entry if testcontainers-go drops the docker dep.
+"""
+
+[[IgnoredVulns]]
+id = "GO-2026-4887"
+ignoreUntil = 2026-07-22
+reason = """
+Same package + reachability story as GO-2026-4883: github.com/docker/docker
+is transitive-only via testcontainers-go, never imported by kite-collector,
+and govulncheck reports zero reachable paths. No upstream fix released as
+of v28.5.2. Revisit by 2026-07-22.
+"""
