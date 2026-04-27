@@ -139,6 +139,12 @@ jobs:
     timeout-minutes: 20
     needs: [vet, lint, security, test]
     if: startsWith(github.ref, 'refs/tags/v')
+    # Bind to the "Deployment" environment so the job can access environment-
+    # scoped secrets (notably HOMEBREW_TAP_GITHUB_TOKEN). Repository-scoped
+    # secrets are visible everywhere; environment-scoped secrets only fire
+    # for jobs that opt in here. Also enables protection rules (required
+    # reviewers, wait timers, branch restrictions) on the release flow.
+    environment: Deployment
     permissions:
       contents: write
     steps:
