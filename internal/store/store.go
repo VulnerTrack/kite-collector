@@ -149,6 +149,13 @@ type Store interface {
 	// (hostname|asset_type) matches key. Returns nil when not found.
 	GetAssetByNaturalKey(ctx context.Context, key string) (*model.Asset, error)
 
+	// GetAssetsByNaturalKeys batch-fetches assets whose natural keys are in
+	// the supplied slice. The returned map is keyed by NaturalKey so callers
+	// can perform O(1) lookups while constructing per-asset events; missing
+	// keys are simply absent from the map. An empty input yields a (nil, nil)
+	// return for callers to treat as "no prior state."
+	GetAssetsByNaturalKeys(ctx context.Context, keys []string) (map[string]model.Asset, error)
+
 	// ListAssets returns assets matching the supplied filter.
 	ListAssets(ctx context.Context, filter AssetFilter) ([]model.Asset, error)
 

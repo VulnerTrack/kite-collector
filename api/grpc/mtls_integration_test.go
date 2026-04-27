@@ -197,6 +197,10 @@ func (m *memStore) GetAssetByNaturalKey(_ context.Context, _ string) (*model.Ass
 	return nil, nil
 }
 
+func (m *memStore) GetAssetsByNaturalKeys(_ context.Context, _ []string) (map[string]model.Asset, error) {
+	return nil, nil
+}
+
 func (m *memStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
 	return nil, nil
 }

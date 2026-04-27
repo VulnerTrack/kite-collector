@@ -214,6 +214,32 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 
 	assets := e.classifier.ClassifyAll(dedupResult.Assets)
 
+	// Snapshot the pre-update view of every asset by natural key BEFORE
+	// the upsert, so the event-classification block below can compare
+	// material fingerprints (existing-on-disk vs incoming-from-discovery)
+	// and emit AssetAnalyzed for repeated rescans where only the
+	// timestamps moved. This is what keeps the event stream from being
+	// dominated by per-tick AssetUpdated noise. The lookup tolerates
+	// errors — degrading to "treat all as discovered/updated" — because
+	// noise is preferable to dropping a scan.
+	priorByKey := make(map[string]model.Asset, len(assets))
+	if len(assets) > 0 {
+		keys := make([]string, 0, len(assets))
+		for i := range assets {
+			if assets[i].NaturalKey != "" {
+				keys = append(keys, assets[i].NaturalKey)
+			}
+		}
+		fetched, perr := e.store.GetAssetsByNaturalKeys(ctx, keys)
+		if perr != nil {
+			slog.Warn("engine: failed to snapshot prior assets for fingerprint compare",
+				"error", perr,
+			)
+		} else {
+			priorByKey = fetched
+		}
+	}
+
 	inserted, updated, err := e.store.UpsertAssets(ctx, assets)
 	if err != nil {
 		return nil, fmt.Errorf("upsert assets: %w", err)
@@ -373,17 +399,42 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	}
 
 	for i := range assets {
+		// Classify the event against the prior-state snapshot taken
+		// before UpsertAssets:
+		//   - no prior row             -> Discovered (first sighting)
+		//   - prior + material change  -> Updated   (real state delta)
+		//   - prior + no material chg  -> Analyzed  (timestamp-only tick)
+		// Authorization / management overrides still fire after this
+		// initial classification because they are alert-grade signals
+		// that should keep their per-tick visibility.
+		natKey := assets[i].NaturalKey
+		prior, hadPrior := priorByKey[natKey]
 		var evtType model.EventType
-		if assets[i].FirstSeenAt.Equal(assets[i].LastSeenAt) {
+		switch {
+		case !hadPrior:
 			evtType = model.EventAssetDiscovered
-		} else {
+		case prior.MaterialFingerprint() != assets[i].MaterialFingerprint():
 			evtType = model.EventAssetUpdated
+		default:
+			evtType = model.EventAssetAnalyzed
 		}
-		severity := e.policy.EvaluateSeverity(assets[i])
 		if assets[i].IsAuthorized == model.AuthorizationUnauthorized {
 			evtType = model.EventUnauthorizedAssetDetected
 		} else if assets[i].IsManaged == model.ManagedUnmanaged {
 			evtType = model.EventUnmanagedAssetDetected
+		}
+		severity := e.policy.EvaluateSeverity(assets[i])
+		// AssetAnalyzed events represent rescans with no material delta —
+		// pure noise from a triage perspective. Force severity=low so
+		// downstream backends and dashboards can filter cheaply (e.g.
+		// "severity > low") without needing to know about the event_type
+		// taxonomy. This is the engine-side override chosen instead of
+		// refactoring policy.EvaluateSeverity to take an EventType, which
+		// would touch every caller. Note: authorization / management
+		// overrides above already short-circuited away from Analyzed, so
+		// this only fires on truly noise-grade events.
+		if evtType == model.EventAssetAnalyzed {
+			severity = model.SeverityLow
 		}
 		evt := model.AssetEvent{
 			ID:        uuid.Must(uuid.NewV7()),

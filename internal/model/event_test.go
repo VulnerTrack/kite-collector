@@ -131,6 +131,7 @@ func TestEventType_Name_AllEventTypes(t *testing.T) {
 	}{
 		{EventAssetDiscovered, "kite.asset.discovered"},
 		{EventAssetUpdated, "kite.asset.updated"},
+		{EventAssetAnalyzed, "kite.asset.analyzed"},
 		{EventUnauthorizedAssetDetected, "kite.asset.unauthorized_detected"},
 		{EventUnmanagedAssetDetected, "kite.asset.unmanaged_detected"},
 		{EventAssetNotSeen, "kite.asset.not_seen"},
