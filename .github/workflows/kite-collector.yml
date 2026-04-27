@@ -70,7 +70,7 @@ jobs:
         run: go test -count=1 -coverprofile=coverage.out ./...
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
@@ -124,7 +124,7 @@ jobs:
             -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
           -o kite-collector-${{ matrix.goos }}-${{ matrix.goarch }} \
           ./cmd/kite-collector
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: kite-collector-${{ matrix.goos }}-${{ matrix.goarch }}
           path: kite-collector-${{ matrix.goos }}-${{ matrix.goarch }}
