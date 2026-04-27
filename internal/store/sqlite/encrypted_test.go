@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -267,6 +268,110 @@ func TestRAMDirAvailable(t *testing.T) {
 		}
 	}
 	t.Logf("ramDirAvailable() = %q (os=%s)", result, runtime.GOOS)
+}
+
+func TestWorkingPath_NamespacesPerEncryptedFile(t *testing.T) {
+	logger := slog.Default()
+
+	p1, _ := workingPath("/tmp/kite-a/agent.db", logger)
+	p2, _ := workingPath("/tmp/kite-b/agent.db", logger)
+
+	assert.NotEqual(t, p1, p2,
+		"different encPaths must yield different workPaths to avoid collisions")
+
+	// Both should share the same /<base>/kite-collector/ prefix —
+	// only the per-instance namespace dir differs.
+	parent1 := filepath.Dir(filepath.Dir(p1)) // strip <nsHash>/<file>
+	parent2 := filepath.Dir(filepath.Dir(p2))
+	assert.Equal(t, parent1, parent2,
+		"both workPaths must live under the same kite-collector base dir")
+	assert.Equal(t, "kite-collector", filepath.Base(parent1),
+		"parent of namespaced dir must be 'kite-collector'")
+
+	// Cleanup the dirs created by the test calls (best-effort).
+	_ = os.RemoveAll(filepath.Dir(p1))
+	_ = os.RemoveAll(filepath.Dir(p2))
+}
+
+func TestWorkingPath_StableForSameEncryptedFile(t *testing.T) {
+	logger := slog.Default()
+
+	p1, _ := workingPath("/tmp/kite-stable/agent.db", logger)
+	p2, _ := workingPath("/tmp/kite-stable/agent.db", logger)
+
+	assert.Equal(t, p1, p2,
+		"workingPath must be deterministic for the same encPath")
+
+	_ = os.RemoveAll(filepath.Dir(p1))
+}
+
+func TestEncryptedStore_ConcurrentInstancesDoNotCollide(t *testing.T) {
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+	encPathA := filepath.Join(dirA, "kite.db")
+	encPathB := filepath.Join(dirB, "kite.db")
+	keyA := testKey(t)
+	keyB := testKey(t)
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 2)
+
+	run := func(encPath string, key []byte, hostname string) {
+		defer wg.Done()
+		ctx := context.Background()
+
+		es, err := NewEncrypted(encPath, key, "tpm", slog.Default())
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if err := es.Migrate(ctx); err != nil {
+			errCh <- err
+			return
+		}
+		// A few writes to exercise WAL/SHM activity concurrently.
+		for i := 0; i < 5; i++ {
+			a := makeTestAsset(hostname, model.AssetTypeServer)
+			if _, _, err := es.UpsertAssets(ctx, []model.Asset{a}); err != nil {
+				errCh <- err
+				return
+			}
+		}
+		if err := es.Close(); err != nil {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}
+
+	wg.Add(2)
+	go run(encPathA, keyA, "host-a")
+	go run(encPathB, keyB, "host-b")
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		require.NoError(t, err, "concurrent EncryptedStore instances must not collide")
+	}
+
+	// Verify both DBs round-trip correctly.
+	for _, tc := range []struct {
+		encPath  string
+		hostname string
+		key      []byte
+	}{
+		{encPathA, "host-a", keyA},
+		{encPathB, "host-b", keyB},
+	} {
+		ctx := context.Background()
+		es, err := NewEncrypted(tc.encPath, tc.key, "tpm", slog.Default())
+		require.NoError(t, err)
+		assets, err := es.ListAssets(ctx, store.AssetFilter{})
+		require.NoError(t, err)
+		require.NotEmpty(t, assets)
+		assert.Equal(t, tc.hostname, assets[0].Hostname)
+		require.NoError(t, es.Close())
+	}
 }
 
 // makeTestAsset creates a minimal asset for testing.

@@ -1,11 +1,15 @@
 package sqlite
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -77,7 +81,31 @@ func ramDirAvailable() string {
 	return ""
 }
 
+// namespaceForEncPath returns a short stable namespace identifier
+// derived from the encrypted file's absolute path. This is used to
+// give each EncryptedStore instance its own working directory so that
+// concurrent instances against different encrypted files cannot stomp
+// on each other's work / WAL / SHM files.
+func namespaceForEncPath(encPath string) string {
+	// Resolve to an absolute path so two callers passing logically
+	// equivalent paths share the same namespace.
+	abs, err := filepath.Abs(encPath)
+	if err != nil {
+		abs = encPath
+	}
+	sum := sha256.Sum256([]byte(abs))
+	return hex.EncodeToString(sum[:8]) // 16-char hex
+}
+
 // workingPath chooses where to place the decrypted working copy.
+//
+// Each encrypted file gets its own namespaced subdirectory under
+// the chosen base (e.g. /dev/shm/kite-collector/<nsHash>/) so that
+// concurrent EncryptedStore instances against different encPaths do
+// not collide on shared work / WAL / SHM files. Without per-instance
+// namespacing, one instance's cleanup can delete a file another
+// instance is mid-commit on, which SQLite reports as
+// SQLITE_IOERR_DELETE_NOENT (5898).
 //
 // Priority:
 //  1. RAM-backed directory (/dev/shm on Linux, /Volumes/RAMDisk on macOS)
@@ -87,12 +115,13 @@ func ramDirAvailable() string {
 //  3. Same directory as the encrypted file — worst case, logged as warning.
 func workingPath(encPath string, logger *slog.Logger) (path string, onRAMDisk bool) {
 	base := filepath.Base(encPath) + ".work"
+	ns := namespaceForEncPath(encPath)
 
 	// Try RAM-backed directory first.
 	if ramDir := ramDirAvailable(); ramDir != "" {
-		dir := filepath.Join(ramDir, "kite-collector")
-		if err := os.MkdirAll(dir, 0o700); err == nil {
-			p := filepath.Join(dir, base)
+		nsDir := filepath.Join(ramDir, "kite-collector", ns)
+		if err := os.MkdirAll(nsDir, 0o700); err == nil {
+			p := filepath.Join(nsDir, base)
 			logger.Info("using RAM-backed directory for decrypted working copy",
 				"ramdisk_path", p, "os", runtime.GOOS)
 			return p, true
@@ -101,9 +130,9 @@ func workingPath(encPath string, logger *slog.Logger) (path string, onRAMDisk bo
 
 	// Fall back to OS temp directory — not RAM but at least not next to
 	// the encrypted file.
-	tmpDir := filepath.Join(os.TempDir(), "kite-collector")
-	if err := os.MkdirAll(tmpDir, 0o700); err == nil {
-		p := filepath.Join(tmpDir, base)
+	nsTmpDir := filepath.Join(os.TempDir(), "kite-collector", ns)
+	if err := os.MkdirAll(nsTmpDir, 0o700); err == nil {
+		p := filepath.Join(nsTmpDir, base)
 		logger.Warn("no RAM-backed directory available — "+
 			"using OS temp directory for decrypted working copy; "+
 			"plaintext may be on persistent storage during operation",
@@ -215,7 +244,12 @@ func (es *EncryptedStore) UseRAMDisk() bool {
 }
 
 // removeWorkingFiles cleans up the plaintext working copy and SQLite
-// journal files (WAL, SHM).
+// journal files (WAL, SHM). It also attempts to remove the per-instance
+// namespaced parent directory (e.g. /dev/shm/kite-collector/<nsHash>/)
+// if it is empty, but never recursively — a non-empty parent is left
+// alone (we don't want to silently nuke files we didn't create) and we
+// never touch any directory above the namespaced subdir, so cleanup
+// cannot reach files belonging to other EncryptedStore instances.
 func (es *EncryptedStore) removeWorkingFiles() {
 	for _, path := range []string{
 		es.workPath,
@@ -227,6 +261,30 @@ func (es *EncryptedStore) removeWorkingFiles() {
 				"path", path, "error", err)
 		}
 	}
+
+	// Best-effort removal of the per-instance namespaced parent
+	// directory. If it's not empty (ENOTEMPTY) we leave it alone —
+	// other instances use different namespaces, so a non-empty parent
+	// here means a stray file we shouldn't blindly delete.
+	parent := filepath.Dir(es.workPath)
+	if isNamespacedWorkDir(parent) {
+		if err := os.Remove(parent); err != nil &&
+			!os.IsNotExist(err) && !errors.Is(err, syscall.ENOTEMPTY) {
+			// Non-fatal — log at debug level via Warn for visibility
+			// without alarming operators.
+			es.logger.Warn("failed to remove namespaced work dir",
+				"path", parent, "error", err)
+		}
+	}
+}
+
+// isNamespacedWorkDir returns true if dir looks like a per-instance
+// namespaced work directory (i.e. its parent is a "kite-collector"
+// directory). This guards Remove() from ever touching anything above
+// the namespaced subdir, so it cannot reach files belonging to other
+// EncryptedStore instances or to unrelated processes.
+func isNamespacedWorkDir(dir string) bool {
+	return filepath.Base(filepath.Dir(dir)) == "kite-collector"
 }
 
 func fileExists(path string) bool {
