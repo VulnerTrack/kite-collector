@@ -40,19 +40,20 @@ func (h *Hostinger) Discover(ctx context.Context, cfg map[string]any) ([]model.A
 
 	client := newClient("hostinger", h.baseURL, bearerAuth(token))
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for page := 1; ; page++ {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("hostinger: %w", err)
-		}
 		if ctx.Err() != nil {
 			return assets, fmt.Errorf("hostinger: context cancelled: %w", ctx.Err())
 		}
 
 		var resp hostingerVMsResponse
-		if err := client.get(ctx, fmt.Sprintf("/api/vps/v1/virtual-machines?page=%d", page), &resp); err != nil {
+		nBytes, err := client.getSized(ctx, fmt.Sprintf("/api/vps/v1/virtual-machines?page=%d", page), &resp)
+		if err != nil {
 			return assets, fmt.Errorf("hostinger: list VMs: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("hostinger: %w", err)
 		}
 
 		now := time.Now().UTC()

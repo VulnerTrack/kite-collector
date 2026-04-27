@@ -40,19 +40,20 @@ func (l *Linode) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	client := newClient("linode", l.baseURL, bearerAuth(token))
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for page := 1; ; page++ {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("linode: %w", err)
-		}
 		if ctx.Err() != nil {
 			return assets, fmt.Errorf("linode: context cancelled: %w", ctx.Err())
 		}
 
 		var resp linodeInstancesResponse
-		if err := client.get(ctx, fmt.Sprintf("/linode/instances?page=%d&page_size=100", page), &resp); err != nil {
+		nBytes, err := client.getSized(ctx, fmt.Sprintf("/linode/instances?page=%d&page_size=100", page), &resp)
+		if err != nil {
 			return assets, fmt.Errorf("linode: list instances: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("linode: %w", err)
 		}
 
 		now := time.Now().UTC()

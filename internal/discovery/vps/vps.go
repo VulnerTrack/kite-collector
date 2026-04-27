@@ -67,6 +67,14 @@ func newClient(name, base string, auth authFunc) *apiClient {
 // get performs an authenticated GET request and JSON-decodes the response
 // body into out. Transient errors are retried with exponential backoff.
 func (c *apiClient) get(ctx context.Context, path string, out any) error {
+	_, err := c.getSized(ctx, path, out)
+	return err
+}
+
+// getSized is like get but also returns the number of bytes read from the
+// response body. Used by paginated callers to feed PaginationGuardV2 byte
+// caps (RFC-0124 R5).
+func (c *apiClient) getSized(ctx context.Context, path string, out any) (int64, error) {
 	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider
 		if reqErr != nil {
@@ -81,13 +89,17 @@ func (c *apiClient) get(ctx context.Context, path string, out any) error {
 		return doResp, nil
 	})
 	if err != nil {
-		return fmt.Errorf("vps GET: %w", err)
+		return 0, fmt.Errorf("vps GET: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("decode vps response: %w", err)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return int64(len(body)), fmt.Errorf("read vps response: %w", readErr)
 	}
-	return nil
+	if err := json.Unmarshal(body, out); err != nil {
+		return int64(len(body)), fmt.Errorf("decode vps response: %w", err)
+	}
+	return int64(len(body)), nil
 }
 
 // doWithRetry executes fn up to maxRetryAttempts times with exponential

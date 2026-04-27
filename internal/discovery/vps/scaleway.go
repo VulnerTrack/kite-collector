@@ -51,20 +51,21 @@ func (s *Scaleway) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 	})
 
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuard()
+	guard := safenet.NewPaginationGuardV2()
 
 	for page := 1; ; page++ {
-		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("scaleway: %w", err)
-		}
 		if ctx.Err() != nil {
 			return assets, fmt.Errorf("scaleway: context cancelled: %w", ctx.Err())
 		}
 
 		var resp scalewayServersResponse
 		path := fmt.Sprintf("/instance/v1/zones/%s/servers?page=%d&per_page=100", zone, page)
-		if err := client.get(ctx, path, &resp); err != nil {
+		nBytes, err := client.getSized(ctx, path, &resp)
+		if err != nil {
 			return assets, fmt.Errorf("scaleway: list servers: %w", err)
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return assets, fmt.Errorf("scaleway: %w", err)
 		}
 
 		now := time.Now().UTC()
