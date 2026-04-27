@@ -32,9 +32,14 @@ func (y *Yarn) Collect(ctx context.Context) (*Result, error) {
 	return ParseYarnJSON(string(out)), nil
 }
 
+// yarnLine is the JSON-line envelope yarn emits. Yarn produces several
+// Type values (progressStart/Stop, info, success, etc.) and the Data field
+// shape varies per type — info carries a string ("pkg@version"), while
+// progressStart carries an object ({id, total}). Decode Data lazily so we
+// only try to coerce it when we actually want a string (Type == "info").
 type yarnLine struct {
-	Type string `json:"type"`
-	Data string `json:"data"`
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
 }
 
 // ParseYarnJSON parses the JSON-lines output of yarn global list --json.
@@ -65,12 +70,20 @@ func ParseYarnJSON(raw string) *Result {
 			continue
 		}
 
-		if entry.Type != "info" || entry.Data == "" {
+		if entry.Type != "info" || len(entry.Data) == 0 {
 			continue
 		}
 
-		// Data format: "package@version" or quoted "\"package@version\""
-		data := strings.Trim(entry.Data, "\"")
+		// Only "info" records carry a string Data payload. Anything else
+		// (e.g. info with nested objects emitted by some yarn versions)
+		// is skipped silently — not every info line is a package row.
+		var data string
+		if err := json.Unmarshal(entry.Data, &data); err != nil {
+			continue
+		}
+		if data == "" {
+			continue
+		}
 
 		// Handle scoped packages (@scope/name@version).
 		atIdx := strings.LastIndex(data, "@")

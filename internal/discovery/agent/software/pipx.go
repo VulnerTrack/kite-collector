@@ -28,9 +28,16 @@ func (p *Pipx) Available() bool {
 
 // Collect runs pipx list --json and returns parsed results.
 func (p *Pipx) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "pipx", "list", "--json")
+	// pipx list --json exits 1 when no venvs are installed (the binary is
+	// available but the user has never run pipx install). That's a normal
+	// empty-inventory state, not a parser failure — return zero items
+	// instead of surfacing a misleading parse error.
+	out, exitCode, err := runWithLimitsTolerateExit(ctx, "pipx", "list", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("pipx list --json: %w", err)
+	}
+	if exitCode != 0 && len(out) == 0 {
+		return &Result{}, nil
 	}
 	return ParsePipxJSON(string(out)), nil
 }

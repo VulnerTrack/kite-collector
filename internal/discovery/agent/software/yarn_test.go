@@ -50,6 +50,36 @@ func TestParseYarnJSON_InvalidJSON(t *testing.T) {
 	assert.Equal(t, "yarn", result.Errs[0].Collector)
 }
 
+// TestParseYarnJSON_SkipsObjectShapedData pins the fix for yarn emitting
+// progressStart/progressTick events whose `data` field is an object rather
+// than a "pkg@ver" string. The parser must treat those as benign skips,
+// not parse errors.
+func TestParseYarnJSON_SkipsObjectShapedData(t *testing.T) {
+	raw := "" +
+		"{\"type\":\"progressStart\",\"data\":{\"id\":0,\"total\":0}}\n" +
+		"{\"type\":\"progressTick\",\"data\":{\"id\":0,\"current\":1}}\n" +
+		"{\"type\":\"progressFinish\",\"data\":{\"id\":0}}\n" +
+		"{\"type\":\"info\",\"data\":\"react@18.0.0\"}\n"
+
+	result := ParseYarnJSON(raw)
+
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "react", result.Items[0].SoftwareName)
+	assert.Equal(t, "18.0.0", result.Items[0].Version)
+	assert.False(t, result.HasErrors(),
+		"object-shaped data must not be flagged as a parse error")
+}
+
+// TestParseYarnJSON_SkipsInfoWithObjectData covers the rare case where an
+// info record itself carries an object payload (some yarn versions). It
+// should be silently skipped, not flagged.
+func TestParseYarnJSON_SkipsInfoWithObjectData(t *testing.T) {
+	raw := "{\"type\":\"info\",\"data\":{\"name\":\"react\"}}\n"
+	result := ParseYarnJSON(raw)
+	assert.Empty(t, result.Items)
+	assert.False(t, result.HasErrors())
+}
+
 func TestParseYarnJSON_CPEHasTargetSW(t *testing.T) {
 	raw := "{\"type\":\"info\",\"data\":\"typescript@5.5.0\"}\n"
 	result := ParseYarnJSON(raw)
