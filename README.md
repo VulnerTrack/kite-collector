@@ -428,4 +428,4 @@ See [`samples/streaming-to-otel/`](samples/streaming-to-otel/) for a self-contai
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
