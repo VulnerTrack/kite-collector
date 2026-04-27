@@ -97,6 +97,10 @@ func (m *mockStore) CompleteScanRun(_ context.Context, _ uuid.UUID, _ model.Scan
 
 func (m *mockStore) GetLatestScanRun(_ context.Context) (*model.ScanRun, error) { return nil, nil }
 
+func (m *mockStore) ListScanRuns(_ context.Context, _ int) ([]model.ScanRun, error) {
+	return []model.ScanRun{}, nil
+}
+
 func (m *mockStore) GetScanRun(_ context.Context, _ uuid.UUID) (*model.ScanRun, error) {
 	return nil, store.ErrNotFound
 }

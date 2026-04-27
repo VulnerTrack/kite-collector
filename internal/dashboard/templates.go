@@ -188,17 +188,10 @@ func renderFindingsFragment(w io.Writer, ctx context.Context, st store.Store, rc
 
 // renderScansFragment renders the scan history table as an HTML fragment.
 func renderScansFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
-	// Get latest scan for now — in a full implementation this would list all.
-	run, err := st.GetLatestScanRun(ctx)
+	runs, err := st.ListScanRuns(ctx, 50)
 	if err != nil {
-		return fmt.Errorf("get latest scan: %w", err)
+		return fmt.Errorf("list scan runs: %w", err)
 	}
-
-	var runs []model.ScanRun
-	if run != nil {
-		runs = append(runs, *run)
-	}
-
 	tmpl := template.Must(template.New("scans").Funcs(templateFuncs).Parse(scansTemplate))
 	if err := tmpl.Execute(w, map[string]any{
 		"Scans":   runs,
@@ -296,7 +289,8 @@ const findingsTemplate = `<h2>Findings ({{len .Findings}})</h2>
   </tbody>
 </table>`
 
-const scansTemplate = `<h2>Scan History</h2>
+const scansTemplate = `<h2>Scan History ({{len .Scans}})</h2>
+{{if .Scans}}
 <table>
   <thead>
     <tr>
@@ -322,7 +316,10 @@ const scansTemplate = `<h2>Scan History</h2>
     </tr>
   {{end}}
   </tbody>
-</table>`
+</table>
+{{else}}
+<p>No scans recorded yet.</p>
+{{end}}`
 
 // renderTablesFragment lists every content table discovered via introspection.
 func renderTablesFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
