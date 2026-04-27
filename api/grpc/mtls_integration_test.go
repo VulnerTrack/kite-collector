@@ -26,6 +26,7 @@ import (
 
 	kitev1 "github.com/vulnertrack/kite-collector/api/grpc/proto/kite/v1"
 	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	"github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -265,6 +266,10 @@ func (m *memStore) ListRuntimeIncidents(_ context.Context, _ store.IncidentFilte
 func (m *memStore) Migrate(_ context.Context) error { return nil }
 func (m *memStore) Close() error                    { return nil }
 func (m *memStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
+}
+
+func (m *memStore) UpsertCloudDNSSnapshot(_ context.Context, _ *cloud.DNSSnapshot) error {
 	return nil
 }
 

@@ -12,7 +12,6 @@ import "time"
 // EntraDevice / DirectoryRole entities without re-querying Graph.
 type Snapshot struct {
 	TenantID                  string
-	StaleAccountDays          int
 	PrivilegedRoleTemplateIDs map[string]string
 
 	Users             []SnapshotUser
@@ -20,6 +19,8 @@ type Snapshot struct {
 	Groups            []SnapshotGroup
 	Devices           []SnapshotDevice
 	RoleAssignments   []SnapshotRoleAssignment
+
+	StaleAccountDays int
 }
 
 // SnapshotUser is the audit-friendly view of a single Entra user.
@@ -64,11 +65,11 @@ type SnapshotRoleAssignment struct {
 // MemberCount is a pointer because the /v1.0/groups list endpoint does not
 // return member counts by default; nil means "unknown" rather than zero.
 type SnapshotGroup struct {
-	GroupTypes        []string
 	MemberCount       *int
 	ObjectID          string
 	DisplayName       string
 	MembershipRule    string
+	GroupTypes        []string
 	SecurityEnabled   bool
 	MailEnabled       bool
 	IsRoleAssignable  bool

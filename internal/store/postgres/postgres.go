@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	cloud "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -1249,5 +1250,13 @@ func derefStr(s *string) string {
 // Postgres backend is used for centralized aggregation and does not
 // own the entra_* tables.
 func (s *PostgresStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
+}
+
+// UpsertCloudDNSSnapshot is a no-op for the Postgres backend. The cloud
+// DNS discovery sources persist into SQLite only (RFC-0122 §5.3); the
+// Postgres backend is used for centralized aggregation and does not own
+// the cloud_dns_* tables.
+func (s *PostgresStore) UpsertCloudDNSSnapshot(_ context.Context, _ *cloud.DNSSnapshot) error {
 	return nil
 }
