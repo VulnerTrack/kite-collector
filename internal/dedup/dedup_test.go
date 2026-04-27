@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	cloud "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -176,6 +177,10 @@ func (m *mockStore) GetRowReport(_ context.Context, _ string, _ map[string]strin
 func (m *mockStore) Close() error { return nil }
 
 func (m *mockStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
+}
+
+func (m *mockStore) UpsertCloudDNSSnapshot(_ context.Context, _ *cloud.DNSSnapshot) error {
 	return nil
 }
 

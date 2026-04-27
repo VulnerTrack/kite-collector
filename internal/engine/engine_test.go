@@ -17,6 +17,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/dedup"
 	"github.com/vulnertrack/kite-collector/internal/discovery"
+	cloud "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	"github.com/vulnertrack/kite-collector/internal/model"
@@ -293,6 +294,10 @@ func (m *mockStore) GetRowReport(_ context.Context, _ string, _ map[string]strin
 }
 
 func (m *mockStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
+}
+
+func (m *mockStore) UpsertCloudDNSSnapshot(_ context.Context, _ *cloud.DNSSnapshot) error {
 	return nil
 }
 

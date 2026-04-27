@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
+	cloud "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/engine"
 	"github.com/vulnertrack/kite-collector/internal/model"
@@ -226,6 +227,10 @@ func (s *fakeStore) GetRowReport(_ context.Context, _ string, _ map[string]strin
 }
 
 func (s *fakeStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
+}
+
+func (s *fakeStore) UpsertCloudDNSSnapshot(_ context.Context, _ *cloud.DNSSnapshot) error {
 	return nil
 }
 

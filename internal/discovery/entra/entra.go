@@ -63,10 +63,10 @@ type httpClient interface {
 // EntraID implements discovery.Source for Microsoft Entra ID.
 type EntraID struct {
 	httpClient   httpClient
-	tokenBaseURL string
-	graphBaseURL string
 	now          func() time.Time
 	lastSnapshot *Snapshot
+	tokenBaseURL string
+	graphBaseURL string
 	mu           sync.Mutex
 }
 
@@ -450,9 +450,9 @@ type entraServicePrincipal struct {
 type entraGroup struct {
 	ID                            string   `json:"id"`
 	DisplayName                   string   `json:"displayName"`
-	GroupTypes                    []string `json:"groupTypes"`
 	MembershipRule                string   `json:"membershipRule"`
 	MembershipRuleProcessingState string   `json:"membershipRuleProcessingState"`
+	GroupTypes                    []string `json:"groupTypes"`
 	SecurityEnabled               bool     `json:"securityEnabled"`
 	MailEnabled                   bool     `json:"mailEnabled"`
 	IsAssignableToRole            bool     `json:"isAssignableToRole"`
@@ -460,6 +460,8 @@ type entraGroup struct {
 
 // entraDevice is the typed view of a single /v1.0/devices response element.
 type entraDevice struct {
+	IsCompliant                   *bool  `json:"isCompliant,omitempty"`
+	IsManaged                     *bool  `json:"isManaged,omitempty"`
 	ApproximateLastSignInDateTime string `json:"approximateLastSignInDateTime"`
 	RegistrationDateTime          string `json:"registrationDateTime"`
 	ID                            string `json:"id"`
@@ -468,8 +470,6 @@ type entraDevice struct {
 	OperatingSystem               string `json:"operatingSystem"`
 	OperatingSystemVersion        string `json:"operatingSystemVersion"`
 	TrustType                     string `json:"trustType"`
-	IsCompliant                   *bool  `json:"isCompliant,omitempty"`
-	IsManaged                     *bool  `json:"isManaged,omitempty"`
 }
 
 // entraMfaRegistration is the typed view of a single

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	cloud "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
@@ -236,6 +237,15 @@ type Store interface {
 	// not host the entra_* tables (e.g. Postgres, where Phase 3 ontology
 	// sync is skipped because the Python bridge reads SQLite directly).
 	UpsertEntraSnapshot(ctx context.Context, snap *entra.Snapshot) error
+
+	// UpsertCloudDNSSnapshot persists a cloud DNS zone enumeration snapshot
+	// (RFC-0122) into the SQLite tables created by migration
+	// 20260430000000_cloud_dns_discovery.sql. The Python ontology bridge
+	// reads those tables read-only to upsert ClickHouse cloud_dns_zones /
+	// cloud_dns_records and synchronize CloudDNSZone / DNSRecord ontology
+	// entities. Implementations may return nil for backends that do not
+	// host the cloud_dns_* tables.
+	UpsertCloudDNSSnapshot(ctx context.Context, snap *cloud.DNSSnapshot) error
 
 	// ListContentTables returns every non-system content table present in the
 	// live schema. System and migration tables (sqlite_*, schema_migrations,

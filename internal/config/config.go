@@ -214,19 +214,19 @@ type SourceConfig struct {
 	PageSize           int      `mapstructure:"page_size"`
 	StaleThresholdDays int      `mapstructure:"stale_threshold_days"`
 	// Entra-specific (RFC-0121 §5.4); harmless when other sources read them.
-	StaleAccountDays     int `mapstructure:"stale_account_days"`
-	MaxUsers             int `mapstructure:"max_users"`
-	MaxServicePrincipals int `mapstructure:"max_service_principals"`
-	MaxGroups            int `mapstructure:"max_groups"`
-	MaxDevices           int `mapstructure:"max_devices"`
-	Enabled            bool     `mapstructure:"enabled"`
-	CollectSoftware    bool     `mapstructure:"collect_software"`
-	CollectInterfaces  bool     `mapstructure:"collect_interfaces"`
-	TLSSkipVerify      bool     `mapstructure:"tls_skip_verify"`
-	CollectUsers       bool     `mapstructure:"collect_users"`
-	CollectGroups      bool     `mapstructure:"collect_groups"`
-	CollectOUs         bool     `mapstructure:"collect_ous"`
-	CollectGPOs        bool     `mapstructure:"collect_gpos"`
+	StaleAccountDays     int  `mapstructure:"stale_account_days"`
+	MaxUsers             int  `mapstructure:"max_users"`
+	MaxServicePrincipals int  `mapstructure:"max_service_principals"`
+	MaxGroups            int  `mapstructure:"max_groups"`
+	MaxDevices           int  `mapstructure:"max_devices"`
+	Enabled              bool `mapstructure:"enabled"`
+	CollectSoftware      bool `mapstructure:"collect_software"`
+	CollectInterfaces    bool `mapstructure:"collect_interfaces"`
+	TLSSkipVerify        bool `mapstructure:"tls_skip_verify"`
+	CollectUsers         bool `mapstructure:"collect_users"`
+	CollectGroups        bool `mapstructure:"collect_groups"`
+	CollectOUs           bool `mapstructure:"collect_ous"`
+	CollectGPOs          bool `mapstructure:"collect_gpos"`
 }
 
 // ClassificationConfig holds authorization and managed-status classification settings.

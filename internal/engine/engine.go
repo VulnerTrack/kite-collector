@@ -16,6 +16,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/dedup"
 	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
+	cloudsrc "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	entrasrc "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	"github.com/vulnertrack/kite-collector/internal/metrics"
@@ -519,6 +520,24 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 							"findings", len(tenantFindings),
 						)
 					}
+				}
+			}
+		}
+	}
+
+	// RFC-0122 Phase 1: persist the Route53 cloud DNS snapshot the
+	// dns_route53 source built during discovery into SQLite so the
+	// Python ontology bridge can sync ClickHouse cloud_dns_zones /
+	// cloud_dns_records tables read-only. Skips silently when the
+	// source was disabled or never produced data.
+	if src := e.registry.Get(cloudsrc.DNSSourceNameRoute53); src != nil {
+		if dnsSrc, ok := src.(*cloudsrc.Route53DNS); ok {
+			if snap := dnsSrc.Snapshot(); snap != nil {
+				if pErr := e.store.UpsertCloudDNSSnapshot(ctx, snap); pErr != nil {
+					slog.Warn("engine: failed to persist cloud DNS snapshot to SQLite",
+						"provider", snap.Provider,
+						"error", pErr,
+					)
 				}
 			}
 		}

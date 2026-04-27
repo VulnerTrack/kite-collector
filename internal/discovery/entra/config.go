@@ -12,7 +12,7 @@ const (
 	defaultRequestTimeoutSecs  = 60
 	defaultPageSize            = 999
 	defaultGraphBaseURL        = "https://graph.microsoft.com"
-	defaultTokenBaseURL        = "https://login.microsoftonline.com"
+	defaultTokenBaseURL        = "https://login.microsoftonline.com" //#nosec G101 -- public Microsoft OAuth endpoint URL, not a credential
 
 	hardLimitMaxUsers   = 1_000_000
 	hardLimitMaxObjects = 500_000
