@@ -86,7 +86,7 @@
             "agent", "arp", "icmp", "tcp_syn", "docker",
             "cloud.aws", "cloud.gcp", "cloud.azure",
             "vpn.tailscale", "vpn.netbird",
-            "dns", "ssh-known-hosts"
+            "dns", "ssh-known-hosts", "ldap"
           ]
         }
       }
