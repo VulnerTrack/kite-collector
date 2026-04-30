@@ -2,6 +2,7 @@ package safenet
 
 import (
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -92,4 +93,38 @@ func ensureJSONObject(s string) string {
 		return "{}"
 	}
 	return s
+}
+
+// GuardObserver receives every GuardEvent the safenet package fires. It
+// allows the cmd binary to wire Prometheus counters (and any other
+// telemetry sink) without creating an import cycle from safenet back to
+// metrics. Implementations MUST be cheap and non-blocking — they run on
+// the request path of paginated HTTP connectors.
+type GuardObserver interface {
+	ObserveGuardEvent(GuardEvent)
+}
+
+var guardObserver atomic.Pointer[GuardObserver]
+
+// SetGuardObserver installs the process-wide observer. Calling with nil
+// detaches the previous observer (useful in tests). Safe to call from any
+// goroutine; reads in emitGuardEvent are lock-free.
+func SetGuardObserver(obs GuardObserver) {
+	if obs == nil {
+		guardObserver.Store(nil)
+		return
+	}
+	guardObserver.Store(&obs)
+}
+
+// emitGuardEvent forwards the event to the registered observer, if any.
+// The observer call is wrapped in a defer/recover so a buggy observer
+// cannot panic the connector goroutine.
+func emitGuardEvent(ev GuardEvent) {
+	p := guardObserver.Load()
+	if p == nil {
+		return
+	}
+	defer func() { _ = recover() }()
+	(*p).ObserveGuardEvent(ev)
 }

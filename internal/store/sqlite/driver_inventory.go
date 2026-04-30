@@ -377,15 +377,29 @@ func (s *SQLiteStore) ListDeviceBindings(
 // MarkLoadedDriversSynced stamps synced_at = unixepoch() on the listed IDs.
 // Used by the DBOS bridge once rows are confirmed in ClickHouse.
 func (s *SQLiteStore) MarkLoadedDriversSynced(ctx context.Context, ids []string) error {
-	return s.markSynced(ctx, "loaded_drivers", ids)
+	return s.markSynced(
+		ctx,
+		"loaded_drivers",
+		"UPDATE loaded_drivers SET synced_at = unixepoch() WHERE id = ?",
+		ids,
+	)
 }
 
 // MarkDeviceBindingsSynced stamps synced_at = unixepoch() on the listed IDs.
 func (s *SQLiteStore) MarkDeviceBindingsSynced(ctx context.Context, ids []string) error {
-	return s.markSynced(ctx, "device_bindings", ids)
+	return s.markSynced(
+		ctx,
+		"device_bindings",
+		"UPDATE device_bindings SET synced_at = unixepoch() WHERE id = ?",
+		ids,
+	)
 }
 
-func (s *SQLiteStore) markSynced(ctx context.Context, table string, ids []string) error {
+// markSynced runs the supplied UPDATE statement once per id inside a single
+// transaction. The query must be a compile-time constant string from a
+// caller-supplied allowlist; the table label is only used to enrich error
+// messages so callers can grep by table.
+func (s *SQLiteStore) markSynced(ctx context.Context, table, query string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -395,10 +409,7 @@ func (s *SQLiteStore) markSynced(ctx context.Context, table string, ids []string
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Table name comes from a fixed allowlist set by the calling exported
-	// method; user input is never interpolated here.
-	q := fmt.Sprintf("UPDATE %s SET synced_at = unixepoch() WHERE id = ?", table)
-	stmt, err := tx.PrepareContext(ctx, q)
+	stmt, err := tx.PrepareContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("prepare mark synced %s: %w", table, err)
 	}

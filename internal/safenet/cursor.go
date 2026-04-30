@@ -24,7 +24,33 @@ const MaxCursorLength = 2048
 // query separators, and any character that could change URL semantics when
 // the cursor is concatenated into a request URL. Returning the original
 // string on success keeps the value byte-identical for the API.
+//
+// Use SanitizeCursorWithSource from inside connectors so cursor rejection
+// events can be attributed to the upstream provider in telemetry.
 func SanitizeCursor(raw string) (string, error) {
+	return SanitizeCursorWithSource("cursor_sanitizer", raw)
+}
+
+// SanitizeCursorWithSource is the source-tagged variant of SanitizeCursor.
+// On rejection it emits a GuardEvent with SourceComponent=source and
+// GuardType="cursor_sanitization_rejected" so observers can record a
+// counter increment and persist a SafetyGuardEvent row.
+func SanitizeCursorWithSource(source, raw string) (string, error) {
+	cur, err := sanitizeCursor(raw)
+	if err == nil {
+		return cur, nil
+	}
+	emitGuardEvent(NewGuardEvent(
+		GuardCursorSanitizationReject,
+		GuardActionRejected,
+		source,
+		err.Error(),
+		"{}",
+	))
+	return "", err
+}
+
+func sanitizeCursor(raw string) (string, error) {
 	if raw == "" {
 		return "", fmt.Errorf("cursor is empty")
 	}

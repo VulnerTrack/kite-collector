@@ -222,7 +222,7 @@ func uname() string {
 }
 
 func readFileOrEmpty(path string) string {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return ""
 	}

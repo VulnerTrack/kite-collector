@@ -1,6 +1,8 @@
 package safenet
 
-import "fmt"
+import (
+	"fmt"
+)
 
 const (
 	// DefaultMaxBytesPerPage is the per-response-body cap (10 MiB).
@@ -25,9 +27,9 @@ const (
 // Callers can extract Reason for logging and for SafetyGuardEvent rows.
 type PaginationGuardError struct {
 	Reason     PaginationCapReason
+	Message    string
 	Iterations int
 	BytesTotal int64
-	Message    string
 }
 
 func (e *PaginationGuardError) Error() string { return e.Message }
@@ -35,7 +37,14 @@ func (e *PaginationGuardError) Error() string { return e.Message }
 // PaginationGuardV2 extends PaginationGuard with byte caps. All caps default
 // to safe values when the corresponding field is zero, so a zero-value
 // PaginationGuardV2{} is usable directly.
+//
+// Source identifies the connector for telemetry (e.g. "heroku", "wazuh",
+// "linode"). It feeds GuardEvent.SourceComponent and the
+// kite_pagination_truncated_total{connector=...} counter. Empty Source is
+// allowed but produces unattributed events, so connectors should always
+// pass a stable name via NewPaginationGuardV2WithSource.
 type PaginationGuardV2 struct {
+	Source          string
 	MaxIterations   int
 	MaxBytesPerPage int64
 	MaxBytesTotal   int64
@@ -46,13 +55,23 @@ type PaginationGuardV2 struct {
 
 // NewPaginationGuardV2 returns a guard with production defaults: 10K
 // iterations, 10 MiB per page, 100 MiB total. Operators can read overrides
-// from env vars via PaginationCapsFromEnv.
+// from env vars via PaginationCapsFromEnv. Source is left empty; prefer
+// NewPaginationGuardV2WithSource so guard events are attributed.
 func NewPaginationGuardV2() *PaginationGuardV2 {
+	return NewPaginationGuardV2WithSource("")
+}
+
+// NewPaginationGuardV2WithSource returns a guard tagged with the provided
+// connector name. Use this in HTTP discovery connectors so Prometheus
+// counters and SafetyGuardEvent rows can be attributed back to the
+// upstream API.
+func NewPaginationGuardV2WithSource(source string) *PaginationGuardV2 {
 	maxPage, maxTotal := PaginationCapsFromEnv()
 	return &PaginationGuardV2{
 		MaxIterations:   MaxPaginationIterations,
 		MaxBytesPerPage: maxPage,
 		MaxBytesTotal:   maxTotal,
+		Source:          source,
 	}
 }
 
@@ -62,12 +81,16 @@ func NewPaginationGuardV2() *PaginationGuardV2 {
 // pageBytes may be 0 when the connector has not yet wired byte counting; in
 // that case only the iteration cap is enforced (matching legacy
 // PaginationGuard semantics).
+//
+// Each cap-fire emits a GuardEvent via emitGuardEvent so observers (e.g.
+// the metrics package) can increment counters without coupling safenet to
+// any specific telemetry stack.
 func (g *PaginationGuardV2) NextPage(pageBytes int64) error {
 	g.fillDefaults()
 
 	g.iterations++
 	if g.iterations > g.MaxIterations {
-		return &PaginationGuardError{
+		err := &PaginationGuardError{
 			Reason:     PaginationCapIterations,
 			Iterations: g.iterations,
 			BytesTotal: g.bytesTotal,
@@ -75,6 +98,8 @@ func (g *PaginationGuardV2) NextPage(pageBytes int64) error {
 				"pagination exceeded %d iterations — possible infinite loop or "+
 					"API reporting incorrect totals", g.MaxIterations),
 		}
+		g.emitCap(err)
+		return err
 	}
 
 	if pageBytes < 0 {
@@ -82,7 +107,7 @@ func (g *PaginationGuardV2) NextPage(pageBytes int64) error {
 	}
 
 	if pageBytes > g.MaxBytesPerPage {
-		return &PaginationGuardError{
+		err := &PaginationGuardError{
 			Reason:     PaginationCapPageBytes,
 			Iterations: g.iterations,
 			BytesTotal: g.bytesTotal + pageBytes,
@@ -91,11 +116,13 @@ func (g *PaginationGuardV2) NextPage(pageBytes int64) error {
 					"(KITE_PAGINATION_MAX_BYTES_PER_PAGE)",
 				pageBytes, g.MaxBytesPerPage),
 		}
+		g.emitCap(err)
+		return err
 	}
 
 	g.bytesTotal += pageBytes
 	if g.bytesTotal > g.MaxBytesTotal {
-		return &PaginationGuardError{
+		err := &PaginationGuardError{
 			Reason:     PaginationCapTotalBytes,
 			Iterations: g.iterations,
 			BytesTotal: g.bytesTotal,
@@ -104,9 +131,34 @@ func (g *PaginationGuardV2) NextPage(pageBytes int64) error {
 					"(KITE_PAGINATION_MAX_BYTES_TOTAL)",
 				g.bytesTotal, g.MaxBytesTotal),
 		}
+		g.emitCap(err)
+		return err
 	}
 
 	return nil
+}
+
+// emitCap publishes a GuardEvent describing the cap that fired. The
+// SourceComponent field carries the connector name so Prometheus labels
+// can attribute the truncation back to the upstream API.
+func (g *PaginationGuardV2) emitCap(err *PaginationGuardError) {
+	source := g.Source
+	if source == "" {
+		source = "pagination_guard"
+	}
+	details := fmt.Sprintf(
+		`{"iterations":%d,"bytes_total":%d,"max_iterations":%d,`+
+			`"max_bytes_per_page":%d,"max_bytes_total":%d}`,
+		err.Iterations, err.BytesTotal, g.MaxIterations,
+		g.MaxBytesPerPage, g.MaxBytesTotal,
+	)
+	emitGuardEvent(NewGuardEvent(
+		GuardEventType(err.Reason),
+		GuardActionCapped,
+		source,
+		err.Message,
+		details,
+	))
 }
 
 // Next is a backward-compatible shim equivalent to NextPage(0). It allows

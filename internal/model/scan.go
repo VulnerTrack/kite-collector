@@ -29,8 +29,13 @@ type ScanRun struct {
 	TotalAssets     int        `json:"total_assets"`
 	NewAssets       int        `json:"new_assets"`
 	UpdatedAssets   int        `json:"updated_assets"`
-	StaleAssets     int        `json:"stale_assets"`
-	ErrorCount      int        `json:"error_count"`
+	// AnalyzedAssets counts rescans that produced an AssetAnalyzed event —
+	// assets that were already known and had no material change since the
+	// previous tick. These are tracked separately from UpdatedAssets so the
+	// dashboard can distinguish real state deltas from steady-state ticks.
+	AnalyzedAssets int `json:"analyzed_assets"`
+	StaleAssets    int `json:"stale_assets"`
+	ErrorCount     int `json:"error_count"`
 }
 
 // ScanResult is a summary returned after a scan completes.
@@ -39,6 +44,7 @@ type ScanResult struct {
 	TotalAssets        int     `json:"total_assets"`
 	NewAssets          int     `json:"new_assets"`
 	UpdatedAssets      int     `json:"updated_assets"`
+	AnalyzedAssets     int     `json:"analyzed_assets"`
 	StaleAssets        int     `json:"stale_assets"`
 	EventsEmitted      int     `json:"events_emitted"`
 	SoftwareCount      int     `json:"software_count"`

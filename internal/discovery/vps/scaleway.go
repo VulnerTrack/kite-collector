@@ -51,7 +51,7 @@ func (s *Scaleway) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 	})
 
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("scaleway")
 
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {

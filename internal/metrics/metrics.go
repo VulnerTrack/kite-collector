@@ -28,7 +28,10 @@ type Metrics struct {
 	FindingsOpen    *prometheus.GaugeVec     // open findings by severity + auditor
 	FindingsTotal   *prometheus.CounterVec   // cumulative findings ever emitted
 	FindingAgeHours *prometheus.HistogramVec // age of open findings (MTTR proxy)
-	registry        *prometheus.Registry
+	// Safenet metrics (RFC-0124)
+	SafetyGuardTotal         *prometheus.CounterVec // every guard fire by type + action
+	PaginationTruncatedTotal *prometheus.CounterVec // pagination caps by connector + reason
+	registry                 *prometheus.Registry
 }
 
 // New creates a Metrics instance backed by a private registry.
@@ -111,6 +114,16 @@ func New() *Metrics {
 		Buckets: []float64{1, 6, 24, 72, 168, 336, 720, 2160}, // 1h … 90d
 	}, []string{"severity", "auditor"})
 
+	safetyGuardTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "kite_safety_guard_total",
+		Help: "Total RFC-0124 safety guard fires, labelled by guard_type and action_taken.",
+	}, []string{"guard_type", "action_taken"})
+
+	paginationTruncatedTotal := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "kite_pagination_truncated_total",
+		Help: "Total pagination cap fires, labelled by connector and cap reason.",
+	}, []string{"connector", "reason"})
+
 	reg.MustRegister(
 		scanDuration,
 		assetsTotal,
@@ -127,25 +140,29 @@ func New() *Metrics {
 		findingsOpen,
 		findingsTotal,
 		findingAgeHours,
+		safetyGuardTotal,
+		paginationTruncatedTotal,
 	)
 
 	return &Metrics{
-		ScanDuration:         scanDuration,
-		AssetsTotal:          assetsTotal,
-		EventsEmitted:        eventsEmitted,
-		DiscoveryErrors:      discoveryErrors,
-		ScanCoverage:         scanCoverage,
-		StaleAssets:          staleAssets,
-		DedupSkipped:         dedupSkipped,
-		PanicsRecovered:      panicsRecovered,
-		CircuitBreakerTrips:  circuitBreakerTrips,
-		SourceHealth:         sourceHealth,
-		ResponseTruncations:  responseTruncations,
-		ScanDeadlineExceeded: scanDeadlineExceeded,
-		FindingsOpen:         findingsOpen,
-		FindingsTotal:        findingsTotal,
-		FindingAgeHours:      findingAgeHours,
-		registry:             reg,
+		ScanDuration:             scanDuration,
+		AssetsTotal:              assetsTotal,
+		EventsEmitted:            eventsEmitted,
+		DiscoveryErrors:          discoveryErrors,
+		ScanCoverage:             scanCoverage,
+		StaleAssets:              staleAssets,
+		DedupSkipped:             dedupSkipped,
+		PanicsRecovered:          panicsRecovered,
+		CircuitBreakerTrips:      circuitBreakerTrips,
+		SourceHealth:             sourceHealth,
+		ResponseTruncations:      responseTruncations,
+		ScanDeadlineExceeded:     scanDeadlineExceeded,
+		FindingsOpen:             findingsOpen,
+		FindingsTotal:            findingsTotal,
+		FindingAgeHours:          findingAgeHours,
+		SafetyGuardTotal:         safetyGuardTotal,
+		PaginationTruncatedTotal: paginationTruncatedTotal,
+		registry:                 reg,
 	}
 }
 

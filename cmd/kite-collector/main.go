@@ -63,6 +63,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/osutil"
 	"github.com/vulnertrack/kite-collector/internal/policy"
+	"github.com/vulnertrack/kite-collector/internal/safenet"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/postgres"
@@ -378,6 +379,7 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 
 	// Set up metrics.
 	met := metrics.New()
+	safenet.SetGuardObserver(metrics.NewSafenetObserver(met))
 	var metricsSrv *http.Server
 	if cfg.Metrics.Enabled {
 		listen := cfg.Metrics.Listen
@@ -1052,6 +1054,7 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 	registry.Register(wazuhdisc.New())
 
 	met := metrics.New()
+	safenet.SetGuardObserver(metrics.NewSafenetObserver(met))
 	var metricsSrv *http.Server
 	if cfg.Metrics.Enabled {
 		listen := cfg.Metrics.Listen

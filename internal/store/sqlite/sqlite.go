@@ -657,7 +657,7 @@ func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) 
 // ---------------------------------------------------------------------------
 
 const scanRunColumns = `id, started_at, completed_at, status, total_assets,
-	new_assets, updated_assets, stale_assets, coverage_percent,
+	new_assets, updated_assets, analyzed_assets, stale_assets, coverage_percent,
 	error_count, scope_config, discovery_sources,
 	trigger_source, triggered_by, cancel_requested_at`
 
@@ -682,6 +682,7 @@ func scanScanRun(row interface{ Scan(dest ...any) error }) (*model.ScanRun, erro
 		&r.TotalAssets,
 		&r.NewAssets,
 		&r.UpdatedAssets,
+		&r.AnalyzedAssets,
 		&r.StaleAssets,
 		&r.CoveragePercent,
 		&r.ErrorCount,
@@ -734,7 +735,7 @@ func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) erro
 	return withTransientRetry(3, func() error {
 		_, err := s.db.ExecContext(ctx,
 			`INSERT INTO scan_runs (`+scanRunColumns+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			run.ID.String(),
 			run.StartedAt.Format(time.RFC3339),
 			nullTimePtr(run.CompletedAt),
@@ -742,6 +743,7 @@ func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) erro
 			run.TotalAssets,
 			run.NewAssets,
 			run.UpdatedAssets,
+			run.AnalyzedAssets,
 			run.StaleAssets,
 			run.CoveragePercent,
 			run.ErrorCount,
@@ -776,6 +778,7 @@ func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result 
 			total_assets     = ?,
 			new_assets       = ?,
 			updated_assets   = ?,
+			analyzed_assets  = ?,
 			stale_assets     = ?,
 			coverage_percent = ?,
 			error_count      = ?
@@ -785,6 +788,7 @@ func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result 
 			result.TotalAssets,
 			result.NewAssets,
 			result.UpdatedAssets,
+			result.AnalyzedAssets,
 			result.StaleAssets,
 			result.CoveragePercent,
 			result.ErrorCount,

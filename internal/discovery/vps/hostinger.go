@@ -40,7 +40,7 @@ func (h *Hostinger) Discover(ctx context.Context, cfg map[string]any) ([]model.A
 
 	client := newClient("hostinger", h.baseURL, bearerAuth(token))
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("hostinger")
 
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {

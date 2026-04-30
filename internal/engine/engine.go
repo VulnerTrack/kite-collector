@@ -613,6 +613,11 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 	}
 
+	// Classification counters — UpdatedAssets and AnalyzedAssets reflect the
+	// post-classification truth (material vs non-material rescans), which
+	// differs from dedupResult.UpdatedCount (every existing asset, regardless
+	// of material delta).
+	var analyzedCount, materialUpdatedCount int
 	for i := range assets {
 		// Classify the event against the prior-state snapshot taken
 		// before UpsertAssets:
@@ -630,8 +635,10 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			evtType = model.EventAssetDiscovered
 		case prior.MaterialFingerprint() != assets[i].MaterialFingerprint():
 			evtType = model.EventAssetUpdated
+			materialUpdatedCount++
 		default:
 			evtType = model.EventAssetAnalyzed
+			analyzedCount++
 		}
 		if assets[i].IsAuthorized == model.AuthorizationUnauthorized {
 			evtType = model.EventUnauthorizedAssetDetected
@@ -722,7 +729,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		Status:          string(scanStatus),
 		TotalAssets:     totalKnown,
 		NewAssets:       dedupResult.NewCount,
-		UpdatedAssets:   dedupResult.UpdatedCount,
+		UpdatedAssets:   materialUpdatedCount,
+		AnalyzedAssets:  analyzedCount,
 		StaleAssets:     len(staleAssets),
 		EventsEmitted:   len(events),
 		SoftwareCount:   softwareCount,
@@ -741,6 +749,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		"total", result.TotalAssets,
 		"new", result.NewAssets,
 		"updated", result.UpdatedAssets,
+		"analyzed", result.AnalyzedAssets,
 		"stale", result.StaleAssets,
 		"events", result.EventsEmitted,
 		"status", result.Status,

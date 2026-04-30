@@ -44,7 +44,7 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	client := newClient("render", r.baseURL, bearerAuth(token))
 	var assets []model.Asset
 	cursor := ""
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("render")
 
 	for {
 		if ctx.Err() != nil {
@@ -78,7 +78,7 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		if raw == "" {
 			break
 		}
-		clean, sanErr := safenet.SanitizeCursor(raw)
+		clean, sanErr := safenet.SanitizeCursorWithSource("render", raw)
 		if sanErr != nil {
 			slog.Warn("render: pagination cursor rejected by safenet, stopping",
 				"error", sanErr)

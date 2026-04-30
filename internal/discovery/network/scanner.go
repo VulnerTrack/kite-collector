@@ -41,26 +41,26 @@ type EventSink interface {
 // mirrors the SQLite network_scan_events row shape so the store layer can
 // persist it without an extra translation step.
 type ScanEvent struct {
+	StartedAt        time.Time
+	CompletedAt      *time.Time
 	ScanID           string
 	AgentID          string
 	ScopeHash        string
-	StartedAt        time.Time
-	CompletedAt      *time.Time
+	PortsProbedJSON  string
+	Outcome          string
 	IPsEnumerated    int
 	IPsScanned       int
 	IPsResponsive    int
-	PortsProbedJSON  string
-	Outcome          string
 	SafetyGuardCount int
 }
 
 // OpenPort is a single observation of an open TCP port emitted alongside a
 // ScanEvent. ProbeAt is the wall-clock UTC time the connect succeeded.
 type OpenPort struct {
-	IPAddress string
-	Port      int
-	Protocol  string
 	ProbeAt   time.Time
+	IPAddress string
+	Protocol  string
+	Port      int
 }
 
 // Scanner implements discovery.Source by performing TCP connect scans
@@ -154,7 +154,7 @@ func (s *Scanner) validateAndClamp(ctx context.Context, c *ScannerConfig) (int, 
 			"{}",
 		)
 		events = append(events, ev)
-		return 0, events, err
+		return 0, events, fmt.Errorf("validate ports: %w", err)
 	}
 
 	scopeGuard := &safenet.NetworkScopeGuard{
@@ -176,7 +176,7 @@ func (s *Scanner) validateAndClamp(ctx context.Context, c *ScannerConfig) (int, 
 			"{}",
 		)
 		events = append(events, ev)
-		return total, events, err
+		return total, events, fmt.Errorf("validate scope: %w", err)
 	}
 
 	clamped := safenet.ClampConcurrency(c.MaxConcurrent)

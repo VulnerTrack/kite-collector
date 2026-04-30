@@ -263,34 +263,31 @@ func (s *SQLiteStore) ListNetworkScanEvents(
 func (s *SQLiteStore) ListNetworkOpenPorts(
 	ctx context.Context, f NetworkOpenPortFilter,
 ) ([]NetworkOpenPortRow, error) {
-	args := []any{}
-	q := `
+	const query = `
 		SELECT id, scan_id, ip_address, port, protocol, probe_at
 		FROM network_open_ports
+		WHERE (? = '' OR probe_at > ?)
+		  AND (? = '' OR scan_id = ?)
+		ORDER BY probe_at DESC
+		LIMIT ? OFFSET ?
 	`
-	conds := make([]string, 0, 2)
+	sinceArg := ""
 	if f.Since != nil {
-		conds = append(conds, "probe_at > ?")
-		args = append(args, f.Since.UTC().Format(time.RFC3339Nano))
+		sinceArg = f.Since.UTC().Format(time.RFC3339Nano)
 	}
-	if f.ScanID != "" {
-		conds = append(conds, "scan_id = ?")
-		args = append(args, f.ScanID)
+	limit := f.Limit
+	if limit <= 0 {
+		limit = -1 // SQLite: -1 means no limit.
 	}
-	if len(conds) > 0 {
-		q += " WHERE " + joinConds(conds)
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
 	}
-	q += " ORDER BY probe_at DESC"
-	if f.Limit > 0 {
-		q += " LIMIT ?"
-		args = append(args, f.Limit)
-	}
-	if f.Offset > 0 {
-		q += " OFFSET ?"
-		args = append(args, f.Offset)
-	}
-
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, query,
+		sinceArg, sinceArg,
+		f.ScanID, f.ScanID,
+		limit, offset,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("list network_open_ports: %w", err)
 	}
@@ -316,35 +313,32 @@ func (s *SQLiteStore) ListNetworkOpenPorts(
 func (s *SQLiteStore) ListSafetyGuardEvents(
 	ctx context.Context, f SafetyGuardEventFilter,
 ) ([]SafetyGuardEventRow, error) {
-	args := []any{}
-	q := `
+	const query = `
 		SELECT id, guard_type, action_taken, triggered_at,
 		       input_summary, source_component, details_json, scan_id
 		FROM safety_guard_events
+		WHERE (? = '' OR triggered_at > ?)
+		  AND (? = '' OR guard_type = ?)
+		ORDER BY triggered_at DESC
+		LIMIT ? OFFSET ?
 	`
-	conds := make([]string, 0, 2)
+	sinceArg := ""
 	if f.Since != nil {
-		conds = append(conds, "triggered_at > ?")
-		args = append(args, f.Since.UTC().Format(time.RFC3339Nano))
+		sinceArg = f.Since.UTC().Format(time.RFC3339Nano)
 	}
-	if f.GuardType != "" {
-		conds = append(conds, "guard_type = ?")
-		args = append(args, f.GuardType)
+	limit := f.Limit
+	if limit <= 0 {
+		limit = -1 // SQLite: -1 means no limit.
 	}
-	if len(conds) > 0 {
-		q += " WHERE " + joinConds(conds)
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
 	}
-	q += " ORDER BY triggered_at DESC"
-	if f.Limit > 0 {
-		q += " LIMIT ?"
-		args = append(args, f.Limit)
-	}
-	if f.Offset > 0 {
-		q += " OFFSET ?"
-		args = append(args, f.Offset)
-	}
-
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, query,
+		sinceArg, sinceArg,
+		f.GuardType, f.GuardType,
+		limit, offset,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("list safety_guard_events: %w", err)
 	}
@@ -370,17 +364,4 @@ func (s *SQLiteStore) ListSafetyGuardEvents(
 		return nil, fmt.Errorf("iterate safety_guard_events: %w", rowsErr)
 	}
 	return out, nil
-}
-
-// joinConds joins SQL conditions with " AND ". Kept local to avoid an
-// import for one call site.
-func joinConds(conds []string) string {
-	out := ""
-	for i, c := range conds {
-		if i > 0 {
-			out += " AND "
-		}
-		out += c
-	}
-	return out
 }

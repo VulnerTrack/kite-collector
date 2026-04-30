@@ -41,7 +41,7 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 	client := newClient("vultr", v.baseURL, bearerAuth(token))
 	var assets []model.Asset
 	cursor := ""
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("vultr")
 
 	for {
 		if ctx.Err() != nil {
@@ -71,7 +71,7 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		if raw == "" {
 			break
 		}
-		clean, sanErr := safenet.SanitizeCursor(raw)
+		clean, sanErr := safenet.SanitizeCursorWithSource("vultr", raw)
 		if sanErr != nil {
 			slog.Warn("vultr: pagination cursor rejected by safenet, stopping",
 				"error", sanErr)

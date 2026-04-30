@@ -173,6 +173,7 @@ func (m *mockStore) CompleteScanRun(_ context.Context, id uuid.UUID, result mode
 			m.scanRuns[i].TotalAssets = result.TotalAssets
 			m.scanRuns[i].NewAssets = result.NewAssets
 			m.scanRuns[i].UpdatedAssets = result.UpdatedAssets
+			m.scanRuns[i].AnalyzedAssets = result.AnalyzedAssets
 			m.scanRuns[i].StaleAssets = result.StaleAssets
 			m.scanRuns[i].CoveragePercent = result.CoveragePercent
 			break

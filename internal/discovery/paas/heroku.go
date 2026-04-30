@@ -43,7 +43,7 @@ func (h *Heroku) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	var assets []model.Asset
 	rangeHeader := "id ..; max=200"
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("heroku")
 
 	for {
 		if ctx.Err() != nil {
