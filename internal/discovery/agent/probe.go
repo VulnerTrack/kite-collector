@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery/agent/driver"
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
@@ -95,7 +96,40 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		}
 	}
 
+	// Collect loaded drivers (kernel modules + PnP bindings). On by default
+	// per RFC-0128; opt out via collect_drivers=false.
+	collectDrivers := true
+	if cd, ok := cfg["collect_drivers"].(bool); ok {
+		collectDrivers = cd
+	}
+	if collectDrivers {
+		drivers, bindings, err := collectLoadedDrivers(ctx)
+		if err != nil {
+			slog.Warn("agent probe: failed to collect drivers", "error", err)
+		} else {
+			slog.Info("agent probe: collected drivers",
+				"drivers", len(drivers), "bindings", len(bindings))
+		}
+	}
+
 	return assets, nil
+}
+
+// CollectLoadedDrivers enumerates loaded kernel modules and PnP device
+// bindings using every cross-platform collector that is Available() on the
+// host. Always returns a (drivers, bindings) tuple even when individual
+// collectors fail; per-collector errors are folded in via slog.
+func CollectLoadedDrivers(ctx context.Context) ([]driver.LoadedDriver, []driver.DeviceBinding, error) {
+	return collectLoadedDrivers(ctx)
+}
+
+func collectLoadedDrivers(ctx context.Context) ([]driver.LoadedDriver, []driver.DeviceBinding, error) {
+	reg := driver.NewRegistry()
+	res := reg.Collect(ctx)
+	if res.HasErrors() {
+		slog.Warn("agent probe: driver collector errors", "count", res.TotalErrors())
+	}
+	return res.Drivers, res.Bindings, nil
 }
 
 // assetTypeForOS maps a GOOS value to an AssetType.
