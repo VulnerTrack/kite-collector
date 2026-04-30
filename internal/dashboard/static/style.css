@@ -782,6 +782,24 @@ table.kv td { word-break: break-all; }
 .data-grid .tabulator .tabulator-footer {
   background: var(--palette-grey-50, #f9fafb);
   border-top: 1px solid var(--palette-divider, #e5e7eb);
+  padding: 4px 6px;
+  font-size: 0.85em;
+}
+.data-grid .tabulator .tabulator-footer .tabulator-paginator {
+  gap: 4px;
+}
+.data-grid .tabulator .tabulator-footer .tabulator-paginator label {
+  margin-right: 4px;
+}
+.data-grid .tabulator .tabulator-footer .tabulator-page-size,
+.data-grid .tabulator .tabulator-footer .tabulator-page {
+  padding: 2px 6px;
+  margin: 0 1px;
+  min-width: 0;
+  font-size: inherit;
+}
+.data-grid .tabulator .tabulator-footer .tabulator-page-counter {
+  margin-left: 6px;
 }
 .data-grid .tabulator .tabulator-footer .tabulator-page.active {
   background: var(--palette-primary-main, #ff3131);
