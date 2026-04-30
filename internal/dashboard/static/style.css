@@ -274,7 +274,9 @@ body {
 
 .container { max-width: 1280px; margin: 0 auto; padding: 16px 24px; }
 
-/* Header */
+/* Default top-banner styles — used by /onboarding (a static HTML page that
+ * keeps the legacy <header>+<nav> layout). The dashboard shell overrides
+ * these via .topbar / .sidenav below. */
 header {
   background: linear-gradient(135deg, var(--palette-primary-main) 0%, var(--palette-primary-dark) 100%);
   color: var(--palette-primary-contrastText); padding: 20px 24px;
@@ -284,7 +286,6 @@ header h1 { margin: 0 0 4px 0; font-size: 1.5rem; }
 header .meta { font-size: 0.8rem; opacity: 0.75; }
 header .meta span { margin-right: 16px; }
 
-/* Navigation */
 nav {
   display: flex; gap: 4px;
   margin-bottom: 16px;
@@ -306,7 +307,152 @@ nav a.active {
   border-bottom: 2px solid var(--palette-primary-main);
 }
 
-/* Content area */
+/* ---------------------------------------------------------------------------
+ * Dashboard sidebar+grid shell
+ * ------------------------------------------------------------------------- */
+.layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "topbar  topbar"
+    "sidenav content"
+    "footer  footer";
+  min-height: 100vh;
+  gap: 0;
+}
+
+/* .topbar overrides the default <header> banner used elsewhere. */
+header.topbar {
+  grid-area: topbar;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding: 12px 24px;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: var(--shadows-2);
+}
+.topbar .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+  color: var(--palette-primary-contrastText);
+}
+.topbar .brand-logo {
+  display: block;
+  height: 36px;
+  width: auto;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+}
+.topbar .brand-sub {
+  font-size: 0.75rem;
+  opacity: 0.9;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.topbar-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.topbar-actions #scan-status { margin: 0; }
+.topbar-actions #scan-status .badge { vertical-align: middle; }
+
+/* Ghost button — used in the topbar for actions like Onboarding so the
+ * button reads as part of the header chrome rather than a primary CTA. */
+.btn-ghost {
+  display: inline-block;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--palette-primary-contrastText);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 0.825rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.btn-ghost:hover { background: rgba(255, 255, 255, 0.22); }
+.btn-ghost.active {
+  background: var(--palette-primary-contrastText);
+  color: var(--palette-primary-darker);
+  border-color: var(--palette-primary-contrastText);
+}
+
+/* Hide the brand sub-text on narrow viewports so the actions row keeps room. */
+@media (max-width: 720px) {
+  .topbar .brand-sub { display: none; }
+}
+
+/* Left sidebar — sectioned list of view + table links. .sidenav nav
+ * overrides the default horizontal <nav> bar styling. */
+.sidenav {
+  grid-area: sidenav;
+  background: var(--palette-background-paper);
+  border-right: 1px solid var(--palette-divider);
+  padding: 12px 0;
+  overflow-y: auto;
+  max-height: calc(100vh - 64px);
+  position: sticky; top: 0;
+}
+.sidenav nav {
+  display: flex; flex-direction: column;
+  margin: 0; padding: 0;
+  border-bottom: none;
+  gap: 0;
+}
+.sidenav-section { padding: 0 8px 16px; }
+.sidenav-section h4 {
+  margin: 12px 12px 6px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--palette-text-disabled);
+}
+.sidenav a {
+  display: block;
+  padding: 7px 14px;
+  margin: 1px 4px;
+  text-decoration: none;
+  color: var(--palette-text-primary);
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  border-bottom: none;
+}
+.sidenav a:hover { background: var(--palette-action-hover); }
+.sidenav a.active {
+  background: var(--palette-primary-lighter);
+  color: var(--palette-primary-darker);
+  border-left: 3px solid var(--palette-primary-main);
+  border-bottom: none;
+  padding-left: 11px;
+}
+.sidenav-tables {
+  list-style: none;
+  margin: 0; padding: 0;
+}
+.sidenav-tables li { margin: 0; }
+.sidenav-tables a {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", Menlo, monospace;
+}
+.sidenav-table-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sidenav-tables .badge {
+  font-size: 0.65rem; padding: 1px 7px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+/* Central content pane. */
+.content-pane {
+  grid-area: content;
+  padding: 16px 24px 32px;
+  min-width: 0; /* allow grid items to shrink instead of overflow */
+}
 #content {
   background: var(--palette-background-paper);
   border-radius: 8px;
@@ -314,6 +460,8 @@ nav a.active {
   box-shadow: var(--customShadows-card);
   min-height: 300px;
 }
+
+.layout > footer { grid-area: footer; }
 
 /* Tables */
 table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -417,6 +565,120 @@ footer {
   footer { break-before: avoid; }
 }
 
+/* ---------------------------------------------------------------------------
+ * Forms — text inputs, textareas, selects, labels, .form-row
+ *
+ * Matches the Vulnertrack marketing visual language: rounded-xl borders,
+ * generous padding, primary-color focus ring, calm placeholder color.
+ * ------------------------------------------------------------------------- */
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.form-row label,
+label.form-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--palette-text-secondary);
+  letter-spacing: 0.01em;
+}
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="url"],
+input[type="search"],
+input[type="number"],
+input[type="tel"],
+select,
+textarea {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--palette-text-primary);
+  background: var(--palette-background-paper);
+  border: 1px solid var(--palette-grey-300);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(145, 158, 171, 0.08);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+textarea {
+  min-height: 96px;
+  resize: vertical;
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", Menlo, monospace;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--palette-text-disabled);
+  opacity: 0.85;
+}
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--palette-grey-400);
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--palette-primary-main);
+  box-shadow: 0 0 0 3px rgba(255, 49, 49, 0.18);
+  background: var(--palette-background-paper);
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--palette-grey-100);
+  color: var(--palette-text-disabled);
+  cursor: not-allowed;
+}
+input[type="password"] {
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", Menlo, monospace;
+  letter-spacing: 0.04em;
+}
+select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23637381' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  padding-right: 36px;
+}
+
+/* Card — used by onboarding sections to group related controls. */
+.card {
+  background: var(--palette-background-paper);
+  border: 1px solid var(--palette-divider);
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+  box-shadow: var(--customShadows-card);
+}
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  color: var(--palette-text-primary);
+}
+.card p { margin: 4px 0 12px; }
+
+/* Toasts — onboarding's flash-message strip. */
+.toasts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.toasts:empty { display: none; }
+
+/* Inline error pill used by onboarding. badge-red sets the background; this
+ * just gives it some breathing room when used as a paragraph. */
+.enroll-error {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
 /* Loading indicator for HTMX */
 .htmx-indicator {
   display: none;
@@ -461,8 +723,9 @@ table.kv td { word-break: break-all; }
 }
 .related-head { margin-bottom: 8px; font-size: 0.85rem; }
 
-/* Right-hand sidebar (row-detail) */
-.sidebar {
+/* Right-hand drawer (row-detail). Renamed from .sidebar to free up that
+ * selector for the new left-hand .sidenav. */
+.row-drawer {
   position: fixed;
   top: 0; right: 0; bottom: 0;
   width: min(560px, 100vw);
@@ -475,13 +738,69 @@ table.kv td { word-break: break-all; }
   transition: transform 0.18s ease-out;
   z-index: 20;
 }
-.sidebar.sidebar-open { transform: translateX(0); }
-.sidebar-head {
+.row-drawer.row-drawer-open { transform: translateX(0); }
+.row-drawer-head {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 12px;
 }
-.sidebar-head h3 { margin: 0; }
+.row-drawer-head h3 { margin: 0; }
 
 @media print {
-  .sidebar { display: none; }
+  .row-drawer { display: none; }
+  .sidenav { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+ * Tabulator overrides — keep the data-grid visually consistent with the rest
+ * of the dashboard (Inter font, rounded corners, brand-red accents). The base
+ * theme is loaded from /static/tabulator.min.css; selectors here are scoped
+ * to .data-grid to avoid leaking into any future bare <table>.
+ * ------------------------------------------------------------------------- */
+.data-grid { width: 100%; overflow: hidden; border-radius: 12px; }
+.data-grid .tabulator {
+  border: 1px solid var(--palette-divider, #e5e7eb);
+  border-radius: 12px;
+  background: var(--palette-background-paper, #ffffff);
+  font-family: inherit;
+  font-size: 0.95em;
+}
+.data-grid .tabulator .tabulator-header {
+  background: var(--palette-grey-100, #f3f4f6);
+  border-bottom: 1px solid var(--palette-divider, #e5e7eb);
+  font-weight: 600;
+}
+.data-grid .tabulator .tabulator-header .tabulator-col {
+  background: transparent;
+  border-right: 1px solid var(--palette-divider, #e5e7eb);
+}
+.data-grid .tabulator .tabulator-header .tabulator-col.tabulator-sortable.tabulator-col-sorter-element:hover {
+  background: var(--palette-grey-200, #e5e7eb);
+}
+.data-grid .tabulator .tabulator-row.tabulator-row-even { background: var(--palette-grey-50, #f9fafb); }
+.data-grid .tabulator .tabulator-row:hover { background: var(--palette-primary-lighter, #ffe5e5); }
+.data-grid .tabulator .tabulator-cell { border-right: 1px solid var(--palette-divider, #f1f5f9); }
+.data-grid .tabulator .tabulator-footer {
+  background: var(--palette-grey-50, #f9fafb);
+  border-top: 1px solid var(--palette-divider, #e5e7eb);
+}
+.data-grid .tabulator .tabulator-footer .tabulator-page.active {
+  background: var(--palette-primary-main, #ff3131);
+  color: var(--palette-primary-contrastText, #f5f5f5);
+  border-color: var(--palette-primary-main, #ff3131);
+}
+.data-grid .tabulator .tabulator-header-filter input {
+  border: 1px solid var(--palette-divider, #e5e7eb);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 0.9em;
+}
+.data-grid .tabulator .tabulator-header-filter input:focus {
+  outline: none;
+  border-color: var(--palette-primary-main, #ff3131);
+  box-shadow: 0 0 0 2px rgba(255, 49, 49, 0.18);
+}
+@media print {
+  .data-grid .tabulator .tabulator-header-filter,
+  .data-grid .tabulator .tabulator-footer { display: none; }
 }

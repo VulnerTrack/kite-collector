@@ -40,7 +40,7 @@ func (h *Hetzner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 
 	client := newClient("hetzner", h.baseURL, bearerAuth(token))
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("hetzner")
 
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {

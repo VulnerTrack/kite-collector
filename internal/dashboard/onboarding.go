@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -93,16 +92,71 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	})
 }
 
-// serveOnboardingPage writes the static onboarding shell that wires up the
-// three HTMX fragments below it.
+// onboardingBody is the server-rendered fragment that wires up the three
+// HTMX panels (enroll → check → stream). It is composed inside the shared
+// dashboard shell (renderIndexPage) so /onboarding gets the same sidebar
+// + grid chrome as the rest of the dashboard.
+const onboardingBody = `<div id="onboarding-toasts" class="toasts"></div>
+
+<section class="card" id="enroll-card">
+  <h2>1. Enroll platform token</h2>
+  <p class="muted">Paste the platform endpoint and API key. The plaintext key is
+     never stored or echoed after this POST &mdash; only a <code>sha256[:8]</code>
+     fingerprint is shown afterwards.</p>
+  <div id="enroll-fragment"
+       hx-get="/fragments/enroll-form"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="htmx-indicator">Loading enroll form&hellip;</div>
+  </div>
+</section>
+
+<section class="card" id="check-card">
+  <h2>2. Connection check</h2>
+  <p class="muted">Six probes verify DNS, TLS, endpoint reach, token auth,
+     clock skew, and OTLP handshake. Click &ldquo;Run check&rdquo; after
+     enrolling.</p>
+  <div id="check-fragment"
+       hx-get="/fragments/connection-check"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="htmx-indicator">Loading probe panel&hellip;</div>
+  </div>
+</section>
+
+<section class="card" id="stream-card">
+  <h2>3. Streaming</h2>
+  <p class="muted">Start or stop the OTLP streaming goroutine without
+     restarting the binary. The status row polls every 3 seconds.</p>
+  <div id="stream-fragment"
+       hx-get="/fragments/stream-status"
+       hx-trigger="load, every 3s"
+       hx-swap="innerHTML">
+    <div class="htmx-indicator">Loading stream status&hellip;</div>
+  </div>
+</section>`
+
+// serveOnboardingPage writes the onboarding view inside the dashboard
+// shell. Plain GET returns the full shell with onboardingBody embedded;
+// HX-Request: true returns the fragment only so the navigation swap from
+// any other page lands without a full reload.
 func serveOnboardingPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	body, err := fs.ReadFile(staticFS, "static/onboarding.html")
-	if err != nil {
-		http.Error(w, "onboarding.html not found", http.StatusInternalServerError)
+	if r.Header.Get("HX-Request") == "true" {
+		_, _ = io.WriteString(w, onboardingBody)
 		return
 	}
-	_, _ = w.Write(body)
+	var buf bytes.Buffer
+	if err := renderIndexPage(&buf, "onboarding", func(fragBuf io.Writer) error {
+		if _, err := io.WriteString(fragBuf, onboardingBody); err != nil {
+			return fmt.Errorf("write onboarding body: %w", err)
+		}
+		return nil
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_, _ = w.Write(buf.Bytes())
 }
 
 // renderOnboardingFragment is a buffered renderer that mirrors the

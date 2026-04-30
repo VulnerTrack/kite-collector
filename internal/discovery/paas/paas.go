@@ -134,16 +134,11 @@ func (c *apiClient) getSized(ctx context.Context, path string, out any) (int64, 
 	return int64(len(body)), nil
 }
 
-// getPage performs a GET with optional extra headers and returns the
-// response headers alongside the decoded body. Used when pagination state
-// is carried in response headers (e.g. Heroku Range pagination).
-func (c *apiClient) getPage(ctx context.Context, path string, extraHeaders map[string]string, out any) (http.Header, error) {
-	_, hdr, err := c.getPageSized(ctx, path, extraHeaders, out)
-	return hdr, err
-}
-
-// getPageSized is like getPage but also returns the number of bytes read,
-// for PaginationGuardV2 byte-cap enforcement (RFC-0124 R5).
+// getPageSized performs a GET with optional extra headers and returns
+// the response headers, body byte count, and decoded body. Used when
+// pagination state is carried in response headers (e.g. Heroku Range
+// pagination). The returned byte count feeds PaginationGuardV2 byte-cap
+// enforcement (RFC-0124 R5).
 func (c *apiClient) getPageSized(ctx context.Context, path string, extraHeaders map[string]string, out any) (int64, http.Header, error) {
 	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider

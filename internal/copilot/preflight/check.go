@@ -129,4 +129,8 @@ func (r *Runner) registerDefaults() {
 	r.Register("entra:tenant_id:guid", &EntraTenantIDChecker{})
 	r.Register("entra:client_id:guid", &EntraClientIDChecker{})
 	r.Register("entra:secret:env", &EntraSecretEnvChecker{})
+	r.Register("cloud_dns:route53:env", &CloudDNSRoute53EnvChecker{})
+	r.Register("cloud_dns:cloudflare:env", &CloudDNSCloudflareEnvChecker{})
+	r.Register("cloud_dns:azure:env", &CloudDNSAzureEnvChecker{})
+	r.Register("cloud_dns:gcp:env", &CloudDNSGCPEnvChecker{})
 }

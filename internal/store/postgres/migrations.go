@@ -72,6 +72,11 @@ ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS trigger_source      TEXT NOT NULL
 ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS triggered_by        TEXT;
 ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS cancel_requested_at TIMESTAMPTZ;
 
+-- AssetAnalyzed counter so the dashboard scan-history table can surface every
+-- event state separately. Pre-existing rows default to 0, which matches "this
+-- run never tracked analyzed events".
+ALTER TABLE scan_runs ADD COLUMN IF NOT EXISTS analyzed_assets     INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS events (
     id          UUID PRIMARY KEY,
     event_type  TEXT NOT NULL CHECK(event_type IN ('AssetDiscovered','AssetUpdated','AssetAnalyzed','UnauthorizedAssetDetected','UnmanagedAssetDetected','AssetNotSeen','AssetRemoved')),

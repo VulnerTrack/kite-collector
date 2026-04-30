@@ -187,7 +187,7 @@ func positiveIntEnv(key string, fallback int) int {
 	n, err := strconv.Atoi(v)
 	if err != nil || n <= 0 {
 		slog.Warn("invalid integer env var, using default",
-			"key", key, "value", sanitizeLog(v), "default", fallback)
+			"key", strconv.Quote(key), "value", strconv.Quote(v), "default", fallback)
 		return fallback
 	}
 	return n
