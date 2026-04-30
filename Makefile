@@ -3,6 +3,9 @@
 build:
 	CGO_ENABLED=0 go build -o bin/kite-collector ./cmd/kite-collector
 
+run:
+	CGO_ENABLED=0 go run ./cmd/kite-collector
+
 test:
 	go test -race -count=1 ./...
 
