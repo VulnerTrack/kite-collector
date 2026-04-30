@@ -153,16 +153,16 @@ function initDataGrids(root) {
       movableColumns: true,
       resizableColumns: true,
       placeholder: 'No rows',
-      autoColumnsDefinitions: function(defs) {
-        defs.forEach(function(d) {
-          d.headerFilter = 'input';
-          d.headerFilterLiveFilter = true;
-          d.headerSort = true;
-          // Preserve <span class="badge">, <code>, <a class="fk-link">,
-          // and other cell HTML that Go templates emitted server-side.
-          d.formatter = 'html';
-        });
-        return defs;
+      // columnDefaults applies to every column, including those parsed
+      // from <thead> on HTML-table init. autoColumnsDefinitions only
+      // fires when autoColumns:true, which is not the case here, so the
+      // html formatter must be set as a default to keep server-emitted
+      // <span class="badge">, <code>, <a class="fk-link"> rendering.
+      columnDefaults: {
+        formatter: 'html',
+        headerFilter: 'input',
+        headerFilterLiveFilter: true,
+        headerSort: true,
       },
     });
     // Re-scan the rebuilt DOM so HTMX picks up hx-get links Tabulator
