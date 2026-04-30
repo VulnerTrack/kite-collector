@@ -86,6 +86,11 @@ func (w *WMIDrivers) Collect(ctx context.Context) (*Result, error) {
 			DriverFramework: classifyServiceType(sd.ServiceType),
 			Architecture:    runtime.GOARCH,
 		}
+		if drv.Path != "" {
+			if hash, hashErr := AuthenticodeHash(drv.Path); hashErr == nil {
+				drv.Authentihash = hash
+			}
+		}
 		res.Drivers = append(res.Drivers, drv)
 	}
 
