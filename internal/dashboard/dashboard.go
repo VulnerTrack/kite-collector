@@ -264,6 +264,15 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		})
 	})
 
+	// Sidebar table list — populates the left-sidebar "Tables" section.
+	// Loaded lazily by HTMX so the shell renders fast and the tables list
+	// reflects whatever was just inserted by the most recent scan.
+	mux.HandleFunc("GET /fragments/sidebar-tables", func(w http.ResponseWriter, r *http.Request) {
+		renderFragment(w, "sidebar-tables", func(buf io.Writer) error {
+			return renderSidebarTablesFragment(buf, r.Context(), st)
+		})
+	})
+
 	// Tables browser — Datasette-style introspection.
 	mux.HandleFunc("GET /fragments/tables", func(w http.ResponseWriter, r *http.Request) {
 		renderFragment(w, "tables", func(buf io.Writer) error {

@@ -535,7 +535,7 @@ func (s *PostgresStore) ListEvents(ctx context.Context, filter store.EventFilter
 // ---------------------------------------------------------------------------
 
 const scanRunColumns = `id, started_at, completed_at, status, total_assets,
-	new_assets, updated_assets, stale_assets, coverage_percent,
+	new_assets, updated_assets, analyzed_assets, stale_assets, coverage_percent,
 	error_count, scope_config, discovery_sources,
 	trigger_source, triggered_by, cancel_requested_at`
 
@@ -557,6 +557,7 @@ func scanScanRun(row pgx.Row) (*model.ScanRun, error) {
 		&r.TotalAssets,
 		&r.NewAssets,
 		&r.UpdatedAssets,
+		&r.AnalyzedAssets,
 		&r.StaleAssets,
 		&r.CoveragePercent,
 		&r.ErrorCount,
@@ -584,7 +585,7 @@ func (s *PostgresStore) CreateScanRun(ctx context.Context, run model.ScanRun) er
 	}
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO scan_runs (`+scanRunColumns+`)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		run.ID,
 		run.StartedAt,
 		run.CompletedAt,
@@ -592,6 +593,7 @@ func (s *PostgresStore) CreateScanRun(ctx context.Context, run model.ScanRun) er
 		run.TotalAssets,
 		run.NewAssets,
 		run.UpdatedAssets,
+		run.AnalyzedAssets,
 		run.StaleAssets,
 		run.CoveragePercent,
 		run.ErrorCount,
@@ -622,15 +624,17 @@ func (s *PostgresStore) CompleteScanRun(ctx context.Context, id uuid.UUID, resul
 			total_assets     = $3,
 			new_assets       = $4,
 			updated_assets   = $5,
-			stale_assets     = $6,
-			coverage_percent = $7,
-			error_count      = $8
-		WHERE id = $9`,
+			analyzed_assets  = $6,
+			stale_assets     = $7,
+			coverage_percent = $8,
+			error_count      = $9
+		WHERE id = $10`,
 		now,
 		status,
 		result.TotalAssets,
 		result.NewAssets,
 		result.UpdatedAssets,
+		result.AnalyzedAssets,
 		result.StaleAssets,
 		result.CoveragePercent,
 		result.ErrorCount,

@@ -44,10 +44,11 @@ var templateFuncs = template.FuncMap{
 		}
 		return "badge-yellow"
 	},
-	"renderCell":  renderCell,
-	"rowKeyQuery": rowKeyQuery,
-	"cellFK":      findFK,
-	"add":         func(a, b int) int { return a + b },
+	"renderCell":     renderCell,
+	"rowKeyQuery":    rowKeyQuery,
+	"cellFK":         findFK,
+	"add":            func(a, b int) int { return a + b },
+	"rowCountBucket": rowCountBucket,
 }
 
 // renderCell stringifies a column value for display. Byte slices are rendered
@@ -208,6 +209,7 @@ const assetsTemplate = `<h2>Assets ({{len .Assets}})</h2>
 <div class="table-actions">
   <a href="/api/v1/assets/export.csv" class="btn">Export CSV</a>
 </div>
+<div class="data-grid">
 <table>
   <thead>
     <tr>
@@ -233,12 +235,14 @@ const assetsTemplate = `<h2>Assets ({{len .Assets}})</h2>
     </tr>
   {{end}}
   </tbody>
-</table>`
+</table>
+</div>`
 
 const softwareTemplate = `<h2>Software ({{len .Software}})</h2>
 <div class="table-actions">
   <a href="/api/v1/software/export.csv" class="btn">Export CSV</a>
 </div>
+<div class="data-grid">
 <table>
   <thead>
     <tr>
@@ -260,12 +264,14 @@ const softwareTemplate = `<h2>Software ({{len .Software}})</h2>
     </tr>
   {{end}}
   </tbody>
-</table>`
+</table>
+</div>`
 
 const findingsTemplate = `<h2>Findings ({{len .Findings}})</h2>
 <div class="table-actions">
   <a href="/api/v1/findings/export.csv" class="btn">Export CSV</a>
 </div>
+<div class="data-grid">
 <table>
   <thead>
     <tr>
@@ -287,19 +293,22 @@ const findingsTemplate = `<h2>Findings ({{len .Findings}})</h2>
     </tr>
   {{end}}
   </tbody>
-</table>`
+</table>
+</div>`
 
 const scansTemplate = `<h2>Scan History ({{len .Scans}})</h2>
 {{if .Scans}}
+<div class="data-grid">
 <table>
   <thead>
     <tr>
       <th>Started</th>
       <th>Status</th>
       <th>Total Assets</th>
-      <th>New</th>
-      <th>Updated</th>
-      <th>Stale</th>
+      <th title="First-time sightings (AssetDiscovered events)">New</th>
+      <th title="Existing assets with material state changes (AssetUpdated events)">Updated</th>
+      <th title="Existing assets with no material change since last scan (AssetAnalyzed events)">Analyzed</th>
+      <th title="Assets older than the stale threshold (AssetNotSeen events)">Stale</th>
       <th>Coverage</th>
     </tr>
   </thead>
@@ -311,15 +320,50 @@ const scansTemplate = `<h2>Scan History ({{len .Scans}})</h2>
       <td>{{.TotalAssets}}</td>
       <td>{{.NewAssets}}</td>
       <td>{{.UpdatedAssets}}</td>
+      <td>{{.AnalyzedAssets}}</td>
       <td>{{.StaleAssets}}</td>
       <td>{{printf "%.0f" .CoveragePercent}}%</td>
     </tr>
   {{end}}
   </tbody>
 </table>
+</div>
 {{else}}
 <p>No scans recorded yet.</p>
 {{end}}`
+
+// rowCountBucket maps a row count into a coarse badge color bucket so the
+// sidebar can highlight tables with notable amounts of data at a glance.
+// Unknown counts (-1) render as gray.
+func rowCountBucket(n int64) string {
+	switch {
+	case n < 0:
+		return "badge-gray"
+	case n == 0:
+		return "badge-gray"
+	case n < 100:
+		return "badge-blue"
+	case n < 10000:
+		return "badge-green"
+	default:
+		return "badge-yellow"
+	}
+}
+
+// renderSidebarTablesFragment renders the compact list of every content
+// table for the left sidebar. Each item is a clickable HTMX link to the
+// table-detail view with a row-count badge.
+func renderSidebarTablesFragment(w io.Writer, ctx context.Context, st store.Store) error {
+	tables, err := st.ListContentTables(ctx)
+	if err != nil {
+		return fmt.Errorf("list content tables: %w", err)
+	}
+	tmpl := template.Must(template.New("sidebarTables").Funcs(templateFuncs).Parse(sidebarTablesTemplate))
+	if err := tmpl.Execute(w, map[string]any{"Tables": tables}); err != nil {
+		return fmt.Errorf("render sidebar-tables template: %w", err)
+	}
+	return nil
+}
 
 // renderTablesFragment lists every content table discovered via introspection.
 func renderTablesFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
@@ -399,8 +443,24 @@ func renderRowReportFragment(w io.Writer, ctx context.Context, st store.Store, n
 	return nil
 }
 
+const sidebarTablesTemplate = `{{ if .Tables -}}
+<ul class="sidenav-tables">
+{{- range .Tables }}
+  <li>
+    <a href="/tables/{{.Name}}" hx-get="/tables/{{.Name}}" hx-target="#content" hx-push-url="true" onclick="setActive(this)">
+      <span class="sidenav-table-name">{{.Name}}</span>
+      <span class="badge {{rowCountBucket .RowCount}}">{{ if lt .RowCount 0 }}?{{ else }}{{.RowCount}}{{ end }}</span>
+    </a>
+  </li>
+{{- end }}
+</ul>
+{{- else -}}
+<span class="muted small">No content tables.</span>
+{{- end }}`
+
 const tablesTemplate = `<h2>Tables ({{len .Tables}})</h2>
 <p class="muted">Every non-system content table in the live database.</p>
+<div class="data-grid">
 <table>
   <thead>
     <tr>
@@ -420,7 +480,8 @@ const tablesTemplate = `<h2>Tables ({{len .Tables}})</h2>
     </tr>
   {{end}}
   </tbody>
-</table>`
+</table>
+</div>`
 
 const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows)</span></h2>
 <div class="table-actions">
@@ -439,7 +500,7 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
   {{$schema := .Schema}}
   {{range .Rows}}
     {{$pk := .PrimaryKey}}
-    <tr class="row-click" hx-get="/fragments/tables/{{$schema.Name}}/row?{{rowKeyQuery $pk}}" hx-target="#sidebar" hx-swap="innerHTML" onclick="openSidebar()">
+    <tr class="row-click" hx-get="/fragments/tables/{{$schema.Name}}/row?{{rowKeyQuery $pk}}" hx-target="#row-drawer" hx-swap="innerHTML" onclick="openRowDrawer()">
     {{range .Columns}}
       {{$fk := cellFK $schema.ForeignKeys .Name}}
       <td>{{if $fk}}<a class="fk-link" href="/tables/{{$fk.ToTable}}" hx-get="/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="true" onclick="event.stopPropagation();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
@@ -458,9 +519,9 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
   {{end}}
 </div>`
 
-const rowReportTemplate = `<div class="sidebar-head">
+const rowReportTemplate = `<div class="row-drawer-head">
   <h3>{{.Report.Table}}</h3>
-  <button class="btn btn-outline" onclick="closeSidebar()">Close</button>
+  <button class="btn btn-outline" onclick="closeRowDrawer()">Close</button>
 </div>
 <h4>Row</h4>
 <table class="kv">
@@ -470,7 +531,7 @@ const rowReportTemplate = `<div class="sidebar-head">
     {{$fk := cellFK $fks .Name}}
     <tr>
       <th>{{.Name}}</th>
-      <td>{{if $fk}}<a class="fk-link" href="/tables/{{$fk.ToTable}}" hx-get="/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="true" onclick="closeSidebar();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
+      <td>{{if $fk}}<a class="fk-link" href="/tables/{{$fk.ToTable}}" hx-get="/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="true" onclick="closeRowDrawer();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>
     </tr>
   {{end}}
   </tbody>

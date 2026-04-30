@@ -292,7 +292,7 @@ type wazuhResponse struct {
 func (c *wazuhClient) listPaginated(ctx context.Context, path string) ([]json.RawMessage, error) {
 	var all []json.RawMessage
 	offset := 0
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("wazuh")
 
 	for {
 		if err := ctx.Err(); err != nil {

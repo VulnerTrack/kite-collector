@@ -40,7 +40,7 @@ func (d *DigitalOcean) Discover(ctx context.Context, cfg map[string]any) ([]mode
 
 	client := newClient("digitalocean", d.baseURL, bearerAuth(token))
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("digitalocean")
 
 	for page := 1; ; page++ {
 		if err := ctx.Err(); err != nil {

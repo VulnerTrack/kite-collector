@@ -12,10 +12,10 @@ import (
 )
 
 type fakeSink struct {
-	mu     sync.Mutex
+	ports  map[string][]OpenPort
 	scans  []ScanEvent
 	guards []safenet.GuardEvent
-	ports  map[string][]OpenPort
+	mu     sync.Mutex
 }
 
 func newFakeSink() *fakeSink { return &fakeSink{ports: map[string][]OpenPort{}} }

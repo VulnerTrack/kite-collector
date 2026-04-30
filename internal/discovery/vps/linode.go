@@ -40,7 +40,7 @@ func (l *Linode) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	client := newClient("linode", l.baseURL, bearerAuth(token))
 	var assets []model.Asset
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("linode")
 
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {

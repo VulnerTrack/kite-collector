@@ -43,7 +43,7 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	client := newClient("vercel", v.baseURL, bearerAuth(token))
 	var assets []model.Asset
 	var until string
-	guard := safenet.NewPaginationGuardV2()
+	guard := safenet.NewPaginationGuardV2WithSource("vercel")
 
 	for {
 		if ctx.Err() != nil {
