@@ -1,6 +1,6 @@
 module github.com/vulnertrack/kite-collector
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/go-jose/go-jose/v4 v4.1.4
@@ -9,6 +9,7 @@ require (
 	github.com/google/go-tpm v0.9.8
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/kardianos/service v1.2.4
 	github.com/pelletier/go-toml/v2 v2.4.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2
@@ -58,7 +59,6 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/kardianos/service v1.2.4 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
