@@ -1,6 +1,41 @@
-.PHONY: build test test-e2e test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick
+.PHONY: build build-host test test-e2e test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick
 
+# Release matrix mirrored from .goreleaser.yaml. Catching cross-OS regressions
+# locally (e.g. syscall.Handle vs int on Windows) is the whole point of this
+# target — keep it in sync with the goreleaser `goos`/`goarch`/`ignore` block.
+#
+# Format: `goos/goarch[/...]` — the optional suffix is for future variants.
+RELEASE_TARGETS = \
+	linux/amd64   linux/arm64 \
+	windows/amd64 \
+	darwin/amd64  darwin/arm64 \
+	freebsd/amd64 freebsd/arm64 \
+	openbsd/amd64 openbsd/arm64
+
+# build cross-compiles for every target in RELEASE_TARGETS, producing
+# bin/kite-collector_<os>_<arch>. A single target failure aborts the whole
+# build (set -e via the leading dash on `exit`). Use build-host for a fast
+# host-only iteration loop.
 build:
+	@mkdir -p bin
+	@for target in $(RELEASE_TARGETS); do \
+		os=$${target%%/*}; arch=$${target##*/}; \
+		out=bin/kite-collector_$${os}_$${arch}; \
+		[ "$$os" = "windows" ] && out=$${out}.exe; \
+		printf "%-22s " "$${os}/$${arch}"; \
+		if CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
+			go build -trimpath -ldflags="-s -w" -o $$out ./cmd/kite-collector 2>&1; then \
+			echo "OK  ($$out)"; \
+		else \
+			echo "FAIL"; \
+			exit 1; \
+		fi; \
+	done
+
+# build-host is the fast inner-loop target — same flags as the goreleaser
+# `kite-collector` build, host platform only. Use this for iterative work;
+# use `build` before pushing to catch cross-OS regressions.
+build-host:
 	CGO_ENABLED=0 go build -o bin/kite-collector ./cmd/kite-collector
 
 run:
@@ -139,7 +174,7 @@ quality: quality-tools
 # against the fixed schema (collector, line, error, raw_line, time, level).
 # Passes regardless of how many parse errors the host produces — the gate
 # is on schema, not count.
-check-parse-errors: build
+check-parse-errors: build-host
 	@scripts/check-parse-errors.sh
 
 # OTLP integration test: starts an OTel Collector in Docker, runs a scan
@@ -179,7 +214,7 @@ streaming:
 endef
 export KITE_STREAMING_YAML
 
-test-otlp: build
+test-otlp: build-host
 	@echo "=== OTLP Integration Test ==="
 	@echo "$$OTEL_COLLECTOR_YAML" > $(OTEL_CONFIG)
 	@echo "$$KITE_STREAMING_YAML" > $(KITE_OTLP_CFG)
