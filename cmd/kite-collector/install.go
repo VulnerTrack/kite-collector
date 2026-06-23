@@ -326,6 +326,14 @@ func newServiceRunCmd() *cobra.Command {
 			if certsDir == "" {
 				certsDir = defaultCertsDir(userMode)
 			}
+			// Self-heal: install creates this dir, but it may be missing if the
+			// install was non-elevated on Windows, or an operator removed it.
+			// Creating it here lets the service come up either way; if creation
+			// fails (e.g. permission denied under LocalSystem), surface that
+			// rather than letting the agent crash on the first cert write.
+			if err := os.MkdirAll(certsDir, 0o750); err != nil {
+				return fmt.Errorf("ensure certs dir %s: %w", certsDir, err)
+			}
 			svc, _, err := newProgramService(svcOpts{
 				userService: userMode,
 				certsDir:    certsDir,
@@ -397,6 +405,13 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 		return nil
 	}
 
+	// Defer the post-install report so it surfaces the *current* state no
+	// matter how runInstall exits: full success, mid-install failure (binary
+	// copied but service registration failed, etc.), or a re-run where things
+	// already exist. Captures the resolved paths so the message points at the
+	// right --certs-dir, not the user's typed defaults.
+	defer printPostInstall(out, dst, a.certsDir, a.userMode)
+
 	if binErr := installBinary(src, dst); binErr != nil {
 		return fmt.Errorf("install binary: %w", binErr)
 	}
@@ -421,25 +436,125 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  service %q registered (%s)\n", cfg.Name, service.Platform())
 
-	_, _ = fmt.Fprintf(out, `
-Next steps:
-
-  1. Enroll this agent (one-time):
-       %s enroll --agent-code <code> --token <token>
-
-  2. Verify OTLP connectivity:
-       %s check
-
-  3. Start the service:
-       %s service start%s
-
-  4. View logs:
-%s
-
-`,
-		dst, dst, dst, userFlag(a.userMode), logsHint(a.userMode))
-
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Post-install state report
+// ---------------------------------------------------------------------------
+
+// installState is what the post-install report shows: the on-disk and SCM
+// reality after `install` finishes (or fails midway). Probed, not assumed.
+type installState struct {
+	serviceState   string
+	binaryPresent  bool
+	certsDirExists bool
+	certsEnrolled  bool
+}
+
+// enrollmentFiles are the three PEMs that `enroll` writes; all three present
+// means this agent has completed enrollment.
+var enrollmentFiles = []string{"ca.pem", "agent.pem", "agent-key.pem"}
+
+// probeInstall returns the on-disk + service-manager state without assuming
+// install completed successfully. Errors from the service handle are mapped
+// to a short string rather than propagated, because this is a status report,
+// not a control plane.
+func probeInstall(binPath, certsDir string, userMode bool) installState {
+	var st installState
+
+	if _, err := os.Stat(binPath); err == nil {
+		st.binaryPresent = true
+	}
+	if fi, err := os.Stat(certsDir); err == nil && fi.IsDir() {
+		st.certsDirExists = true
+		present := 0
+		for _, name := range enrollmentFiles {
+			if _, err := os.Stat(filepath.Join(certsDir, name)); err == nil {
+				present++
+			}
+		}
+		st.certsEnrolled = present == len(enrollmentFiles)
+	}
+
+	svc, _, err := newProgramService(svcOpts{userService: userMode})
+	if err != nil {
+		st.serviceState = "unknown"
+		return st
+	}
+	s, statusErr := svc.Status()
+	switch {
+	case errors.Is(statusErr, service.ErrNotInstalled):
+		st.serviceState = "not installed"
+	case statusErr != nil:
+		st.serviceState = "unknown"
+	case s == service.StatusRunning:
+		st.serviceState = "running"
+	case s == service.StatusStopped:
+		st.serviceState = "stopped"
+	default:
+		st.serviceState = "unknown"
+	}
+	return st
+}
+
+// printPostInstall renders the current-state table and a numbered next-steps
+// list tailored to that state. Every command in the list is pre-filled with
+// the actual binPath and certsDir so the operator can copy-paste verbatim —
+// no <placeholders> for things we already know.
+func printPostInstall(out io.Writer, binPath, certsDir string, userMode bool) {
+	st := probeInstall(binPath, certsDir, userMode)
+
+	check := func(ok bool) string {
+		if ok {
+			return "✓"
+		}
+		return "✗"
+	}
+
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Current state:")
+	_, _ = fmt.Fprintf(out, "  %s  binary       %s\n", check(st.binaryPresent), binPath)
+	_, _ = fmt.Fprintf(out, "  %s  certs dir    %s\n", check(st.certsDirExists), certsDir)
+	_, _ = fmt.Fprintf(out, "  %s  enrollment   %s\n", check(st.certsEnrolled), enrollmentLabel(st))
+	_, _ = fmt.Fprintf(out, "  -  service      %s\n", st.serviceState)
+
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Next steps:")
+	step := 1
+	if !st.certsEnrolled {
+		_, _ = fmt.Fprintf(out,
+			"  %d. Enroll this agent (one-time) — pass the same --certs-dir the service uses:\n"+
+				"       %s enroll --agent-code <code> --token <token> --certs-dir %s\n\n",
+			step, binPath, certsDir)
+		step++
+	}
+	_, _ = fmt.Fprintf(out,
+		"  %d. Verify OTLP connectivity:\n"+
+			"       %s check --certs-dir %s\n\n",
+		step, binPath, certsDir)
+	step++
+	if st.serviceState != "running" {
+		_, _ = fmt.Fprintf(out,
+			"  %d. Start the service:\n"+
+				"       %s service start%s\n\n",
+			step, binPath, userFlag(userMode))
+		step++
+	}
+	_, _ = fmt.Fprintf(out, "  %d. View logs:\n%s\n\n", step, logsHint(userMode))
+}
+
+// enrollmentLabel returns a one-word state for the enrollment row: the three
+// PEMs are present, the dir is empty, or the dir is missing entirely.
+func enrollmentLabel(st installState) string {
+	switch {
+	case st.certsEnrolled:
+		return "ca.pem + agent.pem + agent-key.pem present"
+	case st.certsDirExists:
+		return "empty — run `enroll` to populate"
+	default:
+		return "certs dir missing"
+	}
 }
 
 // ---------------------------------------------------------------------------
