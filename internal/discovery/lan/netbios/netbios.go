@@ -21,7 +21,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
@@ -240,7 +239,8 @@ func subnetBroadcast(ip net.IP, mask net.IPMask) net.IP {
 }
 
 // enableBroadcast sets SO_BROADCAST so writes to subnet broadcast addresses
-// are not silently dropped by the kernel.
+// are not silently dropped by the kernel. The platform-specific syscall fd
+// conversion lives in netbios_broadcast_{unix,windows}.go.
 func enableBroadcast(conn *net.UDPConn) error {
 	raw, err := conn.SyscallConn()
 	if err != nil {
@@ -248,9 +248,7 @@ func enableBroadcast(conn *net.UDPConn) error {
 	}
 	var sockErr error
 	err = raw.Control(func(fd uintptr) {
-		// fd is a valid kernel file descriptor returned by net.ListenUDP; it
-		// always fits in an int on every supported platform.
-		sockErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1) //#nosec G115 -- fd is a valid kernel fd
+		sockErr = setBroadcastOpt(fd)
 	})
 	if err != nil {
 		return fmt.Errorf("control socket: %w", err)
