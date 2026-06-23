@@ -2700,15 +2700,28 @@ func runEnroll(agentCode, token, certsDir string) error {
 // check-otlp command
 // ---------------------------------------------------------------------------
 
-// defaultKiteDataDir returns the platform-appropriate default data directory:
+// defaultKiteDataDir returns the platform-appropriate default data directory
+// for CLI-invoked subcommands (enroll, check, agent, stream, check-otlp).
 //
-//   - $XDG_DATA_HOME/kite-collector  when XDG_DATA_HOME is set (user install)
-//   - /var/lib/kite-collector         otherwise (system install / daemon)
+// XDG_DATA_HOME is honoured regardless of OS as the user-context signal:
+// when set, the caller is opting into a per-user store. Otherwise we fall
+// back to the OS-appropriate *system* default from defaultCertsDir, which
+// keeps Windows out of the Unix /var/lib/... bucket that doesn't exist there.
+//
+// Resolved defaults:
+//
+//   - XDG_DATA_HOME set        -> defaultCertsDir(true)  (per-user resolver)
+//   - Linux, no XDG            -> /var/lib/kite-collector
+//   - Windows, no XDG          -> %ProgramData%\kite-collector
+//   - macOS / BSDs, no XDG     -> /var/lib/kite-collector (same as Linux)
+//
+// CLI flags expose this as the default for --certs-dir; operators can always
+// pass --certs-dir explicitly to override.
 func defaultKiteDataDir() string {
-	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-		return filepath.Join(xdg, "kite-collector")
+	if os.Getenv("XDG_DATA_HOME") != "" {
+		return defaultCertsDir(true)
 	}
-	return "/var/lib/kite-collector"
+	return defaultCertsDir(false)
 }
 
 // currentOSUser returns the login username stamped into scan_runs.triggered_by
