@@ -53,10 +53,12 @@ func New() *Source { return &Source{} }
 // Name returns the stable identifier for this source.
 func (s *Source) Name() string { return "wsdiscovery" }
 
-// Config is the typed projection of operator YAML.
+// Config is the typed projection of operator YAML. Fields are ordered
+// strings-first, slices-next, primitives last to minimise GC pointer-bitmap
+// overhead (fieldalignment).
 type Config struct {
-	Interfaces   []string
 	Types        string // optional SOAP `Types` filter (empty = ProbeAll)
+	Interfaces   []string
 	ListenWindow time.Duration
 	DisableIPv4  bool
 	DisableIPv6  bool
@@ -89,14 +91,16 @@ func parseConfig(cfg map[string]any) Config {
 
 // responder accumulates one logical device, keyed by EndpointReference URN
 // when present (the spec's stable identity), otherwise by source IP.
+//
+//nolint:govet // fieldalignment: all 7 fields are pointer-containing so ptrdata is floor-bounded at 128; the recommended 120 isn't reachable without splitting the type.
 type responder struct {
+	lastSeen time.Time
 	addr     net.IP
+	xaddrs   []string
 	epr      string
 	types    string
 	scopes   string
-	xaddrs   []string
 	hostname string
-	lastSeen time.Time
 }
 
 // Discover sends a Probe and reads ProbeMatch replies for ListenWindow.
@@ -156,7 +160,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				wg.Add(1)
 				go func(c *net.UDPConn) {
 					defer wg.Done()
-					defer c.Close()
+					defer func() { _ = c.Close() }()
 					readLoop(ctx, c, record)
 				}(conn)
 			} else {
@@ -169,7 +173,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				wg.Add(1)
 				go func(c *net.UDPConn) {
 					defer wg.Done()
-					defer c.Close()
+					defer func() { _ = c.Close() }()
 					readLoop(ctx, c, record)
 				}(conn)
 			} else {
@@ -209,7 +213,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 func pickInterfaces(wanted []string) ([]net.Interface, error) {
 	all, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("enumerate interfaces: %w", err)
 	}
 	want := map[string]struct{}{}
 	for _, n := range wanted {
@@ -235,7 +239,7 @@ func pickInterfaces(wanted []string) ([]net.Interface, error) {
 func listenMulticast(iface net.Interface, group net.IP) (*net.UDPConn, error) {
 	conn, err := net.ListenMulticastUDP(networkFor(group), &iface, &net.UDPAddr{IP: group, Port: wsdPort})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("join %s on %s: %w", group, iface.Name, err)
 	}
 	_ = conn.SetReadBuffer(1 << 20)
 	return conn, nil
@@ -257,7 +261,7 @@ func sendAndReadReplies(ctx context.Context, iface net.Interface, group net.IP, 
 			"iface", iface.Name, "group", group.String(), "error", err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	msgID := "uuid:" + uuid.Must(uuid.NewV7()).String()
 	payload := buildProbe(msgID, types)
@@ -307,9 +311,18 @@ type probeMatch struct {
 // ProbeMatches response. Unprefixed XML tags match on local name regardless
 // of namespace, which is exactly what we want for the multi-namespace WSD
 // payload.
+//
+//nolint:govet // fieldalignment: encoding/xml field ordering must match the SOAP envelope's expected child order; reordering for ptrdata would break unmarshalling.
 type xmlEnvelope struct {
-	XMLName xml.Name
-	Body    struct {
+	Body struct {
+		Hello *struct {
+			EndpointReference struct {
+				Address string `xml:"Address"`
+			} `xml:"EndpointReference"`
+			Types  string `xml:"Types"`
+			Scopes string `xml:"Scopes"`
+			XAddrs string `xml:"XAddrs"`
+		} `xml:"Hello"`
 		ProbeMatches struct {
 			Match []struct {
 				EndpointReference struct {
@@ -320,15 +333,8 @@ type xmlEnvelope struct {
 				XAddrs string `xml:"XAddrs"`
 			} `xml:"ProbeMatch"`
 		} `xml:"ProbeMatches"`
-		Hello *struct {
-			EndpointReference struct {
-				Address string `xml:"Address"`
-			} `xml:"EndpointReference"`
-			Types  string `xml:"Types"`
-			Scopes string `xml:"Scopes"`
-			XAddrs string `xml:"XAddrs"`
-		} `xml:"Hello"`
 	} `xml:"Body"`
+	XMLName xml.Name
 }
 
 // parseEnvelope decodes a SOAP datagram and returns a flat list of
@@ -337,7 +343,7 @@ type xmlEnvelope struct {
 func parseEnvelope(raw []byte) ([]probeMatch, error) {
 	var env xmlEnvelope
 	if err := xml.Unmarshal(raw, &env); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal soap envelope: %w", err)
 	}
 	var out []probeMatch
 	for _, m := range env.Body.ProbeMatches.Match {
