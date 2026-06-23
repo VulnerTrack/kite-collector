@@ -19,7 +19,10 @@ builds:
     # NetBSD + Dragonfly are intentionally excluded: modernc.org/sqlite
     # v1.48.1 has an upstream bug on those targets (mu.enter/mu.leave
     # undefined). Re-add when the driver is patched.
-    goos: [linux, darwin, windows, freebsd, openbsd]
+    # Build order: linux first (primary deployment target), then windows
+    # (largest user base after linux), then darwin (developer workstations),
+    # then BSDs (tier-2).
+    goos: [linux, windows, darwin, freebsd, openbsd]
     goarch: [amd64, arm64]
     ignore:
       - goos: windows
