@@ -44,6 +44,11 @@ import (
 	codedisc "github.com/vulnertrack/kite-collector/internal/discovery/code"
 	dockerdisc "github.com/vulnertrack/kite-collector/internal/discovery/docker"
 	entradisc "github.com/vulnertrack/kite-collector/internal/discovery/entra"
+	lldpdisc "github.com/vulnertrack/kite-collector/internal/discovery/lan/lldp"
+	mdnsdisc "github.com/vulnertrack/kite-collector/internal/discovery/lan/mdns"
+	netbiosdisc "github.com/vulnertrack/kite-collector/internal/discovery/lan/netbios"
+	ssdpdisc "github.com/vulnertrack/kite-collector/internal/discovery/lan/ssdp"
+	wsddisc "github.com/vulnertrack/kite-collector/internal/discovery/lan/wsdiscovery"
 	ldapdisc "github.com/vulnertrack/kite-collector/internal/discovery/ldap"
 	"github.com/vulnertrack/kite-collector/internal/discovery/mdm"
 	"github.com/vulnertrack/kite-collector/internal/discovery/network"
@@ -204,6 +209,8 @@ lifecycle events for downstream consumption.`,
 		newTrustCmd(),
 		newCheckOTLPCmd(),
 		newInstallCmd(),
+		newUninstallCmd(),
+		newServiceCmd(),
 	)
 
 	return root
@@ -340,6 +347,11 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry := discovery.NewRegistry()
 	registry.Register(networkScanner(st, dataDir))
 	registry.Register(agent.New())
+	registry.Register(mdnsdisc.New())
+	registry.Register(ssdpdisc.New())
+	registry.Register(wsddisc.New())
+	registry.Register(lldpdisc.New())
+	registry.Register(netbiosdisc.New())
 	registry.Register(cloud.NewAWS())
 	registry.Register(cloud.NewGCP())
 	registry.Register(cloud.NewAzure())
@@ -845,7 +857,9 @@ and no config file is required:
   kite-collector agent --stream --certs-dir /var/lib/kite-collector/<agent-code>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			printBrandBanner(cmd.ErrOrStderr(), version, commit)
-			return runAgent(cfgFile, dbPath, interval, certsDir, endpoint, dashboardAddr, verbose, stream)
+			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer cancel()
+			return runAgent(ctx, cfgFile, dbPath, interval, certsDir, endpoint, dashboardAddr, verbose, stream)
 		},
 	}
 
@@ -889,7 +903,9 @@ automatically and no config file is needed:
 
   kite stream --certs-dir /var/lib/kite-collector/<agent-code>`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runAgent(cfgFile, dbPath, interval, certsDir, endpoint, "", verbose, true)
+			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer cancel()
+			return runAgent(ctx, cfgFile, dbPath, interval, certsDir, endpoint, "", verbose, true)
 		},
 	}
 
@@ -905,10 +921,7 @@ automatically and no config file is needed:
 	return cmd
 }
 
-func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAddr string, verbose, stream bool) error {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
+func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAddr string, verbose, stream bool) error {
 	runID := uuid.Must(uuid.NewV7()).String()
 
 	var cfg *config.Config
@@ -1024,6 +1037,11 @@ func runAgent(cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAd
 	registry := discovery.NewRegistry()
 	registry.Register(networkScanner(st, filepath.Dir(dbPath)))
 	registry.Register(agent.New())
+	registry.Register(mdnsdisc.New())
+	registry.Register(ssdpdisc.New())
+	registry.Register(wsddisc.New())
+	registry.Register(lldpdisc.New())
+	registry.Register(netbiosdisc.New())
 	registry.Register(cloud.NewAWS())
 	registry.Register(cloud.NewGCP())
 	registry.Register(cloud.NewAzure())

@@ -6,7 +6,8 @@
 #   2. Downloads the latest kite-collector binary from GitHub Releases
 #   3. Installs it to %LOCALAPPDATA%\kite-collector\
 #   4. Adds the install directory to the user PATH
-#   5. Prints getting-started instructions
+#   5. Registers the per-user kite-collector Windows service
+#   6. Prints getting-started instructions
 
 $ErrorActionPreference = "Stop"
 
@@ -57,17 +58,36 @@ Write-Host "  Installed:" -ForegroundColor Green
 & $binaryPath version
 Write-Host ""
 
+# Register per-user Windows service via kardianos/service.
+# This is non-elevated so it succeeds from a standard PowerShell session.
+Write-Host "  Registering kite-collector as a per-user service..."
+try {
+    & $binaryPath install --user --binary-dir $installDir
+} catch {
+    Write-Host "  WARNING: service registration failed: $_" -ForegroundColor Yellow
+    Write-Host "  You can retry later with: kite-collector install --user" -ForegroundColor Yellow
+}
+Write-Host ""
+
 # Print getting-started instructions.
 Write-Host "  Getting started:" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "    # Scan this computer"
-Write-Host "    kite-collector scan"
+Write-Host "    # One-time enrollment with your platform"
+Write-Host "    kite-collector enroll --agent-code <code> --token <token>"
 Write-Host ""
-Write-Host "    # Interactive setup wizard"
+Write-Host "    # Start the continuous streaming service"
+Write-Host "    kite-collector service start --user"
+Write-Host ""
+Write-Host "    # Check service status"
+Write-Host "    kite-collector service status --user"
+Write-Host ""
+Write-Host "    # One-off scan or interactive setup"
+Write-Host "    kite-collector scan"
 Write-Host "    kite-collector init"
 Write-Host ""
 Write-Host "    # Open dashboard in browser"
 Write-Host "    kite-collector dashboard"
 Write-Host ""
-Write-Host "    # Or just double-click kite-collector.exe!"
+Write-Host "  To uninstall the service later:" -ForegroundColor Cyan
+Write-Host "    kite-collector uninstall --user"
 Write-Host ""
