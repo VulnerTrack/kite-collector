@@ -71,14 +71,14 @@ func TestAbsorbAndClassifyPrinter(t *testing.T) {
 func TestClassifyPrecedence(t *testing.T) {
 	cases := []struct {
 		name     string
-		services []string
 		want     model.AssetType
+		services []string
 	}{
-		{"appliance beats workstation", []string{"_workstation._tcp.local", "_ipp._tcp.local"}, model.AssetTypeAppliance},
-		{"iot beats server", []string{"_http._tcp.local", "_airplay._tcp.local"}, model.AssetTypeIOTDevice},
-		{"workstation", []string{"_workstation._tcp.local"}, model.AssetTypeWorkstation},
-		{"server fallback", []string{"_ssh._tcp.local"}, model.AssetTypeServer},
-		{"unknown becomes iot", []string{"_weird._tcp.local"}, model.AssetTypeIOTDevice},
+		{"appliance beats workstation", model.AssetTypeAppliance, []string{"_workstation._tcp.local", "_ipp._tcp.local"}},
+		{"iot beats server", model.AssetTypeIOTDevice, []string{"_http._tcp.local", "_airplay._tcp.local"}},
+		{"workstation", model.AssetTypeWorkstation, []string{"_workstation._tcp.local"}},
+		{"server fallback", model.AssetTypeServer, []string{"_ssh._tcp.local"}},
+		{"unknown becomes iot", model.AssetTypeIOTDevice, []string{"_weird._tcp.local"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -196,6 +196,7 @@ func mkPTR(t *testing.T, owner, target string) dnsmessage.Resource {
 		Body:   &dnsmessage.PTRResource{PTR: tgt},
 	}
 }
+
 func mkSRV(t *testing.T, owner, target string) dnsmessage.Resource {
 	t.Helper()
 	o, _ := dnsmessage.NewName(owner)
@@ -205,6 +206,7 @@ func mkSRV(t *testing.T, owner, target string) dnsmessage.Resource {
 		Body:   &dnsmessage.SRVResource{Target: tgt, Port: 631},
 	}
 }
+
 func mkA(t *testing.T, owner string, ip net.IP) dnsmessage.Resource {
 	t.Helper()
 	o, _ := dnsmessage.NewName(owner)

@@ -110,36 +110,36 @@ func TestAbsorbAndClassifyGateway(t *testing.T) {
 func TestClassifyPrecedence(t *testing.T) {
 	cases := []struct {
 		name   string
-		sts    []string
 		server string
 		want   model.AssetType
+		sts    []string
 	}{
 		{
 			"gateway wins over mediarenderer",
+			"",
+			model.AssetTypeNetworkDevice,
 			[]string{
 				"urn:schemas-upnp-org:device:MediaRenderer:1",
 				"urn:schemas-upnp-org:device:InternetGatewayDevice:1",
 			},
-			"",
-			model.AssetTypeNetworkDevice,
 		},
 		{
 			"printer from server header",
-			[]string{"upnp:rootdevice"},
 			"Printer-Daemon IPP/2.0",
 			model.AssetTypeAppliance,
+			[]string{"upnp:rootdevice"},
 		},
 		{
 			"mediarenderer",
-			[]string{"urn:schemas-upnp-org:device:MediaRenderer:1"},
 			"",
 			model.AssetTypeIOTDevice,
+			[]string{"urn:schemas-upnp-org:device:MediaRenderer:1"},
 		},
 		{
 			"unknown falls back to iot",
-			[]string{"upnp:rootdevice"},
 			"",
 			model.AssetTypeIOTDevice,
+			[]string{"upnp:rootdevice"},
 		},
 	}
 	for _, tc := range cases {

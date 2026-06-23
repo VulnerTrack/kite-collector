@@ -37,7 +37,11 @@ type runner func(ctx context.Context, binary string, args ...string) ([]byte, er
 
 func defaultRunner(ctx context.Context, binary string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, binary, args...)
-	return cmd.Output()
+	out, err := cmd.Output()
+	if err != nil {
+		return out, fmt.Errorf("exec %s: %w", binary, err)
+	}
+	return out, nil
 }
 
 // lookPath is the seam for binary detection. Defaults to exec.LookPath.
@@ -45,8 +49,8 @@ type pathLookup func(string) (string, error)
 
 // Source implements discovery.Source over `lldpctl`.
 type Source struct {
-	run        runner
-	lookPath   pathLookup
+	run      runner
+	lookPath pathLookup
 }
 
 // New returns a new LLDP discovery source.
@@ -128,15 +132,15 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 // neighbor is the projected shape of one LLDP neighbor — exactly what we
 // need to build an asset and tag the switch-port edge.
 type neighbor struct {
-	LocalIface     string
-	ChassisName    string
-	ChassisID      string
-	ChassisDescr   string
-	MgmtIP         string
-	PortID         string
-	PortDescr      string
-	Capabilities   []string
-	VLANs          []string
+	LocalIface   string
+	ChassisName  string
+	ChassisID    string
+	ChassisDescr string
+	MgmtIP       string
+	PortID       string
+	PortDescr    string
+	Capabilities []string
+	VLANs        []string
 }
 
 // parseLLDPCtl decodes the JSON shape that `lldpctl -f json` emits. Two
@@ -150,7 +154,7 @@ func parseLLDPCtl(raw []byte) ([]neighbor, error) {
 		} `json:"lldp"`
 	}
 	if err := json.Unmarshal(raw, &root); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal lldpctl output: %w", err)
 	}
 	if len(root.LLDP.Interface) == 0 {
 		return nil, nil
@@ -216,7 +220,7 @@ func flattenKeyedList(raw json.RawMessage) ([]keyedEntry, error) {
 func absorbInterface(n *neighbor, raw json.RawMessage) error {
 	var meta map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &meta); err != nil {
-		return err
+		return fmt.Errorf("unmarshal interface entry: %w", err)
 	}
 	if chassisRaw, ok := meta["chassis"]; ok {
 		entries, err := flattenKeyedList(chassisRaw)

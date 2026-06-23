@@ -68,12 +68,12 @@ func (s *Source) Name() string { return "mdns" }
 
 // Config is the typed projection of the operator YAML.
 type Config struct {
-	ServiceTypes  []string
-	Interfaces    []string
-	ListenWindow  time.Duration
-	QueryRepeat   int
-	DisableIPv6   bool
-	DisableIPv4   bool
+	ServiceTypes []string
+	Interfaces   []string
+	ListenWindow time.Duration
+	QueryRepeat  int
+	DisableIPv6  bool
+	DisableIPv4  bool
 }
 
 func parseConfig(cfg map[string]any) Config {
@@ -115,11 +115,11 @@ func parseConfig(cfg map[string]any) Config {
 // responder accumulates everything we observed about a single mDNS responder
 // (one host, one network address) before we collapse it into a model.Asset.
 type responder struct {
-	addr      net.IP
-	hostname  string
-	services  map[string]struct{} // canonical service types observed
-	instances map[string]struct{} // service instance names (e.g. "Living Room._airplay._tcp.local.")
 	lastSeen  time.Time
+	services  map[string]struct{}
+	instances map[string]struct{}
+	hostname  string
+	addr      net.IP
 }
 
 // Discover sends DNS-SD PTR queries on every usable multicast-capable
@@ -187,7 +187,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				wg.Add(1)
 				go func(c *net.UDPConn) {
 					defer wg.Done()
-					defer c.Close()
+					defer func() { _ = c.Close() }()
 					readLoop(ctx, c, record)
 				}(conn4)
 			}
@@ -202,7 +202,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				wg.Add(1)
 				go func(c *net.UDPConn) {
 					defer wg.Done()
-					defer c.Close()
+					defer func() { _ = c.Close() }()
 					readLoop(ctx, c, record)
 				}(conn6)
 			}
@@ -240,7 +240,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 func pickInterfaces(wanted []string) ([]net.Interface, error) {
 	all, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("enumerate interfaces: %w", err)
 	}
 	want := map[string]struct{}{}
 	for _, n := range wanted {
@@ -274,7 +274,7 @@ func listenMulticast(iface net.Interface, group net.IP) (*net.UDPConn, error) {
 	udpAddr := &net.UDPAddr{IP: group, Port: mdnsPort}
 	conn, err := net.ListenMulticastUDP(networkFor(group), &iface, udpAddr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("join %s on %s: %w", group, iface.Name, err)
 	}
 	_ = conn.SetReadBuffer(1 << 20)
 	return conn, nil
@@ -308,7 +308,7 @@ func sendQueryOn(iface net.Interface, group net.IP, services []string) {
 			"iface", iface.Name, "error", err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	payload, err := buildQuery(services)
 	if err != nil {
@@ -336,7 +336,7 @@ func buildQuery(services []string) ([]byte, error) {
 		RCode:            dnsmessage.RCodeSuccess,
 	})
 	if err := b.StartQuestions(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("start questions: %w", err)
 	}
 	for _, svc := range services {
 		name, err := dnsmessage.NewName(svc)
@@ -350,10 +350,14 @@ func buildQuery(services []string) ([]byte, error) {
 			Type:  dnsmessage.TypePTR,
 			Class: dnsmessage.ClassINET,
 		}); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("encode question %q: %w", svc, err)
 		}
 	}
-	return b.Finish()
+	raw, err := b.Finish()
+	if err != nil {
+		return nil, fmt.Errorf("finish dns message: %w", err)
+	}
+	return raw, nil
 }
 
 // readLoop reads packets until ctx is done, parses them, and pushes records
@@ -392,30 +396,33 @@ func readLoop(ctx context.Context, conn *net.UDPConn, record func(dnsmessage.Res
 func parseMessage(raw []byte) ([]dnsmessage.Resource, error) {
 	var parser dnsmessage.Parser
 	if _, err := parser.Start(raw); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dns parser start: %w", err)
 	}
 	if err := parser.SkipAllQuestions(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("skip questions: %w", err)
 	}
 	var out []dnsmessage.Resource
 	for {
 		r, err := parser.Answer()
-		if err == dnsmessage.ErrSectionDone {
+		if errors.Is(err, dnsmessage.ErrSectionDone) {
 			break
 		}
 		if err != nil {
-			return out, nil
+			// Partial parse — keep what we collected; the rest of the
+			// section is malformed but earlier records are still valid
+			// inventory signal. mDNS packets in the wild are messy.
+			return out, nil //nolint:nilerr // intentional partial-parse
 		}
 		out = append(out, r)
 	}
 	_ = parser.SkipAllAuthorities()
 	for {
 		r, err := parser.Additional()
-		if err == dnsmessage.ErrSectionDone {
+		if errors.Is(err, dnsmessage.ErrSectionDone) {
 			break
 		}
 		if err != nil {
-			return out, nil
+			return out, nil //nolint:nilerr // intentional partial-parse
 		}
 		out = append(out, r)
 	}

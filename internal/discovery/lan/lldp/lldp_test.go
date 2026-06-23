@@ -148,16 +148,16 @@ func TestParseLLDPCtlEmpty(t *testing.T) {
 func TestClassifyPrecedence(t *testing.T) {
 	cases := []struct {
 		name  string
-		caps  []string
 		descr string
 		want  model.AssetType
+		caps  []string
 	}{
-		{"bridge is network device", []string{"Bridge"}, "", model.AssetTypeNetworkDevice},
-		{"router is network device", []string{"Router"}, "", model.AssetTypeNetworkDevice},
-		{"wlan ap is network device", []string{"WLAN-Access-Point"}, "", model.AssetTypeNetworkDevice},
-		{"station-only is server", []string{"Station-Only"}, "Ubuntu 24.04", model.AssetTypeServer},
-		{"linux descr → server", nil, "Linux 6.5", model.AssetTypeServer},
-		{"unknown → network_device default", nil, "", model.AssetTypeNetworkDevice},
+		{"bridge is network device", "", model.AssetTypeNetworkDevice, []string{"Bridge"}},
+		{"router is network device", "", model.AssetTypeNetworkDevice, []string{"Router"}},
+		{"wlan ap is network device", "", model.AssetTypeNetworkDevice, []string{"WLAN-Access-Point"}},
+		{"station-only is server", "Ubuntu 24.04", model.AssetTypeServer, []string{"Station-Only"}},
+		{"linux descr → server", "Linux 6.5", model.AssetTypeServer, nil},
+		{"unknown → network_device default", "", model.AssetTypeNetworkDevice, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
