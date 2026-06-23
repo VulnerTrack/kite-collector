@@ -254,7 +254,8 @@ func enableBroadcast(conn *net.UDPConn) error {
 		return fmt.Errorf("control socket: %w", err)
 	}
 	if sockErr != nil {
-		return fmt.Errorf("setsockopt SO_BROADCAST: %w", sockErr)
+		// setBroadcastOpt already wraps with its own context.
+		return sockErr
 	}
 	return nil
 }
