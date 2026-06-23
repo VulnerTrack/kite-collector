@@ -36,7 +36,10 @@ const (
 type runner func(ctx context.Context, binary string, args ...string) ([]byte, error)
 
 func defaultRunner(ctx context.Context, binary string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, binary, args...)
+	// binary is resolved via exec.LookPath (or operator-supplied absolute path
+	// in cfg["binary"]) before reaching this seam — never operator-tainted
+	// arbitrary input. Args is a fixed literal ([]string{"-f","json"}).
+	cmd := exec.CommandContext(ctx, binary, args...) //#nosec G204 -- binary is LookPath-resolved or operator-configured absolute path; args are fixed literals
 	out, err := cmd.Output()
 	if err != nil {
 		return out, fmt.Errorf("exec %s: %w", binary, err)
