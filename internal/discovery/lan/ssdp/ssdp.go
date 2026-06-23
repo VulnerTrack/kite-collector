@@ -104,14 +104,14 @@ func parseConfig(cfg map[string]any) Config {
 // source IP. We merge multiple announcements (ST/USN pairs) into a single
 // asset so a router advertising 8 service URNs is one asset, not 8.
 type responder struct {
-	addr      net.IP
-	hostname  string
-	server    string
-	location  string
-	usn       string
-	sts       map[string]struct{}
-	usns      map[string]struct{}
-	lastSeen  time.Time
+	lastSeen time.Time
+	sts      map[string]struct{}
+	usns     map[string]struct{}
+	hostname string
+	server   string
+	location string
+	usn      string
+	addr     net.IP
 }
 
 // Discover sends M-SEARCH, joins the multicast group to also pick up
@@ -174,7 +174,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				wg.Add(1)
 				go func(c *net.UDPConn) {
 					defer wg.Done()
-					defer c.Close()
+					defer func() { _ = c.Close() }()
 					readLoop(ctx, c, record)
 				}(conn)
 			} else {
@@ -187,7 +187,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				wg.Add(1)
 				go func(c *net.UDPConn) {
 					defer wg.Done()
-					defer c.Close()
+					defer func() { _ = c.Close() }()
 					readLoop(ctx, c, record)
 				}(conn)
 			} else {
@@ -234,7 +234,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 func pickInterfaces(wanted []string) ([]net.Interface, error) {
 	all, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("enumerate interfaces: %w", err)
 	}
 	want := map[string]struct{}{}
 	for _, n := range wanted {
@@ -266,7 +266,7 @@ func listenMulticast(iface net.Interface, group net.IP) (*net.UDPConn, error) {
 	udpAddr := &net.UDPAddr{IP: group, Port: ssdpPort}
 	conn, err := net.ListenMulticastUDP(networkFor(group), &iface, udpAddr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("join %s on %s: %w", group, iface.Name, err)
 	}
 	_ = conn.SetReadBuffer(1 << 20)
 	return conn, nil
@@ -288,7 +288,7 @@ func sendAndReadReplies(ctx context.Context, iface net.Interface, group net.IP, 
 			"iface", iface.Name, "group", group.String(), "error", err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	payload := buildMSearch(group, st, mx)
 	dst := &net.UDPAddr{IP: group, Port: ssdpPort}
@@ -367,7 +367,7 @@ func parseDatagram(raw []byte) (ssdpMessage, error) {
 		key := strings.TrimSpace(line[:idx])
 		val := strings.TrimSpace(line[idx+1:])
 		// SSDP headers are case-insensitive; normalise to canonical.
-		headers.Add(http.CanonicalHeaderKey(key), val)
+		headers.Add(key, val)
 	}
 	msg.Headers = headers
 	if msg.Method == "NOTIFY" {

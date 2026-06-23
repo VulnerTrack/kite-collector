@@ -78,12 +78,12 @@ func parseConfig(cfg map[string]any) Config {
 // responder accumulates one host. Multiple NBSTAT entries with the same
 // machine name + different service suffixes collapse into one asset.
 type responder struct {
-	addr      net.IP
+	lastSeen  time.Time
 	machine   string
 	workgroup string
 	mac       string
+	addr      net.IP
 	services  []string
-	lastSeen  time.Time
 }
 
 // Discover sends NBSTAT to the broadcast address of each chosen interface
@@ -114,7 +114,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	if err != nil {
 		return nil, fmt.Errorf("netbios: open socket: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if err := enableBroadcast(conn); err != nil {
 		// Non-fatal: unicast targets still work.
@@ -194,7 +194,7 @@ func buildDestinations(cfg Config) ([]net.IP, error) {
 
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return out, err
+		return out, fmt.Errorf("enumerate interfaces: %w", err)
 	}
 	for _, ifi := range ifaces {
 		if ifi.Flags&net.FlagUp == 0 ||
@@ -244,16 +244,21 @@ func subnetBroadcast(ip net.IP, mask net.IPMask) net.IP {
 func enableBroadcast(conn *net.UDPConn) error {
 	raw, err := conn.SyscallConn()
 	if err != nil {
-		return err
+		return fmt.Errorf("get raw conn: %w", err)
 	}
 	var sockErr error
 	err = raw.Control(func(fd uintptr) {
-		sockErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
+		// fd is a valid kernel file descriptor returned by net.ListenUDP; it
+		// always fits in an int on every supported platform.
+		sockErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1) //#nosec G115 -- fd is a valid kernel fd
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("control socket: %w", err)
 	}
-	return sockErr
+	if sockErr != nil {
+		return fmt.Errorf("setsockopt SO_BROADCAST: %w", sockErr)
+	}
+	return nil
 }
 
 // readLoop drains UDP, parses each datagram, pushes to the recorder.

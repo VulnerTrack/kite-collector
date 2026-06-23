@@ -115,14 +115,14 @@ func TestSubnetBroadcast(t *testing.T) {
 func TestClassifyPrecedence(t *testing.T) {
 	cases := []struct {
 		name     string
-		services []string
 		want     model.AssetType
+		services []string
 	}{
-		{"file server suffix 0x20 → server", []string{"KITE<20>"}, model.AssetTypeServer},
-		{"domain master 0x1b → server", []string{"KITE<00>", "WORKGROUP<1b>"}, model.AssetTypeServer},
-		{"domain group 0x1c → server", []string{"WORKGROUP<1c>"}, model.AssetTypeServer},
-		{"plain workstation", []string{"KITE<00>", "WORKGROUP<00>"}, model.AssetTypeWorkstation},
-		{"empty fallback", nil, model.AssetTypeWorkstation},
+		{"file server suffix 0x20 → server", model.AssetTypeServer, []string{"KITE<20>"}},
+		{"domain master 0x1b → server", model.AssetTypeServer, []string{"KITE<00>", "WORKGROUP<1b>"}},
+		{"domain group 0x1c → server", model.AssetTypeServer, []string{"WORKGROUP<1c>"}},
+		{"plain workstation", model.AssetTypeWorkstation, []string{"KITE<00>", "WORKGROUP<00>"}},
+		{"empty fallback", model.AssetTypeWorkstation, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -201,20 +201,9 @@ func TestBuildDestinationsExplicitOnly(t *testing.T) {
 // KITE-DEV<20> unique file server) and a known MAC.
 func buildSyntheticNBSTATResponse(t *testing.T) []byte {
 	t.Helper()
-	hdr := make([]byte, 12)
-	binary.BigEndian.PutUint16(hdr[0:], 0xCAFE) // xid
-	binary.BigEndian.PutUint16(hdr[2:], 0x8400) // response, authoritative
-	binary.BigEndian.PutUint16(hdr[4:], 0)      // qdcount
-	binary.BigEndian.PutUint16(hdr[6:], 1)      // ancount
-	binary.BigEndian.PutUint16(hdr[8:], 0)
-	binary.BigEndian.PutUint16(hdr[10:], 0)
 
-	var nameRaw [16]byte
-	copy(nameRaw[:], "*               ")
-	encName := encodeNetBIOSName(nameRaw[:])
-
-	// Build RDATA: 3 names + 6-byte MAC + 40 bytes of stats (zeroed).
-	var rdata []byte
+	// Build RDATA first so we know the full message size before allocating.
+	rdata := make([]byte, 0, 1+3*18+6+40)
 	rdata = append(rdata, 0x03) // num names
 
 	mkEntry := func(label string, suffix byte, group bool) {
@@ -241,15 +230,29 @@ func buildSyntheticNBSTATResponse(t *testing.T) []byte {
 	rdata = append(rdata, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55)
 	rdata = append(rdata, make([]byte, 40)...) // stats padding
 
+	var nameRaw [16]byte
+	copy(nameRaw[:], "*               ")
+	encName := encodeNetBIOSName(nameRaw[:])
+
 	// Answer: name + type + class + ttl + rdlength + rdata.
-	ans := encName
 	ansTail := make([]byte, 10)
 	binary.BigEndian.PutUint16(ansTail[0:], qtypeNBSTAT)
 	binary.BigEndian.PutUint16(ansTail[2:], qclassIN)
 	binary.BigEndian.PutUint32(ansTail[4:], 0) // ttl
-	binary.BigEndian.PutUint16(ansTail[8:], uint16(len(rdata)))
+	// rdata length fits in uint16 by construction (3*18 + 47 = 101 bytes).
+	binary.BigEndian.PutUint16(ansTail[8:], uint16(len(rdata))) //#nosec G115 -- bounded test payload
+	ans := make([]byte, 0, len(encName)+len(ansTail)+len(rdata))
+	ans = append(ans, encName...)
 	ans = append(ans, ansTail...)
 	ans = append(ans, rdata...)
 
-	return append(hdr, ans...)
+	// 12-byte NBNS header.
+	out := make([]byte, 12, 12+len(ans))
+	binary.BigEndian.PutUint16(out[0:], 0xCAFE) // xid
+	binary.BigEndian.PutUint16(out[2:], 0x8400) // response, authoritative
+	binary.BigEndian.PutUint16(out[4:], 0)      // qdcount
+	binary.BigEndian.PutUint16(out[6:], 1)      // ancount
+	binary.BigEndian.PutUint16(out[8:], 0)
+	binary.BigEndian.PutUint16(out[10:], 0)
+	return append(out, ans...)
 }
