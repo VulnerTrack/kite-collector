@@ -216,7 +216,10 @@ func persist(id *Identity, path string) error {
 	if err != nil {
 		return fmt.Errorf("marshal identity: %w", err)
 	}
-	return os.WriteFile(path, data, 0o600)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write identity: %w", err)
+	}
+	return nil
 }
 
 func loadFromBytes(data []byte, path string, logger *slog.Logger) (*Identity, error) {

@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -72,7 +73,7 @@ func (r *Recorder) Record(
 			"status", status,
 			"error", err,
 		)
-		return err
+		return fmt.Errorf("record heartbeat: %w", err)
 	}
 
 	r.logger.Debug("heartbeat emitted",
