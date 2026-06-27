@@ -1,0 +1,241 @@
+# CI/CD Pipeline for kite-collector — RFC-0051
+# Runs on every push/PR to main. Release on v* tags.
+name: Kite Collector
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: kite-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.26"
+  CGO_ENABLED: "0"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Phase 1: Quality Gates (parallel)
+  # ──────────────────────────────────────────────
+
+  vet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go vet ./...
+
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install golangci-lint v2
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+      - run: golangci-lint run --timeout=5m ./...
+
+  security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+      - run: gosec -exclude-generated ./...
+
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run tests
+        run: go test -count=1 -coverprofile=coverage.out ./...
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 30
+
+  tidy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          if ! git diff --exit-code go.mod go.sum; then
+            echo "::error::go.mod or go.sum is not tidy. Run 'go mod tidy' and commit."
+            exit 1
+          fi
+
+  # ──────────────────────────────────────────────
+  # Phase 2: Build (after all gates pass)
+  # ──────────────────────────────────────────────
+
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [vet, lint, security, test]
+    if: "!startsWith(github.ref, 'refs/tags/v')"
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      # Embed the Windows app manifest (UAC requireAdministrator +
+      # Common-Controls 6.0) before the Windows build, so the wizard binary
+      # ships with the resources it needs. The .syso is named with the
+      # _windows_amd64 suffix so the Go toolchain links it only into the
+      # matching matrix cell — no-op on linux/darwin builds.
+      - name: Generate Windows resources
+        if: matrix.goos == 'windows'
+        run: |
+          go install github.com/akavel/rsrc@latest
+          rsrc -manifest cmd/kite-collector/app.manifest \
+               -arch ${{ matrix.goarch }} \
+               -o cmd/kite-collector/rsrc_windows_${{ matrix.goarch }}.syso
+      - name: Build
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+          go build -ldflags="-s -w \
+            -X main.version=${{ github.ref_name }} \
+            -X main.commit=${{ github.sha }} \
+            -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          -o kite-collector-${{ matrix.goos }}-${{ matrix.goarch }} \
+          ./cmd/kite-collector
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kite-collector-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: kite-collector-${{ matrix.goos }}-${{ matrix.goarch }}
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  # Phase 3: Release (v* tags only)
+  # ──────────────────────────────────────────────
+
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [vet, lint, security, test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    # Bind to the "Deployment" environment so the job can access environment-
+    # scoped secrets (notably HOMEBREW_TAP_GITHUB_TOKEN). Repository-scoped
+    # secrets are visible everywhere; environment-scoped secrets only fire
+    # for jobs that opt in here. Also enables protection rules (required
+    # reviewers, wait timers, branch restrictions) on the release flow.
+    environment: Deployment
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      # msitools provides wixl — the WiX toolset's Linux-native MSI
+      # builder. Used by scripts/build-msi.sh in the post-goreleaser step
+      # below. Without msitools, the MSI build step fails with
+      # "wixl: command not found".
+      - name: Install msitools (wixl) for MSI build
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends msitools
+      # Embed the Windows app manifest (UAC requireAdministrator +
+      # Common-Controls 6.0) before the Windows build in the goreleaser
+      # matrix. Same step as the per-PR build job above, but lives in
+      # the release job so a release-only push (push to tag without
+      # touching main) still produces a properly-manifested .exe.
+      - name: Generate Windows resources
+        run: |
+          go install github.com/akavel/rsrc@latest
+          rsrc -manifest cmd/kite-collector/app.manifest \
+               -arch amd64 \
+               -o cmd/kite-collector/rsrc_windows_amd64.syso
+      - name: Diagnose secret presence (length only — values are masked)
+        # Confirms whether HOMEBREW_TAP_GITHUB_TOKEN is set on THIS repo at
+        # THIS workflow ref. Length-only print; GitHub redacts secret values
+        # in logs, but ${#VAR} is the integer length and is safe to log.
+        # If the secret is missing, you'll see UNSET here, which confirms
+        # the 403 is "secret not configured" rather than "PAT lacks scope".
+        run: |
+          set -u
+          if [ -n "${HOMEBREW_TAP_GITHUB_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_GITHUB_TOKEN: SET (length=${#HOMEBREW_TAP_GITHUB_TOKEN})"
+          else
+            echo "HOMEBREW_TAP_GITHUB_TOKEN: UNSET — add it as a repo secret on"
+            echo "  https://github.com/${{ github.repository }}/settings/secrets/actions"
+            exit 1
+          fi
+          if [ -n "${GITHUB_TOKEN:-}" ]; then
+            echo "GITHUB_TOKEN: SET (length=${#GITHUB_TOKEN})"
+          fi
+        env:
+          # NOTE: deliberately NO `|| secrets.GITHUB_TOKEN` fallback here.
+          # We want to fail fast and visibly when the secret is missing, not
+          # silently use the wrong token and 403 in the goreleaser step.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Cross-repo write to VulnerTrack/homebrew-tap requires a PAT (or
+          # fine-grained token) with contents:write on that repo. Stored as
+          # repo secret HOMEBREW_TAP_GITHUB_TOKEN.
+          # The silent `||` fallback was removed: if the secret is missing,
+          # the diagnose step above fails with a clear actionable message.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+      # Build the Windows MSI from the .exe goreleaser just produced and
+      # attach it to the GitHub Release as an additional asset. Runs after
+      # goreleaser publishes so the release already exists for `gh release
+      # upload` to target. Pure OSS path — no goreleaser Pro license needed.
+      - name: Build MSI and attach to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          COMMIT="${GITHUB_SHA:0:7}"
+          ./scripts/build-msi.sh "$VERSION" "$COMMIT"
+          gh release upload "$GITHUB_REF_NAME" \
+            "dist/kite-collector_${VERSION}_amd64.msi" \
+            --clobber
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          artifact-name: kite-collector-sbom.spdx.json
+          path: .

@@ -1,0 +1,123 @@
+version: 2
+
+# Pre-build hooks. Run once before any `builds:` entry kicks off — output
+# of the rsrc step (cmd/kite-collector/rsrc_windows_amd64.syso) is picked
+# up automatically by the Go toolchain when GOOS=windows. Without this,
+# the released kite-collector.exe would lack the embedded UAC manifest +
+# Common-Controls 6.0 dependency that the install wizard relies on.
+before:
+  hooks:
+    - go mod tidy
+    - go install github.com/akavel/rsrc@latest
+    - rsrc -manifest cmd/kite-collector/app.manifest -arch amd64 -o cmd/kite-collector/rsrc_windows_amd64.syso
+
+builds:
+  - id: kite-collector
+    main: ./cmd/kite-collector
+    binary: kite-collector
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    # FreeBSD and OpenBSD are tier-2: they cross-compile cleanly with
+    # CGO_ENABLED=0 and the pure-Go modernc.org/sqlite driver, but have no
+    # CI runtime tests yet. Identity hardening (TPM, OS keyring) silently
+    # falls back to plain-disk on these platforms — same behavior as
+    # darwin/windows for the keyring backend.
+    # NetBSD + Dragonfly are intentionally excluded: modernc.org/sqlite
+    # v1.48.1 has an upstream bug on those targets (mu.enter/mu.leave
+    # undefined). Re-add when the driver is patched.
+    # Build order: linux first (primary deployment target), then windows
+    # (largest user base after linux), then darwin (developer workstations),
+    # then BSDs (tier-2).
+    goos: [linux, windows, darwin, freebsd, openbsd]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+# Tarball for Homebrew (brews requires tar.gz, not raw binaries).
+archives:
+  - id: homebrew
+    formats: [tar.gz]
+    name_template: "kite-collector_{{ .Os }}_{{ .Arch }}"
+  # Flat binary distribution — single file download, no tar.gz.
+  - id: flat
+    formats: [binary]
+    name_template: "kite-collector_{{ .Os }}_{{ .Arch }}_bin"
+
+checksum:
+  name_template: "checksums.txt"
+
+# Windows MSI installer — see scripts/build-msi.sh.
+#
+# We deliberately do NOT use goreleaser's `msi:` block: that is a Pro-only
+# feature and we want the MSI to ship from the OSS edition. The release
+# workflow instead runs `scripts/build-msi.sh` AFTER goreleaser publishes
+# the GitHub release, then uploads the .msi to that release with
+# `gh release upload`.
+#
+# The MSI is built with wixl (msitools — the WiX toolset's open-source
+# Linux port). wix.wxs lives at cmd/kite-collector/wix.wxs.
+
+# Linux packages via nfpm.
+nfpms:
+  - id: packages
+    package_name: kite-collector
+    vendor: VulnerTrack
+    homepage: https://github.com/VulnerTrack/kite-collector
+    maintainer: VulnerTrack <hello@vulnertrack.dev>
+    description: Cybersecurity asset discovery, configuration audit, and posture analysis agent.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+    contents:
+      - src: configs/kite-collector.example.yaml
+        dst: /etc/kite-collector/kite-collector.example.yaml
+        type: config
+
+# Homebrew Cask — GoReleaser auto-generates the cask and pushes it to
+# the tap repo on every v* release. Migrated from the deprecated `brews:`
+# section per goreleaser's guidance (the cask path now works on both
+# macOS and Linuxbrew, and is the recommended way to publish pre-built
+# binaries via Homebrew). After the first cask release lands, delete the
+# old Formula/kite-collector.rb from the tap repo manually.
+homebrew_casks:
+  - name: kite-collector
+    ids: [homebrew]
+    binaries: [kite-collector]
+    # Publishes the cask into VulnerTrack/homebrew-tap. The default workflow
+    # GITHUB_TOKEN cannot write to a different repo — set
+    # HOMEBREW_TAP_GITHUB_TOKEN in the workflow env to a PAT (or fine-grained
+    # token) with `contents: write` on VulnerTrack/homebrew-tap.
+    # See: https://goreleaser.com/customization/homebrew_casks/
+    repository:
+      owner: VulnerTrack
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/VulnerTrack/kite-collector
+    description: "Cybersecurity asset discovery, configuration audit, and posture analysis agent"
+    # Without Apple notarization, macOS Gatekeeper quarantines the binary
+    # on first run ("App is damaged and cannot be opened"). The post-install
+    # hook strips the quarantine xattr so the binary launches cleanly.
+    # No-op on Linux. Replace with proper notarization when feasible.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/kite-collector"]
+          end
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

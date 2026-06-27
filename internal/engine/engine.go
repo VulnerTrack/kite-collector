@@ -1,0 +1,1015 @@
+package engine
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/vulnertrack/kite-collector/internal/audit"
+	"github.com/vulnertrack/kite-collector/internal/classifier"
+	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/dedup"
+	"github.com/vulnertrack/kite-collector/internal/discovery"
+	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
+	cloudsrc "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
+	entrasrc "github.com/vulnertrack/kite-collector/internal/discovery/entra"
+	"github.com/vulnertrack/kite-collector/internal/emitter"
+	"github.com/vulnertrack/kite-collector/internal/identity"
+	"github.com/vulnertrack/kite-collector/internal/metrics"
+	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/observability"
+	"github.com/vulnertrack/kite-collector/internal/policy"
+	"github.com/vulnertrack/kite-collector/internal/store"
+)
+
+type Engine struct {
+	store        store.Store
+	registry     *discovery.Registry
+	deduplicator *dedup.Deduplicator
+	classifier   *classifier.Classifier
+	emitter      emitter.Emitter
+	policy       *policy.Engine
+	metrics      *metrics.Metrics
+	// identity is the per-install signing identity used to stamp probe
+	// heartbeats and verify them during reconciliation. nil disables
+	// synthetic-finding observability (heartbeats, tamper, canary drift).
+	identity *identity.Identity
+}
+
+// SetIdentity wires the per-install identity into the engine for
+// heartbeat signing and tamper detection. Optional — call sites that
+// don't set this run with synthetic-finding observability disabled.
+func (e *Engine) SetIdentity(id *identity.Identity) {
+	e.identity = id
+}
+
+// RunOptions carries provenance and pre-allocated identity for a scan.
+//
+// The zero value preserves the legacy CLI-path behaviour: the engine mints
+// its own UUID v7, inserts the scan_runs row itself, and stores no trigger
+// metadata. Callers that need to surface the scan ID before the engine
+// finishes (for example the HTTP scan coordinator, which returns 202
+// Accepted immediately) set ScanID to a pre-allocated value and are
+// responsible for inserting the scan_runs row themselves; in that case the
+// engine skips its own CreateScanRun call.
+type RunOptions struct {
+	// TriggerSource is the provenance tag recorded on the ScanRun row
+	// when the engine creates it. Empty defaults to "cli". Ignored when
+	// ScanID is non-zero (the caller already wrote the row).
+	TriggerSource string
+
+	// TriggeredBy identifies the caller (OS user, mTLS CN, or API-key
+	// label). Ignored when ScanID is non-zero.
+	TriggeredBy string
+
+	// ScanID pre-allocates the scan run UUID. When non-zero the caller
+	// must have already persisted the scan_runs row; the engine will not
+	// create it and will only update the row at completion. When zero the
+	// engine mints a fresh UUID v7 and creates the row itself.
+	ScanID uuid.UUID
+}
+
+// sourceEnvVars maps discovery source names to the environment variables
+// that supply their credentials. Values are injected into the per-source
+// config map so connectors read them via cfg["key"]. Only non-empty env
+// vars are applied; missing vars result in graceful skip inside each
+// connector's Discover method.
+var sourceEnvVars = map[string]map[string]string{ //#nosec G101 -- values are env var names, not credentials
+	"intune": {
+		"tenant_id":     "KITE_INTUNE_TENANT_ID",
+		"client_id":     "KITE_INTUNE_CLIENT_ID",
+		"client_secret": "KITE_INTUNE_CLIENT_SECRET", // #nosec G101 -- env var name, not a credential
+	},
+	"entra": {
+		"tenant_id":     "KITE_ENTRA_TENANT_ID",
+		"client_id":     "KITE_ENTRA_CLIENT_ID",
+		"client_secret": "KITE_ENTRA_CLIENT_SECRET", // #nosec G101 -- env var name, not a credential
+	},
+	"jamf": {
+		"api_url":  "KITE_JAMF_API_URL",
+		"username": "KITE_JAMF_USERNAME",
+		"password": "KITE_JAMF_PASSWORD", // #nosec G101 -- env var name, not a credential
+	},
+	"sccm": {
+		"api_url":  "KITE_SCCM_API_URL",
+		"username": "KITE_SCCM_USERNAME",
+		"password": "KITE_SCCM_PASSWORD", // #nosec G101 -- env var name, not a credential
+	},
+	"netbox": {
+		"api_url": "KITE_NETBOX_API_URL",
+		"token":   "KITE_NETBOX_TOKEN", // #nosec G101 -- env var name, not a credential
+	},
+	"servicenow": {
+		"instance_url": "KITE_SERVICENOW_INSTANCE_URL",
+		"username":     "KITE_SERVICENOW_USERNAME",
+		"password":     "KITE_SERVICENOW_PASSWORD",
+		"table":        "KITE_SERVICENOW_TABLE",
+	},
+}
+
+func New(
+	st store.Store,
+	reg *discovery.Registry,
+	dd *dedup.Deduplicator,
+	cls *classifier.Classifier,
+	em emitter.Emitter,
+	pol *policy.Engine,
+	met *metrics.Metrics,
+) *Engine {
+	return &Engine{
+		store:        st,
+		registry:     reg,
+		deduplicator: dd,
+		classifier:   cls,
+		emitter:      em,
+		policy:       pol,
+		metrics:      met,
+	}
+}
+
+// Run is the CLI-entry-point shim for RunWithOptions. It mints a fresh
+// scan ID, creates the ScanRun row, and records a trigger_source of "cli".
+func (e *Engine) Run(ctx context.Context, cfg *config.Config) (*model.ScanResult, error) {
+	return e.RunWithOptions(ctx, cfg, RunOptions{})
+}
+
+// RunWithOptions runs the scan pipeline. When opts.ScanID is non-zero the
+// caller owns the scan_runs row and the engine only issues UPDATE; when it
+// is the zero UUID the engine mints one and records the initial row.
+func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts RunOptions) (*model.ScanResult, error) {
+	// Apply scan deadline — all scan work uses scanCtx; persistence uses
+	// the original ctx so results are saved even when the deadline fires.
+	scanCtx, cancel := context.WithTimeout(ctx, cfg.ScanDeadlineDuration())
+	defer cancel()
+
+	scanID := opts.ScanID
+	engineOwnsRow := scanID == uuid.Nil
+	if engineOwnsRow {
+		scanID = uuid.Must(uuid.NewV7())
+
+		scopeJSON, _ := json.Marshal(cfg.Discovery.Sources)
+		sourceNames := make([]string, 0, len(cfg.Discovery.Sources))
+		for name := range cfg.Discovery.Sources {
+			sourceNames = append(sourceNames, name)
+		}
+		sourcesJSON, _ := json.Marshal(sourceNames)
+
+		triggerSource := opts.TriggerSource
+		if triggerSource == "" {
+			triggerSource = "cli"
+		}
+
+		scanRun := model.ScanRun{
+			ID:               scanID,
+			StartedAt:        time.Now().UTC(),
+			Status:           model.ScanStatusRunning,
+			ScopeConfig:      string(scopeJSON),
+			DiscoverySources: string(sourcesJSON),
+			TriggerSource:    triggerSource,
+			TriggeredBy:      opts.TriggeredBy,
+		}
+		if err := e.store.CreateScanRun(ctx, scanRun); err != nil {
+			return nil, fmt.Errorf("create scan run: %w", err)
+		}
+	}
+
+	configs := make(map[string]map[string]any)
+	for name, src := range cfg.Discovery.Sources {
+		m := map[string]any{
+			"scope":              src.Scope,
+			"paths":              src.Paths,
+			"max_depth":          src.MaxDepth,
+			"tcp_ports":          src.TCPPorts,
+			"timeout":            src.Timeout,
+			"max_concurrent":     src.MaxConcurrent,
+			"collect_software":   src.CollectSoftware,
+			"collect_interfaces": src.CollectInterfaces,
+			"host":               src.Host,
+			"endpoint":           src.Endpoint,
+			"site":               src.Site,
+			"community":          src.Community,
+			"enabled":            src.Enabled,
+			// LDAP-specific (RFC-0121); harmless when other sources read them.
+			"tls_mode":             src.TLSMode,
+			"tls_ca_file":          src.TLSCAFile,
+			"tls_skip_verify":      src.TLSSkipVerify,
+			"bind_dn":              src.BindDN,
+			"bind_password_env":    src.BindPasswordEnv,
+			"base_dn":              src.BaseDN,
+			"domain_controllers":   stringSliceToAny(src.DomainControllers),
+			"page_size":            src.PageSize,
+			"stale_threshold_days": src.StaleThresholdDays,
+			"max_objects":          src.MaxObjects,
+			"collect_users":        src.CollectUsers,
+			"collect_groups":       src.CollectGroups,
+			"collect_ous":          src.CollectOUs,
+			"collect_gpos":         src.CollectGPOs,
+			// Entra-specific (RFC-0121); harmless when other sources read them.
+			"stale_account_days":     src.StaleAccountDays,
+			"max_users":              src.MaxUsers,
+			"max_service_principals": src.MaxServicePrincipals,
+			"max_groups":             src.MaxGroups,
+			"max_devices":            src.MaxDevices,
+		}
+		// Bind MDM/CMDB credential environment variables into the
+		// config map so connectors receive them via the standard
+		// cfg parameter. Credentials never appear in config files.
+		for key, envVar := range sourceEnvVars[name] {
+			if val := os.Getenv(envVar); val != "" {
+				m[key] = val
+			}
+		}
+		configs[name] = m
+	}
+
+	// Bind a scan-scoped heartbeat recorder so DiscoverAll emits one
+	// synthetic liveness record per source. The recorder is replaced (or
+	// cleared) at the start of every scan, so cross-scan leakage is
+	// impossible. When identity is nil (legacy callers, tests without
+	// signing material), no heartbeat is emitted and the reconciler at
+	// the end of the scan becomes a no-op.
+	if e.identity != nil {
+		e.registry.SetHeartbeatRecorder(observability.NewRecorder(
+			scanID, e.identity, e.store, slog.Default(),
+		))
+	} else {
+		e.registry.SetHeartbeatRecorder(nil)
+	}
+
+	slog.Info("discovery phase starting",
+		"code", string(LogCodeDiscoveryStart),
+		"scan_id", scanID,
+		"source_count", len(configs))
+	discovered, err := e.registry.DiscoverAll(scanCtx, configs)
+	if err != nil {
+		if scanCtx.Err() == context.DeadlineExceeded {
+			slog.Warn("discovery exceeded scan deadline; processing partial results",
+				"code", string(LogCodeDiscoveryDeadlineExceeded),
+				"scan_id", scanID,
+				"partial_assets", len(discovered),
+				"error", err,
+			)
+			// Fall through — process whatever was discovered.
+			// Metric is incremented in the final status check.
+		} else {
+			failResult := model.ScanResult{
+				Status:     string(model.ScanStatusFailed),
+				ErrorCount: 1,
+			}
+			_ = e.store.CompleteScanRun(ctx, scanID, failResult)
+			return nil, fmt.Errorf("discovery: %w", err)
+		}
+	}
+	slog.Info("discovery phase complete",
+		"code", string(LogCodeDiscoveryComplete),
+		"scan_id", scanID,
+		"raw_assets", len(discovered))
+
+	dedupResult, err := e.deduplicator.Deduplicate(ctx, discovered)
+	if err != nil {
+		return nil, fmt.Errorf("deduplicate: %w", err)
+	}
+
+	assets := e.classifier.ClassifyAll(dedupResult.Assets)
+
+	// Snapshot the pre-update view of every asset by natural key BEFORE
+	// the upsert, so the event-classification block below can compare
+	// material fingerprints (existing-on-disk vs incoming-from-discovery)
+	// and emit AssetAnalyzed for repeated rescans where only the
+	// timestamps moved. This is what keeps the event stream from being
+	// dominated by per-tick AssetUpdated noise. The lookup tolerates
+	// errors — degrading to "treat all as discovered/updated" — because
+	// noise is preferable to dropping a scan.
+	priorByKey := make(map[string]model.Asset, len(assets))
+	if len(assets) > 0 {
+		keys := make([]string, 0, len(assets))
+		for i := range assets {
+			if assets[i].NaturalKey != "" {
+				keys = append(keys, assets[i].NaturalKey)
+			}
+		}
+		fetched, perr := e.store.GetAssetsByNaturalKeys(ctx, keys)
+		if perr != nil {
+			slog.Warn("prior-asset fingerprint snapshot failed; degrading to update-only event classification",
+				"code", string(LogCodeAssetsFingerprintSnapshot),
+				"error", perr,
+				"scan_id", scanID,
+				"natural_keys", len(keys),
+			)
+		} else {
+			priorByKey = fetched
+		}
+	}
+
+	inserted, updated, err := e.store.UpsertAssets(ctx, assets)
+	if err != nil {
+		return nil, fmt.Errorf("upsert assets: %w", err)
+	}
+	slog.Info("assets persisted to store",
+		"code", string(LogCodeAssetsPersisted),
+		"scan_id", scanID,
+		"inserted", inserted,
+		"updated", updated,
+		"total_assets", len(assets))
+
+	// Collect and persist installed software for the agent asset.
+	// Skip if scan deadline already exceeded.
+	var softwareCount, softwareErrors int
+	if scanCtx.Err() == nil {
+		if agentCfg, ok := configs["agent"]; ok {
+			if cs, ok := agentCfg["collect_software"].(bool); ok && cs {
+				if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
+					swReg := software.NewRegistry()
+					swResult := swReg.Collect(scanCtx)
+					softwareCount = len(swResult.Items)
+					if len(swResult.Items) > 0 {
+						for i := range swResult.Items {
+							swResult.Items[i].AssetID = agentID
+						}
+						if swErr := e.store.UpsertSoftware(ctx, agentID, swResult.Items); swErr != nil {
+							slog.Error("software inventory upsert failed",
+								"code", string(LogCodeSoftwarePersistFailed),
+								"error", swErr,
+								"scan_id", scanID,
+								"asset_id", agentID,
+								"item_count", len(swResult.Items),
+								"parse_errors", swResult.TotalErrors())
+							softwareErrors++
+						} else {
+							slog.Info("software inventory persisted",
+								"code", string(LogCodeSoftwarePersisted),
+								"scan_id", scanID,
+								"asset_id", agentID,
+								"item_count", len(swResult.Items),
+								"parse_errors", swResult.TotalErrors(),
+							)
+						}
+					}
+					if swResult.HasErrors() {
+						logSoftwareParseErrors(swResult.Errs)
+					}
+				}
+			}
+		}
+	}
+
+	// Configuration audit phase: run enabled auditors on the agent asset.
+	// Skip if scan deadline already exceeded.
+	var findingsCount, postureCount int
+	if scanCtx.Err() == nil && cfg.Audit.Enabled {
+		if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
+			var agentAsset model.Asset
+			for _, a := range assets {
+				if a.ID == agentID {
+					agentAsset = a
+					break
+				}
+			}
+
+			auditReg := audit.NewRegistry()
+			if cfg.Audit.SSH.Enabled {
+				auditReg.Register(audit.NewSSH(cfg.Audit.SSH.ConfigPath))
+			}
+			if cfg.Audit.Firewall.Enabled {
+				auditReg.Register(audit.NewFirewall())
+			}
+			if cfg.Audit.Kernel.Enabled {
+				auditReg.Register(audit.NewKernel())
+			}
+			if cfg.Audit.Permissions.Enabled {
+				auditReg.Register(audit.NewPermissions(cfg.Audit.Permissions.Paths))
+			}
+			if cfg.Audit.Service.Enabled {
+				auditReg.Register(audit.NewService(cfg.Audit.Service.CriticalPorts))
+			}
+			if cfg.Audit.ProcessEnvSecrets.Enabled {
+				auditReg.Register(audit.NewProcessEnvSecrets(audit.ProcessEnvSecretsConfig{
+					Processes:         cfg.Audit.ProcessEnvSecrets.ProcessFilter,
+					ExtraDenyPrefixes: cfg.Audit.ProcessEnvSecrets.DenyList,
+					MaxPIDs:           cfg.Audit.ProcessEnvSecrets.MaxPIDs,
+				}))
+			}
+
+			findings, auditErr := auditReg.AuditAll(scanCtx, agentAsset)
+			if auditErr != nil {
+				slog.Warn("config-audit phase returned error",
+					"code", string(LogCodeAuditFailed),
+					"error", auditErr,
+					"scan_id", scanID,
+					"asset_id", agentAsset.ID,
+					"hostname", agentAsset.Hostname)
+			}
+			if len(findings) > 0 {
+				for i := range findings {
+					findings[i].ScanRunID = scanID
+				}
+				if fErr := e.store.InsertFindings(ctx, findings); fErr != nil {
+					slog.Error("config-audit findings persist failed",
+						"code", string(LogCodeAuditFindingsPersistFailed),
+						"error", fErr,
+						"scan_id", scanID,
+						"asset_id", agentAsset.ID,
+						"finding_count", len(findings))
+				} else {
+					findingsCount = len(findings)
+					slog.Info("config-audit phase complete",
+						"code", string(LogCodeAuditComplete),
+						"scan_id", scanID,
+						"asset_id", agentAsset.ID,
+						"findings", findingsCount)
+					e.recordFindingMetrics(findings)
+				}
+			}
+		}
+	}
+
+	// Code audit phase: secrets-scanning only. CVE/SCA matching has been
+	// removed — kite-collector is a CMDB, not a vulnerability scanner.
+	if scanCtx.Err() == nil && cfg.Audit.Enabled {
+		codeAuditReg := audit.NewRegistry()
+		if cfg.Audit.Secrets.Enabled {
+			codeAuditReg.Register(audit.NewSecrets())
+		}
+
+		for _, a := range assets {
+			if a.AssetType != model.AssetTypeRepository {
+				continue
+			}
+			codeFindings, auditErr := codeAuditReg.AuditAll(scanCtx, a)
+			if auditErr != nil {
+				slog.Warn("code-audit phase returned error",
+					"code", string(LogCodeAuditCodeFailed),
+					"error", auditErr,
+					"scan_id", scanID,
+					"asset_id", a.ID,
+					"hostname", a.Hostname)
+				continue
+			}
+			if len(codeFindings) == 0 {
+				continue
+			}
+			for i := range codeFindings {
+				codeFindings[i].ScanRunID = scanID
+			}
+			if fErr := e.store.InsertFindings(ctx, codeFindings); fErr != nil {
+				slog.Error("code-audit findings persist failed",
+					"code", string(LogCodeAuditCodePersistFailed),
+					"error", fErr,
+					"scan_id", scanID,
+					"asset_id", a.ID,
+					"hostname", a.Hostname,
+					"finding_count", len(codeFindings))
+			} else {
+				findingsCount += len(codeFindings)
+				slog.Info("code-audit phase complete",
+					"code", string(LogCodeAuditCodeComplete),
+					"scan_id", scanID,
+					"asset_id", a.ID,
+					"hostname", a.Hostname,
+					"findings", len(codeFindings),
+				)
+				e.recordFindingMetrics(codeFindings)
+			}
+		}
+	}
+
+	// Container env secret audit phase (RFC-0123): run the container env
+	// secret scanner over every asset whose AssetType is "container". The
+	// auditor lazily fetches all container envs once via the docker source
+	// (ContainerEnvLister) and reuses the cached envs for every asset in
+	// this loop, so the Docker socket is consulted only when at least one
+	// container asset exists.
+	if scanCtx.Err() == nil && cfg.Audit.Enabled && cfg.Audit.EnvSecrets.Enabled {
+		var lister audit.ContainerEnvLister
+		if dsrc := e.registry.Get("docker"); dsrc != nil {
+			if l, ok := dsrc.(audit.ContainerEnvLister); ok {
+				lister = l
+			}
+		}
+		if lister != nil {
+			dockerCfg := configs["docker"]
+			envAuditor := audit.NewContainerEnvSecrets(
+				lister, dockerCfg, cfg.Audit.EnvSecrets.DenyList,
+			)
+			for _, a := range assets {
+				if a.AssetType != model.AssetTypeContainer {
+					continue
+				}
+				envFindings, auditErr := envAuditor.Audit(scanCtx, a)
+				if auditErr != nil {
+					slog.Warn("container-env-secret audit returned error",
+						"code", string(LogCodeAuditContainerEnvFailed),
+						"error", auditErr,
+						"scan_id", scanID,
+						"asset_id", a.ID,
+						"hostname", a.Hostname)
+					continue
+				}
+				if len(envFindings) == 0 {
+					continue
+				}
+				for i := range envFindings {
+					envFindings[i].ScanRunID = scanID
+				}
+				if fErr := e.store.InsertFindings(ctx, envFindings); fErr != nil {
+					slog.Error("container-env-secret findings persist failed",
+						"code", string(LogCodeAuditContainerEnvPersistFailed),
+						"error", fErr,
+						"scan_id", scanID,
+						"asset_id", a.ID,
+						"hostname", a.Hostname,
+						"finding_count", len(envFindings))
+					continue
+				}
+				findingsCount += len(envFindings)
+				e.recordFindingMetrics(envFindings)
+				slog.Info("container-env-secret audit complete",
+					"code", string(LogCodeAuditContainerEnvComplete),
+					"scan_id", scanID,
+					"asset_id", a.ID,
+					"hostname", a.Hostname,
+					"findings", len(envFindings),
+				)
+			}
+		} else {
+			slog.Debug("container-env auditor enabled but docker source unavailable",
+				"code", string(LogCodeAuditContainerEnvNoSource),
+				"scan_id", scanID)
+		}
+	}
+
+	// LDAP / Active Directory audit phase: run the LDAP auditor over every
+	// asset whose discovery source is "ldap". The auditor inspects each
+	// asset's tags JSON for ad.* attributes and emits the RFC-0121 §6
+	// findings (stale account, kerberoastable, disabled-in-active-OU,
+	// cleartext bind). We materialise the auditor with the same TLS mode
+	// + stale_threshold the discovery source used so the cleartext finding
+	// fires consistently.
+	if scanCtx.Err() == nil && cfg.Audit.Enabled && cfg.Audit.LDAP.Enabled {
+		ldapSrc := cfg.Discovery.Sources["ldap"]
+		ldapAuditor := audit.NewLDAP(audit.LDAPAuditConfig{
+			StaleThresholdDays: ldapSrc.StaleThresholdDays,
+			TLSMode:            ldapSrc.TLSMode,
+		})
+		ldapReg := audit.NewRegistry()
+		ldapReg.Register(ldapAuditor)
+
+		for _, a := range assets {
+			if a.DiscoverySource != "ldap" {
+				continue
+			}
+			ldapFindings, auditErr := ldapReg.AuditAll(scanCtx, a)
+			if auditErr != nil {
+				slog.Warn("ldap audit phase returned error",
+					"code", string(LogCodeAuditLDAPFailed),
+					"error", auditErr,
+					"scan_id", scanID,
+					"asset_id", a.ID,
+					"hostname", a.Hostname,
+					"tls_mode", ldapSrc.TLSMode)
+				continue
+			}
+			if len(ldapFindings) == 0 {
+				continue
+			}
+			for i := range ldapFindings {
+				ldapFindings[i].ScanRunID = scanID
+			}
+			if fErr := e.store.InsertFindings(ctx, ldapFindings); fErr != nil {
+				slog.Error("ldap findings persist failed",
+					"code", string(LogCodeAuditLDAPPersistFailed),
+					"error", fErr,
+					"scan_id", scanID,
+					"asset_id", a.ID,
+					"hostname", a.Hostname,
+					"finding_count", len(ldapFindings))
+				continue
+			}
+			findingsCount += len(ldapFindings)
+			e.recordFindingMetrics(ldapFindings)
+		}
+	}
+
+	// Microsoft Entra ID audit phase: per-asset ENTRA-005 (non-compliant
+	// device) over assets discovered by the Entra source, plus the
+	// tenant-wide ENTRA-001 / 002 / 003 findings derived from the
+	// Snapshot the EntraID source caches at the end of Discover().
+	if scanCtx.Err() == nil && cfg.Audit.Enabled && cfg.Audit.Entra.Enabled {
+		entraSrcCfg := cfg.Discovery.Sources["entra"]
+		entraAuditor := audit.NewEntra(audit.EntraAuditConfig{
+			StaleAccountDays: entraSrcCfg.StaleAccountDays,
+		})
+
+		// Per-asset ENTRA-005: walk the discovered asset set and emit
+		// findings against assets whose discovery source is "entra".
+		for _, a := range assets {
+			if a.DiscoverySource != entrasrc.SourceName {
+				continue
+			}
+			entraFindings, auditErr := entraAuditor.Audit(scanCtx, a)
+			if auditErr != nil {
+				slog.Warn("entra per-asset audit returned error",
+					"code", string(LogCodeAuditEntraFailed),
+					"error", auditErr,
+					"scan_id", scanID,
+					"asset_id", a.ID,
+					"hostname", a.Hostname)
+				continue
+			}
+			if len(entraFindings) == 0 {
+				continue
+			}
+			for i := range entraFindings {
+				entraFindings[i].ScanRunID = scanID
+			}
+			if fErr := e.store.InsertFindings(ctx, entraFindings); fErr != nil {
+				slog.Error("entra findings persist failed",
+					"code", string(LogCodeAuditEntraPersistFailed),
+					"error", fErr,
+					"scan_id", scanID,
+					"asset_id", a.ID,
+					"hostname", a.Hostname,
+					"finding_count", len(entraFindings))
+				continue
+			}
+			findingsCount += len(entraFindings)
+			e.recordFindingMetrics(entraFindings)
+		}
+
+		// Tenant-wide ENTRA-001 / 002 / 003: pull the snapshot the
+		// EntraID source built during discovery, then emit findings.
+		// A nil snapshot means the source was disabled, never ran, or
+		// failed before producing data — silently skip in that case.
+		if src := e.registry.Get(entrasrc.SourceName); src != nil {
+			if entraSrc, ok := src.(*entrasrc.EntraID); ok {
+				snap := entraSrc.Snapshot()
+				if pErr := e.store.UpsertEntraSnapshot(ctx, snap); pErr != nil {
+					slog.Warn("entra tenant snapshot persist failed",
+						"code", string(LogCodeAuditEntraSnapshotPersist),
+						"error", pErr,
+						"scan_id", scanID,
+					)
+				}
+				tenantFindings, auditErr := entraAuditor.AuditTenant(scanCtx, snap)
+				if auditErr != nil {
+					slog.Warn("entra tenant audit returned error",
+						"code", string(LogCodeAuditEntraTenantFailed),
+						"error", auditErr,
+						"scan_id", scanID)
+				} else if len(tenantFindings) > 0 {
+					for i := range tenantFindings {
+						tenantFindings[i].ScanRunID = scanID
+					}
+					if fErr := e.store.InsertFindings(ctx, tenantFindings); fErr != nil {
+						slog.Error("entra tenant findings persist failed",
+							"code", string(LogCodeAuditEntraTenantPersistFailed),
+							"error", fErr,
+							"scan_id", scanID,
+							"finding_count", len(tenantFindings))
+					} else {
+						findingsCount += len(tenantFindings)
+						e.recordFindingMetrics(tenantFindings)
+						slog.Info("entra tenant audit complete",
+							"code", string(LogCodeAuditEntraTenantComplete),
+							"scan_id", scanID,
+							"findings", len(tenantFindings),
+						)
+					}
+				}
+			}
+		}
+	}
+
+	// RFC-0122 Phase 1+2: persist every cloud DNS snapshot the cloud DNS
+	// sources built during discovery into SQLite so the Python ontology
+	// bridge can sync ClickHouse cloud_dns_zones / cloud_dns_records
+	// tables read-only. Each source is skipped silently when it was
+	// disabled or never produced data.
+	for _, dnsSrc := range cloudDNSSnapshotSources(e.registry) {
+		if snap := dnsSrc.Snapshot(); snap != nil {
+			if pErr := e.store.UpsertCloudDNSSnapshot(ctx, snap); pErr != nil {
+				slog.Warn("cloud-DNS snapshot persist failed",
+					"code", string(LogCodeCloudDNSSnapshotPersist),
+					"error", pErr,
+					"scan_id", scanID,
+					"provider", snap.Provider,
+				)
+			}
+		}
+	}
+
+	// Stale asset detection and event generation — skip heavy work if
+	// the scan deadline already fired.
+	var staleAssets []model.Asset
+	var events []model.AssetEvent
+
+	if scanCtx.Err() == nil {
+		staleAssets, err = e.store.GetStaleAssets(ctx, cfg.StaleThresholdDuration())
+		if err != nil {
+			slog.Warn("stale-asset detection query failed",
+				"code", string(LogCodeStaleDetectFailed),
+				"error", err,
+				"scan_id", scanID,
+				"stale_threshold", cfg.StaleThresholdDuration().String())
+			staleAssets = nil
+		}
+	}
+
+	// Classification counters — UpdatedAssets and AnalyzedAssets reflect the
+	// post-classification truth (material vs non-material rescans), which
+	// differs from dedupResult.UpdatedCount (every existing asset, regardless
+	// of material delta).
+	var analyzedCount, materialUpdatedCount int
+	for i := range assets {
+		// Classify the event against the prior-state snapshot taken
+		// before UpsertAssets:
+		//   - no prior row             -> Discovered (first sighting)
+		//   - prior + material change  -> Updated   (real state delta)
+		//   - prior + no material chg  -> Analyzed  (timestamp-only tick)
+		// Authorization / management overrides still fire after this
+		// initial classification because they are alert-grade signals
+		// that should keep their per-tick visibility.
+		natKey := assets[i].NaturalKey
+		prior, hadPrior := priorByKey[natKey]
+		var evtType model.EventType
+		switch {
+		case !hadPrior:
+			evtType = model.EventAssetDiscovered
+		case prior.MaterialFingerprint() != assets[i].MaterialFingerprint():
+			evtType = model.EventAssetUpdated
+			materialUpdatedCount++
+		default:
+			evtType = model.EventAssetAnalyzed
+			analyzedCount++
+		}
+		if assets[i].IsAuthorized == model.AuthorizationUnauthorized {
+			evtType = model.EventUnauthorizedAssetDetected
+		} else if assets[i].IsManaged == model.ManagedUnmanaged {
+			evtType = model.EventUnmanagedAssetDetected
+		}
+		severity := e.policy.EvaluateSeverity(assets[i])
+		// AssetAnalyzed events represent rescans with no material delta —
+		// pure noise from a triage perspective. Force severity=low so
+		// downstream backends and dashboards can filter cheaply (e.g.
+		// "severity > low") without needing to know about the event_type
+		// taxonomy. This is the engine-side override chosen instead of
+		// refactoring policy.EvaluateSeverity to take an EventType, which
+		// would touch every caller. Note: authorization / management
+		// overrides above already short-circuited away from Analyzed, so
+		// this only fires on truly noise-grade events.
+		if evtType == model.EventAssetAnalyzed {
+			severity = model.SeverityLow
+		}
+		evt := model.AssetEvent{
+			ID:        uuid.Must(uuid.NewV7()),
+			EventType: evtType,
+			ScanRunID: scanID,
+			Severity:  severity,
+			Timestamp: time.Now().UTC(),
+			Details:   model.BuildEventDetails(assets[i], evtType),
+		}
+		evt.FromAsset(assets[i])
+		events = append(events, evt)
+	}
+
+	for i := range staleAssets {
+		evt := model.AssetEvent{
+			ID:        uuid.Must(uuid.NewV7()),
+			EventType: model.EventAssetNotSeen,
+			ScanRunID: scanID,
+			Severity:  e.policy.EvaluateSeverity(staleAssets[i]),
+			Timestamp: time.Now().UTC(),
+			Details:   model.BuildEventDetails(staleAssets[i], model.EventAssetNotSeen),
+		}
+		evt.FromAsset(staleAssets[i])
+		events = append(events, evt)
+	}
+
+	if len(events) > 0 {
+		if err := e.store.InsertEvents(ctx, events); err != nil {
+			slog.Warn("asset-event batch persist failed",
+				"code", string(LogCodeEventsPersistFailed),
+				"error", err,
+				"scan_id", scanID,
+				"event_count", len(events))
+		}
+		if err := e.emitter.EmitBatch(ctx, events); err != nil {
+			slog.Warn("asset-event batch emit failed",
+				"code", string(LogCodeEventsEmitFailed),
+				"error", err,
+				"scan_id", scanID,
+				"event_count", len(events))
+		}
+	}
+
+	if e.metrics != nil {
+		e.metrics.StaleAssets.Set(float64(len(staleAssets)))
+	}
+
+	allAssets, _ := e.store.ListAssets(ctx, store.AssetFilter{})
+	totalKnown := len(allAssets)
+	coveragePct := 0.0
+	if totalKnown > 0 {
+		coveragePct = float64(len(assets)) / float64(totalKnown) * 100.0
+	}
+
+	scanStatus := model.ScanStatusCompleted
+	var errorCount int
+	if scanCtx.Err() == context.DeadlineExceeded {
+		scanStatus = model.ScanStatusTimedOut
+		errorCount = 1
+		if e.metrics != nil {
+			e.metrics.ScanDeadlineExceeded.Inc()
+		}
+		// Record runtime incident for the deadline breach.
+		_ = e.store.InsertRuntimeIncident(ctx, model.RuntimeIncident{
+			ID:           uuid.Must(uuid.NewV7()),
+			IncidentType: model.IncidentTimeoutExceeded,
+			Component:    "engine",
+			ErrorMessage: fmt.Sprintf("scan deadline exceeded (%s)", cfg.ScanDeadlineDuration()),
+			ScanRunID:    &scanID,
+			Severity:     string(model.SeverityHigh),
+			Recovered:    true,
+			ErrorCode:    "KITE-E013",
+			CreatedAt:    time.Now().UTC(),
+		})
+	}
+
+	result := &model.ScanResult{
+		Status:          string(scanStatus),
+		TotalAssets:     totalKnown,
+		NewAssets:       dedupResult.NewCount,
+		UpdatedAssets:   materialUpdatedCount,
+		AnalyzedAssets:  analyzedCount,
+		StaleAssets:     len(staleAssets),
+		EventsEmitted:   len(events),
+		SoftwareCount:   softwareCount,
+		SoftwareErrors:  softwareErrors,
+		FindingsCount:   findingsCount,
+		PostureCount:    postureCount,
+		ErrorCount:      errorCount,
+		CoveragePercent: coveragePct,
+	}
+
+	// Reconcile heartbeats: verify every signature, check binary-hash
+	// drift, and diff the actual collector set against the canary
+	// baseline. Runs synchronously here so its incidents land on the same
+	// scan_run as the failures they describe. Skipped silently when
+	// identity is unset.
+	if e.identity != nil {
+		rec := observability.NewReconciler(
+			e.identity, e.store, cfg.Observability.Canary, slog.Default(),
+		)
+		if _, rerr := rec.ReconcileScan(ctx, scanID); rerr != nil {
+			slog.Warn("observability reconcile failed",
+				"scan_id", scanID,
+				"error", rerr,
+			)
+		}
+	}
+
+	if err := e.store.CompleteScanRun(ctx, scanID, *result); err != nil {
+		slog.Warn("scan-run complete-stamp write failed",
+			"code", string(LogCodeScanRunCompleteFailed),
+			"error", err,
+			"scan_id", scanID,
+			"status", result.Status)
+	}
+
+	slog.Info("scan run complete",
+		"code", string(LogCodeScanRunComplete),
+		"scan_id", scanID,
+		"total", result.TotalAssets,
+		"new", result.NewAssets,
+		"updated", result.UpdatedAssets,
+		"analyzed", result.AnalyzedAssets,
+		"stale", result.StaleAssets,
+		"events", result.EventsEmitted,
+		"findings", result.FindingsCount,
+		"errors", result.ErrorCount,
+		"coverage_pct", result.CoveragePercent,
+		"status", result.Status,
+	)
+
+	return result, nil
+}
+
+// cloudDNSSnapshotProvider is the minimal interface every cloud DNS source
+// must satisfy for the engine to persist its snapshot. It is implemented by
+// Route53DNS, CloudflareDNS, AzureDNS and GCPDNS in internal/discovery/cloud.
+type cloudDNSSnapshotProvider interface {
+	Snapshot() *cloudsrc.DNSSnapshot
+}
+
+// cloudDNSSnapshotSources returns every registered cloud DNS source that can
+// produce a snapshot. Sources that are absent from the registry are skipped.
+func cloudDNSSnapshotSources(registry *discovery.Registry) []cloudDNSSnapshotProvider {
+	names := []string{
+		cloudsrc.DNSSourceNameRoute53,
+		cloudsrc.DNSSourceNameCloudflare,
+		cloudsrc.DNSSourceNameAzure,
+		cloudsrc.DNSSourceNameGCP,
+	}
+	out := make([]cloudDNSSnapshotProvider, 0, len(names))
+	for _, name := range names {
+		src := registry.Get(name)
+		if src == nil {
+			continue
+		}
+		if dnsSrc, ok := src.(cloudDNSSnapshotProvider); ok {
+			out = append(out, dnsSrc)
+		}
+	}
+	return out
+}
+
+// findAgentAssetID returns the ID of the first asset with DiscoverySource "agent".
+func findAgentAssetID(assets []model.Asset) uuid.UUID {
+	for _, a := range assets {
+		if a.DiscoverySource == "agent" {
+			return a.ID
+		}
+	}
+	return uuid.Nil
+}
+
+// stringSliceToAny converts a typed string slice into the []any shape that
+// downstream config consumers (which receive map[string]any) expect.
+// Returns nil for nil/empty input so the value disappears from JSON-style
+// debug dumps.
+func stringSliceToAny(in []string) []any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]any, len(in))
+	for i, v := range in {
+		out[i] = v
+	}
+	return out
+}
+
+// maxParseErrorLogs caps how many individual software parse errors are
+// logged per scan run so a malformed package-manager output cannot flood
+// the journal. The remainder is summarised in a single "truncated" line.
+const maxParseErrorLogs = 20
+
+// maxRawLineLog truncates each raw_line attribute so a multi-kilobyte JSON
+// blob doesn't blow up the log destination.
+const maxRawLineLog = 256
+
+// logSoftwareParseErrors emits one Warn record per software collector parse
+// error so operators can see exactly which line of which package manager's
+// output failed. Lines beyond maxParseErrorLogs are collapsed into a single
+// summary record. The log destination already carries run_id via the root
+// logger configured in cmd/kite-collector/main.go.
+func logSoftwareParseErrors(errs []software.CollectError) {
+	limit := len(errs)
+	if limit > maxParseErrorLogs {
+		limit = maxParseErrorLogs
+	}
+	for i := 0; i < limit; i++ {
+		e := errs[i]
+		raw := e.RawLine
+		if len(raw) > maxRawLineLog {
+			raw = raw[:maxRawLineLog] + "…"
+		}
+		slog.Warn("software-inventory parse error",
+			"code", string(LogCodeSoftwareParseError),
+			"collector", e.Collector,
+			"line", e.Line,
+			"error", e.Err,
+			"raw_line", raw,
+		)
+	}
+	if len(errs) > maxParseErrorLogs {
+		slog.Warn("software-inventory parse-error log truncated to avoid journal flood",
+			"code", string(LogCodeSoftwareParseTruncated),
+			"shown", maxParseErrorLogs,
+			"total", len(errs),
+		)
+	}
+}
+
+// recordFindingMetrics updates the open-findings gauge, cumulative counter,
+// and finding-age histogram for a batch of findings.
+func (e *Engine) recordFindingMetrics(findings []model.ConfigFinding) {
+	if e.metrics == nil {
+		return
+	}
+	now := time.Now().UTC()
+	for _, f := range findings {
+		sev := string(f.Severity)
+		aud := f.Auditor
+		e.metrics.FindingsOpen.WithLabelValues(sev, aud).Inc()
+		e.metrics.FindingsTotal.WithLabelValues(sev, aud).Inc()
+		if !f.FirstSeenAt.IsZero() {
+			ageHours := now.Sub(f.FirstSeenAt).Hours()
+			e.metrics.FindingAgeHours.WithLabelValues(sev, aud).Observe(ageHours)
+		}
+	}
+}

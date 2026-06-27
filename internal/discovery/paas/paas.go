@@ -1,0 +1,349 @@
+// Package paas provides discovery sources for PaaS deployment platforms.
+// Each source implements [discovery.Source] and enumerates applications/services
+// from the provider's API. All connectors use raw net/http + JSON — no
+// vendor SDKs.
+package paas
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"math"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	maxRetryAttempts = 3
+	baseRetryDelay   = 1 * time.Second
+	maxRetryDelay    = 30 * time.Second
+	clientTimeout    = 30 * time.Second
+)
+
+// authError is returned for 401/403 responses. The caller should skip
+// this source rather than retry.
+type authError struct {
+	body       string
+	statusCode int
+}
+
+func (e *authError) Error() string {
+	return fmt.Sprintf("authentication error (%d): %s", e.statusCode, truncate(e.body, 200))
+}
+
+// authFunc sets authentication headers on an outgoing HTTP request.
+type authFunc func(req *http.Request)
+
+// bearerAuth returns an authFunc that sets a Bearer token header.
+func bearerAuth(token string) authFunc {
+	return func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+}
+
+// captainAuth returns an authFunc for CapRover's x-captain-auth header.
+func captainAuth(token string) authFunc {
+	return func(req *http.Request) {
+		req.Header.Set("x-captain-auth", token)
+	}
+}
+
+// apiClient is a shared HTTP client for PaaS provider APIs with retry,
+// rate-limit handling, and JSON response decoding.
+type apiClient struct {
+	http    *http.Client
+	auth    authFunc
+	headers map[string]string
+	base    string
+	name    string
+}
+
+// newClient creates a new API client for the named provider.
+func newClient(name, base string, auth authFunc) *apiClient {
+	return &apiClient{
+		name:    name,
+		base:    base,
+		auth:    auth,
+		http:    &http.Client{Timeout: clientTimeout},
+		headers: make(map[string]string),
+	}
+}
+
+// newClientWithTLS creates a new API client with a custom TLS configuration.
+// Used by self-hosted connectors (Coolify, CapRover) that may need custom CA
+// certs or InsecureSkipVerify for local development.
+func newClientWithTLS(name, base string, auth authFunc, tlsCfg *tls.Config) *apiClient {
+	c := newClient(name, base, auth)
+	if tlsCfg != nil {
+		c.http.Transport = &http.Transport{TLSClientConfig: tlsCfg}
+	}
+	return c
+}
+
+// applyHeaders sets auth, default Accept, and custom headers on a request.
+func (c *apiClient) applyHeaders(req *http.Request) {
+	c.auth(req)
+	if _, ok := c.headers["Accept"]; !ok {
+		req.Header.Set("Accept", "application/json")
+	}
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
+}
+
+// get performs an authenticated GET request and JSON-decodes the response
+// body into out. Transient errors are retried with exponential backoff.
+func (c *apiClient) get(ctx context.Context, path string, out any) error {
+	_, err := c.getSized(ctx, path, out)
+	return err
+}
+
+// getSized is like get but also returns the number of bytes read from the
+// response body. Used by paginated callers to feed PaginationGuardV2 byte
+// caps (RFC-0124 R5).
+func (c *apiClient) getSized(ctx context.Context, path string, out any) (int64, error) {
+	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider
+		if reqErr != nil {
+			return nil, fmt.Errorf("create paas request: %w", reqErr)
+		}
+		c.applyHeaders(req)
+		doResp, doErr := c.http.Do(req) //#nosec G704 -- request built from internal base URL
+		if doErr != nil {
+			return nil, fmt.Errorf("execute paas request: %w", doErr)
+		}
+		return doResp, nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("paas GET %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return int64(len(body)), fmt.Errorf("read paas GET response: %w", readErr)
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return int64(len(body)), fmt.Errorf("decode paas GET response: %w", err)
+	}
+	return int64(len(body)), nil
+}
+
+// getPageSized performs a GET with optional extra headers and returns
+// the response headers, body byte count, and decoded body. Used when
+// pagination state is carried in response headers (e.g. Heroku Range
+// pagination). The returned byte count feeds PaginationGuardV2 byte-cap
+// enforcement (RFC-0124 R5).
+func (c *apiClient) getPageSized(ctx context.Context, path string, extraHeaders map[string]string, out any) (int64, http.Header, error) {
+	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil) //#nosec G704 -- base URL is hardcoded per provider
+		if reqErr != nil {
+			return nil, fmt.Errorf("create paas page request: %w", reqErr)
+		}
+		c.applyHeaders(req)
+		for k, v := range extraHeaders {
+			req.Header.Set(k, v)
+		}
+		doResp, doErr := c.http.Do(req) //#nosec G704 -- request built from internal base URL
+		if doErr != nil {
+			return nil, fmt.Errorf("execute paas page request: %w", doErr)
+		}
+		return doResp, nil
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return int64(len(body)), resp.Header, fmt.Errorf("read paas page response: %w", readErr)
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return int64(len(body)), resp.Header, fmt.Errorf("decode paas page response: %w", err)
+	}
+	return int64(len(body)), resp.Header, nil
+}
+
+// post performs an authenticated POST with a JSON body and decodes the
+// response into out. Used for GraphQL queries.
+func (c *apiClient) post(ctx context.Context, path string, body any, out any) error {
+	payload, mErr := json.Marshal(body)
+	if mErr != nil {
+		return fmt.Errorf("marshal request body: %w", mErr)
+	}
+	resp, err := c.doWithRetry(ctx, func() (*http.Response, error) {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, bytes.NewReader(payload)) //#nosec G704 -- base URL is hardcoded per provider
+		if reqErr != nil {
+			return nil, fmt.Errorf("create paas request: %w", reqErr)
+		}
+		c.applyHeaders(req)
+		req.Header.Set("Content-Type", "application/json")
+		return c.http.Do(req) //#nosec G704 -- request built from internal base URL
+	})
+	if err != nil {
+		return fmt.Errorf("paas POST %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode paas response: %w", err)
+	}
+	return nil
+}
+
+// doWithRetry executes fn up to maxRetryAttempts times with exponential
+// backoff. Response classification:
+//   - 2xx: success
+//   - 401/403: authError (non-retryable)
+//   - 429: retry, honouring Retry-After header
+//   - 5xx: retry
+//   - other 4xx: immediate failure
+func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, error)) (*http.Response, error) {
+	var lastErr error
+
+	for attempt := range maxRetryAttempts {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("%s: context cancelled: %w", c.name, ctx.Err())
+		}
+
+		if attempt > 0 {
+			delay := retryBackoff(attempt)
+			slog.Debug("PaaS HTTP retry after backoff delay", //#nosec G706 -- c.name is a hardcoded provider literal
+				"code", string(LogCodePaaSRetryBackoff),
+				"caller", c.name,
+				"attempt", attempt+1,
+				"delay", delay,
+			)
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("%s: backoff cancelled: %w", c.name, ctx.Err())
+			case <-time.After(delay):
+			}
+		}
+
+		resp, err := fn()
+		if err != nil {
+			lastErr = fmt.Errorf("%s: request failed: %w", c.name, err)
+			slog.Warn("PaaS HTTP network error; will retry", //#nosec G706 -- c.name is a hardcoded provider literal
+				"code", string(LogCodePaaSRetryNetworkError),
+				"caller", c.name,
+				"attempt", attempt+1,
+				"error", err,
+			)
+			continue
+		}
+
+		switch {
+		case resp.StatusCode >= 200 && resp.StatusCode < 300:
+			return resp, nil
+
+		case resp.StatusCode == 401 || resp.StatusCode == 403:
+			body := drainBody(resp, 500)
+			return nil, &authError{statusCode: resp.StatusCode, body: body}
+
+		case resp.StatusCode == 429:
+			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+			body := drainBody(resp, 200)
+			lastErr = fmt.Errorf("%s: rate limited (429): %s", c.name, body)
+			slog.Warn("PaaS HTTP rate-limited (429); will retry after server-suggested delay", //#nosec G706 -- c.name is a hardcoded provider literal
+				"code", string(LogCodePaaSRetryRateLimited),
+				"caller", c.name,
+				"attempt", attempt+1,
+				"retry_after", retryAfter,
+			)
+			if retryAfter > 0 {
+				select {
+				case <-ctx.Done():
+					return nil, fmt.Errorf("%s: rate-limit wait cancelled: %w", c.name, ctx.Err())
+				case <-time.After(retryAfter):
+				}
+			}
+			continue
+
+		case resp.StatusCode >= 500:
+			body := drainBody(resp, 500)
+			lastErr = fmt.Errorf("%s: server error (%d): %s", c.name, resp.StatusCode, body)
+			slog.Warn("PaaS HTTP server error (5xx); will retry", //#nosec G706 -- c.name is a hardcoded provider literal
+				"code", string(LogCodePaaSRetryServerError),
+				"caller", c.name,
+				"attempt", attempt+1,
+				"status", resp.StatusCode,
+			)
+			continue
+
+		default:
+			body := drainBody(resp, 500)
+			return nil, fmt.Errorf("%s: unexpected status %d: %s", c.name, resp.StatusCode, body)
+		}
+	}
+
+	return nil, fmt.Errorf("%s: exhausted %d retry attempts: %w", c.name, maxRetryAttempts, lastErr)
+}
+
+// retryBackoff returns an exponential backoff delay capped at maxRetryDelay.
+func retryBackoff(attempt int) time.Duration {
+	delay := time.Duration(float64(baseRetryDelay) * math.Pow(2, float64(attempt-1)))
+	if delay > maxRetryDelay {
+		delay = maxRetryDelay
+	}
+	return delay
+}
+
+// parseRetryAfter parses a Retry-After header value (seconds or HTTP-date).
+// Returns 0 when the header is missing or unparseable.
+func parseRetryAfter(val string) time.Duration {
+	if val == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(val); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(val); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
+}
+
+// drainBody reads up to maxLen bytes from the response body, closes it, and
+// returns the content as a string.
+func drainBody(resp *http.Response, maxLen int) string {
+	if resp.Body == nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, int64(maxLen)))
+	return string(data)
+}
+
+// truncate returns at most n bytes of s.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+// sanitizeLogValue replaces control characters to prevent log injection (CWE-117).
+func sanitizeLogValue(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return '_'
+		}
+		return r
+	}, s)
+}
+
+// toJSON marshals v to a JSON string. Returns "{}" on error.
+func toJSON(v any) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}

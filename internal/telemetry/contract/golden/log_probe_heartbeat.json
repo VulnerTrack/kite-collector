@@ -1,0 +1,11 @@
+{
+  "event.domain": "security",
+  "event.name": "probe.heartbeat",
+  "security.scan.uid": "01931cb6-b7c4-7c41-c000-1111aaaa2222",
+  "kite.probe.source": "agent.firewall",
+  "kite.probe.status": "ok",
+  "kite.probe.items_emitted": 17,
+  "kite.probe.duration_ms": 84,
+  "kite.probe.binary_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "kite.probe.signature": "Ej8aXyqgnJqfQK2gVoRvuf8wQwYZ7fXyKqJwGZRrtv7w8gqVbQfX7Ej8aXyqgnJqfQK2gVoRvuf8wQwYZ7fXyKqJwGZRrtv7w8g=="
+}

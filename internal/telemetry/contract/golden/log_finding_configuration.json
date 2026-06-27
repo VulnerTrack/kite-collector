@@ -1,0 +1,19 @@
+{
+  "event.domain": "security",
+  "event.name": "finding.configuration",
+  "security.scan.uid": "01931cb6-b7c4-7c41-c000-1111aaaa2222",
+  "security.finding.uid": "01931cb6-b7c4-7c41-e000-bbbb33334444",
+  "security.finding.type": "misconfiguration",
+  "security.finding.title": "SSH PermitRootLogin enabled",
+  "security.finding.severity": "high",
+  "security.finding.severity_id": 4,
+  "security.finding.cwe.uid": "CWE-250",
+  "security.finding.cwe.name": "Execution with Unnecessary Privileges",
+  "security.finding.capec.uid": "CAPEC-122",
+  "security.finding.cis_control": "5.2.10",
+  "security.finding.remediation.desc": "Set PermitRootLogin no in /etc/ssh/sshd_config",
+  "security.finding.evidence": "PermitRootLogin yes",
+  "security.finding.expected": "PermitRootLogin no",
+  "security.asset.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
+  "security.asset.name": "db-primary-01.prod"
+}

@@ -1,0 +1,16 @@
+{
+  "event.domain": "security",
+  "event.name": "asset.discovered",
+  "security.scan.uid": "01931cb6-b7c4-7c41-c000-1111aaaa2222",
+  "security.asset.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
+  "security.asset.type": "server",
+  "security.asset.name": "db-primary-01.prod",
+  "security.asset.os.name": "ubuntu",
+  "security.asset.os.version": "22.04",
+  "security.asset.ip.v4": "10.0.4.21",
+  "security.asset.fqdn": "db-primary-01.prod.acme.example",
+  "security.asset.authorization": "authorized",
+  "security.asset.managed_status": "managed",
+  "security.asset.first_seen": "2026-04-23T11:14:02Z",
+  "security.asset.discovery.source": "agent"
+}
