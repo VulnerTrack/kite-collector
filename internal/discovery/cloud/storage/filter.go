@@ -7,8 +7,8 @@ package storage
 type Filter struct {
 	Providers      []Provider
 	Signals        []SignalType
-	MinConfidence  Confidence
 	ExcludeSignals []SignalType
+	MinConfidence  Confidence
 }
 
 // Apply returns the subset of matches that satisfy every populated

@@ -47,7 +47,7 @@ var validSignalTypes = map[SignalType]struct{}{
 // file path and a 1-based index of the offending spec to keep operator
 // debugging cheap.
 func LoadSignaturesFromFile(path string) ([]Signature, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //#nosec G304 -- operator-supplied signature YAML/JSON path passed via LoadSignaturesFromFile, intentional CLI input
 	if err != nil {
 		return nil, fmt.Errorf("read signature file %s: %w", path, err)
 	}
