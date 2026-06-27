@@ -81,7 +81,7 @@ type ArtifactKind string
 
 const (
 	KindConfig         ArtifactKind = "allaria-config"
-	KindCredentials    ArtifactKind = "allaria-credentials"
+	KindCredentials    ArtifactKind = "allaria-credentials" //#nosec G101 -- ArtifactKind enum naming the Allaria credentials artifact category, not a credential value
 	KindPositionsCache ArtifactKind = "allaria-positions-cache"
 	KindOrdersCache    ArtifactKind = "allaria-orders-cache"
 	KindBlockTrade     ArtifactKind = "allaria-block-trade"

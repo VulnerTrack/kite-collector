@@ -84,7 +84,7 @@ const (
 	KindClearingConfig ArtifactKind = "das-clearing-config"
 	KindOrderLog       ArtifactKind = "das-orderlog"
 	KindShortLocateLog ArtifactKind = "das-short-locate-log"
-	KindAPIToken       ArtifactKind = "das-api-token"
+	KindAPIToken       ArtifactKind = "das-api-token" //#nosec G101 -- ArtifactKind enum naming the DAS Trader API token artifact category, not a token value
 	KindMobileToken    ArtifactKind = "das-mobile-token"
 	KindInstaller      ArtifactKind = "das-installer"
 	KindOther          ArtifactKind = "other"

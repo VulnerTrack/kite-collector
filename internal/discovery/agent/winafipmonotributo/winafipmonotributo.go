@@ -59,7 +59,7 @@ const (
 	KindCategoriaVigente ArtifactKind = "categoria-vigente"
 	KindF184Adhesion     ArtifactKind = "f184-adhesion"
 	KindIngresoAnual     ArtifactKind = "ingreso-anual"
-	KindCredencialCard   ArtifactKind = "credencial-card"
+	KindCredencialCard   ArtifactKind = "credencial-card" //#nosec G101 -- ArtifactKind enum naming the Monotributo credential-card artifact category, not a credential value
 	KindOther            ArtifactKind = "other"
 	KindUnknown          ArtifactKind = "unknown"
 )

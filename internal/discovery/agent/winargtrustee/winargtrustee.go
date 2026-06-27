@@ -73,7 +73,7 @@ const (
 	KindCollateralMonitoring ArtifactKind = "trustee-collateral-monitoring"
 	KindTrusteeFee           ArtifactKind = "trustee-fee"
 	KindConfig               ArtifactKind = "trustee-config"
-	KindCredentials          ArtifactKind = "trustee-credentials"
+	KindCredentials          ArtifactKind = "trustee-credentials" //#nosec G101 -- ArtifactKind enum naming the trustee-credentials artifact category, not a credential value
 	KindInstaller            ArtifactKind = "trustee-installer"
 	KindOther                ArtifactKind = "other"
 	KindUnknown              ArtifactKind = "unknown"

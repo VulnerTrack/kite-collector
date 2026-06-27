@@ -75,7 +75,7 @@ type ArtifactKind string
 
 const (
 	KindConfig         ArtifactKind = "maeclear-config"
-	KindCredentials    ArtifactKind = "maeclear-credentials"
+	KindCredentials    ArtifactKind = "maeclear-credentials" //#nosec G101 -- ArtifactKind enum naming the MAEClear credentials artifact category, not a credential value
 	KindSettlementBook ArtifactKind = "maeclear-settlement-book"
 	KindAffirmationLog ArtifactKind = "maeclear-affirmation-log"
 	KindRepoBook       ArtifactKind = "maeclear-repo-book"

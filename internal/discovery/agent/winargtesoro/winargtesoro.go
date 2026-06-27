@@ -64,7 +64,7 @@ const (
 	KindMECONResolution     ArtifactKind = "tesoro-mecon-resolution"
 	KindIMFEngagement       ArtifactKind = "tesoro-imf-engagement"
 	KindConfig              ArtifactKind = "tesoro-config"
-	KindCredentials         ArtifactKind = "tesoro-credentials"
+	KindCredentials         ArtifactKind = "tesoro-credentials" //#nosec G101 -- ArtifactKind enum naming the tesoro-credentials artifact category, not a credential value
 	KindInstaller           ArtifactKind = "tesoro-installer"
 	KindOther               ArtifactKind = "other"
 	KindUnknown             ArtifactKind = "unknown"

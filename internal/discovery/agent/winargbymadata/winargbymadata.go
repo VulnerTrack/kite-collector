@@ -86,7 +86,7 @@ type ArtifactKind string
 
 const (
 	KindConfig         ArtifactKind = "bymadata-config"
-	KindCredentials    ArtifactKind = "bymadata-credentials"
+	KindCredentials    ArtifactKind = "bymadata-credentials" //#nosec G101 -- ArtifactKind enum naming the BYMAdata credentials artifact category, not a credential value
 	KindFIXFASTLog     ArtifactKind = "bymadata-fix-fast-log"
 	KindWSLog          ArtifactKind = "bymadata-ws-log"
 	KindRESTCache      ArtifactKind = "bymadata-rest-cache"
