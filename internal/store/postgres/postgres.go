@@ -1,0 +1,1207 @@
+// Package postgres provides a PostgreSQL-backed implementation of store.Store
+// using pgx/v5 with connection pooling. It is safe for concurrent use and works
+// with CGO_ENABLED=0 (pgx is pure Go).
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	cloud "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
+	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
+	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/store"
+)
+
+// PostgresStore implements store.Store against a PostgreSQL database using a
+// pgxpool connection pool. All methods are safe for concurrent use.
+type PostgresStore struct {
+	pool *pgxpool.Pool
+}
+
+// Compile-time interface check.
+var _ store.Store = (*PostgresStore)(nil)
+
+// New creates a PostgresStore by parsing the DSN and establishing a connection
+// pool with bounded resource limits. The pool verifies connectivity lazily on
+// first use.
+func New(dsn string) (*PostgresStore, error) {
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("postgres parse config: %w", err)
+	}
+
+	config.MaxConns = 25
+	config.MinConns = 2
+	config.MaxConnLifetime = 30 * time.Minute
+	config.MaxConnIdleTime = 5 * time.Minute
+	config.ConnConfig.ConnectTimeout = 10 * time.Second
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		return nil, fmt.Errorf("postgres new pool: %w", err)
+	}
+
+	return &PostgresStore{pool: pool}, nil
+}
+
+// Migrate creates the schema tables and indexes if they do not already exist.
+func (s *PostgresStore) Migrate(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, schema)
+	if err != nil {
+		return fmt.Errorf("postgres migrate: %w", err)
+	}
+	return nil
+}
+
+// Close releases all connections held by the pool.
+func (s *PostgresStore) Close() error {
+	s.pool.Close()
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Assets
+// ---------------------------------------------------------------------------
+
+const assetColumns = `id, asset_type, hostname, os_family, os_version,
+	kernel_version, architecture, is_authorized, is_managed, environment, owner, criticality,
+	discovery_source, first_seen_at, last_seen_at, tags, natural_key`
+
+// scanAsset reads a single row into a model.Asset. The column order must match
+// assetColumns exactly.
+func scanAsset(row pgx.Row) (*model.Asset, error) {
+	var a model.Asset
+	var (
+		osFamily      *string
+		osVersion     *string
+		kernelVersion *string
+		architecture  *string
+		environment   *string
+		owner         *string
+		criticality   *string
+		tags          *string
+		naturalKey    *string
+	)
+	err := row.Scan(
+		&a.ID,
+		&a.AssetType,
+		&a.Hostname,
+		&osFamily,
+		&osVersion,
+		&kernelVersion,
+		&architecture,
+		&a.IsAuthorized,
+		&a.IsManaged,
+		&environment,
+		&owner,
+		&criticality,
+		&a.DiscoverySource,
+		&a.FirstSeenAt,
+		&a.LastSeenAt,
+		&tags,
+		&naturalKey,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("scan asset: %w", err)
+	}
+
+	a.OSFamily = derefStr(osFamily)
+	a.OSVersion = derefStr(osVersion)
+	a.KernelVersion = derefStr(kernelVersion)
+	a.Architecture = derefStr(architecture)
+	a.Environment = derefStr(environment)
+	a.Owner = derefStr(owner)
+	a.Criticality = derefStr(criticality)
+	a.Tags = derefStr(tags)
+	a.NaturalKey = derefStr(naturalKey)
+
+	return &a, nil
+}
+
+// scanAssets collects all rows from a pgx.Rows result set into a slice.
+func scanAssets(rows pgx.Rows) ([]model.Asset, error) {
+	defer rows.Close()
+	var assets []model.Asset
+	for rows.Next() {
+		a, err := scanAsset(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan asset row: %w", err)
+		}
+		assets = append(assets, *a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate asset rows: %w", err)
+	}
+	return assets, nil
+}
+
+// UpsertAsset inserts a new asset or updates an existing one matched by the
+// UNIQUE(hostname, asset_type) constraint. The natural key is computed before
+// writing.
+func (s *PostgresStore) UpsertAsset(ctx context.Context, asset model.Asset) error {
+	asset.ComputeNaturalKey()
+
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO assets (`+assetColumns+`)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+		ON CONFLICT(hostname, asset_type) DO UPDATE SET
+			os_family        = EXCLUDED.os_family,
+			os_version       = EXCLUDED.os_version,
+			kernel_version   = EXCLUDED.kernel_version,
+			architecture     = EXCLUDED.architecture,
+			is_authorized    = EXCLUDED.is_authorized,
+			is_managed       = EXCLUDED.is_managed,
+			environment      = EXCLUDED.environment,
+			owner            = EXCLUDED.owner,
+			criticality      = EXCLUDED.criticality,
+			discovery_source = EXCLUDED.discovery_source,
+			last_seen_at     = EXCLUDED.last_seen_at,
+			tags             = EXCLUDED.tags,
+			natural_key      = EXCLUDED.natural_key
+	`,
+		asset.ID,
+		string(asset.AssetType),
+		asset.Hostname,
+		nullStr(asset.OSFamily),
+		nullStr(asset.OSVersion),
+		nullStr(asset.KernelVersion),
+		nullStr(asset.Architecture),
+		string(asset.IsAuthorized),
+		string(asset.IsManaged),
+		nullStr(asset.Environment),
+		nullStr(asset.Owner),
+		nullStr(asset.Criticality),
+		asset.DiscoverySource,
+		asset.FirstSeenAt,
+		asset.LastSeenAt,
+		nullStr(asset.Tags),
+		asset.NaturalKey,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert asset %s: %w", asset.ID, err)
+	}
+	return nil
+}
+
+// UpsertAssets atomically upserts a batch of assets inside a single
+// transaction and returns counts of newly inserted and updated rows.
+// It uses the PostgreSQL xmax system column trick: after an INSERT ON CONFLICT
+// DO UPDATE, xmax = 0 means the row was inserted; xmax != 0 means it was
+// updated.
+func (s *PostgresStore) UpsertAssets(ctx context.Context, assets []model.Asset) (inserted, updated int, err error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	for i := range assets {
+		assets[i].ComputeNaturalKey()
+
+		var xmax uint32
+		err = tx.QueryRow(ctx, `
+			INSERT INTO assets (`+assetColumns+`)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			ON CONFLICT(hostname, asset_type) DO UPDATE SET
+				os_family        = EXCLUDED.os_family,
+				os_version       = EXCLUDED.os_version,
+				kernel_version   = EXCLUDED.kernel_version,
+				architecture     = EXCLUDED.architecture,
+				is_authorized    = EXCLUDED.is_authorized,
+				is_managed       = EXCLUDED.is_managed,
+				environment      = EXCLUDED.environment,
+				owner            = EXCLUDED.owner,
+				criticality      = EXCLUDED.criticality,
+				discovery_source = EXCLUDED.discovery_source,
+				last_seen_at     = EXCLUDED.last_seen_at,
+				tags             = EXCLUDED.tags,
+				natural_key      = EXCLUDED.natural_key
+			RETURNING xmax
+		`,
+			assets[i].ID,
+			string(assets[i].AssetType),
+			assets[i].Hostname,
+			nullStr(assets[i].OSFamily),
+			nullStr(assets[i].OSVersion),
+			nullStr(assets[i].KernelVersion),
+			nullStr(assets[i].Architecture),
+			string(assets[i].IsAuthorized),
+			string(assets[i].IsManaged),
+			nullStr(assets[i].Environment),
+			nullStr(assets[i].Owner),
+			nullStr(assets[i].Criticality),
+			assets[i].DiscoverySource,
+			assets[i].FirstSeenAt,
+			assets[i].LastSeenAt,
+			nullStr(assets[i].Tags),
+			assets[i].NaturalKey,
+		).Scan(&xmax)
+		if err != nil {
+			return 0, 0, fmt.Errorf("upsert asset %s: %w", assets[i].ID, err)
+		}
+
+		if xmax == 0 {
+			inserted++
+		} else {
+			updated++
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, fmt.Errorf("commit tx: %w", err)
+	}
+	return inserted, updated, nil
+}
+
+// GetAssetByID retrieves the asset identified by id. Returns store.ErrNotFound
+// when the id does not exist.
+func (s *PostgresStore) GetAssetByID(ctx context.Context, id uuid.UUID) (*model.Asset, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE id = $1`, id)
+	a, err := scanAsset(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get asset by id: %w", err)
+	}
+	return a, nil
+}
+
+// GetAssetByNaturalKey retrieves the asset whose precomputed SHA-256 natural
+// key matches key. Returns (nil, nil) when no match is found.
+func (s *PostgresStore) GetAssetByNaturalKey(ctx context.Context, key string) (*model.Asset, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE natural_key = $1`, key)
+	a, err := scanAsset(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get asset by natural key: %w", err)
+	}
+	return a, nil
+}
+
+// GetAssetsByNaturalKeys batch-fetches assets matching the supplied natural
+// keys. The returned map is keyed by NaturalKey; keys with no matching row are
+// absent. An empty input slice returns (nil, nil).
+func (s *PostgresStore) GetAssetsByNaturalKeys(
+	ctx context.Context, keys []string,
+) (map[string]model.Asset, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE natural_key = ANY($1)`, keys)
+	if err != nil {
+		return nil, fmt.Errorf("get assets by natural keys: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]model.Asset, len(keys))
+	for rows.Next() {
+		a, err := scanAsset(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan asset row: %w", err)
+		}
+		out[a.NaturalKey] = *a
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate asset rows: %w", err)
+	}
+	return out, nil
+}
+
+// ListAssets returns assets matching the supplied filter. An empty filter
+// returns all assets (subject to Limit/Offset).
+func (s *PostgresStore) ListAssets(ctx context.Context, filter store.AssetFilter) ([]model.Asset, error) {
+	var (
+		clauses []string
+		args    []any
+		paramN  int // positional parameter counter
+	)
+
+	if filter.AssetType != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("asset_type = $%d", paramN))
+		args = append(args, filter.AssetType)
+	}
+	if filter.IsAuthorized != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("is_authorized = $%d", paramN))
+		args = append(args, filter.IsAuthorized)
+	}
+	if filter.IsManaged != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("is_managed = $%d", paramN))
+		args = append(args, filter.IsManaged)
+	}
+	if filter.Hostname != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("hostname = $%d", paramN))
+		args = append(args, filter.Hostname)
+	}
+
+	query := `SELECT ` + assetColumns + ` FROM assets`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY last_seen_at DESC, id ASC"
+
+	if filter.Limit > 0 {
+		paramN++
+		query += fmt.Sprintf(" LIMIT $%d", paramN)
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		paramN++
+		query += fmt.Sprintf(" OFFSET $%d", paramN)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list assets: %w", err)
+	}
+	return scanAssets(rows)
+}
+
+// GetStaleAssets returns assets whose last_seen_at is older than the given
+// threshold measured from the current time.
+func (s *PostgresStore) GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error) {
+	cutoff := time.Now().UTC().Add(-threshold)
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < $1 ORDER BY last_seen_at ASC, id ASC`,
+		cutoff,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get stale assets: %w", err)
+	}
+	return scanAssets(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+const eventColumns = `id, event_type, asset_id, scan_run_id, severity, details, timestamp`
+
+// scanEvent reads a single row into a model.AssetEvent. The column order must
+// match eventColumns exactly.
+func scanEvent(row pgx.Row) (*model.AssetEvent, error) {
+	var e model.AssetEvent
+	var details *string
+	err := row.Scan(
+		&e.ID,
+		&e.EventType,
+		&e.AssetID,
+		&e.ScanRunID,
+		&e.Severity,
+		&details,
+		&e.Timestamp,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("scan event: %w", err)
+	}
+	e.Details = derefStr(details)
+	return &e, nil
+}
+
+// scanEvents collects all rows from a pgx.Rows result set into a slice.
+func scanEvents(rows pgx.Rows) ([]model.AssetEvent, error) {
+	defer rows.Close()
+	var events []model.AssetEvent
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan event row: %w", err)
+		}
+		events = append(events, *e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate event rows: %w", err)
+	}
+	return events, nil
+}
+
+// InsertEvent persists a single asset lifecycle event.
+func (s *PostgresStore) InsertEvent(ctx context.Context, event model.AssetEvent) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO events (`+eventColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		event.ID,
+		string(event.EventType),
+		event.AssetID,
+		event.ScanRunID,
+		string(event.Severity),
+		nullStr(event.Details),
+		event.Timestamp,
+	)
+	if err != nil {
+		return fmt.Errorf("insert event %s: %w", event.ID, err)
+	}
+	return nil
+}
+
+// InsertEvents persists a batch of events inside a single transaction.
+func (s *PostgresStore) InsertEvents(ctx context.Context, events []model.AssetEvent) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	for i := range events {
+		_, err = tx.Exec(ctx,
+			`INSERT INTO events (`+eventColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			events[i].ID,
+			string(events[i].EventType),
+			events[i].AssetID,
+			events[i].ScanRunID,
+			string(events[i].Severity),
+			nullStr(events[i].Details),
+			events[i].Timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("insert event %s: %w", events[i].ID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// ListEvents returns events matching the supplied filter.
+func (s *PostgresStore) ListEvents(ctx context.Context, filter store.EventFilter) ([]model.AssetEvent, error) {
+	var (
+		clauses []string
+		args    []any
+		paramN  int
+	)
+
+	if filter.EventType != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("event_type = $%d", paramN))
+		args = append(args, filter.EventType)
+	}
+	if filter.AssetID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("asset_id = $%d", paramN))
+		args = append(args, *filter.AssetID)
+	}
+	if filter.ScanRunID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("scan_run_id = $%d", paramN))
+		args = append(args, *filter.ScanRunID)
+	}
+
+	query := `SELECT ` + eventColumns + ` FROM events`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY timestamp DESC, id ASC"
+
+	if filter.Limit > 0 {
+		paramN++
+		query += fmt.Sprintf(" LIMIT $%d", paramN)
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		paramN++
+		query += fmt.Sprintf(" OFFSET $%d", paramN)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+	return scanEvents(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Scan runs
+// ---------------------------------------------------------------------------
+
+const scanRunColumns = `id, started_at, completed_at, status, total_assets,
+	new_assets, updated_assets, analyzed_assets, stale_assets, coverage_percent,
+	error_count, scope_config, discovery_sources,
+	trigger_source, triggered_by, cancel_requested_at`
+
+// scanScanRun reads a single row into a model.ScanRun. The column order must
+// match scanRunColumns exactly.
+func scanScanRun(row pgx.Row) (*model.ScanRun, error) {
+	var r model.ScanRun
+	var (
+		scopeConfig      *string
+		discoverySources *string
+		triggerSource    string
+		triggeredBy      *string
+	)
+	err := row.Scan(
+		&r.ID,
+		&r.StartedAt,
+		&r.CompletedAt,
+		&r.Status,
+		&r.TotalAssets,
+		&r.NewAssets,
+		&r.UpdatedAssets,
+		&r.AnalyzedAssets,
+		&r.StaleAssets,
+		&r.CoveragePercent,
+		&r.ErrorCount,
+		&scopeConfig,
+		&discoverySources,
+		&triggerSource,
+		&triggeredBy,
+		&r.CancelRequestedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("scan scan run: %w", err)
+	}
+	r.ScopeConfig = derefStr(scopeConfig)
+	r.DiscoverySources = derefStr(discoverySources)
+	r.TriggerSource = triggerSource
+	r.TriggeredBy = derefStr(triggeredBy)
+	return &r, nil
+}
+
+// CreateScanRun records a new scan run.
+func (s *PostgresStore) CreateScanRun(ctx context.Context, run model.ScanRun) error {
+	triggerSource := run.TriggerSource
+	if triggerSource == "" {
+		triggerSource = "cli"
+	}
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO scan_runs (`+scanRunColumns+`)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		run.ID,
+		run.StartedAt,
+		run.CompletedAt,
+		string(run.Status),
+		run.TotalAssets,
+		run.NewAssets,
+		run.UpdatedAssets,
+		run.AnalyzedAssets,
+		run.StaleAssets,
+		run.CoveragePercent,
+		run.ErrorCount,
+		nullStr(run.ScopeConfig),
+		nullStr(run.DiscoverySources),
+		triggerSource,
+		nullStr(run.TriggeredBy),
+		run.CancelRequestedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("create scan run %s: %w", run.ID, err)
+	}
+	return nil
+}
+
+// CompleteScanRun updates an existing scan run with the final result and marks
+// it as completed (or failed when the result carries a non-completed status).
+func (s *PostgresStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result model.ScanResult) error {
+	now := time.Now().UTC()
+	status := string(model.ScanStatusCompleted)
+	if result.Status != "" {
+		status = result.Status
+	}
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE scan_runs SET
+			completed_at     = $1,
+			status           = $2,
+			total_assets     = $3,
+			new_assets       = $4,
+			updated_assets   = $5,
+			analyzed_assets  = $6,
+			stale_assets     = $7,
+			coverage_percent = $8,
+			error_count      = $9
+		WHERE id = $10`,
+		now,
+		status,
+		result.TotalAssets,
+		result.NewAssets,
+		result.UpdatedAssets,
+		result.AnalyzedAssets,
+		result.StaleAssets,
+		result.CoveragePercent,
+		result.ErrorCount,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("complete scan run %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("scan run %s not found", id)
+	}
+	return nil
+}
+
+// GetLatestScanRun returns the most recent scan run ordered by started_at, or
+// (nil, nil) when no scan runs exist.
+func (s *PostgresStore) GetLatestScanRun(ctx context.Context) (*model.ScanRun, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT 1`)
+	r, err := scanScanRun(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get latest scan run: %w", err)
+	}
+	return r, nil
+}
+
+// ListScanRuns returns scan runs ordered by started_at DESC, capped at limit.
+// limit <= 0 uses the default (50); limit is hard-capped at 1000. Returns an
+// empty slice (not nil) when no runs exist.
+func (s *PostgresStore) ListScanRuns(ctx context.Context, limit int) ([]model.ScanRun, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list scan runs: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]model.ScanRun, 0, limit)
+	for rows.Next() {
+		r, err := scanScanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list scan runs: %w", err)
+	}
+	return out, nil
+}
+
+// GetScanRun returns the scan run identified by id, or store.ErrNotFound when
+// no row matches.
+func (s *PostgresStore) GetScanRun(ctx context.Context, id uuid.UUID) (*model.ScanRun, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+scanRunColumns+` FROM scan_runs WHERE id = $1`, id)
+	r, err := scanScanRun(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get scan run %s: %w", id, err)
+	}
+	return r, nil
+}
+
+// MarkScanCancelRequested stamps cancel_requested_at without mutating status,
+// returning store.ErrNotFound when the row does not exist.
+func (s *PostgresStore) MarkScanCancelRequested(ctx context.Context, id uuid.UUID, at time.Time) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE scan_runs SET cancel_requested_at = $1 WHERE id = $2`,
+		at.UTC(), id)
+	if err != nil {
+		return fmt.Errorf("mark scan cancel requested %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Installed Software
+// ---------------------------------------------------------------------------
+
+const softwareColumns = `id, asset_id, software_name, vendor, version, cpe23, package_manager, architecture`
+
+// scanSoftware reads a single row into a model.InstalledSoftware.
+func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
+	var sw model.InstalledSoftware
+	var (
+		cpe23  *string
+		pkgMgr *string
+		arch   *string
+	)
+	err := row.Scan(
+		&sw.ID,
+		&sw.AssetID,
+		&sw.SoftwareName,
+		&sw.Vendor,
+		&sw.Version,
+		&cpe23,
+		&pkgMgr,
+		&arch,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("scan software: %w", err)
+	}
+	sw.CPE23 = derefStr(cpe23)
+	sw.PackageManager = derefStr(pkgMgr)
+	sw.Architecture = derefStr(arch)
+	return &sw, nil
+}
+
+// UpsertSoftware replaces all installed software records for the given asset.
+// It deletes existing rows and inserts the new set inside a single transaction.
+func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, software []model.InstalledSoftware) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	_, err = tx.Exec(ctx,
+		`DELETE FROM installed_software WHERE asset_id = $1`, assetID)
+	if err != nil {
+		return fmt.Errorf("delete old software for %s: %w", assetID, err)
+	}
+
+	for i := range software {
+		_, err = tx.Exec(ctx,
+			`INSERT INTO installed_software (`+softwareColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			software[i].ID,
+			assetID,
+			software[i].SoftwareName,
+			software[i].Vendor,
+			software[i].Version,
+			nullStr(software[i].CPE23),
+			nullStr(software[i].PackageManager),
+			nullStr(software[i].Architecture),
+		)
+		if err != nil {
+			return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// ListSoftware returns all installed software records for the given asset,
+// ordered by software name.
+func (s *PostgresStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = $1 ORDER BY software_name ASC, version ASC, id ASC`,
+		assetID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list software: %w", err)
+	}
+	defer rows.Close()
+
+	var software []model.InstalledSoftware
+	for rows.Next() {
+		sw, err := scanSoftware(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan software row: %w", err)
+		}
+		software = append(software, *sw)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate software rows: %w", err)
+	}
+	return software, nil
+}
+
+// ---------------------------------------------------------------------------
+// Config Findings
+// ---------------------------------------------------------------------------
+
+const findingColumns = `id, asset_id, scan_run_id, auditor, check_id, title,
+	severity, evidence, expected, remediation, cis_control, timestamp`
+
+// scanFinding reads a single row into a model.ConfigFinding. The column order
+// must match findingColumns exactly.
+func scanFinding(row pgx.Row) (*model.ConfigFinding, error) {
+	var f model.ConfigFinding
+	var (
+		evidence    *string
+		expected    *string
+		remediation *string
+		cisControl  *string
+	)
+	err := row.Scan(
+		&f.ID,
+		&f.AssetID,
+		&f.ScanRunID,
+		&f.Auditor,
+		&f.CheckID,
+		&f.Title,
+		&f.Severity,
+		&evidence,
+		&expected,
+		&remediation,
+		&cisControl,
+		&f.Timestamp,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("scan finding: %w", err)
+	}
+	f.Evidence = derefStr(evidence)
+	f.Expected = derefStr(expected)
+	f.Remediation = derefStr(remediation)
+	f.CISControl = derefStr(cisControl)
+	return &f, nil
+}
+
+// scanFindings collects all rows from a pgx.Rows result set into a slice.
+func scanFindings(rows pgx.Rows) ([]model.ConfigFinding, error) {
+	defer rows.Close()
+	var findings []model.ConfigFinding
+	for rows.Next() {
+		f, err := scanFinding(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan finding row: %w", err)
+		}
+		findings = append(findings, *f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate finding rows: %w", err)
+	}
+	return findings, nil
+}
+
+// InsertFindings persists a batch of config findings inside a single transaction.
+func (s *PostgresStore) InsertFindings(ctx context.Context, findings []model.ConfigFinding) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	for i := range findings {
+		_, err = tx.Exec(ctx,
+			`INSERT INTO config_findings (`+findingColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			findings[i].ID,
+			findings[i].AssetID,
+			findings[i].ScanRunID,
+			findings[i].Auditor,
+			findings[i].CheckID,
+			findings[i].Title,
+			string(findings[i].Severity),
+			nullStr(findings[i].Evidence),
+			nullStr(findings[i].Expected),
+			nullStr(findings[i].Remediation),
+			nullStr(findings[i].CISControl),
+			findings[i].Timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("insert finding %s: %w", findings[i].ID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// ListFindings returns config findings matching the supplied filter.
+func (s *PostgresStore) ListFindings(ctx context.Context, filter store.FindingFilter) ([]model.ConfigFinding, error) {
+	var (
+		clauses []string
+		args    []any
+		paramN  int
+	)
+
+	if filter.AssetID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("asset_id = $%d", paramN))
+		args = append(args, *filter.AssetID)
+	}
+	if filter.ScanRunID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("scan_run_id = $%d", paramN))
+		args = append(args, *filter.ScanRunID)
+	}
+	if filter.Auditor != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("auditor = $%d", paramN))
+		args = append(args, filter.Auditor)
+	}
+	if filter.Severity != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("severity = $%d", paramN))
+		args = append(args, filter.Severity)
+	}
+	query := `SELECT ` + findingColumns + ` FROM config_findings`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY timestamp DESC, id ASC"
+
+	if filter.Limit > 0 {
+		paramN++
+		query += fmt.Sprintf(" LIMIT $%d", paramN)
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		paramN++
+		query += fmt.Sprintf(" OFFSET $%d", paramN)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list findings: %w", err)
+	}
+	return scanFindings(rows)
+}
+
+// Runtime Incidents
+// ---------------------------------------------------------------------------
+
+func (s *PostgresStore) InsertRuntimeIncident(ctx context.Context, incident model.RuntimeIncident) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO runtime_incidents
+		(id, incident_type, component, error_message, stack_trace, scan_run_id,
+		 severity, recovered, error_code, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		incident.ID,
+		string(incident.IncidentType),
+		incident.Component,
+		incident.ErrorMessage,
+		nullStr(incident.StackTrace),
+		incident.ScanRunID,
+		incident.Severity,
+		incident.Recovered,
+		nullStr(incident.ErrorCode),
+		incident.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert runtime incident %s: %w", incident.ID, err)
+	}
+	return nil
+}
+
+func (s *PostgresStore) ListRuntimeIncidents(ctx context.Context, filter store.IncidentFilter) ([]model.RuntimeIncident, error) {
+	var (
+		clauses []string
+		args    []any
+		paramN  int
+	)
+
+	if filter.ScanRunID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("scan_run_id = $%d", paramN))
+		args = append(args, *filter.ScanRunID)
+	}
+	if filter.IncidentType != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("incident_type = $%d", paramN))
+		args = append(args, filter.IncidentType)
+	}
+	if filter.Since != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("created_at >= $%d", paramN))
+		args = append(args, *filter.Since)
+	}
+
+	query := `SELECT id, incident_type, component, error_message, stack_trace,
+		scan_run_id, severity, recovered, error_code, created_at
+		FROM runtime_incidents`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY created_at DESC"
+
+	if filter.Limit > 0 {
+		paramN++
+		query += fmt.Sprintf(" LIMIT $%d", paramN)
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		paramN++
+		query += fmt.Sprintf(" OFFSET $%d", paramN)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list runtime incidents: %w", err)
+	}
+	defer rows.Close()
+
+	var incidents []model.RuntimeIncident
+	for rows.Next() {
+		var inc model.RuntimeIncident
+		var stackTrace, errorCode *string
+		err := rows.Scan(
+			&inc.ID,
+			&inc.IncidentType,
+			&inc.Component,
+			&inc.ErrorMessage,
+			&stackTrace,
+			&inc.ScanRunID,
+			&inc.Severity,
+			&inc.Recovered,
+			&errorCode,
+			&inc.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan incident row: %w", err)
+		}
+		inc.StackTrace = derefStr(stackTrace)
+		inc.ErrorCode = derefStr(errorCode)
+		incidents = append(incidents, inc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate incident rows: %w", err)
+	}
+	return incidents, nil
+}
+
+// ---------------------------------------------------------------------------
+// Probe Heartbeats
+// ---------------------------------------------------------------------------
+
+func (s *PostgresStore) RecordHeartbeat(ctx context.Context, hb model.ProbeHeartbeat) error {
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO probe_heartbeats
+		(id, scan_run_id, source, status, items_emitted, duration_ms,
+		 binary_hash, signature, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		hb.ID,
+		hb.ScanRunID,
+		hb.Source,
+		string(hb.Status),
+		hb.ItemsEmitted,
+		hb.DurationMS,
+		hb.BinaryHash,
+		hb.Signature,
+		hb.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert probe heartbeat %s/%s: %w", hb.ScanRunID, hb.Source, err)
+	}
+	return nil
+}
+
+func (s *PostgresStore) ListHeartbeats(ctx context.Context, filter store.HeartbeatFilter) ([]model.ProbeHeartbeat, error) {
+	var (
+		clauses []string
+		args    []any
+		paramN  int
+	)
+	if filter.ScanRunID != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("scan_run_id = $%d", paramN))
+		args = append(args, *filter.ScanRunID)
+	}
+	if filter.Source != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("source = $%d", paramN))
+		args = append(args, filter.Source)
+	}
+	if filter.Status != "" {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("status = $%d", paramN))
+		args = append(args, filter.Status)
+	}
+	if filter.Since != nil {
+		paramN++
+		clauses = append(clauses, fmt.Sprintf("created_at >= $%d", paramN))
+		args = append(args, *filter.Since)
+	}
+
+	query := `SELECT id, scan_run_id, source, status, items_emitted,
+		duration_ms, binary_hash, signature, created_at
+		FROM probe_heartbeats`
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY created_at DESC"
+
+	if filter.Limit > 0 {
+		paramN++
+		query += fmt.Sprintf(" LIMIT $%d", paramN)
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		paramN++
+		query += fmt.Sprintf(" OFFSET $%d", paramN)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list heartbeats: %w", err)
+	}
+	defer rows.Close()
+
+	var out []model.ProbeHeartbeat
+	for rows.Next() {
+		var hb model.ProbeHeartbeat
+		var statusStr string
+		if err := rows.Scan(
+			&hb.ID, &hb.ScanRunID, &hb.Source, &statusStr,
+			&hb.ItemsEmitted, &hb.DurationMS, &hb.BinaryHash,
+			&hb.Signature, &hb.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan heartbeat row: %w", err)
+		}
+		hb.Status = model.HeartbeatStatus(statusStr)
+		out = append(out, hb)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate heartbeat rows: %w", err)
+	}
+	return out, nil
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// nullStr returns a *string that is nil when s is empty, allowing PostgreSQL
+// to store NULL for optional text columns.
+func nullStr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// derefStr safely dereferences a *string, returning "" when the pointer is nil.
+func derefStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// UpsertEntraSnapshot is a no-op for the Postgres backend. The Entra
+// discovery source persists into SQLite only (RFC-0121 §5.3); the
+// Postgres backend is used for centralized aggregation and does not
+// own the entra_* tables.
+func (s *PostgresStore) UpsertEntraSnapshot(_ context.Context, _ *entra.Snapshot) error {
+	return nil
+}
+
+// UpsertCloudDNSSnapshot is a no-op for the Postgres backend. The cloud
+// DNS discovery sources persist into SQLite only (RFC-0122 §5.3); the
+// Postgres backend is used for centralized aggregation and does not own
+// the cloud_dns_* tables.
+func (s *PostgresStore) UpsertCloudDNSSnapshot(_ context.Context, _ *cloud.DNSSnapshot) error {
+	return nil
+}

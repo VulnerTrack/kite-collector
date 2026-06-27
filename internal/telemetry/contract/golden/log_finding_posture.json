@@ -1,0 +1,15 @@
+{
+  "event.domain": "security",
+  "event.name": "finding.posture",
+  "security.scan.uid": "01931cb6-b7c4-7c41-c000-1111aaaa2222",
+  "security.finding.uid": "01931cb6-b7c4-7c41-f000-cccc55556666",
+  "security.finding.type": "policy",
+  "security.finding.title": "Brute force exposure on SSH",
+  "security.finding.severity": "critical",
+  "security.finding.severity_id": 5,
+  "security.finding.capec.uid": "CAPEC-49",
+  "security.finding.likelihood": "high",
+  "security.finding.mitigation": "Enable account lockout, require MFA, enforce key-based SSH auth",
+  "security.asset.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
+  "security.asset.name": "db-primary-01.prod"
+}
