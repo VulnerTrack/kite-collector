@@ -21,7 +21,7 @@ type LogCode string
 const (
 	// --- Jamf Pro (macOS-focused MDM) --------------------------------
 	LogCodeJamfStarting          LogCode = "mdm.jamf.starting"
-	LogCodeJamfCredsMissing      LogCode = "mdm.jamf.creds_missing"
+	LogCodeJamfCredsMissing      LogCode = "mdm.jamf.creds_missing" //#nosec G101 -- log code identifier emitted when Jamf credentials env vars are absent, not a credential value
 	LogCodeJamfAuthFailed        LogCode = "mdm.jamf.auth_failed"
 	LogCodeJamfComputersFetched  LogCode = "mdm.jamf.computers_fetched"
 	LogCodeJamfDetailFetchFailed LogCode = "mdm.jamf.detail_fetch_failed"
@@ -29,14 +29,14 @@ const (
 
 	// --- Microsoft Intune (Graph API) --------------------------------
 	LogCodeIntuneStarting           LogCode = "mdm.intune.starting"
-	LogCodeIntuneCredsMissing       LogCode = "mdm.intune.creds_missing"
-	LogCodeIntuneTokenAcquireFailed LogCode = "mdm.intune.token_acquire_failed"
+	LogCodeIntuneCredsMissing       LogCode = "mdm.intune.creds_missing"        //#nosec G101 -- log code identifier signalling Intune credentials env vars are missing, not a credential value
+	LogCodeIntuneTokenAcquireFailed LogCode = "mdm.intune.token_acquire_failed" //#nosec G101 -- log code identifier for Intune OAuth token acquisition failure, not a token value
 	LogCodeIntuneSkipUnparseable    LogCode = "mdm.intune.skip_unparseable_device"
 	LogCodeIntuneComplete           LogCode = "mdm.intune.completed"
 
 	// --- Microsoft SCCM / ConfigMgr (AdminService REST) --------------
 	LogCodeSCCMStarting        LogCode = "mdm.sccm.starting"
-	LogCodeSCCMCredsMissing    LogCode = "mdm.sccm.creds_missing"
+	LogCodeSCCMCredsMissing    LogCode = "mdm.sccm.creds_missing" //#nosec G101 -- log code identifier emitted when SCCM credentials env vars are absent, not a credential value
 	LogCodeSCCMAuthFailed      LogCode = "mdm.sccm.auth_failed"
 	LogCodeSCCMSkipUnparseable LogCode = "mdm.sccm.skip_unparseable_device"
 	LogCodeSCCMComplete        LogCode = "mdm.sccm.completed"
