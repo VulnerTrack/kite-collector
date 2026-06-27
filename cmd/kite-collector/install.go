@@ -641,13 +641,14 @@ func logsHint(userMode bool) string {
 // flow can report it without aborting — boot persistence is a recoverable
 // miss, not a corrupt install.
 func enableBootPersistence(userMode bool) error {
+	ctx := context.Background()
 	switch runtime.GOOS {
 	case "linux":
 		args := []string{"enable", svcName + ".service"}
 		if userMode {
 			args = append([]string{"--user"}, args...)
 		}
-		out, err := exec.Command("systemctl", args...).CombinedOutput()
+		out, err := exec.CommandContext(ctx, "systemctl", args...).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("systemctl %v: %w (%s)", args, err, trimOutput(out))
 		}
@@ -655,7 +656,7 @@ func enableBootPersistence(userMode bool) error {
 	case "windows":
 		// `sc config <name> start= auto` — note the literal space after
 		// `start=` is required by sc.exe's parser.
-		out, err := exec.Command("sc", "config", svcName, "start=", "auto").CombinedOutput()
+		out, err := exec.CommandContext(ctx, "sc", "config", svcName, "start=", "auto").CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("sc config %s start= auto: %w (%s)", svcName, err, trimOutput(out))
 		}
