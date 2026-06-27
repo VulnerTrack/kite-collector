@@ -110,7 +110,7 @@ func scanHeartbeat(row interface {
 		&idStr, &scanRunStr, &source, &status, &itemsEmitted,
 		&durationMS, &binaryHash, &signature, &createdAt,
 	); err != nil {
-		return model.ProbeHeartbeat{}, err
+		return model.ProbeHeartbeat{}, fmt.Errorf("scan heartbeat: %w", err)
 	}
 	hb := model.ProbeHeartbeat{
 		Source:       source,
