@@ -100,20 +100,12 @@ const (
 // DNS), literal strings (JA4 hashes, JS source substrings), or CIDR ranges
 // (network).
 type Signature struct {
-	// Pattern matches against textual evidence (URL, filename, JS source,
-	// TLS SAN, DNS CNAME chain). May be nil.
-	Pattern *regexp.Regexp
-	// Literals are exact-match strings — used for JA4/JA4S/JA4H/JA5 hashes
-	// and for unambiguous JS substrings ("supabase.storage.from").
-	Literals []string
-	// CIDRs are IP-network ranges used for SignalNetwork. CIDR matching is
-	// performed by detector.matchNetwork against Evidence.RemoteIP.
-	CIDRs []string
-	// Description explains the rule in human-readable form; surfaced via
-	// Match.Reason.
+	Pattern     *regexp.Regexp
 	Description string
 	Provider    Provider
 	Signal      SignalType
+	Literals    []string
+	CIDRs       []string
 	Confidence  Confidence
 }
 
@@ -122,36 +114,19 @@ type Signature struct {
 // lets a caller feed partial data (e.g. just a JS file) without needing to
 // stub TLS or JA4 fields.
 type Evidence struct {
-	// APIHeaders are HTTP response headers from a probe; they are scanned
-	// for provider-specific markers (x-amz-*, x-goog-*, server, etc.).
-	APIHeaders http.Header
-	// URL is the source URL of the asset, if known.
-	URL string
-	// Filename is a basename or path; checked against SignalFile patterns.
-	Filename string
-	// JS is the decoded JavaScript source. Detect runs SignalFile and
-	// SignalAPI regexes that target SDK identifiers and endpoint strings.
-	JS string
-	// TLSSANs is the list of subject-alternative-names presented by the
-	// host on the TLS handshake.
-	TLSSANs []string
-	// TLSServerName is the SNI / cert CN observed on the connection.
+	APIHeaders    http.Header
+	JA4           string
+	Filename      string
+	JS            string
 	TLSServerName string
-	// JA4, JA4S, JA4H, JA5 are pre-computed fingerprint hashes. The
-	// detector compares them against Signature.Literals.
-	JA4  string
-	JA4S string
-	JA4H string
-	JA5  string
-	// BucketHost is the hostname extracted from a candidate object URL
-	// (e.g. "my-bucket.s3.us-east-1.amazonaws.com").
-	BucketHost string
-	// DNSChain is the CNAME chain observed when resolving BucketHost; the
-	// last entry is typically the provider's apex.
-	DNSChain []string
-	// RemoteIP is the resolved IP of the candidate host; matched against
-	// SignalNetwork CIDRs.
-	RemoteIP string
+	URL           string
+	JA4S          string
+	JA4H          string
+	JA5           string
+	BucketHost    string
+	RemoteIP      string
+	TLSSANs       []string
+	DNSChain      []string
 }
 
 // Match is a single successful signature application. Snippet is a short

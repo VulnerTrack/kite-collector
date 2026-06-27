@@ -24,18 +24,10 @@ const (
 
 // AnalyzerOptions tunes the HTTP probe used by Analyzer.Analyze.
 type AnalyzerOptions struct {
-	// HTTPClient is the underlying client. If nil, Analyzer constructs one
-	// with a custom Transport that records the served chain in TLSEvidence.
-	HTTPClient *http.Client
-	// MaxBodyBytes caps how much response body Analyze reads. Larger
-	// payloads are truncated so a 200 MiB JS bundle never DoS's the worker.
+	HTTPClient   *http.Client
+	UserAgent    string
 	MaxBodyBytes int64
-	// Timeout bounds the total round-trip time. Applied via context.WithTimeout
-	// when the caller-supplied context has no shorter deadline.
-	Timeout time.Duration
-	// UserAgent is the User-Agent header sent on outbound probes. Empty
-	// disables the header so the Go default is used.
-	UserAgent string
+	Timeout      time.Duration
 }
 
 // Analyzer fetches a URL, captures network and TLS metadata, then runs the
@@ -45,12 +37,9 @@ type AnalyzerOptions struct {
 type Analyzer struct {
 	client       *http.Client
 	userAgent    string
+	signatures   []Signature
 	maxBodyBytes int64
 	timeout      time.Duration
-	// signatures is the effective catalogue this Analyzer evaluates
-	// against. Zero-length means "use the package-level catalogue", which
-	// keeps existing callers working without any extra wiring.
-	signatures []Signature
 }
 
 // NewAnalyzer returns an Analyzer ready for probing. Zero-valued options
