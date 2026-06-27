@@ -88,6 +88,70 @@ func NewScannerWithClient(client *http.Client) *Scanner {
 	}
 }
 
+// CustomCatalogs bundles operator-supplied overlay signatures for any
+// subset of the five surfaces. Empty slices are ignored. The composite
+// scanner appends these to each underlying detector's DefaultCatalog
+// so operators can extend detection without modifying Go code.
+type CustomCatalogs struct {
+	TLS    []tlsfingerprint.Signature
+	Header []headerfingerprint.Signature
+	JS     []jsfingerprint.Signature
+	File   []filefingerprint.Probe
+	API    []apifingerprint.Signature
+}
+
+// NewScannerWithCustomCatalogs constructs a Scanner where each
+// underlying detector's catalog is `DefaultCatalog + custom`. Operators
+// load the custom slices from a YAML overlay via
+// internal/discovery/network/customcatalog.LoadFile, then pass them
+// here so the composite sweep picks up internal vendors / products
+// the default catalog does not know about.
+func NewScannerWithCustomCatalogs(client *http.Client, custom CustomCatalogs) *Scanner {
+	merge := func(a, b []apifingerprint.Signature) []apifingerprint.Signature {
+		if len(b) == 0 {
+			return a
+		}
+		out := make([]apifingerprint.Signature, 0, len(a)+len(b))
+		return append(append(out, a...), b...)
+	}
+	mergeTLS := func(a, b []tlsfingerprint.Signature) []tlsfingerprint.Signature {
+		if len(b) == 0 {
+			return a
+		}
+		out := make([]tlsfingerprint.Signature, 0, len(a)+len(b))
+		return append(append(out, a...), b...)
+	}
+	mergeHeader := func(a, b []headerfingerprint.Signature) []headerfingerprint.Signature {
+		if len(b) == 0 {
+			return a
+		}
+		out := make([]headerfingerprint.Signature, 0, len(a)+len(b))
+		return append(append(out, a...), b...)
+	}
+	mergeJS := func(a, b []jsfingerprint.Signature) []jsfingerprint.Signature {
+		if len(b) == 0 {
+			return a
+		}
+		out := make([]jsfingerprint.Signature, 0, len(a)+len(b))
+		return append(append(out, a...), b...)
+	}
+	mergeFile := func(a, b []filefingerprint.Probe) []filefingerprint.Probe {
+		if len(b) == 0 {
+			return a
+		}
+		out := make([]filefingerprint.Probe, 0, len(a)+len(b))
+		return append(append(out, a...), b...)
+	}
+
+	return &Scanner{
+		tls:    tlsfingerprint.NewScanner(mergeTLS(tlsfingerprint.DefaultCatalog(), custom.TLS)),
+		header: headerfingerprint.NewDetector(client, mergeHeader(headerfingerprint.DefaultCatalog(), custom.Header)),
+		js:     jsfingerprint.NewDetector(client, mergeJS(jsfingerprint.DefaultCatalog(), custom.JS)),
+		file:   filefingerprint.NewScanner(client, mergeFile(filefingerprint.DefaultCatalog(), custom.File)),
+		api:    apifingerprint.NewDetector(client, merge(apifingerprint.DefaultCatalog(), custom.API)),
+	}
+}
+
 // Scan fans out across the five mechanisms in parallel against the
 // supplied endpoint. Per-mechanism timeouts are independent; ctx
 // cancellation aborts every in-flight mechanism.
