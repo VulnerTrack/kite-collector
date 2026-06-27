@@ -1,9 +1,0 @@
-nvidia 56807424 53 nvidia_drm,nvidia_modeset, Live 0x0000000000000000 (PO)
-nvidia_modeset 1335296 12 nvidia_drm, Live 0x0000000000000000 (PO)
-nvidia_drm 122880 5 - Live 0x0000000000000000 (PO)
-xt_conntrack 16384 1 - Live 0x0000000000000000
-nf_conntrack 188416 6 xt_conntrack,xt_state,nf_conntrack_netlink,nf_nat,xt_MASQUERADE,iptable_nat Live 0x0000000000000000
-overlay 167936 51 - Live 0x0000000000000000
-ip_tables 32768 0 - Live 0x0000000000000000
-x_tables 53248 7 ip6_tables,xt_state,xt_conntrack,iptable_filter,xt_tcpudp,xt_MASQUERADE,ip_tables Live 0x0000000000000000
-zfs 4694016 0 - Live 0x0000000000000000 (PO)
