@@ -79,7 +79,7 @@ type ArtifactKind string
 
 const (
 	KindConfig           ArtifactKind = "eikon-config"
-	KindCredentials      ArtifactKind = "eikon-credentials"
+	KindCredentials      ArtifactKind = "eikon-credentials" //#nosec G101 -- ArtifactKind enum naming the Eikon/Refinitiv credentials artifact category, not a credential value
 	KindLicense          ArtifactKind = "eikon-license"
 	KindSessionLog       ArtifactKind = "eikon-session-log"
 	KindLSEGWorkspaceCfg ArtifactKind = "lseg-workspace-config"

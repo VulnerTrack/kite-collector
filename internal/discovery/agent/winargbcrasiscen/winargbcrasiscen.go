@@ -84,8 +84,8 @@ type ArtifactKind string
 
 const (
 	KindConfig       ArtifactKind = "siscen-config"
-	KindCredentials  ArtifactKind = "siscen-credentials"
-	KindPortalToken  ArtifactKind = "siscen-portal-token"
+	KindCredentials  ArtifactKind = "siscen-credentials"  //#nosec G101 -- ArtifactKind enum naming the SISCEN credentials artifact category, not a credential value
+	KindPortalToken  ArtifactKind = "siscen-portal-token" //#nosec G101 -- ArtifactKind enum naming the SISCEN portal-token artifact category, not a token value
 	KindPortalCert   ArtifactKind = "siscen-portal-cert"
 	KindReport       ArtifactKind = "siscen-report"
 	KindTemplate     ArtifactKind = "siscen-template"

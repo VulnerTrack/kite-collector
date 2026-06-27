@@ -66,7 +66,7 @@ const HighVolumeUSDTARSCents int64 = 1_000_000_000
 type ArtifactKind string
 
 const (
-	KindCredentials      ArtifactKind = "cocos-credentials"
+	KindCredentials      ArtifactKind = "cocos-credentials" //#nosec G101 -- ArtifactKind enum naming the Cocos Capital credentials artifact category, not a credential value
 	KindPortfolioCache   ArtifactKind = "cocos-portfolio-cache"
 	KindOrdersCache      ArtifactKind = "cocos-orders-cache"
 	KindMarketDataCache  ArtifactKind = "cocos-marketdata-cache"

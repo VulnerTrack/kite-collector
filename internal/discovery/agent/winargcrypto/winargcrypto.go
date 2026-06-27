@@ -75,7 +75,7 @@ const AfipUnreportedThresholdCents int64 = 500_000_000
 type ArtifactKind string
 
 const (
-	KindAPIKey         ArtifactKind = "crypto-api-key"
+	KindAPIKey         ArtifactKind = "crypto-api-key" //#nosec G101 -- ArtifactKind enum naming the crypto exchange API-key artifact category, not an API key value
 	KindAccountExport  ArtifactKind = "crypto-account-export"
 	KindOTCP2PLog      ArtifactKind = "crypto-otc-p2p-log"
 	KindWalletSeed     ArtifactKind = "crypto-wallet-seed"

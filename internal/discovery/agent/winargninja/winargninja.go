@@ -73,7 +73,7 @@ type ArtifactKind string
 
 const (
 	KindConfig           ArtifactKind = "ninja-config"
-	KindCredentials      ArtifactKind = "ninja-credentials"
+	KindCredentials      ArtifactKind = "ninja-credentials" //#nosec G101 -- ArtifactKind enum naming the NinjaTrader credentials artifact category, not a credential value
 	KindStrategy         ArtifactKind = "ninja-strategy"
 	KindIndicator        ArtifactKind = "ninja-indicator"
 	KindAddOn            ArtifactKind = "ninja-addon"

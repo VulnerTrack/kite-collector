@@ -72,7 +72,7 @@ type ArtifactKind string
 
 const (
 	KindConfig            ArtifactKind = "lemon-config"
-	KindCredentials       ArtifactKind = "lemon-credentials"
+	KindCredentials       ArtifactKind = "lemon-credentials" //#nosec G101 -- ArtifactKind enum naming the Lemon Cash credentials artifact category, not a credential value
 	KindSDKScript         ArtifactKind = "lemon-sdk-script"
 	KindTradeLog          ArtifactKind = "lemon-trade-log"
 	KindEarnPositions     ArtifactKind = "lemon-earn-positions"
