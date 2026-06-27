@@ -96,8 +96,8 @@ type Fingerprint struct {
 	Product    string     `json:"product"`
 	Category   Category   `json:"category"`
 	Endpoint   string     `json:"endpoint"`
-	Evidence   []string   `json:"evidence"`
 	Confidence Confidence `json:"confidence"`
+	Evidence   []string   `json:"evidence"`
 }
 
 // Result is the full output of one Probe() call.

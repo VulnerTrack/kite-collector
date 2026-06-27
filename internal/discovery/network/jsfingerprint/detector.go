@@ -184,7 +184,7 @@ func resolveURL(pageURL *url.URL, ref string) (string, error) {
 	}
 	u, err := url.Parse(ref)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("url parse: %w", err)
 	}
 	abs := pageURL.ResolveReference(u)
 	if abs.Scheme != "http" && abs.Scheme != "https" {

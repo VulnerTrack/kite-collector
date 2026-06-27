@@ -29,16 +29,16 @@ func stripScheme(t *testing.T, base string) (string, int) {
 
 func TestTargetURL(t *testing.T) {
 	cases := []struct {
-		target  Target
 		want    string
+		target  Target
 		wantErr bool
 	}{
-		{Target{Host: "1.2.3.4", Port: 443, Scheme: "https"}, "https://1.2.3.4:443", false},
-		{Target{Host: "host", Port: 80}, "http://host:80", false}, // default scheme
-		{Target{Host: "", Port: 80}, "", true},
-		{Target{Host: "x", Port: 0}, "", true},
-		{Target{Host: "x", Port: 70000}, "", true},
-		{Target{Host: "x", Port: 80, Scheme: "ftp"}, "", true},
+		{"https://1.2.3.4:443", Target{Host: "1.2.3.4", Port: 443, Scheme: "https"}, false},
+		{"http://host:80", Target{Host: "host", Port: 80}, false}, // default scheme
+		{"", Target{Host: "", Port: 80}, true},
+		{"", Target{Host: "x", Port: 0}, true},
+		{"", Target{Host: "x", Port: 70000}, true},
+		{"", Target{Host: "x", Port: 80, Scheme: "ftp"}, true},
 	}
 	for _, c := range cases {
 		u, err := c.target.URL()
@@ -60,16 +60,16 @@ func TestTargetURL(t *testing.T) {
 
 func TestGuessSchemes(t *testing.T) {
 	cases := []struct {
-		port int
 		want []string
+		port int
 	}{
-		{443, []string{"https"}},
-		{8443, []string{"https"}},
-		{80, []string{"http"}},
-		{8080, []string{"http"}},
-		{9090, []string{"http"}},
-		{8123, []string{"http", "https"}}, // unknown port
-		{9092, []string{"http", "https"}}, // Kafka — typically not HTTP at all but be lenient
+		{[]string{"https"}, 443},
+		{[]string{"https"}, 8443},
+		{[]string{"http"}, 80},
+		{[]string{"http"}, 8080},
+		{[]string{"http"}, 9090},
+		{[]string{"http", "https"}, 8123}, // unknown port
+		{[]string{"http", "https"}, 9092}, // Kafka — typically not HTTP at all but be lenient
 	}
 	for _, c := range cases {
 		got := GuessSchemes(c.port)
@@ -143,7 +143,7 @@ func TestScanTargets_MultiHostOrdering(t *testing.T) {
 	defer s3.Close()
 	d := NewDetector(s1.Client(), DefaultCatalog())
 
-	var targets []Target
+	targets := make([]Target, 0, 3)
 	for _, srv := range []*httptest.Server{s1, s2, s3} {
 		host, port := stripScheme(t, srv.URL)
 		targets = append(targets, Target{Host: host, Port: port, Scheme: "http"})

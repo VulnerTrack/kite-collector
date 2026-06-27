@@ -18,38 +18,58 @@ func fixtureVercelNextAuthSupabase() *CompositeResult {
 		Endpoint: "https://myapp.vercel.app:443",
 		TLS: &tlsfingerprint.Result{
 			Fingerprints: []tlsfingerprint.Fingerprint{
-				{Vendor: "Vercel", Product: "Vercel",
-					Category: tlsfingerprint.CategoryHosting, Confidence: tlsfingerprint.ConfidenceHigh},
+				{
+					Vendor: "Vercel", Product: "Vercel",
+					Category: tlsfingerprint.CategoryHosting, Confidence: tlsfingerprint.ConfidenceHigh,
+				},
 			},
 		},
 		Header: &headerfingerprint.Result{
 			Fingerprints: []headerfingerprint.Fingerprint{
-				{Vendor: "Vercel", Product: "Vercel-hosted",
-					Category: headerfingerprint.CategoryEdgeHosting, Confidence: headerfingerprint.ConfidenceHigh},
-				{Vendor: "Vercel", Product: "Next.js (X-Powered-By)",
-					Category: headerfingerprint.CategoryFramework, Confidence: headerfingerprint.ConfidenceHigh},
-				{Vendor: "F5 NGINX", Product: "nginx",
-					Category: headerfingerprint.CategoryWebServer, Confidence: headerfingerprint.ConfidenceHigh},
-				{Vendor: "NextAuth.js", Product: "Auth.js / NextAuth (session)",
-					Category: headerfingerprint.CategorySessionTrack, Confidence: headerfingerprint.ConfidenceHigh},
+				{
+					Vendor: "Vercel", Product: "Vercel-hosted",
+					Category: headerfingerprint.CategoryEdgeHosting, Confidence: headerfingerprint.ConfidenceHigh,
+				},
+				{
+					Vendor: "Vercel", Product: "Next.js (X-Powered-By)",
+					Category: headerfingerprint.CategoryFramework, Confidence: headerfingerprint.ConfidenceHigh,
+				},
+				{
+					Vendor: "F5 NGINX", Product: "nginx",
+					Category: headerfingerprint.CategoryWebServer, Confidence: headerfingerprint.ConfidenceHigh,
+				},
+				{
+					Vendor: "NextAuth.js", Product: "Auth.js / NextAuth (session)",
+					Category: headerfingerprint.CategorySessionTrack, Confidence: headerfingerprint.ConfidenceHigh,
+				},
 			},
 		},
 		API: &apifingerprint.Result{
 			Fingerprints: []apifingerprint.Fingerprint{
-				{Vendor: "Vercel", Product: "Next.js",
-					Category: apifingerprint.CategoryWebFramework, Confidence: apifingerprint.ConfidenceHigh},
+				{
+					Vendor: "Vercel", Product: "Next.js",
+					Category: apifingerprint.CategoryWebFramework, Confidence: apifingerprint.ConfidenceHigh,
+				},
 			},
 		},
 		JS: &jsfingerprint.Result{
 			Fingerprints: []jsfingerprint.Fingerprint{
-				{Vendor: "NextAuth.js", Product: "Auth.js / NextAuth",
-					Category: jsfingerprint.CategoryAuth, Confidence: jsfingerprint.ConfidenceHigh},
-				{Vendor: "Google", Product: "Google Analytics 4",
-					Category: jsfingerprint.CategoryAnalytics, Confidence: jsfingerprint.ConfidenceHigh},
-				{Vendor: "Vercel", Product: "Vercel Web Analytics",
-					Category: jsfingerprint.CategoryAnalytics, Confidence: jsfingerprint.ConfidenceHigh},
-				{Vendor: "Supabase", Product: "Supabase",
-					Category: jsfingerprint.CategoryBaaS, Confidence: jsfingerprint.ConfidenceHigh},
+				{
+					Vendor: "NextAuth.js", Product: "Auth.js / NextAuth",
+					Category: jsfingerprint.CategoryAuth, Confidence: jsfingerprint.ConfidenceHigh,
+				},
+				{
+					Vendor: "Google", Product: "Google Analytics 4",
+					Category: jsfingerprint.CategoryAnalytics, Confidence: jsfingerprint.ConfidenceHigh,
+				},
+				{
+					Vendor: "Vercel", Product: "Vercel Web Analytics",
+					Category: jsfingerprint.CategoryAnalytics, Confidence: jsfingerprint.ConfidenceHigh,
+				},
+				{
+					Vendor: "Supabase", Product: "Supabase",
+					Category: jsfingerprint.CategoryBaaS, Confidence: jsfingerprint.ConfidenceHigh,
+				},
 			},
 		},
 	}
@@ -114,16 +134,24 @@ func TestSummarise_SecretsLeakSurfacesEveryFinding(t *testing.T) {
 		Endpoint: "https://leaky:443",
 		JS: &jsfingerprint.Result{
 			Fingerprints: []jsfingerprint.Fingerprint{
-				{Vendor: "Amazon (exposed)", Product: "AWS Access Key ID",
-					Category: jsfingerprint.CategorySecretLeak, Confidence: jsfingerprint.ConfidenceHigh},
-				{Vendor: "GitHub (exposed)", Product: "GitHub Personal Access Token",
-					Category: jsfingerprint.CategorySecretLeak, Confidence: jsfingerprint.ConfidenceHigh},
-				{Vendor: "Slack (exposed)", Product: "Slack incoming webhook URL",
-					Category: jsfingerprint.CategorySecretLeak, Confidence: jsfingerprint.ConfidenceHigh},
+				{
+					Vendor: "Amazon (exposed)", Product: "AWS Access Key ID",
+					Category: jsfingerprint.CategorySecretLeak, Confidence: jsfingerprint.ConfidenceHigh,
+				},
+				{
+					Vendor: "GitHub (exposed)", Product: "GitHub Personal Access Token",
+					Category: jsfingerprint.CategorySecretLeak, Confidence: jsfingerprint.ConfidenceHigh,
+				},
+				{
+					Vendor: "Slack (exposed)", Product: "Slack incoming webhook URL",
+					Category: jsfingerprint.CategorySecretLeak, Confidence: jsfingerprint.ConfidenceHigh,
+				},
 				// Two of the same vendor (e.g. two GitHub PATs) must
 				// not collapse — Vendor+Product key keeps them split.
-				{Vendor: "GitHub (exposed)", Product: "GitHub fine-grained PAT",
-					Category: jsfingerprint.CategorySecretLeak, Confidence: jsfingerprint.ConfidenceHigh},
+				{
+					Vendor: "GitHub (exposed)", Product: "GitHub fine-grained PAT",
+					Category: jsfingerprint.CategorySecretLeak, Confidence: jsfingerprint.ConfidenceHigh,
+				},
 			},
 		},
 	}
@@ -147,10 +175,14 @@ func TestSummarise_PicksHigherConfidenceCandidate(t *testing.T) {
 		Endpoint: "https://x:443",
 		Header: &headerfingerprint.Result{
 			Fingerprints: []headerfingerprint.Fingerprint{
-				{Vendor: "Apache Software Foundation", Product: "Apache httpd",
-					Category: headerfingerprint.CategoryWebServer, Confidence: headerfingerprint.ConfidenceLow},
-				{Vendor: "F5 NGINX", Product: "nginx",
-					Category: headerfingerprint.CategoryWebServer, Confidence: headerfingerprint.ConfidenceHigh},
+				{
+					Vendor: "Apache Software Foundation", Product: "Apache httpd",
+					Category: headerfingerprint.CategoryWebServer, Confidence: headerfingerprint.ConfidenceLow,
+				},
+				{
+					Vendor: "F5 NGINX", Product: "nginx",
+					Category: headerfingerprint.CategoryWebServer, Confidence: headerfingerprint.ConfidenceHigh,
+				},
 			},
 		},
 	}
@@ -272,12 +304,12 @@ func fixtureVercelNextAuthSupabaseWithNoise() *CompositeResult {
 	r := fixtureVercelNextAuthSupabase()
 	r.JS.Fingerprints = append(r.JS.Fingerprints, jsfingerprint.Fingerprint{
 		Vendor: "Noisy", Product: "Maybe-X",
-		Category: jsfingerprint.CategoryGeneric,
+		Category:   jsfingerprint.CategoryGeneric,
 		Confidence: jsfingerprint.ConfidenceLow,
 	})
 	r.Header.Fingerprints = append(r.Header.Fingerprints, headerfingerprint.Fingerprint{
 		Vendor: "GenericSig", Product: "Could-be-anything",
-		Category: headerfingerprint.CategoryGeneric,
+		Category:   headerfingerprint.CategoryGeneric,
 		Confidence: headerfingerprint.ConfidenceLow,
 	})
 	return r

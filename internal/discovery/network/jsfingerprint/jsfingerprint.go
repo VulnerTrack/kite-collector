@@ -118,8 +118,8 @@ type Fingerprint struct {
 	Category   Category   `json:"category"`
 	Endpoint   string     `json:"endpoint"`
 	ProjectID  string     `json:"project_id,omitempty"`
-	Evidence   []string   `json:"evidence"`
 	Confidence Confidence `json:"confidence"`
+	Evidence   []string   `json:"evidence"`
 }
 
 // Result bundles every Fingerprint produced from one Scan() call.

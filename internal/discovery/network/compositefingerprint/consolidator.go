@@ -38,8 +38,8 @@ type StackSummary struct {
 type Pick struct {
 	Vendor     string   `json:"vendor"`
 	Product    string   `json:"product"`
-	Sources    []string `json:"sources"`
 	Confidence string   `json:"confidence"`
+	Sources    []string `json:"sources"`
 }
 
 // confRank returns a numeric rank for a string-valued confidence so
@@ -252,10 +252,10 @@ func (r *CompositeResult) FilterByConfidence(min string) CompositeResult {
 // product pair under consideration, with a running best confidence
 // and a de-duplicated source list.
 type candidate struct {
-	vendor     string
-	product    string
-	conf       string
-	sources    map[string]struct{}
+	sources map[string]struct{}
+	vendor  string
+	product string
+	conf    string
 }
 
 func (c *candidate) addSource(src, conf string) {
@@ -301,10 +301,10 @@ func sortSrcs(s []string, order map[string]int) {
 // when you want a one-line "what is this app" answer; fall back to
 // the full CompositeResult when you need every attribution.
 func (r *CompositeResult) Summarise() StackSummary {
-	s := StackSummary{Endpoint: r.Endpoint}
 	if r == nil {
-		return s
+		return StackSummary{}
 	}
+	s := StackSummary{Endpoint: r.Endpoint}
 	s.Hosting = pickHosting(r)
 	s.WebServer = pickWebServer(r)
 	s.Runtime = pickRuntime(r)
@@ -367,6 +367,11 @@ func pickHosting(r *CompositeResult) *Pick {
 				tlsfingerprint.CategoryCDN,
 				tlsfingerprint.CategoryCloudCompute:
 				addFP(cands, "tls", fp.Vendor, fp.Product, string(fp.Confidence))
+			case tlsfingerprint.CategoryBaaS,
+				tlsfingerprint.CategoryAuth,
+				tlsfingerprint.CategoryStorage,
+				tlsfingerprint.CategoryGeneric:
+				// Not a hosting layer signal — handled by other pickers.
 			}
 		}
 	}
@@ -376,6 +381,16 @@ func pickHosting(r *CompositeResult) *Pick {
 			case headerfingerprint.CategoryEdgeHosting,
 				headerfingerprint.CategoryCDN:
 				addFP(cands, "header", fp.Vendor, fp.Product, string(fp.Confidence))
+			case headerfingerprint.CategoryWebServer,
+				headerfingerprint.CategoryAppRuntime,
+				headerfingerprint.CategoryFramework,
+				headerfingerprint.CategoryCMS,
+				headerfingerprint.CategoryAuth,
+				headerfingerprint.CategoryCache,
+				headerfingerprint.CategorySessionTrack,
+				headerfingerprint.CategorySecurity,
+				headerfingerprint.CategoryGeneric:
+				// Not a hosting layer signal — handled by other pickers.
 			}
 		}
 	}

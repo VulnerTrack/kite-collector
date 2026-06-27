@@ -18,7 +18,7 @@ const DefaultDialTimeout = 5 * time.Second
 // chain, and matches it against the supplied catalog. Concurrent
 // callers safe — Scanner holds no per-call state.
 type Scanner struct {
-	signatures []Signature
+	signatures  []Signature
 	dialTimeout time.Duration
 }
 

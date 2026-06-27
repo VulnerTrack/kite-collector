@@ -238,15 +238,15 @@ func TestProbe_ContextCancellationStopsEarly(t *testing.T) {
 
 func TestStatusAllowed(t *testing.T) {
 	cases := []struct {
-		got   int
 		allow []int
+		got   int
 		want  bool
 	}{
-		{200, nil, true},
-		{204, nil, true},
-		{301, nil, false},
-		{401, []int{200, 401}, true},
-		{500, []int{200, 401}, false},
+		{nil, 200, true},
+		{nil, 204, true},
+		{nil, 301, false},
+		{[]int{200, 401}, 401, true},
+		{[]int{200, 401}, 500, false},
 	}
 	for _, c := range cases {
 		if got := statusAllowed(c.got, c.allow); got != c.want {
@@ -311,12 +311,12 @@ func getProduct(fps []Fingerprint, product string) Fingerprint {
 // should trigger its Signature. The responses are minimal but
 // realistic — copied from each framework's stock SSR output.
 type jsFrameworkCase struct {
+	header   http.Header
 	product  string
 	path     string
-	status   int
-	header   http.Header
 	body     string
 	category Category
+	status   int
 }
 
 func TestProbe_DetectsJSWebFrameworks(t *testing.T) {

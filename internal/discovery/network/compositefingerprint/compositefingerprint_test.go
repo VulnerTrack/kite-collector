@@ -199,6 +199,7 @@ func hasHeaderProduct(fps []headerfingerprint.Fingerprint, product string) bool 
 	}
 	return false
 }
+
 func hasJSProduct(fps []jsfingerprint.Fingerprint, product string) bool {
 	for _, f := range fps {
 		if f.Product == product {
@@ -207,6 +208,7 @@ func hasJSProduct(fps []jsfingerprint.Fingerprint, product string) bool {
 	}
 	return false
 }
+
 func hasAPIProduct(fps []apifingerprint.Fingerprint, product string) bool {
 	for _, f := range fps {
 		if f.Product == product {
@@ -215,6 +217,7 @@ func hasAPIProduct(fps []apifingerprint.Fingerprint, product string) bool {
 	}
 	return false
 }
+
 func hasFilePath(fs []filefingerprint.Finding, path string) bool {
 	for _, f := range fs {
 		if f.Path == path {

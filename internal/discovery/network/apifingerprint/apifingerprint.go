@@ -84,21 +84,12 @@ const (
 // only ExpectedStatus is too weak on its own (every reverse proxy
 // returns 200) and is rejected at catalog-load time.
 type Probe struct {
-	// Path is the URL path component, including any leading slash.
-	Path string
-	// ExpectedStatus is the set of HTTP status codes that count as a
-	// hit; an empty slice means "any 2xx".
+	BodyRegex      *regexp.Regexp
+	HeaderRegex    *regexp.Regexp
+	Path           string
+	BodyContains   string
+	HeaderName     string
 	ExpectedStatus []int
-	// BodyContains is a literal substring match against the truncated
-	// response body. Empty = no body-substring check.
-	BodyContains string
-	// BodyRegex is a compiled regex run against the truncated body.
-	// nil = no regex check.
-	BodyRegex *regexp.Regexp
-	// HeaderName, HeaderRegex check a response header. HeaderRegex
-	// may be nil to assert mere header presence.
-	HeaderName  string
-	HeaderRegex *regexp.Regexp
 }
 
 // HasMatcher reports whether the Probe has any non-status matcher set.
@@ -111,14 +102,11 @@ func (p Probe) HasMatcher() bool {
 // same vendor/product attribution; the engine emits a single Fingerprint
 // per Signature even if multiple Probes hit.
 type Signature struct {
-	Vendor   string
-	Product  string
-	Category Category
-	Probes   []Probe
-	// Confidence is the maximum confidence a perfect match can yield.
-	// A partial match (some Probes hit, others missed) yields one
-	// tier lower.
+	Vendor     string
+	Product    string
+	Category   Category
 	Confidence Confidence
+	Probes     []Probe
 }
 
 // Fingerprint is the read-only outcome of one matched Signature.
@@ -127,8 +115,8 @@ type Fingerprint struct {
 	Product    string     `json:"product"`
 	Category   Category   `json:"category"`
 	Endpoint   string     `json:"endpoint"`
-	Evidence   []string   `json:"evidence"`
 	Confidence Confidence `json:"confidence"`
+	Evidence   []string   `json:"evidence"`
 }
 
 // Result is the full output of one Probe(host, port) sweep.
@@ -143,7 +131,7 @@ func downgradeConfidence(c Confidence) Confidence {
 	switch c {
 	case ConfidenceHigh:
 		return ConfidenceMedium
-	case ConfidenceMedium:
+	case ConfidenceMedium, ConfidenceLow:
 		return ConfidenceLow
 	default:
 		return ConfidenceLow

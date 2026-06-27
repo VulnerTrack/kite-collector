@@ -70,20 +70,14 @@ const (
 // SPA's catch-all index handler — without it, a Probe would emit a
 // false positive on every Next.js/Nuxt/Vite app.
 type Probe struct {
-	Path        string
-	Description string
-	Category    Category
-	Severity    Severity
-	// ExpectedStatus filters by HTTP status; empty == any 2xx.
-	ExpectedStatus []int
-	// BodyContains: literal substring required in the truncated body.
-	BodyContains string
-	// BodyRegex: regex required against the truncated body.
-	BodyRegex *regexp.Regexp
-	// MustNotContain disqualifies the hit when the body contains the
-	// supplied substring — used to drop SPA index-page false
-	// positives that return the same HTML for every unknown path.
+	BodyRegex      *regexp.Regexp
+	Path           string
+	Description    string
+	Category       Category
+	Severity       Severity
+	BodyContains   string
 	MustNotContain string
+	ExpectedStatus []int
 }
 
 // Finding is one matched Probe on one origin.
@@ -93,8 +87,8 @@ type Finding struct {
 	Description string   `json:"description"`
 	Category    Category `json:"category"`
 	Severity    Severity `json:"severity"`
-	StatusCode  int      `json:"status_code"`
 	Evidence    []string `json:"evidence,omitempty"`
+	StatusCode  int      `json:"status_code"`
 }
 
 // Result bundles every Finding the Scanner emits for one origin.
