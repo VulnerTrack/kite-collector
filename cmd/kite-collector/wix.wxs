@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  WiX source for the kite-collector MSI installer, consumed by the
+  goreleaser-pro `msi:` block at release time. The MSI complements the
+  in-binary Go wizard:
+
+    - Go wizard:   end-user "I downloaded kite-collector.exe and
+                   double-clicked it" path. Friendly UI, manual flow.
+    - MSI:         enterprise "IT pushes this via Intune/GPO/SCCM" path.
+                   Silent install (msiexec /i kite-collector.msi /quiet),
+                   automatic Add/Remove Programs registration, automatic
+                   service install + start, transactional rollback.
+
+  Both surfaces ultimately install the *same* binary at the *same* path
+  and register the *same* Windows service — the divergence is the UX, not
+  the artifact on disk.
+
+  GUID discipline:
+
+    - UpgradeCode is FIXED and shared across every kite-collector release.
+      Changing it would make new MSIs install side-by-side with old ones
+      instead of upgrading them. NEVER change this value.
+    - ProductCode is regenerated per build (Id="*") so MajorUpgrade can
+      cleanly remove the previous installation before laying down the
+      new one.
+    - Component GUIDs (CertsDir) are FIXED so the MSI registry-tracking
+      of "this MSI created the certs dir" persists across upgrades and
+      the dir is only removed on a full uninstall.
+
+  Templating: goreleaser-pro substitutes {{ .Version }} and friends at
+  build time. The `.Version` token comes from the git tag.
+-->
+
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+      Id="*"
+      Name="Kite Collector"
+      Language="1033"
+      Version="{{ .Version }}"
+      Manufacturer="VulnerTrack"
+      UpgradeCode="19b944d3-493b-4a20-952d-df1c6b0e2fe3">
+
+    <Package
+        InstallerVersion="500"
+        Compressed="yes"
+        InstallScope="perMachine"
+        Description="Continuous asset discovery and OTLP streaming agent"
+        Comments="Kite Collector {{ .Version }} ({{ .ShortCommit }})"/>
+
+    <!--
+      MajorUpgrade replaces older installations transparently. The MSI
+      noticing an older Kite Collector with this same UpgradeCode will
+      remove it before installing the new version — operators get a
+      one-MSI upgrade story, not "uninstall old, install new" manual
+      steps.
+    -->
+    <MajorUpgrade
+        DowngradeErrorMessage="A newer version of Kite Collector is already installed."
+        Schedule="afterInstallInitialize"/>
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high"/>
+
+    <Feature Id="ProductFeature" Title="Kite Collector" Level="1">
+      <ComponentRef Id="MainExecutable"/>
+      <ComponentRef Id="CertsDirComponent"/>
+      <ComponentRef Id="StartMenuShortcut"/>
+    </Feature>
+
+    <!-- Per-machine install layout: Program Files\Kite Collector\ -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="Kite Collector">
+
+          <Component Id="MainExecutable" Guid="16af03e6-2e93-4785-a3c9-bcd60c226088" Win64="yes">
+            <File
+                Id="KiteCollectorExe"
+                Name="kite-collector.exe"
+                Source="kite-collector.exe"
+                KeyPath="yes"/>
+
+            <!--
+              ServiceInstall registers the kite-collector service with the
+              Windows SCM directly via MSI, instead of relying on the
+              binary's own `install` subcommand to do it. Two reasons:
+
+                1. Silent enterprise installs (msiexec /quiet) need the
+                   service registered without launching the wizard.
+                2. MSI rollback can cleanly remove the service if any
+                   subsequent install step fails.
+
+              Arguments mirror what cmd/kite-collector/install.go writes
+              for the SCM-registered command line: service run with the
+              certs-dir flag pointing at the ProgramData folder. Path
+              is hard-coded to the MSI's CERTSDIR property which resolves
+              to the ProgramData folder entry below.
+            -->
+            <ServiceInstall
+                Id="KiteCollectorService"
+                Name="kite-collector"
+                DisplayName="Kite Collector"
+                Description="Continuous asset discovery and OTLP streaming agent"
+                Type="ownProcess"
+                Start="auto"
+                ErrorControl="normal"
+                Account="LocalSystem"
+                Arguments="service run --certs-dir &quot;[CERTSDIR]&quot;"
+                Vital="yes"/>
+
+            <!--
+              ServiceControl drives lifecycle around install/uninstall:
+              start on install, stop on both install (for upgrade-in-place)
+              and uninstall, and remove on uninstall. Wait="no" so the
+              installer doesn't block on the agent reaching steady state.
+            -->
+            <ServiceControl
+                Id="StartKiteCollectorService"
+                Name="kite-collector"
+                Start="install"
+                Stop="both"
+                Remove="uninstall"
+                Wait="no"/>
+          </Component>
+
+          <Component Id="StartMenuShortcut" Guid="4cbfa176-f57e-4682-afcd-a459abdfc28b" Win64="yes">
+            <Shortcut
+                Id="DashboardShortcut"
+                Name="Kite Collector Dashboard"
+                Description="Open the Kite Collector configuration dashboard"
+                Target="[#KiteCollectorExe]"
+                Arguments="dashboard"
+                WorkingDirectory="INSTALLFOLDER"/>
+            <RegistryValue
+                Root="HKCU"
+                Key="Software\VulnerTrack\KiteCollector"
+                Name="StartMenuShortcut"
+                Type="integer"
+                Value="1"
+                KeyPath="yes"/>
+          </Component>
+
+        </Directory>
+      </Directory>
+
+      <!--
+        ProgramData\kite-collector is the canonical certs / data dir for a
+        per-machine install. The path matches installer.DefaultCertsDir
+        (system mode) in internal/installer/installer.go, so the dashboard's
+        smart-defaults and the MSI's service arguments agree on where to
+        look for ca.pem / agent.pem / agent-key.pem.
+
+        Permission element grants LocalSystem full access — the service
+        runs as LocalSystem and needs to write enrollment PEMs here.
+      -->
+      <Directory Id="CommonAppDataFolder">
+        <Directory Id="CERTSDIR" Name="kite-collector">
+          <Component Id="CertsDirComponent" Guid="73156730-7394-494e-8607-838ccbe821ac" Win64="yes">
+            <CreateFolder>
+              <Permission User="SYSTEM" GenericAll="yes"/>
+              <Permission User="Administrators" GenericAll="yes"/>
+            </CreateFolder>
+            <RegistryValue
+                Root="HKLM"
+                Key="Software\VulnerTrack\KiteCollector"
+                Name="CertsDir"
+                Type="string"
+                Value="[CERTSDIR]"
+                KeyPath="yes"/>
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <!--
+      Add/Remove Programs metadata — what end users see when they open
+      Settings → Apps. Setting ARPPRODUCTICON would also surface the
+      tray icon if we ship one; left out for now to keep the WiX
+      surface minimal.
+    -->
+    <Property Id="ARPHELPLINK" Value="https://github.com/VulnerTrack/kite-collector"/>
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/VulnerTrack/kite-collector"/>
+    <Property Id="ARPNOMODIFY" Value="1"/>
+  </Product>
+</Wix>
