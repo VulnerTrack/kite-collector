@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 )
 
@@ -46,7 +47,7 @@ func UnmarshalTags(encoded string) (map[string]string, error) {
 	}
 	var pairs [][2]string
 	if err := json.Unmarshal([]byte(encoded), &pairs); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal tags: %w", err)
 	}
 	out := make(map[string]string, len(pairs))
 	for _, p := range pairs {
