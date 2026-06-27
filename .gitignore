@@ -49,3 +49,4 @@ data/
 # .vscode/
 internal/discovery/network/jsfingerprint/jsfingerprint_test.go
 identity.json
+cmd/kite-collector/web_fingerprint_test.go:
