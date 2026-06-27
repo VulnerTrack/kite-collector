@@ -71,8 +71,16 @@ build-host:
 run:
 	CGO_ENABLED=0 go run ./cmd/kite-collector
 
+# test runs the suite without the race detector. The sqlite + dashboard
+# packages perform full schema migrations per t.TempDir, and under -race
+# each migration runs ~10× slower; chained across ~250 tests the package
+# wall-time exceeds the 30m go-test cap. The race-detector pass lives
+# behind `make test-race` for opt-in nightly / pre-release runs.
 test:
-	go test -race -count=1 ./...
+	go test -count=1 -timeout 30m ./...
+
+test-race:
+	go test -race -count=1 -timeout 60m ./...
 
 test-e2e:
 	go test -tags e2e -count=1 -timeout 120s ./tests/e2e/...
