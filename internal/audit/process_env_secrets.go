@@ -24,10 +24,6 @@ import (
 const (
 	processEnvSecretsAuditorName = "process_env_secrets" //#nosec G101 -- auditor identifier, not a credential
 
-	// CWE-526: Cleartext Storage of Sensitive Information in an Environment Variable
-	processEnvSecretsCWEID   = "CWE-526"
-	processEnvSecretsCWEName = "Cleartext Storage of Sensitive Information in an Environment Variable" //#nosec G101 -- CWE description text, not a credential
-
 	processEnvSecretsExpected   = "No credentials in process environment variables"
 	processEnvSecretsCISControl = "CIS 3.11, CIS 14.8" //#nosec G101 -- CIS control reference, not a credential
 
