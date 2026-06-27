@@ -218,7 +218,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | Code | Constant | Description |
 |---|---|---|
 | `cloud.aws_ec2.starting` | `LogCodeAWSEC2Starting` | — |
-| `cloud.aws_ec2.creds_missing` | `LogCodeAWSEC2CredsMissing` | — |
+| `cloud.aws_ec2.creds_missing` | `LogCodeAWSEC2CredsMissing` | #nosec G101 -- log code identifier emitted when AWS EC2 credentials env vars are absent, not a credential value |
 | `cloud.aws_ec2.assume_role` | `LogCodeAWSEC2AssumeRole` | — |
 | `cloud.aws_ec2.assume_role_failed` | `LogCodeAWSEC2AssumeRoleFailed` | — |
 | `cloud.aws_ec2.using_assumed_role` | `LogCodeAWSEC2UsingAssumedRole` | — |
@@ -233,8 +233,8 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | Code | Constant | Description |
 |---|---|---|
 | `cloud.azure_vm.starting` | `LogCodeAzureVMStarting` | — |
-| `cloud.azure_vm.creds_missing` | `LogCodeAzureVMCredsMissing` | — |
-| `cloud.azure_vm.token_acquire_failed` | `LogCodeAzureVMTokenAcquireFailed` | — |
+| `cloud.azure_vm.creds_missing` | `LogCodeAzureVMCredsMissing` | #nosec G101 -- log code identifier signalling Azure VM credentials env vars are missing, not a credential value |
+| `cloud.azure_vm.token_acquire_failed` | `LogCodeAzureVMTokenAcquireFailed` | #nosec G101 -- log code identifier for Azure VM OAuth token acquisition failure, not a token value |
 | `cloud.azure_vm.enumerating_subscriptions` | `LogCodeAzureVMEnumeratingSubs` | — |
 | `cloud.azure_vm.enumerate_subscriptions_failed` | `LogCodeAzureVMEnumerateSubsFailed` | — |
 | `cloud.azure_vm.no_subscriptions_accessible` | `LogCodeAzureVMNoSubsAccessible` | — |
@@ -250,11 +250,11 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 |---|---|---|
 | `cloud.gcp_compute.starting` | `LogCodeGCPComputeStarting` | — |
 | `cloud.gcp_compute.project_missing` | `LogCodeGCPComputeProjectMissing` | — |
-| `cloud.gcp_compute.token_acquire_failed` | `LogCodeGCPComputeTokenAcquireFailed` | — |
+| `cloud.gcp_compute.token_acquire_failed` | `LogCodeGCPComputeTokenAcquireFailed` | #nosec G101 -- log code identifier for GCP Compute OAuth token acquisition failure, not a token value |
 | `cloud.gcp_compute.completed` | `LogCodeGCPComputeComplete` | — |
-| `cloud.gcp_compute.token_from_metadata` | `LogCodeGCPComputeTokenFromMetadata` | — |
-| `cloud.gcp_compute.token_from_creds_file` | `LogCodeGCPComputeTokenFromCredsFile` | — |
-| `cloud.gcp_compute.token_creds_file_failed` | `LogCodeGCPComputeTokenCredsFileFailed` | — |
+| `cloud.gcp_compute.token_from_metadata` | `LogCodeGCPComputeTokenFromMetadata` | #nosec G101 -- log code identifier marking that GCP Compute used the metadata server for tokens, not a token value |
+| `cloud.gcp_compute.token_from_creds_file` | `LogCodeGCPComputeTokenFromCredsFile` | #nosec G101 -- log code identifier marking that GCP Compute used a service-account JSON file for tokens, not a token value |
+| `cloud.gcp_compute.token_creds_file_failed` | `LogCodeGCPComputeTokenCredsFileFailed` | #nosec G101 -- log code identifier for failure to acquire a token from a GCP credentials file, not a token value |
 | `cloud.gcp_compute.disk_fetch_failed` | `LogCodeGCPComputeDiskFetchFailed` | — |
 
 **--- Route53 DNS discovery (AWS DNS) -----------------------------**
@@ -262,7 +262,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | Code | Constant | Description |
 |---|---|---|
 | `cloud.dns_route53.disabled` | `LogCodeRoute53Disabled` | — |
-| `cloud.dns_route53.creds_missing` | `LogCodeRoute53CredsMissing` | — |
+| `cloud.dns_route53.creds_missing` | `LogCodeRoute53CredsMissing` | #nosec G101 -- log code identifier emitted when Route53 credentials env vars are absent, not a credential value |
 | `cloud.dns_route53.assume_role` | `LogCodeRoute53AssumeRole` | — |
 | `cloud.dns_route53.assume_role_failed` | `LogCodeRoute53AssumeRoleFailed` | — |
 | `cloud.dns_route53.get_dnssec_failed` | `LogCodeRoute53GetDNSSECFailed` | — |
@@ -275,7 +275,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | Code | Constant | Description |
 |---|---|---|
 | `cloud.dns_cloudflare.disabled` | `LogCodeCloudflareDisabled` | — |
-| `cloud.dns_cloudflare.token_missing` | `LogCodeCloudflareTokenMissing` | — |
+| `cloud.dns_cloudflare.token_missing` | `LogCodeCloudflareTokenMissing` | #nosec G101 -- log code identifier emitted when the Cloudflare API token env var is absent, not a token value |
 | `cloud.dns_cloudflare.list_records_failed` | `LogCodeCloudflareListRecordsFailed` | — |
 | `cloud.dns_cloudflare.skip_unsupported_record_type` | `LogCodeCloudflareSkipUnsupportedType` | — |
 | `cloud.dns_cloudflare.completed` | `LogCodeCloudflareComplete` | — |
@@ -285,7 +285,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | Code | Constant | Description |
 |---|---|---|
 | `cloud.dns_azure.disabled` | `LogCodeAzureDNSDisabled` | — |
-| `cloud.dns_azure.creds_missing` | `LogCodeAzureDNSCredsMissing` | — |
+| `cloud.dns_azure.creds_missing` | `LogCodeAzureDNSCredsMissing` | #nosec G101 -- log code identifier emitted when Azure DNS credentials env vars are absent, not a credential value |
 | `cloud.dns_azure.list_zones_failed` | `LogCodeAzureDNSListZonesFailed` | — |
 | `cloud.dns_azure.list_records_failed` | `LogCodeAzureDNSListRecordsFailed` | — |
 | `cloud.dns_azure.skip_unsupported_record_type` | `LogCodeAzureDNSSkipUnsupportedType` | — |
@@ -297,7 +297,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 |---|---|---|
 | `cloud.dns_gcp.disabled` | `LogCodeGCPDNSDisabled` | — |
 | `cloud.dns_gcp.project_missing` | `LogCodeGCPDNSProjectMissing` | — |
-| `cloud.dns_gcp.token_acquire_failed` | `LogCodeGCPDNSTokenAcquireFailed` | — |
+| `cloud.dns_gcp.token_acquire_failed` | `LogCodeGCPDNSTokenAcquireFailed` | #nosec G101 -- log code identifier for GCP DNS OAuth token acquisition failure, not a token value |
 | `cloud.dns_gcp.list_records_failed` | `LogCodeGCPDNSListRecordsFailed` | — |
 | `cloud.dns_gcp.skip_unsupported_record_type` | `LogCodeGCPDNSSkipUnsupportedType` | — |
 | `cloud.dns_gcp.completed` | `LogCodeGCPDNSComplete` | — |
@@ -446,7 +446,7 @@ Source: [`internal/discovery/mdm/logcodes.go`](../internal/discovery/mdm/logcode
 | Code | Constant | Description |
 |---|---|---|
 | `mdm.jamf.starting` | `LogCodeJamfStarting` | — |
-| `mdm.jamf.creds_missing` | `LogCodeJamfCredsMissing` | — |
+| `mdm.jamf.creds_missing` | `LogCodeJamfCredsMissing` | #nosec G101 -- log code identifier emitted when Jamf credentials env vars are absent, not a credential value |
 | `mdm.jamf.auth_failed` | `LogCodeJamfAuthFailed` | — |
 | `mdm.jamf.computers_fetched` | `LogCodeJamfComputersFetched` | — |
 | `mdm.jamf.detail_fetch_failed` | `LogCodeJamfDetailFetchFailed` | — |
@@ -457,8 +457,8 @@ Source: [`internal/discovery/mdm/logcodes.go`](../internal/discovery/mdm/logcode
 | Code | Constant | Description |
 |---|---|---|
 | `mdm.intune.starting` | `LogCodeIntuneStarting` | — |
-| `mdm.intune.creds_missing` | `LogCodeIntuneCredsMissing` | — |
-| `mdm.intune.token_acquire_failed` | `LogCodeIntuneTokenAcquireFailed` | — |
+| `mdm.intune.creds_missing` | `LogCodeIntuneCredsMissing` | #nosec G101 -- log code identifier signalling Intune credentials env vars are missing, not a credential value |
+| `mdm.intune.token_acquire_failed` | `LogCodeIntuneTokenAcquireFailed` | #nosec G101 -- log code identifier for Intune OAuth token acquisition failure, not a token value |
 | `mdm.intune.skip_unparseable_device` | `LogCodeIntuneSkipUnparseable` | — |
 | `mdm.intune.completed` | `LogCodeIntuneComplete` | — |
 
@@ -467,7 +467,7 @@ Source: [`internal/discovery/mdm/logcodes.go`](../internal/discovery/mdm/logcode
 | Code | Constant | Description |
 |---|---|---|
 | `mdm.sccm.starting` | `LogCodeSCCMStarting` | — |
-| `mdm.sccm.creds_missing` | `LogCodeSCCMCredsMissing` | — |
+| `mdm.sccm.creds_missing` | `LogCodeSCCMCredsMissing` | #nosec G101 -- log code identifier emitted when SCCM credentials env vars are absent, not a credential value |
 | `mdm.sccm.auth_failed` | `LogCodeSCCMAuthFailed` | — |
 | `mdm.sccm.skip_unparseable_device` | `LogCodeSCCMSkipUnparseable` | — |
 | `mdm.sccm.completed` | `LogCodeSCCMComplete` | — |
