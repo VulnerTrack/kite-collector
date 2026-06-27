@@ -101,7 +101,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	}
 	analyzer.signatures = sigs
 
-	filter := Filter{MinConfidence: Confidence(intFromCfg(cfg["min_confidence"]))}
+	filter := Filter{MinConfidence: Confidence(intFromCfg(cfg["min_confidence"]))} //#nosec G115 -- narrow int from config, Confidence bounds enforced downstream
 	for _, p := range stringSliceFromCfg(cfg["providers_allowlist"]) {
 		filter.Providers = append(filter.Providers, Provider(p))
 	}
@@ -237,11 +237,11 @@ func summariseMatches(matches []Match, primary Match) string {
 	}
 
 	payload := struct {
-		PrimaryProvider string         `json:"primary_provider"`
-		Signals         map[string]int `json:"signals"`
-		Providers       map[string]int `json:"providers"`
-		MatchCount      int            `json:"match_count"`
-		PrimaryConfidence Confidence   `json:"primary_confidence"`
+		Signals           map[string]int `json:"signals"`
+		Providers         map[string]int `json:"providers"`
+		PrimaryProvider   string         `json:"primary_provider"`
+		MatchCount        int            `json:"match_count"`
+		PrimaryConfidence Confidence     `json:"primary_confidence"`
 	}{
 		PrimaryProvider:   string(primary.Provider),
 		Signals:           signals,

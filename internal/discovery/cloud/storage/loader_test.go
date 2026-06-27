@@ -91,22 +91,22 @@ func TestLoadSignaturesFromFile_DetectsExtension(t *testing.T) {
 
 func TestCompileSpec_Validations(t *testing.T) {
 	cases := []struct {
-		spec    SignatureSpec
 		errSub  string
-		wantOK  bool
 		comment string
+		spec    SignatureSpec
+		wantOK  bool
 	}{
-		{SignatureSpec{Provider: "p", Signal: "file", Description: "d", Pattern: "x"}, "", true, "happy path"},
-		{SignatureSpec{Signal: "file", Description: "d", Pattern: "x"}, "provider is required", false, "missing provider"},
-		{SignatureSpec{Provider: "p", Description: "d", Pattern: "x"}, "signal is required", false, "missing signal"},
-		{SignatureSpec{Provider: "p", Signal: "bogus", Description: "d", Pattern: "x"}, "unknown signal", false, "invalid signal"},
-		{SignatureSpec{Provider: "p", Signal: "file", Pattern: "x"}, "description is required", false, "missing description"},
-		{SignatureSpec{Provider: "p", Signal: "file", Description: "d"}, "at least one of", false, "no payload"},
-		{SignatureSpec{Provider: "p", Signal: "network", Description: "d", CIDRs: []string{"10.0.0.0/8"}}, "", true, "network with cidr"},
-		{SignatureSpec{Provider: "p", Signal: "network", Description: "d", Pattern: "x"}, "signal=network requires cidrs", false, "network without cidr"},
-		{SignatureSpec{Provider: "p", Signal: "network", Description: "d", CIDRs: []string{"not-a-cidr"}}, "invalid cidr", false, "bad cidr"},
-		{SignatureSpec{Provider: "p", Signal: "file", Description: "d", Pattern: "(unclosed"}, "compile pattern", false, "bad regex"},
-		{SignatureSpec{Provider: "p", Signal: "file", Description: "d", Pattern: "x", Confidence: 9}, "confidence", false, "confidence out of range"},
+		{"", "happy path", SignatureSpec{Provider: "p", Signal: "file", Description: "d", Pattern: "x"}, true},
+		{"provider is required", "missing provider", SignatureSpec{Signal: "file", Description: "d", Pattern: "x"}, false},
+		{"signal is required", "missing signal", SignatureSpec{Provider: "p", Description: "d", Pattern: "x"}, false},
+		{"unknown signal", "invalid signal", SignatureSpec{Provider: "p", Signal: "bogus", Description: "d", Pattern: "x"}, false},
+		{"description is required", "missing description", SignatureSpec{Provider: "p", Signal: "file", Pattern: "x"}, false},
+		{"at least one of", "no payload", SignatureSpec{Provider: "p", Signal: "file", Description: "d"}, false},
+		{"", "network with cidr", SignatureSpec{Provider: "p", Signal: "network", Description: "d", CIDRs: []string{"10.0.0.0/8"}}, true},
+		{"signal=network requires cidrs", "network without cidr", SignatureSpec{Provider: "p", Signal: "network", Description: "d", Pattern: "x"}, false},
+		{"invalid cidr", "bad cidr", SignatureSpec{Provider: "p", Signal: "network", Description: "d", CIDRs: []string{"not-a-cidr"}}, false},
+		{"compile pattern", "bad regex", SignatureSpec{Provider: "p", Signal: "file", Description: "d", Pattern: "(unclosed"}, false},
+		{"confidence", "confidence out of range", SignatureSpec{Provider: "p", Signal: "file", Description: "d", Pattern: "x", Confidence: 9}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.comment, func(t *testing.T) {

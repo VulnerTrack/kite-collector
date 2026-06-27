@@ -7,14 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"os/signal"
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/cloud/storage"
 )
@@ -226,7 +225,10 @@ func runStorageFingerprintBatch(ctx context.Context, opts storageFingerprintOpts
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(results)
+		if err := enc.Encode(results); err != nil {
+			return fmt.Errorf("encode results: %w", err)
+		}
+		return nil
 	case "table", "":
 		writeStorageBatchTable(results)
 		return nil
@@ -239,7 +241,7 @@ func runStorageFingerprintBatch(ctx context.Context, opts storageFingerprintOpts
 // that start with '#' (after leading whitespace) are skipped so the file
 // can be commented for operator review.
 func readScanList(path string) ([]string, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //#nosec G304 -- CLI-supplied --scan-list path for storage-fingerprint, intentional operator input
 	if err != nil {
 		return nil, fmt.Errorf("open scan list %s: %w", path, err)
 	}
@@ -345,7 +347,10 @@ func runStorageFingerprintPage(ctx context.Context, opts storageFingerprintOpts,
 	case "json":
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(results)
+		if err := enc.Encode(results); err != nil {
+			return fmt.Errorf("encode results: %w", err)
+		}
+		return nil
 	case "table", "":
 		fmt.Printf("\nStorage Fingerprint — Page Crawl\n================================\n")
 		fmt.Printf("  Page: %s\n", opts.page)
@@ -360,7 +365,7 @@ func runStorageFingerprintPage(ctx context.Context, opts storageFingerprintOpts,
 // flag values yield an unrestricted filter — Apply already treats nil
 // slices as "no constraint".
 func buildStorageFilter(opts storageFingerprintOpts) storage.Filter {
-	f := storage.Filter{MinConfidence: storage.Confidence(opts.minConf)}
+	f := storage.Filter{MinConfidence: storage.Confidence(opts.minConf)} //#nosec G115 -- opts.minConf bounded to 0..3 by validation above
 	for _, p := range opts.providers {
 		if p == "" {
 			continue
@@ -390,8 +395,8 @@ func writeStorageJSON(ev storage.Evidence, matches []storage.Match) error {
 		JSBytes       int      `json:"js_bytes,omitempty"`
 	}
 	payload := struct {
-		Evidence evidenceSummary  `json:"evidence"`
-		Matches  []storage.Match  `json:"matches"`
+		Matches  []storage.Match `json:"matches"`
+		Evidence evidenceSummary `json:"evidence"`
 	}{
 		Evidence: evidenceSummary{
 			URL:           ev.URL,
@@ -406,7 +411,10 @@ func writeStorageJSON(ev storage.Evidence, matches []storage.Match) error {
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	return enc.Encode(payload)
+	if err := enc.Encode(payload); err != nil {
+		return fmt.Errorf("encode payload: %w", err)
+	}
+	return nil
 }
 
 // writeStorageTable renders a human-friendly summary: source, evidence

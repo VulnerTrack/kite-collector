@@ -55,7 +55,7 @@ func TestDetect_AWSS3_JSSource(t *testing.T) {
 func TestDetect_AWSS3_APIHeader(t *testing.T) {
 	ev := Evidence{
 		APIHeaders: http.Header{
-			"X-Amz-Request-Id":         []string{"ABC123"},
+			"X-Amz-Request-Id":             []string{"ABC123"},
 			"X-Amz-Server-Side-Encryption": []string{"AES256"},
 		},
 	}

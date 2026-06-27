@@ -172,7 +172,8 @@ func matchNetwork(sig Signature, ev Evidence, id int) (Match, bool) {
 // DNSChain entries. The matched fragment becomes the Match snippet so
 // downstream code can capture the bucket name.
 func matchBucket(sig Signature, ev Evidence, id int) (Match, bool) {
-	candidates := []string{ev.BucketHost, ev.URL}
+	candidates := make([]string, 0, 2+len(ev.DNSChain))
+	candidates = append(candidates, ev.BucketHost, ev.URL)
 	candidates = append(candidates, ev.DNSChain...)
 	for _, text := range candidates {
 		if text == "" {
