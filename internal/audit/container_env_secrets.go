@@ -17,10 +17,6 @@ import (
 const (
 	containerEnvSecretsAuditorName = "container_env_secrets" //#nosec G101 -- auditor identifier, not a credential
 
-	// CWE-526: Cleartext Storage of Sensitive Information in an Environment Variable
-	containerEnvSecretsCWEID   = "CWE-526"
-	containerEnvSecretsCWEName = "Cleartext Storage of Sensitive Information in an Environment Variable" //#nosec G101 -- CWE description text, not a credential
-
 	// containerEnvSecretsExpected is the security baseline message included
 	// in every finding's Expected field.
 	containerEnvSecretsExpected = "No credentials in container environment variables"
