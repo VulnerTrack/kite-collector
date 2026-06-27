@@ -40,7 +40,7 @@ func main() {
 func findRepoRoot() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getwd: %w", err)
 	}
 	d := cwd
 	for {

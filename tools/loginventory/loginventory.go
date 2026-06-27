@@ -109,7 +109,7 @@ func findLogcodesFiles(repoRoot string) ([]string, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("walk: %w", err)
 	}
 	sort.Strings(out)
 	return out, nil
@@ -127,7 +127,7 @@ func parseLogcodes(path, repoRoot string) ([]Code, string, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("parse: %w", err)
 	}
 
 	relPath, err := filepath.Rel(repoRoot, path)
