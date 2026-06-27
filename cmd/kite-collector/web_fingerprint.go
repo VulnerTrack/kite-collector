@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/network/compositefingerprint"
+	"github.com/vulnertrack/kite-collector/internal/discovery/network/customcatalog"
 )
 
 // newWebFingerprintCmd builds the `kite-collector web-fingerprint`
@@ -49,6 +50,7 @@ func newWebFingerprintCmd() *cobra.Command {
 		categories    []string
 		summaryOnly   bool
 		failOn        []string
+		customCatalog string
 	)
 
 	cmd := &cobra.Command{
@@ -88,6 +90,7 @@ override the choice.`,
 				categories:    categories,
 				summaryOnly:   summaryOnly,
 				failOn:        failOn,
+				customCatalog: customCatalog,
 			})
 		},
 	}
@@ -104,6 +107,7 @@ override the choice.`,
 	cmd.Flags().StringSliceVar(&categories, "category", nil, "keep only fingerprints in these categories (comma-separated)")
 	cmd.Flags().BoolVar(&summaryOnly, "summary-only", false, "emit only the synthesised StackSummary (skip per-surface raw fingerprints)")
 	cmd.Flags().StringSliceVar(&failOn, "fail-on", nil, "exit non-zero when any fingerprint in these categories is found (CI gating: e.g. --fail-on secret-leak)")
+	cmd.Flags().StringVar(&customCatalog, "custom-catalog", "", "path to a YAML overlay file with operator-supplied signatures (api/header/js/file/tls)")
 
 	return cmd
 }
@@ -115,6 +119,7 @@ type webFingerprintOpts struct {
 	sni           string
 	minConfidence string
 	vendorFilter  string
+	customCatalog string
 	categories    []string
 	skip          []string
 	failOn        []string
@@ -201,12 +206,36 @@ func runWebFingerprint(opts webFingerprintOpts) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	scanner := compositefingerprint.NewScanner()
+	scanner, err := buildScanner(opts)
+	if err != nil {
+		return err
+	}
 
 	if opts.scanList != "" {
 		return runWebFingerprintBatch(ctx, scanner, opts, options)
 	}
 	return runWebFingerprintSingle(ctx, scanner, opts, options)
+}
+
+// buildScanner constructs the composite scanner, layering in any
+// operator-supplied YAML overlay from --custom-catalog. When no
+// overlay is set the default scanner with each package's
+// DefaultCatalog is used.
+func buildScanner(opts webFingerprintOpts) (*compositefingerprint.Scanner, error) {
+	if opts.customCatalog == "" {
+		return compositefingerprint.NewScanner(), nil
+	}
+	cat, err := customcatalog.LoadFile(opts.customCatalog)
+	if err != nil {
+		return nil, fmt.Errorf("load custom catalog: %w", err)
+	}
+	return compositefingerprint.NewScannerWithCustomCatalogs(nil, compositefingerprint.CustomCatalogs{
+		TLS:    cat.TLS,
+		Header: cat.Header,
+		JS:     cat.JS,
+		File:   cat.File,
+		API:    cat.API,
+	}), nil
 }
 
 // validateMinConfidence rejects unknown bands early so the operator
