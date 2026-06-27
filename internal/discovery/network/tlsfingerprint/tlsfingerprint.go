@@ -67,11 +67,11 @@ const (
 type SignalKind string
 
 const (
-	SignalSANSuffix   SignalKind = "san-suffix"
-	SignalIssuerName  SignalKind = "issuer-name"
-	SignalSubjectCN   SignalKind = "subject-cn"
-	SignalOCSPHost    SignalKind = "ocsp-host"
-	SignalCertExtra   SignalKind = "cert-extra"
+	SignalSANSuffix  SignalKind = "san-suffix"
+	SignalIssuerName SignalKind = "issuer-name"
+	SignalSubjectCN  SignalKind = "subject-cn"
+	SignalOCSPHost   SignalKind = "ocsp-host"
+	SignalCertExtra  SignalKind = "cert-extra"
 )
 
 // Pattern is one matcher in a Signature. Exactly one of SANSuffix /
@@ -87,7 +87,7 @@ type Pattern struct {
 	// SubjectRegex matches Cert.Subject.CommonName.
 	SubjectRegex *regexp.Regexp
 	// OCSPHost matches OCSP responder URL host.
-	OCSPHost string
+	OCSPHost   string
 	Kind       SignalKind
 	Confidence Confidence
 }
@@ -105,18 +105,18 @@ type Signature struct {
 // chain. The Detector populates this once per Scan; vendor matching
 // runs against it.
 type CertSummary struct {
-	SubjectCN    string    `json:"subject_cn"`
-	SubjectOrg   []string  `json:"subject_org,omitempty"`
-	SANs         []string  `json:"sans"`
-	IssuerCN     string    `json:"issuer_cn"`
-	IssuerOrg    []string  `json:"issuer_org,omitempty"`
-	IssuerJoined string    `json:"issuer_joined"`
-	NotBefore    string    `json:"not_before"`
-	NotAfter     string    `json:"not_after"`
-	SignatureAlg string    `json:"signature_alg"`
-	PublicKeyAlg string    `json:"public_key_alg"`
-	OCSPServers  []string  `json:"ocsp_servers,omitempty"`
-	CRLPoints    []string  `json:"crl_points,omitempty"`
+	SubjectCN    string   `json:"subject_cn"`
+	SubjectOrg   []string `json:"subject_org,omitempty"`
+	SANs         []string `json:"sans"`
+	IssuerCN     string   `json:"issuer_cn"`
+	IssuerOrg    []string `json:"issuer_org,omitempty"`
+	IssuerJoined string   `json:"issuer_joined"`
+	NotBefore    string   `json:"not_before"`
+	NotAfter     string   `json:"not_after"`
+	SignatureAlg string   `json:"signature_alg"`
+	PublicKeyAlg string   `json:"public_key_alg"`
+	OCSPServers  []string `json:"ocsp_servers,omitempty"`
+	CRLPoints    []string `json:"crl_points,omitempty"`
 }
 
 // Fingerprint is one matched vendor on one TLS endpoint.
@@ -125,8 +125,8 @@ type Fingerprint struct {
 	Product    string     `json:"product"`
 	Category   Category   `json:"category"`
 	Endpoint   string     `json:"endpoint"`
-	Evidence   []string   `json:"evidence"`
 	Confidence Confidence `json:"confidence"`
+	Evidence   []string   `json:"evidence"`
 }
 
 // Result is the full output of one Scan() call. Cert metadata is
@@ -134,16 +134,11 @@ type Fingerprint struct {
 // still get the SAN list / issuer for inventory.
 type Result struct {
 	Endpoint     string        `json:"endpoint"`
+	ClientJA3    string        `json:"client_ja3,omitempty"`
+	ServerJA3S   string        `json:"server_ja3s,omitempty"`
+	ServerJA4S   string        `json:"server_ja4s,omitempty"`
 	Cert         CertSummary   `json:"cert"`
 	Fingerprints []Fingerprint `json:"fingerprints"`
-	// ClientJA3 holds the JA3 string of the *kite-collector* end of
-	// the handshake. Populated by the scanner so operators can pin
-	// expected outgoing fingerprints without re-deriving them.
-	ClientJA3 string `json:"client_ja3,omitempty"`
-	// ServerJA3S, ServerJA4S are reserved for a future faithful-
-	// handshake capture; current scanner leaves them empty.
-	ServerJA3S string `json:"server_ja3s,omitempty"`
-	ServerJA4S string `json:"server_ja4s,omitempty"`
 }
 
 // SummariseCert converts an *x509.Certificate into the read-only
@@ -174,9 +169,7 @@ func SummariseCert(c *x509.Certificate) CertSummary {
 		cs.SANs = append(cs.SANs, u.String())
 	}
 	sort.Strings(cs.SANs)
-	for _, dp := range c.CRLDistributionPoints {
-		cs.CRLPoints = append(cs.CRLPoints, dp)
-	}
+	cs.CRLPoints = append(cs.CRLPoints, c.CRLDistributionPoints...)
 	// Build issuer joined form for regex matchers.
 	parts := []string{cs.IssuerCN}
 	if len(cs.IssuerOrg) > 0 {

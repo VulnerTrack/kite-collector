@@ -50,18 +50,16 @@ type MechanismError struct {
 // reasons for the latter so consumers can show "we tried but it
 // timed out" rather than silently empty sections.
 type CompositeResult struct {
-	Scheme   string `json:"scheme"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Endpoint string `json:"endpoint"`
-
-	TLS    *tlsfingerprint.Result    `json:"tls,omitempty"`
-	Header *headerfingerprint.Result `json:"header,omitempty"`
-	JS     *jsfingerprint.Result     `json:"js,omitempty"`
-	File   *filefingerprint.Result   `json:"file,omitempty"`
-	API    *apifingerprint.Result    `json:"api,omitempty"`
-
-	Errors []MechanismError `json:"errors,omitempty"`
+	TLS      *tlsfingerprint.Result    `json:"tls,omitempty"`
+	Header   *headerfingerprint.Result `json:"header,omitempty"`
+	JS       *jsfingerprint.Result     `json:"js,omitempty"`
+	File     *filefingerprint.Result   `json:"file,omitempty"`
+	API      *apifingerprint.Result    `json:"api,omitempty"`
+	Scheme   string                    `json:"scheme"`
+	Host     string                    `json:"host"`
+	Endpoint string                    `json:"endpoint"`
+	Errors   []MechanismError          `json:"errors,omitempty"`
+	Port     int                       `json:"port"`
 }
 
 // TotalFingerprints returns the sum of detections across all

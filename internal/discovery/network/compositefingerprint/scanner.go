@@ -22,30 +22,15 @@ import (
 // zero value enables every mechanism — callers opt out, not in,
 // because the typical use case is "find everything you can".
 type Options struct {
-	DisableTLS    bool
-	DisableHeader bool
-	DisableJS     bool
-	DisableFile   bool
-	DisableAPI    bool
-
-	// PerMechanismTimeout caps each mechanism's wall time
-	// independently. Default 15s — long enough for the file probe
-	// (~71 paths at 8x concurrency ≈ 9 round-trips) without giving
-	// a hostile origin room to stall.
+	HTTPClient          *http.Client
+	TLSSNI              string
 	PerMechanismTimeout time.Duration
-
-	// TLSSNI overrides the SNI sent during the TLS handshake; empty
-	// = use Host.
-	TLSSNI string
-
-	// HTTPClient overrides the shared client used by header / JS /
-	// file / API mechanisms. Nil = each package's own default.
-	HTTPClient *http.Client
-
-	// InsecureSkipVerify forwards to TLS handshake. Used by the
-	// header / JS / file / API mechanisms when scheme is https but
-	// the operator wants to scan a self-signed origin.
-	InsecureSkipVerify bool
+	DisableTLS          bool
+	DisableHeader       bool
+	DisableJS           bool
+	DisableFile         bool
+	DisableAPI          bool
+	InsecureSkipVerify  bool
 }
 
 // DefaultPerMechanismTimeout is the timeout each mechanism gets when
@@ -188,8 +173,8 @@ func (s *Scanner) Scan(ctx context.Context, scheme, host string, port int, opts 
 	}
 
 	var (
-		mu      sync.Mutex
-		wg      sync.WaitGroup
+		mu sync.Mutex
+		wg sync.WaitGroup
 	)
 	addErr := func(mech string, err error) {
 		if err == nil {

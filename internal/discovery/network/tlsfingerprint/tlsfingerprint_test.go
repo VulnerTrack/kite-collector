@@ -20,12 +20,12 @@ import (
 // Subject/Issuer/SANs spec. Used to drive tlstest servers so we can
 // exercise the matcher without hitting the real internet.
 type certSpec struct {
-	SubjectCN    string
-	IssuerCN     string
-	IssuerOrg    []string
-	SANs         []string
-	NotBefore    time.Time
-	NotAfter     time.Time
+	NotBefore time.Time
+	NotAfter  time.Time
+	SubjectCN string
+	IssuerCN  string
+	IssuerOrg []string
+	SANs      []string
 }
 
 func generateCert(t *testing.T, spec certSpec) (tls.Certificate, *x509.Certificate) {
@@ -90,7 +90,7 @@ func startTLSServer(t *testing.T, cert tls.Certificate) (string, int, func()) {
 			// then close.
 			tlsConn, _ := c.(*tls.Conn)
 			if tlsConn != nil {
-				_ = tlsConn.Handshake()
+				_ = tlsConn.HandshakeContext(context.Background())
 			}
 			_ = c.Close()
 		}

@@ -17,8 +17,8 @@ import (
 // services on unusual ports.
 type Target struct {
 	Host   string
-	Port   int
 	Scheme string
+	Port   int
 }
 
 // URL returns the canonical base URL for the target, suitable for
@@ -74,11 +74,6 @@ func ScanTargets(ctx context.Context, d *Detector, targets []Target, opts ScanOp
 		maxC = len(targets)
 	}
 
-	type indexed struct {
-		idx    int
-		result Result
-		err    error
-	}
 	out := make([]Result, len(targets))
 	hadErr := make([]error, len(targets))
 

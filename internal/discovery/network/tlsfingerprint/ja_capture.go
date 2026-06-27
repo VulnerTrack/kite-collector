@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sort"
 	"strings"
@@ -38,8 +39,8 @@ import (
 // internal buffer until Stop() is called. Goroutine-safe.
 type handshakeRecorder struct {
 	net.Conn
-	mu   sync.Mutex
 	buf  bytes.Buffer
+	mu   sync.Mutex
 	done bool
 }
 
@@ -58,7 +59,10 @@ func (r *handshakeRecorder) Read(p []byte) (int, error) {
 		}
 		r.mu.Unlock()
 	}
-	return n, err
+	if err != nil && !errors.Is(err, io.EOF) {
+		return n, fmt.Errorf("conn read: %w", err)
+	}
+	return n, err //nolint:wrapcheck // io.Reader contract requires io.EOF passthrough unwrapped.
 }
 
 // Stop pauses recording. Future Reads pass through verbatim.
@@ -79,14 +83,11 @@ func (r *handshakeRecorder) snapshot() []byte {
 
 // serverHello carries the fields we need to compute JA3S / JA4S.
 type serverHello struct {
-	// LegacyVersion is the TLS-record legacy version (in TLS 1.3 still
-	// 0x0303). If a supported_versions extension is present, the
-	// SelectedVersion field overrides it.
-	LegacyVersion    uint16
-	SelectedVersion  uint16
-	SelectedCipher   uint16
-	Extensions       []uint16 // in order of appearance
-	ALPN             string   // first proto if multiple negotiated
+	ALPN            string
+	Extensions      []uint16
+	LegacyVersion   uint16
+	SelectedVersion uint16
+	SelectedCipher  uint16
 }
 
 // parseServerHello extracts the first ServerHello record from buf

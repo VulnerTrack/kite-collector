@@ -53,9 +53,9 @@ func defaultClient() *http.Client {
 // httpEntry is the memoised response triple cached per-path during a
 // single Probe sweep.
 type httpEntry struct {
-	status  int
-	body    string
 	headers http.Header
+	body    string
+	status  int
 }
 
 // Probe sweeps base against every Signature in the catalog and returns

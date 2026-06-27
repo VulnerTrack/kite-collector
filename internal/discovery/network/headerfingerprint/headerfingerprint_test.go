@@ -239,8 +239,8 @@ func TestProbe_ContextCancelStopsEarly(t *testing.T) {
 
 func TestProbe_DetectsJSRuntimesAndNextAuth(t *testing.T) {
 	cases := []struct {
-		product string
 		setup   func(w http.ResponseWriter)
+		product string
 	}{
 		{
 			product: "Bun (runtime)",

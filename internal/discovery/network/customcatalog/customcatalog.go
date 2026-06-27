@@ -163,20 +163,20 @@ func compile(ov Overlay) (Catalogs, error) {
 // ---------------------------------------------------------------
 
 type apiSigYAML struct {
-	Vendor     string        `yaml:"vendor"`
-	Product    string        `yaml:"product"`
-	Category   string        `yaml:"category"`
-	Confidence string        `yaml:"confidence"`
+	Vendor     string         `yaml:"vendor"`
+	Product    string         `yaml:"product"`
+	Category   string         `yaml:"category"`
+	Confidence string         `yaml:"confidence"`
 	Probes     []apiProbeYAML `yaml:"probes"`
 }
 
 type apiProbeYAML struct {
 	Path           string `yaml:"path"`
-	ExpectedStatus []int  `yaml:"expected_status"`
 	BodyContains   string `yaml:"body_contains"`
 	BodyRegex      string `yaml:"body_regex"`
 	HeaderName     string `yaml:"header_name"`
 	HeaderRegex    string `yaml:"header_regex"`
+	ExpectedStatus []int  `yaml:"expected_status"`
 }
 
 func (s apiSigYAML) compile() (apifingerprint.Signature, error) {
@@ -226,9 +226,9 @@ func (s apiSigYAML) compile() (apifingerprint.Signature, error) {
 // ---------------------------------------------------------------
 
 type headerSigYAML struct {
-	Vendor   string             `yaml:"vendor"`
-	Product  string             `yaml:"product"`
-	Category string             `yaml:"category"`
+	Vendor   string              `yaml:"vendor"`
+	Product  string              `yaml:"product"`
+	Category string              `yaml:"category"`
 	Patterns []headerPatternYAML `yaml:"patterns"`
 }
 
@@ -283,9 +283,9 @@ func (s headerSigYAML) compile() (headerfingerprint.Signature, error) {
 // ---------------------------------------------------------------
 
 type jsSigYAML struct {
-	Vendor   string         `yaml:"vendor"`
-	Product  string         `yaml:"product"`
-	Category string         `yaml:"category"`
+	Vendor   string          `yaml:"vendor"`
+	Product  string          `yaml:"product"`
+	Category string          `yaml:"category"`
 	Patterns []jsPatternYAML `yaml:"patterns"`
 }
 
@@ -335,10 +335,10 @@ type fileProbeYAML struct {
 	Description    string `yaml:"description"`
 	Category       string `yaml:"category"`
 	Severity       string `yaml:"severity"`
-	ExpectedStatus []int  `yaml:"expected_status"`
 	BodyContains   string `yaml:"body_contains"`
 	BodyRegex      string `yaml:"body_regex"`
 	MustNotContain string `yaml:"must_not_contain"`
+	ExpectedStatus []int  `yaml:"expected_status"`
 }
 
 func (p fileProbeYAML) compile() (filefingerprint.Probe, error) {
@@ -372,9 +372,9 @@ func (p fileProbeYAML) compile() (filefingerprint.Probe, error) {
 // ---------------------------------------------------------------
 
 type tlsSigYAML struct {
-	Vendor   string          `yaml:"vendor"`
-	Product  string          `yaml:"product"`
-	Category string          `yaml:"category"`
+	Vendor   string           `yaml:"vendor"`
+	Product  string           `yaml:"product"`
+	Category string           `yaml:"category"`
 	Patterns []tlsPatternYAML `yaml:"patterns"`
 }
 
