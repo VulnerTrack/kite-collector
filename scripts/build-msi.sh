@@ -39,10 +39,41 @@ WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 if ! command -v wixl >/dev/null 2>&1; then
-  echo "error: wixl not on PATH — install msitools" >&2
-  echo "  Debian/Ubuntu: sudo apt install msitools" >&2
-  echo "  macOS:         brew install msitools" >&2
-  exit 1
+  echo "  wixl not on PATH — attempting auto-install" >&2
+  case "$(uname -s)" in
+    Linux)
+      # Noble (24.04) and later ship wixl as a standalone package separate
+      # from msitools — install both so the script works on older releases
+      # too (msitools used to bundle wixl). Falls back to a clear error if
+      # apt-get is missing (non-Debian-family distro).
+      if command -v apt-get >/dev/null 2>&1; then
+        SUDO=""
+        if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
+        $SUDO apt-get update
+        $SUDO apt-get install -y --no-install-recommends wixl msitools
+      else
+        echo "error: unsupported Linux distro — install wixl manually" >&2
+        exit 1
+      fi
+      ;;
+    Darwin)
+      if command -v brew >/dev/null 2>&1; then
+        brew install msitools
+      else
+        echo "error: Homebrew not on PATH — install brew, then 'brew install msitools'" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "error: wixl auto-install not supported on $(uname -s)" >&2
+      echo "  install wixl/msitools manually for your platform." >&2
+      exit 1
+      ;;
+  esac
+  if ! command -v wixl >/dev/null 2>&1; then
+    echo "error: wixl still not on PATH after install attempt" >&2
+    exit 1
+  fi
 fi
 
 # Locate the Windows binary. Two layouts:
