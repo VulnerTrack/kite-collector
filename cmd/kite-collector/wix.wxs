@@ -54,12 +54,21 @@
       remove it before installing the new version — operators get a
       one-MSI upgrade story, not "uninstall old, install new" manual
       steps.
+
+      Schedule defaults to afterInstallValidate, which is what we want —
+      wixl (msitools) does not implement the Schedule attribute, so it is
+      omitted here for portability between full WiX and wixl-based CI.
     -->
     <MajorUpgrade
-        DowngradeErrorMessage="A newer version of Kite Collector is already installed."
-        Schedule="afterInstallInitialize"/>
+        DowngradeErrorMessage="A newer version of Kite Collector is already installed."/>
 
-    <MediaTemplate EmbedCab="yes" CompressionLevel="high"/>
+    <!--
+      EmbedCab keeps the .cab inside the .msi (single-file artifact for
+      enterprise deployment). CompressionLevel is intentionally omitted
+      because wixl does not support that attribute; the default
+      ("mszip"-equivalent) compression is fine for a ~10 MiB binary.
+    -->
+    <MediaTemplate EmbedCab="yes"/>
 
     <Feature Id="ProductFeature" Title="Kite Collector" Level="1">
       <ComponentRef Id="MainExecutable"/>
@@ -149,16 +158,19 @@
         smart-defaults and the MSI's service arguments agree on where to
         look for ca.pem / agent.pem / agent-key.pem.
 
-        Permission element grants LocalSystem full access — the service
-        runs as LocalSystem and needs to write enrollment PEMs here.
+        ACLs are inherited from ProgramData (CommonAppDataFolder), which
+        grants SYSTEM + Administrators full control by default — exactly
+        what the service (running as LocalSystem) needs. We previously
+        set explicit <Permission> entries here for SYSTEM/Administrators,
+        but those are redundant given the parent ACL and wixl does not
+        support nested <Permission> inside <CreateFolder>. Keeping the
+        bare <CreateFolder/> so the directory is created at install and
+        registry-tracked by Windows Installer for uninstall cleanup.
       -->
       <Directory Id="CommonAppDataFolder">
         <Directory Id="CERTSDIR" Name="kite-collector">
           <Component Id="CertsDirComponent" Guid="73156730-7394-494e-8607-838ccbe821ac" Win64="yes">
-            <CreateFolder>
-              <Permission User="SYSTEM" GenericAll="yes"/>
-              <Permission User="Administrators" GenericAll="yes"/>
-            </CreateFolder>
+            <CreateFolder/>
             <RegistryValue
                 Root="HKLM"
                 Key="Software\VulnerTrack\KiteCollector"

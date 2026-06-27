@@ -1,4 +1,4 @@
-.PHONY: build build-host test test-e2e test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources
+.PHONY: build build-host test test-e2e test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Release matrix mirrored from .goreleaser.yaml. Catching cross-OS regressions
 # locally (e.g. syscall.Handle vs int on Windows) is the whole point of this
@@ -61,6 +61,35 @@ $(WIN_SYSO): $(WIN_MANIFEST)
 
 clean-windows-resources:
 	rm -f $(WIN_SYSO)
+
+# Validate the WiX installer source against two layers of checks:
+#   1. xmllint --noout            — XML well-formedness
+#   2. xmllint --schema wix.xsd   — WiX 3.x XSD conformance
+#   3. wixl --arch x64 -o /tmp/   — actual MSI build (subset wixl supports)
+#
+# Layer 3 is the only ground truth — wixl implements a subset of WiX 3.x,
+# so a wxs can validate clean against the upstream XSD and still fail at
+# build time. xmllint catches the schema-level errors editors miss; wixl
+# catches the wixl-specific gaps. Run both before pushing wxs edits.
+#
+# The vendored schema lives at schemas/wix.xsd. To refresh:
+#   curl -fsSL https://raw.githubusercontent.com/wixtoolset/wix3/develop/src/tools/wix/Xsd/wix.xsd -o schemas/wix.xsd
+WIX_WXS    := cmd/kite-collector/wix.wxs
+WIX_XSD    := schemas/wix.xsd
+validate-wxs:
+	@echo "[1/3] xmllint well-formedness"
+	@xmllint --noout $(WIX_WXS) && echo "  PASS"
+	@echo "[2/3] xmllint XSD ($(WIX_XSD))"
+	@xmllint --noout --schema $(WIX_XSD) $(WIX_WXS)
+	@echo "[3/3] wixl dry build"
+	@if ! command -v wixl >/dev/null 2>&1; then \
+		echo "  SKIP — wixl not on PATH (install wixl + msitools to enable)"; \
+	else \
+		tmp=$$(mktemp -d); trap "rm -rf $$tmp" EXIT; \
+		sed -e 's|{{ \.Version }}|0.0.0-dev|g' -e 's|{{ \.ShortCommit }}|dev|g' $(WIX_WXS) > $$tmp/wix.wxs; \
+		: > $$tmp/kite-collector.exe; \
+		wixl --arch x64 -o $$tmp/test.msi $$tmp/wix.wxs && echo "  PASS — wixl accepts the wxs"; \
+	fi
 
 # build-host is the fast inner-loop target — same flags as the goreleaser
 # `kite-collector` build, host platform only. Use this for iterative work;

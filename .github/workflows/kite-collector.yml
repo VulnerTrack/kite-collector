@@ -166,12 +166,13 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
-      # msitools provides wixl — the WiX toolset's Linux-native MSI
-      # builder. Used by scripts/build-msi.sh in the post-goreleaser step
-      # below. Without msitools, the MSI build step fails with
-      # "wixl: command not found".
-      - name: Install msitools (wixl) for MSI build
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends msitools
+      # wixl is the WiX toolset's Linux-native MSI builder. On Ubuntu 24.04
+      # (noble) and later, wixl ships as a standalone package separate from
+      # msitools; install both so the build works on older releases too.
+      # Used by scripts/build-msi.sh in the post-goreleaser step below.
+      # Without wixl, the MSI build step fails with "wixl: command not found".
+      - name: Install wixl + msitools for MSI build
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends wixl msitools
       # Embed the Windows app manifest (UAC requireAdministrator +
       # Common-Controls 6.0) before the Windows build in the goreleaser
       # matrix. Same step as the per-PR build job above, but lives in
