@@ -199,7 +199,7 @@ func runWebFingerprint(opts webFingerprintOpts) error {
 	if err != nil {
 		return err
 	}
-	if err := validateMinConfidence(opts.minConfidence); err != nil {
+	if err = validateMinConfidence(opts.minConfidence); err != nil {
 		return err
 	}
 
@@ -327,10 +327,10 @@ func (e failOnHitError) Error() string {
 // webBatchRecord holds one target's outcome for --scan-list. Per-target
 // errors are kept so a single failure doesn't abort the rest.
 type webBatchRecord struct {
-	Target  string                                `json:"target"`
-	Error   string                                `json:"error,omitempty"`
 	Result  *compositefingerprint.CompositeResult `json:"result,omitempty"`
 	Summary *compositefingerprint.StackSummary    `json:"summary,omitempty"`
+	Target  string                                `json:"target"`
+	Error   string                                `json:"error,omitempty"`
 }
 
 func runWebFingerprintBatch(ctx context.Context, s *compositefingerprint.Scanner, opts webFingerprintOpts, options compositefingerprint.Options) error {
@@ -389,10 +389,10 @@ func runWebFingerprintBatch(ctx context.Context, s *compositefingerprint.Scanner
 				}
 			}
 			if err := enc.Encode(compact); err != nil {
-				return err
+				return fmt.Errorf("encode results: %w", err)
 			}
 		} else if err := enc.Encode(records); err != nil {
-			return err
+			return fmt.Errorf("encode results: %w", err)
 		}
 	case "ndjson":
 		if err := writeWebFingerprintBatchNDJSON(records, opts.summaryOnly); err != nil {
@@ -421,9 +421,9 @@ func runWebFingerprintBatch(ctx context.Context, s *compositefingerprint.Scanner
 // is set: the per-surface CompositeResult is dropped, keeping only the
 // synthesised summary.
 type webBatchSummaryRecord struct {
+	Summary *compositefingerprint.StackSummary `json:"summary,omitempty"`
 	Target  string                             `json:"target"`
 	Error   string                             `json:"error,omitempty"`
-	Summary *compositefingerprint.StackSummary `json:"summary,omitempty"`
 }
 
 // scanOneTarget runs one composite scan, applies any filters, and
@@ -454,7 +454,7 @@ func readWebScanList(path string) ([]string, error) {
 	if path == "-" {
 		rc = io.NopCloser(os.Stdin)
 	} else {
-		f, err := os.Open(path)
+		f, err := os.Open(path) //#nosec G304 -- CLI-supplied --scan-list path for web-fingerprint, intentional operator input
 		if err != nil {
 			return nil, fmt.Errorf("open %s: %w", path, err)
 		}
@@ -531,13 +531,19 @@ func writeWebFingerprintJSON(res compositefingerprint.CompositeResult, sum compo
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if summaryOnly {
-		return enc.Encode(sum)
+		if err := enc.Encode(sum); err != nil {
+			return fmt.Errorf("encode summary: %w", err)
+		}
+		return nil
 	}
 	doc := struct {
-		Result  compositefingerprint.CompositeResult `json:"result"`
 		Summary compositefingerprint.StackSummary    `json:"summary"`
-	}{Result: res, Summary: sum}
-	return enc.Encode(doc)
+		Result  compositefingerprint.CompositeResult `json:"result"`
+	}{Summary: sum, Result: res}
+	if err := enc.Encode(doc); err != nil {
+		return fmt.Errorf("encode doc: %w", err)
+	}
+	return nil
 }
 
 // writeWebFingerprintNDJSON writes a single JSON line — for the
@@ -548,12 +554,18 @@ func writeWebFingerprintJSON(res compositefingerprint.CompositeResult, sum compo
 func writeWebFingerprintNDJSON(res compositefingerprint.CompositeResult, sum compositefingerprint.StackSummary, summaryOnly bool) error {
 	enc := json.NewEncoder(os.Stdout)
 	if summaryOnly {
-		return enc.Encode(sum)
+		if err := enc.Encode(sum); err != nil {
+			return fmt.Errorf("encode summary: %w", err)
+		}
+		return nil
 	}
-	return enc.Encode(struct {
-		Result  compositefingerprint.CompositeResult `json:"result"`
+	if err := enc.Encode(struct {
 		Summary compositefingerprint.StackSummary    `json:"summary"`
-	}{Result: res, Summary: sum})
+		Result  compositefingerprint.CompositeResult `json:"result"`
+	}{Summary: sum, Result: res}); err != nil {
+		return fmt.Errorf("encode doc: %w", err)
+	}
+	return nil
 }
 
 // writeWebFingerprintBatchNDJSON writes one JSON object per line for
@@ -570,12 +582,12 @@ func writeWebFingerprintBatchNDJSON(records []webBatchRecord, summaryOnly bool) 
 				Summary: r.Summary,
 			}
 			if err := enc.Encode(row); err != nil {
-				return err
+				return fmt.Errorf("encode row: %w", err)
 			}
 			continue
 		}
 		if err := enc.Encode(r); err != nil {
-			return err
+			return fmt.Errorf("encode record: %w", err)
 		}
 	}
 	return nil
@@ -588,13 +600,16 @@ func writeWebFingerprintBatchNDJSON(records []webBatchRecord, summaryOnly bool) 
 func writeWebFingerprintCSV(target string, sum compositefingerprint.StackSummary) error {
 	w := csv.NewWriter(os.Stdout)
 	if err := w.Write([]string{"target", "layer", "vendor", "product", "confidence", "sources"}); err != nil {
-		return err
+		return fmt.Errorf("csv write: %w", err)
 	}
 	if err := writeCSVRowsForSummary(w, target, sum); err != nil {
 		return err
 	}
 	w.Flush()
-	return w.Error()
+	if err := w.Error(); err != nil {
+		return fmt.Errorf("csv flush: %w", err)
+	}
+	return nil
 }
 
 // writeWebFingerprintBatchCSV writes one CSV with one header row plus
@@ -604,12 +619,12 @@ func writeWebFingerprintCSV(target string, sum compositefingerprint.StackSummary
 func writeWebFingerprintBatchCSV(records []webBatchRecord) error {
 	w := csv.NewWriter(os.Stdout)
 	if err := w.Write([]string{"target", "layer", "vendor", "product", "confidence", "sources"}); err != nil {
-		return err
+		return fmt.Errorf("csv write: %w", err)
 	}
 	for _, r := range records {
 		if r.Error != "" {
 			if err := w.Write([]string{r.Target, "error", "", r.Error, "", ""}); err != nil {
-				return err
+				return fmt.Errorf("csv write: %w", err)
 			}
 			continue
 		}
@@ -621,7 +636,10 @@ func writeWebFingerprintBatchCSV(records []webBatchRecord) error {
 		}
 	}
 	w.Flush()
-	return w.Error()
+	if err := w.Error(); err != nil {
+		return fmt.Errorf("csv flush: %w", err)
+	}
+	return nil
 }
 
 // writeCSVRowsForSummary emits one row per non-nil pick in sum. Used
