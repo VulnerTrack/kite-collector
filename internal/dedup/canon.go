@@ -128,7 +128,7 @@ func CanonAccount(provider, raw string) string {
 			return ""
 		}
 		for _, r := range raw {
-			if !(r == '-' || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			if r != '-' && (r < 'a' || r > 'z') && (r < '0' || r > '9') {
 				return ""
 			}
 		}
