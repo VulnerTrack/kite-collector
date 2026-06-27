@@ -23,12 +23,18 @@ func DefaultCatalog() []Signature {
 			Vendor: "Google", Product: "Firebase Hosting",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "firebaseapp", SANSuffix: ".firebaseapp.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "web-app", SANSuffix: ".web.app",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "firebaseio", SANSuffix: ".firebaseio.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "firebaseapp", SANSuffix: ".firebaseapp.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "web-app", SANSuffix: ".web.app",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "firebaseio", SANSuffix: ".firebaseio.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -53,20 +59,28 @@ func DefaultCatalog() []Signature {
 			Vendor: "Vercel", Product: "Vercel",
 			Category: CategoryHosting,
 			Patterns: []Pattern{
-				{Name: "vercel-app", SANSuffix: ".vercel.app",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "vercel-now", SANSuffix: ".now.sh",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "vercel-app", SANSuffix: ".vercel.app",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "vercel-now", SANSuffix: ".now.sh",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Netlify", Product: "Netlify",
 			Category: CategoryHosting,
 			Patterns: []Pattern{
-				{Name: "netlify-app", SANSuffix: ".netlify.app",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "netlify-com", SANSuffix: ".netlify.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "netlify-app", SANSuffix: ".netlify.app",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "netlify-com", SANSuffix: ".netlify.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -89,12 +103,16 @@ func DefaultCatalog() []Signature {
 			Vendor: "Cloudflare", Product: "Cloudflare edge CDN",
 			Category: CategoryCDN,
 			Patterns: []Pattern{
-				{Name: "issuer-cloudflare-inc",
+				{
+					Name:        "issuer-cloudflare-inc",
 					IssuerRegex: regexp.MustCompile(`Cloudflare,?\s*Inc`),
-					Kind:        SignalIssuerName, Confidence: ConfidenceMedium},
-				{Name: "ocsp-cloudflare",
+					Kind:        SignalIssuerName, Confidence: ConfidenceMedium,
+				},
+				{
+					Name:     "ocsp-cloudflare",
 					OCSPHost: "ocsp.cloudflare.com",
-					Kind:     SignalOCSPHost, Confidence: ConfidenceHigh},
+					Kind:     SignalOCSPHost, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -117,10 +135,14 @@ func DefaultCatalog() []Signature {
 			Vendor: "Salesforce", Product: "Heroku",
 			Category: CategoryHosting,
 			Patterns: []Pattern{
-				{Name: "herokuapp", SANSuffix: ".herokuapp.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "heroku-app", SANSuffix: ".heroku.app",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "herokuapp", SANSuffix: ".herokuapp.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "heroku-app", SANSuffix: ".heroku.app",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -167,60 +189,84 @@ func DefaultCatalog() []Signature {
 			Vendor: "Backblaze", Product: "Backblaze B2",
 			Category: CategoryStorage,
 			Patterns: []Pattern{
-				{Name: "backblazeb2", SANSuffix: ".backblazeb2.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "b2cdn", SANSuffix: ".b2cdn.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "backblazeb2", SANSuffix: ".backblazeb2.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "b2cdn", SANSuffix: ".b2cdn.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Bunny.net", Product: "Bunny CDN",
 			Category: CategoryCDN,
 			Patterns: []Pattern{
-				{Name: "b-cdn-net", SANSuffix: ".b-cdn.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "bunnycdn", SANSuffix: ".bunnycdn.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "b-cdn-net", SANSuffix: ".b-cdn.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "bunnycdn", SANSuffix: ".bunnycdn.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Yandex", Product: "Yandex Cloud",
 			Category: CategoryCloudCompute,
 			Patterns: []Pattern{
-				{Name: "yandexcloud-net", SANSuffix: ".yandexcloud.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "yandex-cloud", SANSuffix: ".yandex.cloud",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "yandexcloud-net", SANSuffix: ".yandexcloud.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "yandex-cloud", SANSuffix: ".yandex.cloud",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Oracle", Product: "Oracle Cloud Infrastructure",
 			Category: CategoryCloudCompute,
 			Patterns: []Pattern{
-				{Name: "oraclecloud", SANSuffix: ".oraclecloud.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "oci-customer", SANSuffix: ".oci.customer-oci.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "oraclecloud", SANSuffix: ".oraclecloud.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "oci-customer", SANSuffix: ".oci.customer-oci.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "OVHcloud", Product: "OVHcloud",
 			Category: CategoryCloudCompute,
 			Patterns: []Pattern{
-				{Name: "ovh-net", SANSuffix: ".ovh.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "hosting-ovh", SANSuffix: ".hosting.ovh.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "ovh-net", SANSuffix: ".ovh.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "hosting-ovh", SANSuffix: ".hosting.ovh.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Scaleway", Product: "Scaleway",
 			Category: CategoryCloudCompute,
 			Patterns: []Pattern{
-				{Name: "scw-cloud", SANSuffix: ".scw.cloud",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "scaleway", SANSuffix: ".scaleway.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "scw-cloud", SANSuffix: ".scw.cloud",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "scaleway", SANSuffix: ".scaleway.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -245,10 +291,14 @@ func DefaultCatalog() []Signature {
 			Vendor: "OpenAI", Product: "OpenAI API",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "openai-com", SANSuffix: ".openai.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "openai-azure", SANSuffix: ".openai.azure.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "openai-com", SANSuffix: ".openai.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "openai-azure", SANSuffix: ".openai.azure.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -263,10 +313,14 @@ func DefaultCatalog() []Signature {
 			Vendor: "Hugging Face", Product: "Hugging Face Hub / Inference",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "huggingface-co", SANSuffix: ".huggingface.co",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "hf-co", SANSuffix: ".hf.co",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "huggingface-co", SANSuffix: ".huggingface.co",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "hf-co", SANSuffix: ".hf.co",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -297,10 +351,14 @@ func DefaultCatalog() []Signature {
 			Vendor: "LangChain", Product: "LangSmith",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "smith-langchain", SANSuffix: ".smith.langchain.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "langchain-com", SANSuffix: ".langchain.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "smith-langchain", SANSuffix: ".smith.langchain.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "langchain-com", SANSuffix: ".langchain.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -347,20 +405,28 @@ func DefaultCatalog() []Signature {
 			Vendor: "Weaviate", Product: "Weaviate Cloud",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "weaviate-cloud", SANSuffix: ".weaviate.cloud",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "weaviate-network", SANSuffix: ".weaviate.network",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "weaviate-cloud", SANSuffix: ".weaviate.cloud",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "weaviate-network", SANSuffix: ".weaviate.network",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Qdrant", Product: "Qdrant Cloud",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "qdrant-io", SANSuffix: ".qdrant.io",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "qdrant-tech", SANSuffix: ".cloud.qdrant.io",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "qdrant-io", SANSuffix: ".qdrant.io",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "qdrant-tech", SANSuffix: ".cloud.qdrant.io",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -399,20 +465,28 @@ func DefaultCatalog() []Signature {
 			Vendor: "Liveblocks", Product: "Liveblocks",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "liveblocks-io", SANSuffix: ".liveblocks.io",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "liveblocks-net", SANSuffix: ".liveblocks.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "liveblocks-io", SANSuffix: ".liveblocks.io",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "liveblocks-net", SANSuffix: ".liveblocks.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Intercom", Product: "Intercom",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "intercom-io", SANSuffix: ".intercom.io",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "intercomcdn", SANSuffix: ".intercomcdn.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "intercom-io", SANSuffix: ".intercom.io",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "intercomcdn", SANSuffix: ".intercomcdn.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -443,10 +517,14 @@ func DefaultCatalog() []Signature {
 			Vendor: "Zendesk", Product: "Zendesk",
 			Category: CategoryBaaS,
 			Patterns: []Pattern{
-				{Name: "zendesk-com", SANSuffix: ".zendesk.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "zdassets", SANSuffix: ".zdassets.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "zendesk-com", SANSuffix: ".zendesk.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "zdassets", SANSuffix: ".zdassets.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 
@@ -463,23 +541,33 @@ func DefaultCatalog() []Signature {
 			Vendor: "Amazon", Product: "AWS API Gateway",
 			Category: CategoryServerless,
 			Patterns: []Pattern{
-				{Name: "execute-api", SANSuffix: ".execute-api.amazonaws.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "lambda-url", SANSuffix: ".lambda-url.amazonaws.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "execute-api", SANSuffix: ".execute-api.amazonaws.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "lambda-url", SANSuffix: ".lambda-url.amazonaws.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Amazon", Product: "AWS S3 / amazonaws.com",
 			Category: CategoryStorage,
 			Patterns: []Pattern{
-				{Name: "s3-amazonaws", SANSuffix: ".s3.amazonaws.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "amazonaws-tail", SANSuffix: ".amazonaws.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceMedium},
-				{Name: "issuer-amazon",
+				{
+					Name: "s3-amazonaws", SANSuffix: ".s3.amazonaws.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "amazonaws-tail", SANSuffix: ".amazonaws.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceMedium,
+				},
+				{
+					Name:        "issuer-amazon",
 					IssuerRegex: regexp.MustCompile(`Amazon`),
-					Kind:        SignalIssuerName, Confidence: ConfidenceLow},
+					Kind:        SignalIssuerName, Confidence: ConfidenceLow,
+				},
 			},
 		},
 		{
@@ -526,10 +614,14 @@ func DefaultCatalog() []Signature {
 			Vendor: "Microsoft", Product: "Azure Front Door / CDN",
 			Category: CategoryCDN,
 			Patterns: []Pattern{
-				{Name: "azureedge-net", SANSuffix: ".azureedge.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "azurefd-net", SANSuffix: ".azurefd.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "azureedge-net", SANSuffix: ".azureedge.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "azurefd-net", SANSuffix: ".azurefd.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
@@ -580,24 +672,36 @@ func DefaultCatalog() []Signature {
 			Vendor: "Akamai", Product: "Akamai CDN",
 			Category: CategoryCDN,
 			Patterns: []Pattern{
-				{Name: "akamaiedge-net", SANSuffix: ".akamaiedge.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "akamaihd-net", SANSuffix: ".akamaihd.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "edgesuite-net", SANSuffix: ".edgesuite.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "edgekey-net", SANSuffix: ".edgekey.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "akamaiedge-net", SANSuffix: ".akamaiedge.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "akamaihd-net", SANSuffix: ".akamaihd.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "edgesuite-net", SANSuffix: ".edgesuite.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "edgekey-net", SANSuffix: ".edgekey.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 		{
 			Vendor: "Fastly", Product: "Fastly CDN",
 			Category: CategoryCDN,
 			Patterns: []Pattern{
-				{Name: "fastly-net", SANSuffix: ".fastly.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "fastlylb-net", SANSuffix: ".fastlylb.net",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "fastly-net", SANSuffix: ".fastly.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "fastlylb-net", SANSuffix: ".fastlylb.net",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 
@@ -614,10 +718,14 @@ func DefaultCatalog() []Signature {
 			Vendor: "Clerk Inc.", Product: "Clerk",
 			Category: CategoryAuth,
 			Patterns: []Pattern{
-				{Name: "clerk-accounts", SANSuffix: ".clerk.accounts.dev",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
-				{Name: "clerk-com", SANSuffix: ".clerk.com",
-					Kind: SignalSANSuffix, Confidence: ConfidenceHigh},
+				{
+					Name: "clerk-accounts", SANSuffix: ".clerk.accounts.dev",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
+				{
+					Name: "clerk-com", SANSuffix: ".clerk.com",
+					Kind: SignalSANSuffix, Confidence: ConfidenceHigh,
+				},
 			},
 		},
 

@@ -43,17 +43,17 @@ func buildServerHelloRecord() []byte {
 	alpn := []byte{0x00, 0x10, 0x00, 0x05, 0x00, 0x03, 0x02, 'h', '2'}
 	exts.Write(alpn)
 
-	body.WriteByte(byte(exts.Len() >> 8))
-	body.WriteByte(byte(exts.Len()))
+	body.WriteByte(byte(exts.Len() >> 8)) //nolint:gosec // synthetic TLS extensions length fits in a byte for this test fixture.
+	body.WriteByte(byte(exts.Len()))      //nolint:gosec // synthetic TLS extensions length fits in a byte for this test fixture.
 	body.Write(exts.Bytes())
 
 	// Handshake header: type(2)=ServerHello, len(3)
 	hs := &bytes.Buffer{}
 	hs.WriteByte(0x02)
 	bodyLen := body.Len()
-	hs.WriteByte(byte(bodyLen >> 16))
-	hs.WriteByte(byte(bodyLen >> 8))
-	hs.WriteByte(byte(bodyLen))
+	hs.WriteByte(byte(bodyLen >> 16)) //nolint:gosec // synthetic handshake body length is small in this test fixture.
+	hs.WriteByte(byte(bodyLen >> 8))  //nolint:gosec // synthetic handshake body length is small in this test fixture.
+	hs.WriteByte(byte(bodyLen))       //nolint:gosec // synthetic handshake body length is small in this test fixture.
 	hs.Write(body.Bytes())
 
 	// Record header: type 22 (handshake), legacy ver 0x0303, length(2)
@@ -61,8 +61,8 @@ func buildServerHelloRecord() []byte {
 	rec.WriteByte(0x16)
 	rec.WriteByte(0x03)
 	rec.WriteByte(0x03)
-	rec.WriteByte(byte(hs.Len() >> 8))
-	rec.WriteByte(byte(hs.Len()))
+	rec.WriteByte(byte(hs.Len() >> 8)) //nolint:gosec // synthetic handshake length is small in this test fixture.
+	rec.WriteByte(byte(hs.Len()))      //nolint:gosec // synthetic handshake length is small in this test fixture.
 	rec.Write(hs.Bytes())
 
 	return rec.Bytes()
@@ -161,15 +161,15 @@ func TestJA4SString_NoALPN(t *testing.T) {
 
 func TestJA4Version(t *testing.T) {
 	cases := []struct {
-		v    uint16
 		want string
+		v    uint16
 	}{
-		{0x0304, "13"},
-		{0x0303, "12"},
-		{0x0302, "11"},
-		{0x0301, "10"},
-		{0x0300, "s3"},
-		{0xffff, "00"},
+		{"13", 0x0304},
+		{"12", 0x0303},
+		{"11", 0x0302},
+		{"10", 0x0301},
+		{"s3", 0x0300},
+		{"00", 0xffff},
 	}
 	for _, c := range cases {
 		if got := ja4Version(c.v); got != c.want {

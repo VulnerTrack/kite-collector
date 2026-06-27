@@ -24,9 +24,9 @@ const DefaultMaxConcurrent = 8
 // single Scan() call. The embedded http.Client is goroutine-safe so
 // reusing one Scanner across hosts is preferred.
 type Scanner struct {
-	client  *http.Client
-	probes  []Probe
-	maxC    int
+	client *http.Client
+	probes []Probe
+	maxC   int
 }
 
 // NewScanner returns a Scanner. Pass nil for client to get safe
@@ -138,18 +138,18 @@ func (s *Scanner) Scan(ctx context.Context, base *url.URL) (Result, error) {
 func (s *Scanner) fetch(ctx context.Context, target string) (string, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "kite-collector/filefingerprint")
 	req.Header.Set("Accept", "*/*")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("http get: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
 	if err != nil {
-		return "", resp.StatusCode, err
+		return "", resp.StatusCode, fmt.Errorf("read body: %w", err)
 	}
 	return string(body), resp.StatusCode, nil
 }
