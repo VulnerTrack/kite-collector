@@ -171,7 +171,7 @@ func randomInstance(i int) string {
 	out := make([]byte, 19)
 	out[0] = 'i'
 	out[1] = '-'
-	x := uint64(i)
+	x := uint64(i) //nolint:gosec // test driver, i is small positive int.
 	for j := 2; j < 19; j++ {
 		out[j] = alphabet[x&0xf]
 		x >>= 4
@@ -179,7 +179,7 @@ func randomInstance(i int) string {
 			// Pad the rest with a position-dependent byte so the full
 			// 17-char tail is still distinct across trials. Without this,
 			// small i values would all end in many zeroes.
-			x = uint64(i)*0x9E3779B97F4A7C15 + uint64(j)
+			x = uint64(i)*0x9E3779B97F4A7C15 + uint64(j) //nolint:gosec // test driver, i,j are small positive ints.
 		}
 	}
 	return string(out)
