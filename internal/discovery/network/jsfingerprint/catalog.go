@@ -2654,5 +2654,35 @@ func DefaultCatalog() []Signature {
 				Confidence: ConfidenceMedium,
 			}},
 		},
+		{
+			Vendor: "HashiCorp (exposed)", Product: "Vault token",
+			Category: CategorySecretLeak,
+			Patterns: []Pattern{{
+				Name:       "vault-token",
+				Regex:      regexp.MustCompile(`\b(?P<id>hv[bs]\.[A-Za-z0-9_-]{24,200})\b`),
+				Kind:       SignalPublicKey,
+				Confidence: ConfidenceHigh,
+			}},
+		},
+		{
+			Vendor: "Doppler (exposed)", Product: "Doppler service token",
+			Category: CategorySecretLeak,
+			Patterns: []Pattern{{
+				Name:       "doppler-token",
+				Regex:      regexp.MustCompile(`\b(?P<id>dp\.(?:pt|st|ct|sa|scim|audit)\.[a-z]{1,6}_?[A-Za-z0-9_-]{20,60})\b`),
+				Kind:       SignalPublicKey,
+				Confidence: ConfidenceHigh,
+			}},
+		},
+		{
+			Vendor: "Apple (exposed)", Product: "App Store Connect API key reference",
+			Category: CategorySecretLeak,
+			Patterns: []Pattern{{
+				Name:       "apple-asc-key",
+				Regex:      regexp.MustCompile(`\b(?:APP_STORE_CONNECT_API_KEY_ID|ASC_KEY_ID)\s*[:=]\s*['"]?(?P<id>[A-Z0-9]{10})['"]?`),
+				Kind:       SignalConfigLiteral,
+				Confidence: ConfidenceMedium,
+			}},
+		},
 	}
 }
