@@ -66,7 +66,7 @@ type ArtifactKind string
 
 const (
 	KindConfig         ArtifactKind = "balanz-config"
-	KindCredentials    ArtifactKind = "balanz-credentials"
+	KindCredentials    ArtifactKind = "balanz-credentials" //#nosec G101 -- ArtifactKind enum naming the Balanz credentials artifact category, not a credential value
 	KindPositionsCache ArtifactKind = "balanz-positions-cache"
 	KindOrdersCache    ArtifactKind = "balanz-orders-cache"
 	KindCaucionCache   ArtifactKind = "balanz-caucion-cache"

@@ -109,7 +109,7 @@ type UnderlyingClass string
 
 const (
 	UnderlyingConsumerCredit   UnderlyingClass = "consumer-credit"
-	UnderlyingTarjetaCredito   UnderlyingClass = "tarjeta-credito"
+	UnderlyingTarjetaCredito   UnderlyingClass = "tarjeta-credito" //#nosec G101 -- UnderlyingClass enum naming the credit-card receivables securitization underlying, not a credential
 	UnderlyingMortgage         UnderlyingClass = "mortgage"
 	UnderlyingPrendario        UnderlyingClass = "prendario"
 	UnderlyingLeasing          UnderlyingClass = "leasing"

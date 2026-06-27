@@ -77,7 +77,7 @@ type ArtifactKind string
 
 const (
 	KindConfig       ArtifactKind = "mae-onlinefx-config"
-	KindCredentials  ArtifactKind = "mae-onlinefx-credentials"
+	KindCredentials  ArtifactKind = "mae-onlinefx-credentials" //#nosec G101 -- ArtifactKind enum naming the MAE OnlineFX credentials artifact category, not a credential value
 	KindQuotesCache  ArtifactKind = "mae-onlinefx-quotes-cache"
 	KindTradeBlotter ArtifactKind = "mae-onlinefx-trade-blotter"
 	KindForwardBook  ArtifactKind = "mae-onlinefx-forward-book"

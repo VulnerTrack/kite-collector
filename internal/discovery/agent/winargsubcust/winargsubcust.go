@@ -68,7 +68,7 @@ const (
 	KindCorporateAction       ArtifactKind = "subcust-corporate-action"
 	KindSovereignImmunity     ArtifactKind = "subcust-sovereign-immunity"
 	KindConfig                ArtifactKind = "subcust-config"
-	KindCredentials           ArtifactKind = "subcust-credentials"
+	KindCredentials           ArtifactKind = "subcust-credentials" //#nosec G101 -- ArtifactKind enum naming the sub-custodian credentials artifact category, not a credential value
 	KindInstaller             ArtifactKind = "subcust-installer"
 	KindOther                 ArtifactKind = "other"
 	KindUnknown               ArtifactKind = "unknown"

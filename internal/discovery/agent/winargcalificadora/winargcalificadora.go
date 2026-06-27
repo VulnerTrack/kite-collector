@@ -75,7 +75,7 @@ const (
 	KindWatchlist             ArtifactKind = "cal-watchlist"
 	KindConflictOfInterestDoc ArtifactKind = "cal-conflict-of-interest-doc"
 	KindFeeSchedule           ArtifactKind = "cal-fee-schedule"
-	KindInternalCreditModel   ArtifactKind = "cal-internal-credit-model"
+	KindInternalCreditModel   ArtifactKind = "cal-internal-credit-model" //#nosec G101 -- ArtifactKind enum naming the calificadora internal credit-model artifact category, not a credential
 	KindDissentingOpinion     ArtifactKind = "cal-dissenting-opinion"
 	KindIssuerRoster          ArtifactKind = "cal-issuer-roster"
 	KindCNVFiling             ArtifactKind = "cal-cnv-filing"

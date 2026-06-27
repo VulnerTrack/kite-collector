@@ -71,7 +71,7 @@ type ArtifactKind string
 
 const (
 	KindConfig                ArtifactKind = "quantower-config"
-	KindCredentials           ArtifactKind = "quantower-credentials"
+	KindCredentials           ArtifactKind = "quantower-credentials" //#nosec G101 -- ArtifactKind enum naming the Quantower credentials artifact category, not a credential value
 	KindWorkspace             ArtifactKind = "quantower-workspace"
 	KindSymbols               ArtifactKind = "quantower-symbols"
 	KindConnectionConfig      ArtifactKind = "quantower-connection-config"

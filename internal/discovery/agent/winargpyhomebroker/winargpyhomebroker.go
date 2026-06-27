@@ -67,7 +67,7 @@ type ArtifactKind string
 
 const (
 	KindConfig          ArtifactKind = "pyhomebroker-config"
-	KindCredentials     ArtifactKind = "pyhomebroker-credentials"
+	KindCredentials     ArtifactKind = "pyhomebroker-credentials" //#nosec G101 -- ArtifactKind enum naming the pyhomebroker credentials artifact category, not a credential value
 	KindSession         ArtifactKind = "pyhomebroker-session"
 	KindOrdersCache     ArtifactKind = "pyhomebroker-orders-cache"
 	KindPortfolioCache  ArtifactKind = "pyhomebroker-portfolio-cache"

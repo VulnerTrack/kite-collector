@@ -65,7 +65,7 @@ const (
 	KindF572Monthly        ArtifactKind = "f572-monthly"
 	KindDependientes       ArtifactKind = "dependientes"
 	KindAlquiler           ArtifactKind = "alquiler"
-	KindCreditoHipotecario ArtifactKind = "credito-hipotecario"
+	KindCreditoHipotecario ArtifactKind = "credito-hipotecario" //#nosec G101 -- ArtifactKind enum naming the mortgage-credit SIRADIG deduction category, not a credential
 	KindGastosMedicos      ArtifactKind = "gastos-medicos"
 	KindDonaciones         ArtifactKind = "donaciones"
 	KindGastosEducativos   ArtifactKind = "gastos-educativos"

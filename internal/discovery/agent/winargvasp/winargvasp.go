@@ -121,12 +121,12 @@ type TokenClass string
 
 const (
 	TokenBTCNative        TokenClass = "btc-native"
-	TokenERC20Stablecoin  TokenClass = "erc20-stablecoin"
-	TokenERC20Utility     TokenClass = "erc20-utility"
-	TokenTRC20Stablecoin  TokenClass = "trc20-stablecoin"
-	TokenSOLSPLStablecoin TokenClass = "sol-spl-stablecoin"
-	TokenNFTERC721        TokenClass = "nft-erc721"
-	TokenNFTERC1155       TokenClass = "nft-erc1155"
+	TokenERC20Stablecoin  TokenClass = "erc20-stablecoin"   //#nosec G101 -- TokenClass enum value naming the ERC-20 stablecoin asset class, not a token credential
+	TokenERC20Utility     TokenClass = "erc20-utility"      //#nosec G101 -- TokenClass enum value naming the ERC-20 utility asset class, not a token credential
+	TokenTRC20Stablecoin  TokenClass = "trc20-stablecoin"   //#nosec G101 -- TokenClass enum value naming the TRC-20 stablecoin asset class, not a token credential
+	TokenSOLSPLStablecoin TokenClass = "sol-spl-stablecoin" //#nosec G101 -- TokenClass enum value naming the Solana SPL stablecoin asset class, not a token credential
+	TokenNFTERC721        TokenClass = "nft-erc721"         //#nosec G101 -- TokenClass enum value naming the ERC-721 NFT asset class, not a token credential
+	TokenNFTERC1155       TokenClass = "nft-erc1155"        //#nosec G101 -- TokenClass enum value naming the ERC-1155 NFT asset class, not a token credential
 	TokenNativeCoin       TokenClass = "native-coin"
 	TokenWrappedCoin      TokenClass = "wrapped-coin"
 	TokenCustom           TokenClass = "custom"

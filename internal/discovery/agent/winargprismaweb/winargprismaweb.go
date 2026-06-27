@@ -70,7 +70,7 @@ type ArtifactKind string
 
 const (
 	KindConfig          ArtifactKind = "prismaweb-config"
-	KindCredentials     ArtifactKind = "prismaweb-credentials"
+	KindCredentials     ArtifactKind = "prismaweb-credentials" //#nosec G101 -- ArtifactKind enum naming the PrismaWeb credentials artifact category, not a credential value
 	KindDailySettlement ArtifactKind = "prismaweb-daily-settlement"
 	KindCollateral      ArtifactKind = "prismaweb-collateral"
 	KindMarginCalls     ArtifactKind = "prismaweb-margin-calls"

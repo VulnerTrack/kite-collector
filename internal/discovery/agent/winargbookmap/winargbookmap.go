@@ -77,7 +77,7 @@ type ArtifactKind string
 
 const (
 	KindConfig            ArtifactKind = "bookmap-config"
-	KindCredentials       ArtifactKind = "bookmap-credentials"
+	KindCredentials       ArtifactKind = "bookmap-credentials" //#nosec G101 -- ArtifactKind enum naming the Bookmap credentials artifact category, not a credential value
 	KindWorkspace         ArtifactKind = "bookmap-workspace"
 	KindBTRRecording      ArtifactKind = "bookmap-btr-recording"
 	KindIndicatorSDK      ArtifactKind = "bookmap-indicator-sdk"

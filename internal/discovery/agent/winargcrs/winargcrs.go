@@ -124,7 +124,7 @@ const (
 	HolderForeignIndividual AccountHolderClass = "foreign-individual"
 	HolderForeignEntity     AccountHolderClass = "foreign-entity"
 	HolderUSPerson          AccountHolderClass = "us-person"
-	HolderPassiveNFFE       AccountHolderClass = "passive-nffe"
+	HolderPassiveNFFE       AccountHolderClass = "passive-nffe" //#nosec G101 -- AccountHolderClass enum naming the FATCA passive-NFFE entity classification, not a credential
 	HolderActiveNFFE        AccountHolderClass = "active-nffe"
 	HolderHighNetWorth      AccountHolderClass = "high-net-worth"
 	HolderDormant           AccountHolderClass = "dormant"

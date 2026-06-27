@@ -61,7 +61,7 @@ const (
 type TaxFirm string
 
 const (
-	FirmPwCTaxArgentina      TaxFirm = "pwc-tax-argentina"
+	FirmPwCTaxArgentina      TaxFirm = "pwc-tax-argentina" //#nosec G101 -- TaxFirm enum naming the PwC Argentina tax-practice provider, not a credential
 	FirmDeloitteTaxArgentina TaxFirm = "deloitte-tax-argentina"
 	FirmEYTaxArgentina       TaxFirm = "ey-tax-argentina"
 	FirmKPMGTaxArgentina     TaxFirm = "kpmg-tax-argentina"
@@ -106,7 +106,7 @@ const (
 	RegimeBienesPersonales    TaxRegime = "bienes-personales"
 	RegimeIVA                 TaxRegime = "iva"
 	RegimeTransferPricing     TaxRegime = "transfer-pricing"
-	RegimeImpCredDebBancarios TaxRegime = "imp-cred-deb-bancarios"
+	RegimeImpCredDebBancarios TaxRegime = "imp-cred-deb-bancarios" //#nosec G101 -- TaxRegime enum naming the bank credit/debit tax regime, not a credential
 	RegimeImpSellos           TaxRegime = "imp-sellos"
 	RegimeIngresosBrutos      TaxRegime = "ingresos-brutos"
 	RegimeRIPRO               TaxRegime = "ripro"

@@ -158,18 +158,39 @@ func agencyTokens() map[string]Agency {
 
 // AgencyFromPath classifies path under a curated root or by
 // path-name token.
+//
+// Path comparison normalises Windows backslashes to forward
+// slashes (filepath.ToSlash is a no-op on Linux), so curated
+// roots like `C:\ARBA` match against `C:\ARBA\export\file.txt`
+// regardless of the host OS.
+//
+// Token fallback iterates the agencyTokens map in deterministic
+// order — longest token first, then alphabetical — so paths that
+// contain multiple agency tokens (e.g. `/opt/arba/citi-ventas.txt`)
+// always resolve to the same Agency.
 func AgencyFromPath(roots []AgencyRoot, path string) Agency {
+	normPath := strings.ReplaceAll(filepath.ToSlash(path), `\`, "/")
+	lowerNorm := strings.ToLower(normPath)
 	for _, r := range roots {
-		if strings.HasPrefix(strings.ToLower(filepath.ToSlash(path)),
-			strings.ToLower(filepath.ToSlash(r.Path))+"/") ||
-			strings.EqualFold(path, r.Path) {
+		rootNorm := strings.ToLower(strings.ReplaceAll(filepath.ToSlash(r.Path), `\`, "/"))
+		if strings.HasPrefix(lowerNorm, rootNorm+"/") || lowerNorm == rootNorm {
 			return r.Agency
 		}
 	}
-	lower := strings.ToLower(filepath.ToSlash(path))
-	for token, agency := range agencyTokens() {
-		if strings.Contains(lower, token) {
-			return agency
+	tokens := agencyTokens()
+	keys := make([]string, 0, len(tokens))
+	for k := range tokens {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if len(keys[i]) != len(keys[j]) {
+			return len(keys[i]) > len(keys[j])
+		}
+		return keys[i] < keys[j]
+	})
+	for _, token := range keys {
+		if strings.Contains(lowerNorm, token) {
+			return tokens[token]
 		}
 	}
 	return AgencyUnknown

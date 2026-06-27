@@ -96,7 +96,7 @@ type ArtifactKind string
 
 const (
 	KindConfig           ArtifactKind = "sintesis-config"
-	KindCredentials      ArtifactKind = "sintesis-credentials"
+	KindCredentials      ArtifactKind = "sintesis-credentials" //#nosec G101 -- ArtifactKind enum naming the Sintesis credentials artifact category, not a credential value
 	KindFCIDatabase      ArtifactKind = "sintesis-fci-database"
 	KindNAVCalc          ArtifactKind = "sintesis-nav-calc"
 	KindCuotaparteLedger ArtifactKind = "sintesis-cuotaparte-ledger"
