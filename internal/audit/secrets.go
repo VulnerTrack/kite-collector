@@ -36,10 +36,6 @@ func extractRepoPath(tags string) string {
 const (
 	secretsAuditorName = "secrets"
 
-	// CWE-798: Use of Hard-coded Credentials
-	secretsCWEID   = "CWE-798"
-	secretsCWEName = "Use of Hard-coded Credentials" //#nosec G101 -- CWE label, not a credential
-
 	maxFileSize     = 1 << 20 // 1 MiB — skip larger files
 	maxFilesScanned = 10_000  // safety cap per repository
 )
