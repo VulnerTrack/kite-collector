@@ -157,7 +157,7 @@ func obtainGCPToken(ctx context.Context) (string, error) {
 	if credFile != "" {
 		token, err = tokenFromCredentialsFile(ctx, credFile)
 		if err == nil && token != "" {
-			slog.Info("GCP Compute token obtained from application default credentials file",
+			slog.Info("GCP Compute token obtained from application default credentials file", //#nosec G706 -- structured log; message is a constant literal, attributes carry sanitized identifiers (LogCode constant, local file path)
 				"code", string(LogCodeGCPComputeTokenFromCredsFile),
 				"cred_file", credFile)
 			return token, nil

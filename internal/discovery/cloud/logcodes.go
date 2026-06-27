@@ -21,7 +21,7 @@ type LogCode string
 const (
 	// --- AWS EC2 compute discovery -----------------------------------
 	LogCodeAWSEC2Starting         LogCode = "cloud.aws_ec2.starting"
-	LogCodeAWSEC2CredsMissing     LogCode = "cloud.aws_ec2.creds_missing"
+	LogCodeAWSEC2CredsMissing     LogCode = "cloud.aws_ec2.creds_missing" //#nosec G101 -- log code identifier emitted when AWS EC2 credentials env vars are absent, not a credential value
 	LogCodeAWSEC2AssumeRole       LogCode = "cloud.aws_ec2.assume_role"
 	LogCodeAWSEC2AssumeRoleFailed LogCode = "cloud.aws_ec2.assume_role_failed"
 	LogCodeAWSEC2UsingAssumedRole LogCode = "cloud.aws_ec2.using_assumed_role"
@@ -33,8 +33,8 @@ const (
 
 	// --- Azure VM compute discovery ----------------------------------
 	LogCodeAzureVMStarting            LogCode = "cloud.azure_vm.starting"
-	LogCodeAzureVMCredsMissing        LogCode = "cloud.azure_vm.creds_missing"
-	LogCodeAzureVMTokenAcquireFailed  LogCode = "cloud.azure_vm.token_acquire_failed"
+	LogCodeAzureVMCredsMissing        LogCode = "cloud.azure_vm.creds_missing"        //#nosec G101 -- log code identifier signalling Azure VM credentials env vars are missing, not a credential value
+	LogCodeAzureVMTokenAcquireFailed  LogCode = "cloud.azure_vm.token_acquire_failed" //#nosec G101 -- log code identifier for Azure VM OAuth token acquisition failure, not a token value
 	LogCodeAzureVMEnumeratingSubs     LogCode = "cloud.azure_vm.enumerating_subscriptions"
 	LogCodeAzureVMEnumerateSubsFailed LogCode = "cloud.azure_vm.enumerate_subscriptions_failed"
 	LogCodeAzureVMNoSubsAccessible    LogCode = "cloud.azure_vm.no_subscriptions_accessible"
@@ -47,16 +47,16 @@ const (
 	// --- GCP Compute discovery ---------------------------------------
 	LogCodeGCPComputeStarting             LogCode = "cloud.gcp_compute.starting"
 	LogCodeGCPComputeProjectMissing       LogCode = "cloud.gcp_compute.project_missing"
-	LogCodeGCPComputeTokenAcquireFailed   LogCode = "cloud.gcp_compute.token_acquire_failed"
+	LogCodeGCPComputeTokenAcquireFailed   LogCode = "cloud.gcp_compute.token_acquire_failed" //#nosec G101 -- log code identifier for GCP Compute OAuth token acquisition failure, not a token value
 	LogCodeGCPComputeComplete             LogCode = "cloud.gcp_compute.completed"
-	LogCodeGCPComputeTokenFromMetadata    LogCode = "cloud.gcp_compute.token_from_metadata"
-	LogCodeGCPComputeTokenFromCredsFile   LogCode = "cloud.gcp_compute.token_from_creds_file"
-	LogCodeGCPComputeTokenCredsFileFailed LogCode = "cloud.gcp_compute.token_creds_file_failed"
+	LogCodeGCPComputeTokenFromMetadata    LogCode = "cloud.gcp_compute.token_from_metadata"     //#nosec G101 -- log code identifier marking that GCP Compute used the metadata server for tokens, not a token value
+	LogCodeGCPComputeTokenFromCredsFile   LogCode = "cloud.gcp_compute.token_from_creds_file"   //#nosec G101 -- log code identifier marking that GCP Compute used a service-account JSON file for tokens, not a token value
+	LogCodeGCPComputeTokenCredsFileFailed LogCode = "cloud.gcp_compute.token_creds_file_failed" //#nosec G101 -- log code identifier for failure to acquire a token from a GCP credentials file, not a token value
 	LogCodeGCPComputeDiskFetchFailed      LogCode = "cloud.gcp_compute.disk_fetch_failed"
 
 	// --- Route53 DNS discovery (AWS DNS) -----------------------------
 	LogCodeRoute53Disabled            LogCode = "cloud.dns_route53.disabled"
-	LogCodeRoute53CredsMissing        LogCode = "cloud.dns_route53.creds_missing"
+	LogCodeRoute53CredsMissing        LogCode = "cloud.dns_route53.creds_missing" //#nosec G101 -- log code identifier emitted when Route53 credentials env vars are absent, not a credential value
 	LogCodeRoute53AssumeRole          LogCode = "cloud.dns_route53.assume_role"
 	LogCodeRoute53AssumeRoleFailed    LogCode = "cloud.dns_route53.assume_role_failed"
 	LogCodeRoute53GetDNSSECFailed     LogCode = "cloud.dns_route53.get_dnssec_failed"
@@ -66,14 +66,14 @@ const (
 
 	// --- Cloudflare DNS discovery ------------------------------------
 	LogCodeCloudflareDisabled            LogCode = "cloud.dns_cloudflare.disabled"
-	LogCodeCloudflareTokenMissing        LogCode = "cloud.dns_cloudflare.token_missing"
+	LogCodeCloudflareTokenMissing        LogCode = "cloud.dns_cloudflare.token_missing" //#nosec G101 -- log code identifier emitted when the Cloudflare API token env var is absent, not a token value
 	LogCodeCloudflareListRecordsFailed   LogCode = "cloud.dns_cloudflare.list_records_failed"
 	LogCodeCloudflareSkipUnsupportedType LogCode = "cloud.dns_cloudflare.skip_unsupported_record_type"
 	LogCodeCloudflareComplete            LogCode = "cloud.dns_cloudflare.completed"
 
 	// --- Azure DNS discovery -----------------------------------------
 	LogCodeAzureDNSDisabled            LogCode = "cloud.dns_azure.disabled"
-	LogCodeAzureDNSCredsMissing        LogCode = "cloud.dns_azure.creds_missing"
+	LogCodeAzureDNSCredsMissing        LogCode = "cloud.dns_azure.creds_missing" //#nosec G101 -- log code identifier emitted when Azure DNS credentials env vars are absent, not a credential value
 	LogCodeAzureDNSListZonesFailed     LogCode = "cloud.dns_azure.list_zones_failed"
 	LogCodeAzureDNSListRecordsFailed   LogCode = "cloud.dns_azure.list_records_failed"
 	LogCodeAzureDNSSkipUnsupportedType LogCode = "cloud.dns_azure.skip_unsupported_record_type"
@@ -82,7 +82,7 @@ const (
 	// --- GCP DNS discovery -------------------------------------------
 	LogCodeGCPDNSDisabled            LogCode = "cloud.dns_gcp.disabled"
 	LogCodeGCPDNSProjectMissing      LogCode = "cloud.dns_gcp.project_missing"
-	LogCodeGCPDNSTokenAcquireFailed  LogCode = "cloud.dns_gcp.token_acquire_failed"
+	LogCodeGCPDNSTokenAcquireFailed  LogCode = "cloud.dns_gcp.token_acquire_failed" //#nosec G101 -- log code identifier for GCP DNS OAuth token acquisition failure, not a token value
 	LogCodeGCPDNSListRecordsFailed   LogCode = "cloud.dns_gcp.list_records_failed"
 	LogCodeGCPDNSSkipUnsupportedType LogCode = "cloud.dns_gcp.skip_unsupported_record_type"
 	LogCodeGCPDNSComplete            LogCode = "cloud.dns_gcp.completed"
