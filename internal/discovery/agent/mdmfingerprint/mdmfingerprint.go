@@ -80,11 +80,11 @@ const (
 type Source string
 
 const (
-	SourceDarwinFS  Source = "darwin-fs"
-	SourceLinuxFS   Source = "linux-fs"
-	SourceWindowsFS Source = "windows-fs"
+	SourceDarwinFS        Source = "darwin-fs"
+	SourceLinuxFS         Source = "linux-fs"
+	SourceWindowsFS       Source = "windows-fs"
 	SourceWindowsRegistry Source = "windows-registry"
-	SourceNoProbe   Source = "no-probe"
+	SourceNoProbe         Source = "no-probe"
 )
 
 // Fingerprint is a single positive match against the vendor table.
@@ -103,13 +103,8 @@ type Fingerprint struct {
 type State struct {
 	Source       Source        `json:"source"`
 	Fingerprints []Fingerprint `json:"fingerprints"`
-	// IsMDMManaged rolls up the fingerprints into the single boolean
-	// the asset pipeline cares about: any high-confidence enrollment
-	// signal, or any medium-confidence signal at all.
-	IsMDMManaged bool `json:"is_mdm_managed"`
-	// Vendors is the de-duplicated, sorted list of vendors observed —
-	// useful as an asset tag value without re-walking Fingerprints.
-	Vendors []Vendor `json:"vendors"`
+	Vendors      []Vendor      `json:"vendors"`
+	IsMDMManaged bool          `json:"is_mdm_managed"`
 }
 
 // Collector is the contract every per-OS implementation satisfies.
@@ -416,26 +411,26 @@ func windowsFSSignals() map[string]signalSpec {
 func windowsRegistrySignals() []registrySignal {
 	return []registrySignal{
 		{
-			Path:   `SOFTWARE\Microsoft\Enrollments`,
-			Vendor: VendorWindowsMDM,
-			Product: "Windows OMA-DM enrollment",
+			Path:       `SOFTWARE\Microsoft\Enrollments`,
+			Vendor:     VendorWindowsMDM,
+			Product:    "Windows OMA-DM enrollment",
 			Kind:       SignalEnrollmentRecord,
 			Confidence: ConfidenceHigh,
 			Enrollment: true,
 		},
 		{
-			Path:   `SOFTWARE\Microsoft\Provisioning\OMADM\Accounts`,
-			Vendor: VendorWindowsMDM,
-			Product: "Windows OMA-DM accounts",
+			Path:       `SOFTWARE\Microsoft\Provisioning\OMADM\Accounts`,
+			Vendor:     VendorWindowsMDM,
+			Product:    "Windows OMA-DM accounts",
 			Kind:       SignalEnrollmentRecord,
 			Confidence: ConfidenceHigh,
 			Enrollment: true,
 		},
 		// Intune leaves a dedicated PolicyManager hive when enrolled.
 		{
-			Path:   `SOFTWARE\Microsoft\PolicyManager\current\device`,
-			Vendor: VendorIntune,
-			Product: "Intune PolicyManager device policy",
+			Path:       `SOFTWARE\Microsoft\PolicyManager\current\device`,
+			Vendor:     VendorIntune,
+			Product:    "Intune PolicyManager device policy",
 			Kind:       SignalEnrollmentRecord,
 			Confidence: ConfidenceHigh,
 			Enrollment: true,

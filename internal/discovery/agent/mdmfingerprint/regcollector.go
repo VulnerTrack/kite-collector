@@ -19,9 +19,9 @@ type KeyProbe func(path string) (exists bool, hasSubkeys bool, err error)
 // or the signal being a leaf key (we treat any signal where the parent
 // path itself is the target as a leaf — see below).
 type regCollector struct {
+	probe   KeyProbe
 	name    string
 	signals []registrySignal
-	probe   KeyProbe
 }
 
 // NewRegistryCollector returns a Collector that probes the supplied
