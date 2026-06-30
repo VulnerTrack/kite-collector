@@ -1,0 +1,15 @@
+Package: kite-collector
+Version: 0.34.2
+Architecture: amd64
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 35281
+Filename: dists/stable/main/binary-amd64/kite-collector_0.34.2_linux_amd64.deb
+Size: 12871734
+MD5sum: ab9eb37bf95adfb2c14d1b1c0a7ba692
+SHA1: a4873a17a0a828046fa8502654a276de9f84282d
+SHA256: 10ae3f9b4b68860fe5292ed61153b73e118f6305078a45c26c83d7b806b014b2
+Priority: optional
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Cybersecurity asset discovery, configuration audit, and posture analysis agent.
+Architecture-Variant: amd64v1
+

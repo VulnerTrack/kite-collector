@@ -1,0 +1,17 @@
+Origin: VulnerTrack
+Label: Kite Collector Repo
+Suite: stable
+Codename: stable
+Architectures: amd64 arm64
+Components: main
+Description: Repositorio oficial de APT para Kite Collector
+MD5Sum:
+ 35e85c742ab57c927e9bf5c9bed562aa 584 main/binary-amd64/Packages
+ e2b6e4ad6212fb3cfe7d3e434078ea98 425 main/binary-amd64/Packages.gz
+ 3ea15e167fd2fcb4d1aa4fb35c61f915 554 main/binary-arm64/Packages
+ e446678e3eb82d4aa9c8c989567bf7d5 413 main/binary-arm64/Packages.gz
+SHA256:
+ 3fe1e4b0828938ebe0a9562e8cd0c400db78161533b66fef422916189781d67e 584 main/binary-amd64/Packages
+ f9a8edbaa68ab3590596e1f773af298c1331b57ef82fcf4e1170a4536dfb4883 425 main/binary-amd64/Packages.gz
+ f38bac01e7ce92922173ac8bb69f3ea6756584dbaa6add24ace97d4de928bd57 554 main/binary-arm64/Packages
+ b7a72c5e57c65c0c8e6062a1304e61379157e2464bb5c6c5ff9a75f45e3d46ea 413 main/binary-arm64/Packages.gz
