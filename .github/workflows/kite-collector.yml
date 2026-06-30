@@ -300,7 +300,7 @@ jobs:
 
           # 7. Exportar clave pública al raíz del deployment
           cd ../..
-          gpg --armor --export 79847F85E3FF6E43 > public/repository.key
+          gpg --armor --export 79847F85E3FF6E43 > repository.key
 
       - name: Desplegar repositorio a GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
