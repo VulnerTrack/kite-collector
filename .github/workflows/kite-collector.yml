@@ -159,6 +159,7 @@ jobs:
     environment: Deployment
     permissions:
       contents: write
+      pages: write      # Requerido para actualizar la rama gh-pages sin fricciones
     steps:
       - uses: actions/checkout@v7
         with:
@@ -172,7 +173,7 @@ jobs:
       # Used by scripts/build-msi.sh in the post-goreleaser step below.
       # Without wixl, the MSI build step fails with "wixl: command not found".
       - name: Install wixl + msitools for MSI build
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends wixl msitools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends wixl msitools dpkg-dev
       # Embed the Windows app manifest (UAC requireAdministrator +
       # Common-Controls 6.0) before the Windows build in the goreleaser
       # matrix. Same step as the per-PR build job above, but lives in
@@ -240,3 +241,69 @@ jobs:
         with:
           artifact-name: kite-collector-sbom.spdx.json
           path: .
+
+      # ──────────────────────────────────────────────
+      # Generación Dinámica del Repositorio APT
+      # ──────────────────────────────────────────────
+      - name: Generar estructura del repositorio APT y firmar
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          # 1. Importar clave privada GPG
+          echo "$GPG_PRIVATE_KEY" | gpg --import --batch
+
+          # 2. Crear carpetas de arquitectura APT
+          mkdir -p public/dists/stable/main/binary-amd64
+          mkdir -p public/dists/stable/main/binary-arm64
+
+          # 3. Mover los paquetes .deb creados por GoReleaser al directorio público
+          cp dist/*.deb public/dists/stable/main/binary-amd64/ 2>/dev/null || true
+          cp dist/*.deb public/dists/stable/main/binary-arm64/ 2>/dev/null || true
+
+          # Limpiar duplicados cruzados dejando solo lo correspondiente a cada arquitectura
+          rm -f public/dists/stable/main/binary-amd64/*_arm64.deb
+          rm -f public/dists/stable/main/binary-arm64/*_amd64.deb
+
+          # 4. Generar índices de paquetes
+          cd public
+          dpkg-scanpackages dists/stable/main/binary-amd64 /dev/null > dists/stable/main/binary-amd64/Packages
+          gzip -9fk dists/stable/main/binary-amd64/Packages
+
+          dpkg-scanpackages dists/stable/main/binary-arm64 /dev/null > dists/stable/main/binary-arm64/Packages
+          gzip -9fk dists/stable/main/binary-arm64/Packages
+
+          # 5. Estructurar archivo maestro Release
+          cd dists/stable
+          echo "Origin: VulnerTrack" > Release
+          echo "Label: Kite Collector Repo" >> Release
+          echo "Suite: stable" >> Release
+          echo "Codename: stable" >> Release
+          echo "Architectures: amd64 arm64" >> Release
+          echo "Components: main" >> Release
+          echo "Description: Repositorio oficial de APT para Kite Collector" >> Release
+          
+          echo "MD5Sum:" >> Release
+          printf " $(md5sum main/binary-amd64/Packages | cut -d' ' -f1) %s main/binary-amd64/Packages\n" $(wc -c < main/binary-amd64/Packages) >> Release
+          printf " $(md5sum main/binary-amd64/Packages.gz | cut -d' ' -f1) %s main/binary-amd64/Packages.gz\n" $(wc -c < main/binary-amd64/Packages.gz) >> Release
+          printf " $(md5sum main/binary-arm64/Packages | cut -d' ' -f1) %s main/binary-arm64/Packages\n" $(wc -c < main/binary-arm64/Packages) >> Release
+          printf " $(md5sum main/binary-arm64/Packages.gz | cut -d' ' -f1) %s main/binary-arm64/Packages.gz\n" $(wc -c < main/binary-arm64/Packages.gz) >> Release
+          
+          echo "SHA256:" >> Release
+          printf " $(sha256sum main/binary-amd64/Packages | cut -d' ' -f1) %s main/binary-amd64/Packages\n" $(wc -c < main/binary-amd64/Packages) >> Release
+          printf " $(sha256sum main/binary-amd64/Packages.gz | cut -d' ' -f1) %s main/binary-amd64/Packages.gz\n" $(wc -c < main/binary-amd64/Packages.gz) >> Release
+          printf " $(sha256sum main/binary-arm64/Packages | cut -d' ' -f1) %s main/binary-arm64/Packages\n" $(wc -c < main/binary-arm64/Packages) >> Release
+          printf " $(sha256sum main/binary-arm64/Packages.gz | cut -d' ' -f1) %s main/binary-arm64/Packages.gz\n" $(wc -c < main/binary-arm64/Packages.gz) >> Release
+
+          # 6. Firmar índices con tu clave (79847F85E3FF6E43)
+          gpg --batch --yes --clearsign --digest-algo SHA256 -u 79847F85E3FF6E43 -o InRelease Release
+          gpg --batch --yes --detach-sign --digest-algo SHA256 -u 79847F85E3FF6E43 -o Release.gpg Release
+
+          # 7. Exportar clave pública al raíz del deployment
+          cd ../..
+          gpg --armor --export 79847F85E3FF6E43 > public/repository.key
+
+      - name: Desplegar repositorio a GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: public
