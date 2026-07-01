@@ -28,6 +28,14 @@ You can install `kite-collector` on Debian-based distributions (such as Ubuntu, 
    sudo apt install kite-collector
    ```
 
+### Snap (Universal Linux)
+
+For any Linux distribution that supports Snap (including Ubuntu, Debian, Fedora, Arch Linux, etc.), you can install the agent directly from the Snap Store:
+
+```bash
+sudo snap install kite-collector
+```
+
 ### Other Linux Distributions (Fedora, Red Hat, Arch Linux, etc.)
 
 For distributions that do not use the `apt` package manager (such as Fedora, Red Hat Enterprise Linux, CentOS, or Arch Linux):
