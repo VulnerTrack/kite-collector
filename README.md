@@ -26,6 +26,7 @@ You can install `kite-collector` on Debian-based distributions (such as Ubuntu, 
    ```bash
    sudo apt update
    sudo apt install kite-collector
+   kite-collector install
    ```
 
 ### Snap (Universal Linux)
