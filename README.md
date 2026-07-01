@@ -8,7 +8,36 @@ Results are stored in a local SQLite database. No servers, no dependencies, full
 
 ## Install
 
-Download from [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases):
+### Ubuntu / Debian (APT Repository)
+
+You can install `kite-collector` on Debian-based distributions (such as Ubuntu, Linux Mint, or Pop!_OS) using the official APT repository:
+
+1. Download and install the public keyring:
+   ```bash
+   curl -fsSL https://vulnertrack.github.io/kite-collector/repository.key | sudo tee /usr/share/keyrings/kite-collector-keyring.asc > /dev/null
+   ```
+
+2. Add the repository to your system sources:
+   ```bash
+   echo "deb [signed-by=/usr/share/keyrings/kite-collector-keyring.asc] https://vulnertrack.github.io/kite-collector/ stable main" | sudo tee /etc/apt/sources.list.d/kite-collector.list
+   ```
+
+3. Update the package list and install the agent:
+   ```bash
+   sudo apt update
+   sudo apt install kite-collector
+   ```
+
+### Other Linux Distributions (Fedora, Red Hat, Arch Linux, etc.)
+
+For distributions that do not use the `apt` package manager (such as Fedora, Red Hat Enterprise Linux, CentOS, or Arch Linux):
+
+- **Fedora / Red Hat / CentOS**: Download the `.rpm` package directly from the [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) page and install it using your package manager (e.g., `sudo dnf install ./kite-collector-*.rpm`).
+- **Arch Linux / Others**: Download the precompiled binary inside the `.tar.gz` archive from the releases page, extract it, and place it in your `PATH`. Alternatively, you can build from source.
+
+### Manual Download
+
+If you prefer to download the precompiled binaries directly:
 
 ```bash
 # Linux
@@ -18,7 +47,7 @@ curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download
 curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download/kite-collector_darwin_arm64.tar.gz | tar xz
 ```
 
-Or build from source:
+### Build from Source
 
 ```bash
 make build
