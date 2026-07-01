@@ -6,7 +6,36 @@ Un solo binario que escanea tu red, inventaria el software instalado, audita la 
 
 ## Instalacion
 
-Descarga desde [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases):
+### Ubuntu / Debian (Repositorio APT)
+
+Puedes instalar `kite-collector` en distribuciones basadas en Debian (como Ubuntu, Linux Mint o Pop!_OS) utilizando nuestro repositorio oficial de APT:
+
+1. Descargar e instalar la clave pública del repositorio:
+   ```bash
+   curl -fsSL https://vulnertrack.github.io/kite-collector/repository.key | sudo tee /usr/share/keyrings/kite-collector-keyring.asc > /dev/null
+   ```
+
+2. Agregar el repositorio a tus fuentes de sistema:
+   ```bash
+   echo "deb [signed-by=/usr/share/keyrings/kite-collector-keyring.asc] https://vulnertrack.github.io/kite-collector/ stable main" | sudo tee /etc/apt/sources.list.d/kite-collector.list
+   ```
+
+3. Actualizar la lista de paquetes e instalar el agente:
+   ```bash
+   sudo apt update
+   sudo apt install kite-collector
+   ```
+
+### Otras distribuciones Linux (Fedora, Red Hat, Arch Linux, etc.)
+
+Para aquellas distribuciones que NO utilizan el gestor de paquetes `apt` (como Fedora, Red Hat Enterprise Linux, CentOS o Arch Linux, las cuales usan `dnf`, `yum` o `pacman`):
+
+- **Fedora / Red Hat / CentOS**: Puedes descargar el paquete `.rpm` directamente desde la pestaña de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) e instalarlo usando tu gestor de paquetes (por ejemplo, `sudo dnf install ./kite-collector-*.rpm`).
+- **Arch Linux / Otras distribuciones**: Descarga el binario precompilado dentro del archivo `.tar.gz` desde la página de Releases, extráelo y colócalo en tu `PATH`. Alternativamente, puedes compilarlo desde el código fuente.
+
+### Descarga Manual / Otros Sistemas
+
+Si prefieres descargar directamente los binarios precompilados o estás en macOS/Windows:
 
 ```bash
 # Linux
@@ -20,7 +49,7 @@ brew install vulnertrack/tap/kite-collector
 irm https://get.kite-collector.dev/install.ps1 | iex
 ```
 
-O compilar desde el codigo fuente:
+### Compilar desde el código fuente
 
 ```bash
 make build
