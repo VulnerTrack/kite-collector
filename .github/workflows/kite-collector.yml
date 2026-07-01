@@ -159,7 +159,7 @@ jobs:
     environment: Deployment
     permissions:
       contents: write
-      pages: write      # Requerido para actualizar la rama gh-pages sin fricciones
+      pages: write # Requerido para actualizar la rama gh-pages sin fricciones
     steps:
       - uses: actions/checkout@v7
         with:
@@ -167,13 +167,17 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+
       # wixl is the WiX toolset's Linux-native MSI builder. On Ubuntu 24.04
       # (noble) and later, wixl ships as a standalone package separate from
       # msitools; install both so the build works on older releases too.
       # Used by scripts/build-msi.sh in the post-goreleaser step below.
       # Without wixl, the MSI build step fails with "wixl: command not found".
-      - name: Install wixl + msitools for MSI build
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends wixl msitools dpkg-dev
+      - name: Install dependencies (wixl, dpkg-dev, snapcraft)
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends wixl msitools dpkg-dev
+          sudo snap install snapcraft --classic
+
       # Embed the Windows app manifest (UAC requireAdministrator +
       # Common-Controls 6.0) before the Windows build in the goreleaser
       # matrix. Same step as the per-PR build job above, but lives in
@@ -185,6 +189,7 @@ jobs:
           rsrc -manifest cmd/kite-collector/app.manifest \
                -arch amd64 \
                -o cmd/kite-collector/rsrc_windows_amd64.syso
+
       - name: Diagnose secret presence (length only — values are masked)
         # Confirms whether HOMEBREW_TAP_GITHUB_TOKEN is set on THIS repo at
         # THIS workflow ref. Length-only print; GitHub redacts secret values
@@ -209,6 +214,7 @@ jobs:
           # silently use the wrong token and 403 in the goreleaser step.
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -219,9 +225,10 @@ jobs:
           # Cross-repo write to VulnerTrack/homebrew-tap requires a PAT (or
           # fine-grained token) with contents:write on that repo. Stored as
           # repo secret HOMEBREW_TAP_GITHUB_TOKEN.
-          # The silent `||` fallback was removed: if the secret is missing,
-          # the diagnose step above fails with a clear actionable message.
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          # Token para publicar automáticamente en la Snap Store:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+
       # Build the Windows MSI from the .exe goreleaser just produced and
       # attach it to the GitHub Release as an additional asset. Runs after
       # goreleaser publishes so the release already exists for `gh release
@@ -236,6 +243,7 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" \
             "dist/kite-collector_${VERSION}_amd64.msi" \
             --clobber
+
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
@@ -281,13 +289,13 @@ jobs:
           echo "Architectures: amd64 arm64" >> Release
           echo "Components: main" >> Release
           echo "Description: Repositorio oficial de APT para Kite Collector" >> Release
-          
+
           echo "MD5Sum:" >> Release
           printf " $(md5sum main/binary-amd64/Packages | cut -d' ' -f1) %s main/binary-amd64/Packages\n" $(wc -c < main/binary-amd64/Packages) >> Release
           printf " $(md5sum main/binary-amd64/Packages.gz | cut -d' ' -f1) %s main/binary-amd64/Packages.gz\n" $(wc -c < main/binary-amd64/Packages.gz) >> Release
           printf " $(md5sum main/binary-arm64/Packages | cut -d' ' -f1) %s main/binary-arm64/Packages\n" $(wc -c < main/binary-arm64/Packages) >> Release
           printf " $(md5sum main/binary-arm64/Packages.gz | cut -d' ' -f1) %s main/binary-arm64/Packages.gz\n" $(wc -c < main/binary-arm64/Packages.gz) >> Release
-          
+
           echo "SHA256:" >> Release
           printf " $(sha256sum main/binary-amd64/Packages | cut -d' ' -f1) %s main/binary-amd64/Packages\n" $(wc -c < main/binary-amd64/Packages) >> Release
           printf " $(sha256sum main/binary-amd64/Packages.gz | cut -d' ' -f1) %s main/binary-amd64/Packages.gz\n" $(wc -c < main/binary-amd64/Packages.gz) >> Release
