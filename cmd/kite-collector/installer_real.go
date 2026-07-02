@@ -67,6 +67,9 @@ func (realInstaller) Install(_ context.Context, opts installer.Options) error {
 	if mkErr := os.MkdirAll(opts.CertsDir, 0o750); mkErr != nil {
 		return fmt.Errorf("create certs dir %s: %w", opts.CertsDir, mkErr)
 	}
+	if pathErr := installer.ConfigurePath(opts); pathErr != nil {
+		return fmt.Errorf("configure PATH: %w", pathErr)
+	}
 	if runtime.GOOS == "windows" && opts.UserMode {
 		return nil
 	}

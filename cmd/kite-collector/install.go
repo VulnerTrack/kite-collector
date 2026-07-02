@@ -449,6 +449,11 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  %s\n", a.certsDir)
 
+	if pathErr := installer.ConfigurePath(opts.toInstallerOptions()); pathErr != nil {
+		return fmt.Errorf("configure PATH: %w", pathErr)
+	}
+	_, _ = fmt.Fprintf(out, "  ✓  PATH configured\n")
+
 	svc, svcErr := service.New(&program{}, cfg)
 	if svcErr != nil {
 		return fmt.Errorf("create service handle: %w", svcErr)

@@ -244,6 +244,16 @@ jobs:
             "dist/kite-collector_${VERSION}_amd64.msi" \
             --clobber
 
+      - name: Publish to WinGet
+        if: env.WINGET_TOKEN != ''
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: VulnerTrack.KiteCollector
+          max-retries: 3
+          token: ${{ secrets.WINGET_TOKEN }}
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:

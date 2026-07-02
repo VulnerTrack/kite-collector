@@ -44,6 +44,38 @@ For distributions that do not use the `apt` package manager (such as Fedora, Red
 - **Fedora / Red Hat / CentOS**: Download the `.rpm` package directly from the [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) page and install it using your package manager (e.g., `sudo dnf install ./kite-collector-*.rpm`).
 - **Arch Linux / Others**: Download the precompiled binary inside the `.tar.gz` archive from the releases page, extract it, and place it in your `PATH`. Alternatively, you can build from source.
 
+### Windows
+
+For Windows, you can install `kite-collector` using any of these simple and fast methods:
+
+#### 1. One-click MSI Installer (Recommended)
+Download the latest `kite-collector_<version>_amd64.msi` package from the [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) page. Double-click it to run the installation wizard, or perform a silent enterprise deployment (GPO/Intune) as an administrator:
+```powershell
+msiexec /i kite-collector_amd64.msi /quiet
+```
+
+#### 2. Standalone GUI Wizard
+Download the Windows binary `kite-collector_windows_amd64.exe` and double-click it from File Explorer. The binary will automatically detect the double-click launch and open the built-in graphical installation wizard.
+
+#### 3. PowerShell One-Liner
+Open a PowerShell console and run the automated installation script directly:
+```powershell
+irm https://get.kite-collector.dev/install.ps1 | iex
+```
+
+#### 4. Windows Package Manager (WinGet)
+Install it using the native package manager in Windows 10 & 11:
+```powershell
+winget install VulnerTrack.KiteCollector
+```
+
+#### 5. Scoop
+If you use Scoop, add our bucket and install it with:
+```powershell
+scoop bucket add vulnertrack https://github.com/VulnerTrack/homebrew-tap
+scoop install kite-collector
+```
+
 ### Manual Download
 
 If you prefer to download the precompiled binaries directly:

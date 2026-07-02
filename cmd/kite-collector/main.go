@@ -3284,12 +3284,14 @@ func (a dashboardStreamAdapter) Status() dashboard.StreamStatus {
 
 func main() {
 	if osutil.IsDoubleClicked() {
+		osutil.HideConsole()
 		// On Windows, the GUI wizard is the friendly default for double-click
 		// launches — Windows end users don't want a terminal menu. The wizard
 		// is build-tagged to Windows; on every other platform runWizard
 		// returns an error and we fall back to the text-mode menu so the
 		// double-click flow stays useful for dev work on macOS/Linux.
 		if err := runWizard(); err != nil {
+			osutil.ShowConsole()
 			runInteractiveMenu()
 		}
 		return
