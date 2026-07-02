@@ -42,6 +42,38 @@ Para aquellas distribuciones que NO utilizan el gestor de paquetes `apt` (como F
 - **Fedora / Red Hat / CentOS**: Puedes descargar el paquete `.rpm` directamente desde la pestaña de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) e instalarlo usando tu gestor de paquetes (por ejemplo, `sudo dnf install ./kite-collector-*.rpm`).
 - **Arch Linux / Otras distribuciones**: Descarga el binario precompilado dentro del archivo `.tar.gz` desde la página de Releases, extráelo y colócalo en tu `PATH`. Alternativamente, puedes compilarlo desde el código fuente.
 
+### Windows
+
+Para Windows, puedes instalar `kite-collector` usando cualquiera de estos métodos rápidos y sencillos:
+
+#### 1. Instalador MSI (Recomendado)
+Descarga el último instalador `kite-collector_<version>_amd64.msi` desde la página de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases). Haz doble clic en él para iniciar el asistente de instalación, o realiza un despliegue silencioso para empresas (GPO/Intune) como administrador:
+```powershell
+msiexec /i kite-collector_amd64.msi /quiet
+```
+
+#### 2. Asistente Gráfico Integrado
+Descarga el binario para Windows `kite-collector_windows_amd64.exe` y haz doble clic sobre él en el Explorador de Archivos. El binario detectará el doble clic y abrirá automáticamente el asistente gráfico de instalación para registrar el servicio.
+
+#### 3. PowerShell de una línea
+Abre una consola de PowerShell y ejecuta el script de instalación automatizado:
+```powershell
+irm https://get.kite-collector.dev/install.ps1 | iex
+```
+
+#### 4. Windows Package Manager (WinGet)
+Instálalo usando el gestor de paquetes nativo de Windows 10 y 11:
+```powershell
+winget install VulnerTrack.KiteCollector
+```
+
+#### 5. Scoop
+Si utilizas Scoop, añade nuestro repositorio e instálalo con:
+```powershell
+scoop bucket add vulnertrack https://github.com/VulnerTrack/homebrew-tap
+scoop install kite-collector
+```
+
 ### Descarga Manual / Otros Sistemas
 
 Si prefieres descargar directamente los binarios precompilados o estás en macOS/Windows:

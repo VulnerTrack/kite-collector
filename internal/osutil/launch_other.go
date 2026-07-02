@@ -6,3 +6,9 @@ package osutil
 // in a graphical file manager (e.g. Windows Explorer). On non-Windows
 // platforms this always returns false.
 func IsDoubleClicked() bool { return false }
+
+// HideConsole is a no-op on non-Windows platforms.
+func HideConsole() {}
+
+// ShowConsole is a no-op on non-Windows platforms.
+func ShowConsole() {}
