@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/kardianos/service"
 
@@ -65,6 +66,9 @@ func (realInstaller) Install(_ context.Context, opts installer.Options) error {
 	}
 	if mkErr := os.MkdirAll(opts.CertsDir, 0o750); mkErr != nil {
 		return fmt.Errorf("create certs dir %s: %w", opts.CertsDir, mkErr)
+	}
+	if runtime.GOOS == "windows" && opts.UserMode {
+		return nil
 	}
 
 	cfg := installer.BuildSvcConfig(opts)
