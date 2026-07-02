@@ -12,17 +12,23 @@ Open PowerShell and run:
 irm https://get.kite-collector.dev/install.ps1 | iex
 ```
 
-This downloads the latest binary to `%LOCALAPPDATA%\kite-collector\` and adds it to your user PATH.
+This downloads the latest binary directly to `%LOCALAPPDATA%\kite-collector\`, adds it to your user PATH, and registers the per-user service.
 
-### Option 2: Manual download
+For the fastest binary-only install, skip service registration:
+
+```powershell
+& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService
+```
+
+### Option 2: Direct setup download
 
 1. Go to [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases)
-2. Download `kite-collector_windows_amd64.exe`
-3. Move it to a folder in your PATH, or run it from the download location
+2. Download `kite-collector_windows_amd64_bin.exe`
+3. Rename it to `kite-collector.exe`
+4. Double-click it to open setup
 
-### Option 3: Double-click
-
-Download `kite-collector_windows_amd64.exe`, rename it to `kite-collector.exe`, and double-click it. An interactive menu will appear.
+Use the direct `.exe` asset, not the `.tar.gz` archive. Opening the executable
+from inside the archive triggers Windows' compressed-folder warning.
 
 ## First scan
 

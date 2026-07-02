@@ -38,11 +38,9 @@ build: windows-resources
 	done
 
 # windows-resources generates the .syso resource that embeds app.manifest
-# into the Windows binary. The manifest declares Common-Controls 6.0 (so
-# lxn/walk renders modern themed widgets in the install wizard) and
-# requestedExecutionLevel=requireAdministrator (so double-click triggers
-# the UAC prompt automatically). Without this step, the wizard still
-# launches but draws Win95-era widgets and skips UAC auto-elevation.
+# into the Windows binary. The manifest declares Common-Controls 6.0 so
+# lxn/walk renders modern themed widgets in the install wizard. Without this
+# step, the wizard still launches but draws Win95-era widgets.
 #
 # The .syso is build-tagged by filename suffix: rsrc_windows_amd64.syso is
 # only linked when GOOS=windows && GOARCH=amd64. We deliberately produce a

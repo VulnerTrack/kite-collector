@@ -54,6 +54,12 @@ curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download
 
 # macOS
 curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download/kite-collector_darwin_arm64.tar.gz | tar xz
+
+# Windows (PowerShell)
+irm https://get.kite-collector.dev/install.ps1 | iex
+
+# Windows fast binary-only install
+& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService
 ```
 
 ### Build from Source

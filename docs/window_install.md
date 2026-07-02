@@ -14,11 +14,17 @@ the same install command works identically on Linux (systemd) and macOS
 Open PowerShell and run:
 
 ```powershell
-irm https://github.com/VulnerTrack/kite-collector/releases/latest/download/install.ps1 | iex
+irm https://get.kite-collector.dev/install.ps1 | iex
 ```
 
 This is self-contained: it downloads the binary, adds it to your PATH, and
 registers a **per-user** Windows service. No elevation required.
+
+For the fastest binary-only install, skip service registration:
+
+```powershell
+& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService
+```
 
 After it finishes:
 
@@ -32,9 +38,10 @@ kite-collector service status --user
 
 `install.ps1` performs five steps:
 
-1. Detects the OS architecture (`amd64` or `386`).
-2. Resolves the latest `kite-collector_windows_<arch>.exe` asset from the
-   [GitHub Releases API](https://github.com/VulnerTrack/kite-collector/releases).
+1. Verifies that the host is 64-bit Windows (`amd64`).
+2. Downloads the latest `kite-collector_windows_amd64_bin.exe` asset directly
+   from the GitHub Releases `latest/download` URL, avoiding a separate API
+   request.
 3. Downloads it to `%LOCALAPPDATA%\kite-collector\kite-collector.exe`.
 4. Appends that directory to the **user** `Path` environment variable.
 5. Runs `kite-collector.exe install --user --binary-dir %LOCALAPPDATA%\kite-collector`
@@ -71,24 +78,31 @@ This registers the service against the SCM as `LocalSystem`. Default paths:
 - Binary: `%ProgramFiles%\kite-collector\kite-collector.exe`
 - Certificate store: `%ProgramData%\kite-collector`
 
-## Manual install (no PowerShell script)
+## Direct graphical setup
 
 If you prefer not to run the one-liner:
 
-1. Download `kite-collector_windows_amd64.exe` from
+1. Download `kite-collector_windows_amd64_bin.exe` from
    [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases).
-2. Rename it to `kite-collector.exe` and place it in a stable directory (e.g.
-   `C:\Program Files\kite-collector\` for system installs or
-   `%LOCALAPPDATA%\kite-collector\` for user installs).
-3. From an elevated (system) or normal (user) PowerShell:
+2. Rename it to `kite-collector.exe`.
+3. Double-click it to open the graphical setup.
 
-   ```powershell
-   # System install
-   kite-collector.exe install --binary-dir "C:\Program Files\kite-collector"
+Use the direct `.exe` asset for this flow, not the `.tar.gz` archive. Running
+an executable from inside a compressed archive causes Windows to show an
+extra extraction warning before setup opens.
 
-   # — or — user install
-   kite-collector.exe install --user --binary-dir "$env:LOCALAPPDATA\kite-collector"
-   ```
+## Manual install from PowerShell
+
+For scripted installs, place `kite-collector.exe` in a stable directory and
+run:
+
+```powershell
+# System install
+kite-collector.exe install --binary-dir "C:\Program Files\kite-collector"
+
+# Or user install
+kite-collector.exe install --user --binary-dir "$env:LOCALAPPDATA\kite-collector"
+```
 
 ## Install flags
 
