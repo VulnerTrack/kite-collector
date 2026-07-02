@@ -56,6 +56,9 @@ brew install vulnertrack/tap/kite-collector
 
 # Windows (PowerShell)
 irm https://get.kite-collector.dev/install.ps1 | iex
+
+# Windows rapido, solo binario
+& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService
 ```
 
 ### Compilar desde el código fuente

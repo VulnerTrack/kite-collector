@@ -31,7 +31,7 @@ import (
 // app manifest is embedded via a .syso resource. The app.manifest in this
 // directory plus `go run github.com/akavel/rsrc@latest -manifest app.manifest
 // -o rsrc_windows_amd64.syso` produces that resource. Without it the wizard
-// still works but draws with Win95-era widgets and skips the UAC auto-elevate.
+// still works but draws with Win95-era widgets.
 func runWizard() error {
 	m := newWizardModel()
 
@@ -139,17 +139,23 @@ func runWizard() error {
 	// the same on both surfaces.
 	renderConfirm := func() {
 		readSettings()
+		serviceStep := fmt.Sprintf("  3. Register the Windows service \"%s\"\r\n     (runs as %s)\r\n\r\n",
+			installer.SvcDisplayName,
+			modeLabel(m.opts.UserMode),
+		)
+		if m.opts.UserMode {
+			serviceStep = "  3. Leave service registration for later\r\n     (requires Administrator privileges on Windows)\r\n\r\n"
+		}
 		s := fmt.Sprintf(
 			"The wizard will:\r\n\r\n"+
 				"  1. Copy this binary to:\r\n     %s\r\n\r\n"+
 				"  2. Create the certificate store at:\r\n     %s\r\n\r\n"+
-				"  3. Register the Windows service \"%s\"\r\n     (runs as %s)\r\n\r\n"+
+				"%s"+
 				"After install you can finish onboarding (enroll, run probes,\r\n"+
 				"start streaming) from the dashboard.",
 			m.opts.BinaryPath(),
 			m.opts.CertsDir,
-			installer.SvcDisplayName,
-			modeLabel(m.opts.UserMode),
+			serviceStep,
 		)
 		_ = confirmText.SetText(s)
 	}
@@ -205,7 +211,11 @@ func runWizard() error {
 			appendProgress("Creating certificate store → " + m.opts.CertsDir)
 			mw.Synchronize(func() { progressBar.SetValue(40) })
 
-			appendProgress(fmt.Sprintf("Registering service %q", installer.SvcName))
+			if m.opts.UserMode {
+				appendProgress("Skipping service registration (Administrator required on Windows)")
+			} else {
+				appendProgress(fmt.Sprintf("Registering service %q", installer.SvcName))
+			}
 			mw.Synchronize(func() { progressBar.SetValue(70) })
 
 			err := newRealInstaller().Install(ctx, m.opts)
@@ -298,10 +308,10 @@ func runWizard() error {
 							decl.Label{Text: "Welcome to Kite Collector Setup", Font: decl.Font{PointSize: 14, Bold: true}},
 							decl.VSpacer{Size: 8},
 							decl.Label{
-								Text: "This wizard installs the Kite Collector agent as a Windows service.\n\n" +
+								Text: "This wizard installs Kite Collector for the current Windows user.\n\n" +
 									"You can review and edit the install paths on the next page. The wizard\n" +
-									"will copy this binary into Program Files, create a certificate store, and\n" +
-									"register the service with Windows.\n\n" +
+									"will copy this binary into your user profile, create a data folder, and\n" +
+									"leave service registration for an Administrator flow if needed.\n\n" +
 									"Click Next to continue.",
 							},
 							decl.VSpacer{},
@@ -356,6 +366,9 @@ func runWizard() error {
 									userMode := userModeChk.Checked()
 									_ = binaryDirEdit.SetText(installer.DefaultBinaryDir(userMode))
 									_ = certsDirEdit.SetText(installer.DefaultCertsDir(userMode))
+									if privNote != nil {
+										_ = privNote.SetText(privilegeHint(m.defaults.Detected.Privileged, userMode))
+									}
 								},
 							},
 							decl.HSpacer{},
@@ -485,6 +498,12 @@ type wizardModel struct {
 
 func newWizardModel() *wizardModel {
 	d := installer.DetectDefaults()
+	// Double-click setup should work for a standard Windows user without UAC.
+	// Keep system installs available from the Settings page, but make the
+	// first-run path per-user so it does not write to Program Files.
+	d.Options.UserMode = true
+	d.Options.BinaryDir = installer.DefaultBinaryDir(true)
+	d.Options.CertsDir = installer.DefaultCertsDir(true)
 	return &wizardModel{
 		defaults: d,
 		opts:     d.Options,
@@ -542,11 +561,24 @@ func formatFinishSuccess(st installer.State) string {
 // command (re-run as Administrator OR run the equivalent CLI invocation),
 // so the operator never leaves the wizard without a next step.
 func formatFinishError(err error, opts installer.Options) string {
+	errText := err.Error()
 	var b strings.Builder
 	b.WriteString("The install did not complete.\r\n\r\n")
 	b.WriteString("Error: ")
-	b.WriteString(err.Error())
+	b.WriteString(errText)
 	b.WriteString("\r\n\r\nWhat to try next:\r\n\r\n")
+	if strings.Contains(strings.ToLower(errText), "already exists") {
+		b.WriteString("  1. Remove the previous kite-collector service, then run setup again:\r\n\r\n")
+		b.WriteString("     kite-collector.exe uninstall --user\r\n")
+		b.WriteString("     sc.exe stop kite-collector\r\n")
+		b.WriteString("     sc.exe delete kite-collector\r\n\r\n")
+		b.WriteString("  2. If sc.exe reports access denied, open PowerShell as Administrator\r\n")
+		b.WriteString("     and run the same sc.exe commands there.\r\n\r\n")
+		b.WriteString("  3. Then run setup again, or run:\r\n\r\n")
+		b.WriteString("     ")
+		b.WriteString(equivalentCLI(opts))
+		return b.String()
+	}
 	b.WriteString("  1. If the error mentions \"access denied\", close this wizard,\r\n")
 	b.WriteString("     right-click kite-collector.exe and choose \"Run as administrator\",\r\n")
 	b.WriteString("     then re-run the wizard.\r\n\r\n")

@@ -5,17 +5,11 @@
 
     Two things this manifest does:
 
-    1. requestedExecutionLevel = requireAdministrator
-       Double-clicking kite-collector.exe (the wizard entry point) triggers
-       the UAC prompt automatically, so the wizard runs elevated and the
-       service registration step in installer.Install can write to
-       %ProgramFiles% and the Service Control Manager.
-
-       Trade-off: this also forces UAC when running CLI subcommands
-       (kite-collector scan, kite-collector query, etc.). If that becomes
-       annoying for power users, switch to `level="asInvoker"` and rely
-       on the wizard's "re-launch as Administrator" remediation copy on
-       the Finish-failure page.
+    1. requestedExecutionLevel = asInvoker
+       Double-clicking kite-collector.exe (the wizard entry point) opens a
+       normal user-mode setup instead of forcing UAC. The wizard defaults to
+       a per-user install under %LOCALAPPDATA%, so the common workstation path
+       does not need Administrator privileges.
 
     2. Common-Controls 6.0 dependency
        lxn/walk renders modern (XP+) themed widgets only when this
@@ -33,7 +27,7 @@
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
       </requestedPrivileges>
     </security>
   </trustInfo>
