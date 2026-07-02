@@ -104,6 +104,20 @@ snapcrafts:
     base: core22
     license: MIT
 
+# Scoop manifests
+scoops:
+  - name: kite-collector
+    ids: [homebrew]
+    repository:
+      owner: VulnerTrack
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: scoop
+    homepage: https://github.com/VulnerTrack/kite-collector
+    description: "Cybersecurity asset discovery, configuration audit, and posture analysis agent"
+    license: MIT
+
 changelog:
   sort: asc
   filters:

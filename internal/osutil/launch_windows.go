@@ -11,7 +11,28 @@ import (
 var (
 	kernel32                = syscall.NewLazyDLL("kernel32.dll")
 	procGetConsoleProcesses = kernel32.NewProc("GetConsoleProcessList") //#nosec G112 -- Windows API, not user input
+	procGetConsoleWindow    = kernel32.NewProc("GetConsoleWindow")
+	user32                  = syscall.NewLazyDLL("user32.dll")
+	procShowWindow          = user32.NewProc("ShowWindow")
 )
+
+// HideConsole hides the console window of the current process on Windows.
+func HideConsole() {
+	hwnd, _, _ := procGetConsoleWindow.Call()
+	if hwnd != 0 {
+		const SW_HIDE = 0
+		_, _, _ = procShowWindow.Call(hwnd, SW_HIDE)
+	}
+}
+
+// ShowConsole restores/shows the console window of the current process on Windows.
+func ShowConsole() {
+	hwnd, _, _ := procGetConsoleWindow.Call()
+	if hwnd != 0 {
+		const SW_SHOW = 5
+		_, _, _ = procShowWindow.Call(hwnd, SW_SHOW)
+	}
+}
 
 // IsDoubleClicked reports whether the binary was launched by double-clicking
 // in Windows Explorer. Detection uses GetConsoleProcessList: when launched
