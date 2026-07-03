@@ -88,14 +88,6 @@
                 Source="kite-collector.exe"
                 KeyPath="yes"/>
 
-            <Environment
-                Id="PathUpdate"
-                Name="PATH"
-                Value="[INSTALLFOLDER]"
-                Action="set"
-                Part="last"
-                System="yes" />
-
             <!--
               ServiceInstall registers the kite-collector service with the
               Windows SCM directly via MSI, instead of relying on the
