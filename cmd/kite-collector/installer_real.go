@@ -75,6 +75,7 @@ func (realInstaller) Install(ctx context.Context, opts installer.Options) error 
 	// to make sure no file locks remain (excluding this installer's process).
 	if runtime.GOOS == "windows" {
 		currentPid := os.Getpid()
+		//#nosec G204 -- PID is an integer retrieved via os.Getpid(), not user input.
 		killCmd := exec.CommandContext(ctx, "taskkill", "/F", "/IM", "kite-collector.exe", "/FI", fmt.Sprintf("PID ne %d", currentPid))
 		setHideWindow(killCmd)
 		_ = killCmd.Run()
