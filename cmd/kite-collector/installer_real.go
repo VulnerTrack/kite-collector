@@ -54,7 +54,7 @@ func (realInstaller) Uninstall(_ context.Context, opts installer.Options) error 
 // name so re-running install is idempotent — matching the CLI's behavior
 // and avoiding "service already registered" footguns when an operator
 // re-clicks the dashboard button.
-func (realInstaller) Install(_ context.Context, opts installer.Options) error {
+func (realInstaller) Install(ctx context.Context, opts installer.Options) error {
 	src, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locate current executable: %w", err)
@@ -75,7 +75,7 @@ func (realInstaller) Install(_ context.Context, opts installer.Options) error {
 	// to make sure no file locks remain (excluding this installer's process).
 	if runtime.GOOS == "windows" {
 		currentPid := os.Getpid()
-		killCmd := exec.Command("taskkill", "/F", "/IM", "kite-collector.exe", "/FI", fmt.Sprintf("PID ne %d", currentPid))
+		killCmd := exec.CommandContext(ctx, "taskkill", "/F", "/IM", "kite-collector.exe", "/FI", fmt.Sprintf("PID ne %d", currentPid))
 		setHideWindow(killCmd)
 		_ = killCmd.Run()
 		time.Sleep(300 * time.Millisecond) // Give the OS a moment to clean up process handles
