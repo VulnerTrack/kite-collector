@@ -19,3 +19,6 @@ func HideConsole() {}
 
 // ShowConsole is a no-op on non-Windows platforms.
 func ShowConsole() {}
+
+// IsAttachedToConsole always returns false on non-Windows platforms.
+func IsAttachedToConsole() bool { return false }
