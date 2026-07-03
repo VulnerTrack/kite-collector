@@ -55,7 +55,12 @@ windows-resources: $(WIN_SYSO)
 $(WIN_SYSO): $(WIN_MANIFEST)
 	@command -v rsrc >/dev/null 2>&1 || go install github.com/akavel/rsrc@latest
 	@echo "  rsrc  $(WIN_MANIFEST) → $(WIN_SYSO)"
-	@rsrc -manifest $(WIN_MANIFEST) -arch amd64 -o $(WIN_SYSO)
+	@if command -v rsrc >/dev/null 2>&1; then \
+		rsrc -manifest $(WIN_MANIFEST) -arch amd64 -o $(WIN_SYSO); \
+	else \
+		GOPATH=$$(go env GOPATH); \
+		$$GOPATH/bin/rsrc -manifest $(WIN_MANIFEST) -arch amd64 -o $(WIN_SYSO); \
+	fi
 
 clean-windows-resources:
 	rm -f $(WIN_SYSO)
