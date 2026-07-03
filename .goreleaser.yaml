@@ -22,6 +22,7 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
+      - '{{ if eq .Os "windows" }}-H=windowsgui{{ end }}'
     # FreeBSD and OpenBSD are tier-2: they cross-compile cleanly with
     # CGO_ENABLED=0 and the pure-Go modernc.org/sqlite driver, but have no
     # CI runtime tests yet. Identity hardening (TPM, OS keyring) silently
