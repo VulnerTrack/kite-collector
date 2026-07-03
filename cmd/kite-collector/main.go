@@ -3298,8 +3298,26 @@ func main() {
 		return
 	}
 
-	if err := newRootCmd().Execute(); err != nil {
+	err := newRootCmd().Execute()
+
+	if osutil.IsAttachedToConsole() {
+		printFakePrompt()
+	}
+
+	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func printFakePrompt() {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "C:\\"
+	}
+	if osutil.IsPowerShell() {
+		fmt.Printf("\nPS %s> ", cwd)
+	} else {
+		fmt.Printf("\n%s> ", cwd)
 	}
 }
