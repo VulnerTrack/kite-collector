@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"syscall"
 )
 
 // hyperVCollector shells out to PowerShell `Get-VM` and parses the
@@ -48,5 +49,6 @@ func (c *hyperVCollector) Collect(ctx context.Context) ([]VM, error) {
 func defaultHyperVRun(ctx context.Context, args ...string) ([]byte, error) {
 	//#nosec G204 -- fixed flags + an inline script; no user input.
 	cmd := exec.CommandContext(ctx, "powershell.exe", args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.CombinedOutput()
 }

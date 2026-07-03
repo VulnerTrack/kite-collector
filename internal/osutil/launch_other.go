@@ -2,6 +2,13 @@
 
 package osutil
 
+import (
+	"os/exec"
+)
+
+// HideWindow is a no-op on non-Windows platforms.
+func HideWindow(cmd *exec.Cmd) {}
+
 // IsDoubleClicked reports whether the binary was launched by double-clicking
 // in a graphical file manager (e.g. Windows Explorer). On non-Windows
 // platforms this always returns false.

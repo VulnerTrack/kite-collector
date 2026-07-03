@@ -4,9 +4,19 @@ package osutil
 
 import (
 	"os"
+	"os/exec"
 	"syscall"
 	"unsafe"
 )
+
+// HideWindow configures the command so that no command prompt terminal window
+// is created or flashed when executing it on Windows.
+func HideWindow(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.HideWindow = true
+}
 
 var (
 	kernel32                = syscall.NewLazyDLL("kernel32.dll")

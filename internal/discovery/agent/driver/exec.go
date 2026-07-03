@@ -8,6 +8,8 @@ import (
 	"io"
 	"os/exec"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/osutil"
 )
 
 const (
@@ -61,6 +63,7 @@ func runWithLimitsTolerateExit(ctx context.Context, name string, args ...string)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...) //#nosec G204 -- callers pass hardcoded binary names
+	osutil.HideWindow(cmd)
 
 	stderrBuf := &cappedBuffer{max: maxStderrBytes}
 	cmd.Stderr = stderrBuf

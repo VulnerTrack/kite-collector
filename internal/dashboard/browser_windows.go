@@ -3,10 +3,12 @@
 package dashboard
 
 import (
-	"context"
-	"os/exec"
+	"golang.org/x/sys/windows"
 )
 
 func openBrowser(url string) {
-	_ = exec.CommandContext(context.Background(), "cmd", "/c", "start", url).Start() //#nosec G204 -- url is from trusted internal code
+	u, err := windows.UTF16PtrFromString(url)
+	if err == nil {
+		_ = windows.ShellExecute(0, nil, u, nil, nil, windows.SW_SHOWNORMAL)
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"syscall"
 )
 
 // windowsTaskCollector shells out to PowerShell with
@@ -52,5 +53,6 @@ func (c *windowsTaskCollector) Collect(ctx context.Context) ([]Job, error) {
 func defaultWindowsRun(ctx context.Context, args ...string) ([]byte, error) {
 	//#nosec G204 -- fixed flags + an inline script; no user input.
 	cmd := exec.CommandContext(ctx, "powershell.exe", args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.CombinedOutput()
 }

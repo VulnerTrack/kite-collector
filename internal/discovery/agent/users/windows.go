@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"syscall"
 )
 
 // windowsCollector enumerates Windows local user accounts via
@@ -54,5 +55,6 @@ func (c *windowsCollector) Collect(ctx context.Context) ([]User, error) {
 func defaultWindowsRun(ctx context.Context, args ...string) ([]byte, error) {
 	//#nosec G204 -- fixed flags + an inline script; no user input.
 	cmd := exec.CommandContext(ctx, "powershell.exe", args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.CombinedOutput()
 }
