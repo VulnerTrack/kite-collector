@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"syscall"
 )
 
 // powershellCollector shells out to PowerShell with PowerShellScript,
@@ -53,5 +54,6 @@ func (c *powershellCollector) Collect(ctx context.Context) (Info, error) {
 func defaultRun(ctx context.Context, args ...string) ([]byte, error) {
 	//#nosec G204 -- args are fixed flags + an inline script; no user input.
 	cmd := exec.CommandContext(ctx, "powershell.exe", args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.CombinedOutput()
 }

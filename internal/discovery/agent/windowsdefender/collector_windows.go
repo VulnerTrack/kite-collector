@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"syscall"
 )
 
 type powershellCollector struct {
@@ -42,5 +43,6 @@ func (c *powershellCollector) Collect(ctx context.Context) (State, error) {
 func defaultRun(ctx context.Context, args ...string) ([]byte, error) {
 	//#nosec G204 -- fixed flags + an inline script; no user input.
 	cmd := exec.CommandContext(ctx, "powershell.exe", args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.CombinedOutput()
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/kardianos/service"
 
@@ -61,7 +63,35 @@ func (realInstaller) Install(_ context.Context, opts installer.Options) error {
 
 	dst := opts.BinaryPath()
 
-	if binErr := installer.InstallBinary(src, dst); binErr != nil {
+	// Stop any existing service before copying the binary to release the file lock
+	if runtime.GOOS == "windows" && !opts.UserMode {
+		cfg := installer.BuildSvcConfig(opts)
+		if svc, err := service.New(&program{}, cfg); err == nil {
+			_ = svc.Stop()
+		}
+	}
+
+	// Forcefully kill any other running instances of kite-collector.exe on Windows
+	// to make sure no file locks remain (excluding this installer's process).
+	if runtime.GOOS == "windows" {
+		currentPid := os.Getpid()
+		killCmd := exec.Command("taskkill", "/F", "/IM", "kite-collector.exe", "/FI", fmt.Sprintf("PID ne %d", currentPid))
+		setHideWindow(killCmd)
+		_ = killCmd.Run()
+		time.Sleep(300 * time.Millisecond) // Give the OS a moment to clean up process handles
+	}
+
+	// Retry loop for copying and renaming the binary, since Windows might take a moment
+	// to release the file lock on the running executable after stopping/killing the process.
+	var binErr error
+	for i := 0; i < 5; i++ {
+		binErr = installer.InstallBinary(src, dst)
+		if binErr == nil {
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if binErr != nil {
 		return fmt.Errorf("install binary: %w", binErr)
 	}
 	if mkErr := os.MkdirAll(opts.CertsDir, 0o750); mkErr != nil {
@@ -79,7 +109,8 @@ func (realInstaller) Install(_ context.Context, opts installer.Options) error {
 	if svcErr != nil {
 		return fmt.Errorf("create service handle: %w", svcErr)
 	}
-	// Best-effort uninstall first so re-install replaces any stale unit.
+	// Best-effort stop and uninstall first so re-install replaces any stale unit.
+	_ = svc.Stop()
 	_ = svc.Uninstall()
 	if instErr := svc.Install(); instErr != nil {
 		return fmt.Errorf("install service: %w", instErr)
