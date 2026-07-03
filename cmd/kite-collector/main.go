@@ -3292,6 +3292,7 @@ func main() {
 		// double-click flow stays useful for dev work on macOS/Linux.
 		if err := runWizard(); err != nil {
 			osutil.ShowConsole()
+			fmt.Printf("Wizard initialization failed: %v\n", err)
 			runInteractiveMenu()
 		}
 		return
