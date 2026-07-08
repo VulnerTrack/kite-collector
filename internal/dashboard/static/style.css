@@ -382,6 +382,266 @@ header.topbar {
   .topbar .brand-sub { display: none; }
 }
 
+/* Kite launch/auth surface */
+.kite-auth-page {
+  min-height: 100vh;
+  background: #fff;
+  color: #202124;
+}
+.kite-auth-window {
+  min-height: 100vh;
+  background: #fff;
+}
+.kite-auth-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 104px;
+  padding: 32px 40px 0;
+  margin: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #202124;
+  box-shadow: none;
+}
+.kite-auth-product {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  color: #202124;
+  text-decoration: none;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+.kite-auth-product img {
+  display: block;
+  width: 132px;
+  height: auto;
+}
+.kite-auth-menu {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #5f6368;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.kite-auth-menu:hover {
+  background: #f1f3f4;
+}
+.kite-auth-shell {
+  width: min(1100px, calc(100vw - 64px));
+  min-height: calc(100vh - 104px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: center;
+  gap: 72px;
+  padding: 24px 0 72px;
+}
+.kite-auth-copy {
+  max-width: 440px;
+  padding-left: 24px;
+}
+.kite-auth-copy h1 {
+  margin: 0;
+  font-size: 1.65rem;
+  line-height: 1.25;
+  font-weight: 500;
+  color: #3c4043;
+}
+.kite-auth-copy p {
+  margin: 18px 0 0;
+  max-width: 360px;
+  color: #5f6368;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+.kite-auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 28px;
+  margin-top: 28px;
+}
+.kite-auth-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 108px;
+  min-height: 44px;
+  padding: 0 24px;
+  border-radius: 24px;
+  background: var(--palette-primary-main);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.2);
+}
+.kite-auth-primary:hover {
+  background: var(--palette-primary-dark);
+}
+.kite-auth-secondary {
+  color: var(--palette-primary-dark);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.kite-auth-secondary:hover {
+  text-decoration: underline;
+}
+.kite-auth-collector {
+  margin-top: 28px !important;
+  font-size: 0.8rem !important;
+  color: #80868b !important;
+}
+.kite-auth-collector code {
+  font-size: 0.78rem;
+}
+.kite-auth-illustration {
+  position: relative;
+  width: 340px;
+  height: 260px;
+  justify-self: center;
+}
+.kite-auth-folder {
+  position: absolute;
+  left: 34px;
+  top: 68px;
+  width: 88px;
+  height: 58px;
+  border: 2px solid #8c8f94;
+  border-radius: 8px;
+  background: #ffe39b;
+}
+.kite-auth-folder::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -18px;
+  width: 44px;
+  height: 22px;
+  border: 2px solid #8c8f94;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: #ffe39b;
+}
+.kite-auth-document {
+  position: absolute;
+  left: 76px;
+  top: 50px;
+  width: 160px;
+  height: 200px;
+  border: 2px solid #8c8f94;
+  border-radius: 6px;
+  background: #ffe5e5;
+}
+.kite-auth-document::before {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 46px;
+  height: 46px;
+  border-left: 2px solid #8c8f94;
+  border-bottom: 2px solid #8c8f94;
+  background: #fff;
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+}
+.kite-auth-document span {
+  position: absolute;
+  left: 36px;
+  top: 62px;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: var(--palette-primary-main);
+}
+.kite-auth-document span::before,
+.kite-auth-document span::after {
+  content: "";
+  position: absolute;
+  background: #fff;
+}
+.kite-auth-document span::before {
+  width: 48px;
+  height: 14px;
+  left: 18px;
+  top: 35px;
+}
+.kite-auth-document span::after {
+  width: 14px;
+  height: 48px;
+  left: 35px;
+  top: 18px;
+}
+.kite-auth-dot {
+  position: absolute;
+  right: 14px;
+  top: 82px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--palette-success-main);
+}
+.kite-auth-illustration::after {
+  content: "";
+  position: absolute;
+  left: 62px;
+  right: 18px;
+  bottom: 8px;
+  height: 2px;
+  background: #8c8f94;
+  opacity: 0.7;
+}
+
+@media (max-width: 860px) {
+  .kite-auth-topbar {
+    height: 88px;
+    padding: 24px 24px 0;
+  }
+  .kite-auth-shell {
+    grid-template-columns: 1fr;
+    min-height: calc(100vh - 88px);
+    gap: 32px;
+    padding: 24px 0 48px;
+    width: min(100vw - 40px, 560px);
+  }
+  .kite-auth-copy {
+    padding-left: 0;
+  }
+  .kite-auth-illustration {
+    width: 280px;
+    height: 220px;
+    transform: scale(0.86);
+    transform-origin: top center;
+  }
+}
+
+@media (max-width: 520px) {
+  .kite-auth-product {
+    gap: 10px;
+    font-size: 1.25rem;
+  }
+  .kite-auth-product img {
+    width: 112px;
+  }
+  .kite-auth-actions {
+    gap: 18px;
+  }
+  .kite-auth-primary {
+    min-width: 102px;
+    padding: 0 20px;
+  }
+  .kite-auth-illustration {
+    display: none;
+  }
+}
+
 /* Left sidebar — sectioned list of view + table links. .sidenav nav
  * overrides the default horizontal <nav> bar styling. */
 .sidenav {
