@@ -2550,7 +2550,7 @@ installed service uses, so this command Just Works after install.`,
 				ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 				defer cancel()
 				if !noBrowser {
-					go dashboard.OpenBrowser("http://" + addr)
+					go dashboard.OpenBrowser(dashboardLoginURL(addr))
 				}
 				return runAgent(ctx, cfgFile, dbPath, "", certsDir, "", addr, false, true)
 			}
@@ -2612,7 +2612,7 @@ installed service uses, so this command Just Works after install.`,
 			}()
 
 			if !noBrowser {
-				dashboard.OpenBrowser("http://" + addr)
+				dashboard.OpenBrowser(dashboardLoginURL(addr))
 			}
 
 			<-ctx.Done()
@@ -2652,6 +2652,25 @@ func dashboardModeLabel(withAgent, enableInstall bool) string {
 	default:
 		return "inspector"
 	}
+}
+
+func dashboardLoginURL(addr string) string {
+	base := "http://" + dashboardBrowserAddr(addr)
+	return base + "/kite-login?collector=" + url.QueryEscape(base)
+}
+
+func dashboardBrowserAddr(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return "127.0.0.1" + addr
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		return net.JoinHostPort("127.0.0.1", port)
+	}
+	return addr
 }
 
 // ---------------------------------------------------------------------------

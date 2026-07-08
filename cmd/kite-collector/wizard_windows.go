@@ -37,13 +37,17 @@ func runWizard() error {
 	}
 
 	var (
-		mw           *walk.MainWindow
-		progressBar  *walk.ProgressBar
-		statusLbl    *walk.Label
-		installBtn   *walk.PushButton
-		cancelBtn    *walk.PushButton
-		logoBmp      *walk.Bitmap
-		installed    bool
+		mw                     *walk.MainWindow
+		progressBar            *walk.ProgressBar
+		descLbl                *walk.Label
+		statusLbl              *walk.Label
+		installBtn             *walk.PushButton
+		cancelBtn              *walk.PushButton
+		launchPushBtn          *walk.PushButton
+		logoBmp                *walk.Bitmap
+		installed              bool
+		installCancelContainer *walk.Composite
+		launchContainer        *walk.Composite
 	)
 
 	// Create bitmap from decoded image
@@ -85,7 +89,7 @@ func runWizard() error {
 				},
 				decl.VSpacer{Size: 10},
 				decl.Label{
-					Text:      "Vulnertrack Kite Collector has been successfully installed.\n\nDashboard URL: http://127.0.0.1:9090",
+					Text:      "Vulnertrack Kite Collector has been successfully installed.\n\nPortal URL: http://127.0.0.1:9090/kite-login",
 					Font:      decl.Font{Family: "Segoe UI", PointSize: 10},
 					TextColor: walk.RGB(108, 117, 125),
 				},
@@ -183,102 +187,117 @@ func runWizard() error {
 				installed = true
 				progressBar.SetVisible(false)
 
-				_ = statusLbl.SetText("Installation complete. Click Finish to complete the setup.")
+				_ = descLbl.SetText("Vulnertrack Kite Collector has been successfully installed.")
+				_ = statusLbl.SetText("Portal URL: http://127.0.0.1:9090/kite-login")
+				statusLbl.SetTextColor(walk.RGB(33, 37, 41))
 
-				installBtn.SetEnabled(true)
-				_ = installBtn.SetText("Finish")
-
-				cancelBtn.SetVisible(false)
+				installCancelContainer.SetVisible(false)
+				launchContainer.SetVisible(true)
 			})
 		}()
 	}
 
-	// Build window with a modern split-layout (dark brand sidebar on the left, white content on the right)
+	// Build window with a modern simplified layout (centered card design)
 	err = (decl.MainWindow{
 		AssignTo:   &mw,
 		Title:      "Vulnertrack Kite Collector Setup",
-		MinSize:    decl.Size{Width: 520, Height: 350},
-		MaxSize:    decl.Size{Width: 520, Height: 350},
-		Size:       decl.Size{Width: 520, Height: 350},
+		MinSize:    decl.Size{Width: 440, Height: 380},
+		MaxSize:    decl.Size{Width: 440, Height: 380},
+		Size:       decl.Size{Width: 440, Height: 380},
 		Background: decl.SolidColorBrush{Color: walk.RGB(255, 255, 255)},
-		Layout:     decl.HBox{MarginsZero: true, Spacing: 0},
+		Layout:     decl.VBox{Margins: decl.Margins{Left: 30, Top: 30, Right: 30, Bottom: 30}, Spacing: 0},
 		Children: []decl.Widget{
-			// Left Column: Brand Sidebar (Dark theme)
-			decl.Composite{
-				Background: decl.SolidColorBrush{Color: walk.RGB(24, 24, 27)}, // Zinc-900
-				Layout:     decl.VBox{Margins: decl.Margins{Left: 15, Top: 30, Right: 15, Bottom: 30}},
-				MinSize:    decl.Size{Width: 160, Height: 350},
-				MaxSize:    decl.Size{Width: 160, Height: 350},
-				Children: []decl.Widget{
-					decl.VSpacer{},
-					decl.Composite{
-						Background: decl.SolidColorBrush{Color: walk.RGB(24, 24, 27)},
-						Layout:     decl.HBox{MarginsZero: true},
-						Children: []decl.Widget{
-							decl.HSpacer{},
-							decl.ImageView{
-								Image:   logoBmp,
-								Mode:    decl.ImageViewModeShrink,
-								MinSize: decl.Size{Width: 110, Height: 110},
-								MaxSize: decl.Size{Width: 110, Height: 110},
-							},
-							decl.HSpacer{},
-						},
-					},
-					decl.VSpacer{},
-				},
-			},
-			// Right Column: Settings & Content (Light theme)
+			// Centered Logo
 			decl.Composite{
 				Background: decl.SolidColorBrush{Color: walk.RGB(255, 255, 255)},
-				Layout:     decl.VBox{Margins: decl.Margins{Left: 25, Top: 35, Right: 25, Bottom: 25}},
+				Layout:     decl.HBox{MarginsZero: true},
 				Children: []decl.Widget{
-					decl.Label{
-						Text:      "Vulnertrack Kite Collector",
-						Font:      decl.Font{Family: "Segoe UI", PointSize: 15, Bold: true},
-						TextColor: walk.RGB(33, 37, 41),
+					decl.HSpacer{},
+					decl.ImageView{
+						Image:   logoBmp,
+						Mode:    decl.ImageViewModeShrink,
+						MinSize: decl.Size{Width: 80, Height: 80},
+						MaxSize: decl.Size{Width: 80, Height: 80},
 					},
-					decl.VSpacer{Size: 10},
-					decl.Label{
-						Text:      "This wizard will configure and run the Vulnertrack Kite Collector agent on your machine.",
-						Font:      decl.Font{Family: "Segoe UI", PointSize: 10},
-						TextColor: walk.RGB(108, 117, 125),
+					decl.HSpacer{},
+				},
+			},
+			decl.VSpacer{Size: 15},
+			// Centered Title
+			decl.Label{
+				Text:      "Vulnertrack Kite Collector",
+				Font:      decl.Font{Family: "Segoe UI", PointSize: 14, Bold: true},
+				TextColor: walk.RGB(33, 37, 41),
+				Alignment: decl.AlignHCenterVCenter,
+			},
+			decl.VSpacer{Size: 10},
+			// Centered Description
+			decl.Label{
+				AssignTo:  &descLbl,
+				Text:      "This wizard will configure and run the Vulnertrack Kite Collector agent on your machine.",
+				Font:      decl.Font{Family: "Segoe UI", PointSize: 10},
+				TextColor: walk.RGB(108, 117, 125),
+				Alignment: decl.AlignHCenterVCenter,
+			},
+			decl.VSpacer{Size: 20},
+			// Progress Bar
+			decl.ProgressBar{
+				AssignTo: &progressBar,
+				MaxValue: 100,
+				MinValue: 0,
+				Visible:  false,
+			},
+			decl.VSpacer{Size: 5},
+			// Status Label
+			decl.Label{
+				AssignTo:  &statusLbl,
+				Text:      "Ready to install.",
+				Font:      decl.Font{Family: "Segoe UI", PointSize: 9},
+				TextColor: walk.RGB(140, 140, 140),
+				Alignment: decl.AlignHCenterVCenter,
+			},
+			decl.VSpacer{Size: 20},
+			// Install / Cancel Buttons Container
+			decl.Composite{
+				AssignTo:   &installCancelContainer,
+				Background: decl.SolidColorBrush{Color: walk.RGB(255, 255, 255)},
+				Layout:     decl.HBox{MarginsZero: true},
+				Children: []decl.Widget{
+					decl.HSpacer{},
+					decl.PushButton{
+						AssignTo:  &installBtn,
+						Text:      "Install",
+						MinSize:   decl.Size{Width: 110, Height: 30},
+						OnClicked: startInstall,
 					},
-					decl.VSpacer{Size: 20},
-					decl.ProgressBar{
-						AssignTo: &progressBar,
-						MaxValue: 100,
-						MinValue: 0,
-						Visible:  false,
+					decl.HSpacer{Size: 10},
+					decl.PushButton{
+						AssignTo:  &cancelBtn,
+						Text:      "Cancel",
+						MinSize:   decl.Size{Width: 110, Height: 30},
+						OnClicked: onCancel,
 					},
-					decl.VSpacer{Size: 5},
-					decl.Label{
-						AssignTo:  &statusLbl,
-						Text:      "Ready to install.",
-						Font:      decl.Font{Family: "Segoe UI", PointSize: 9},
-						TextColor: walk.RGB(140, 140, 140),
-					},
-					decl.VSpacer{},
-					decl.Composite{
-						Background: decl.SolidColorBrush{Color: walk.RGB(255, 255, 255)},
-						Layout:     decl.HBox{MarginsZero: true},
-						Children: []decl.Widget{
-							decl.HSpacer{},
-							decl.PushButton{
-								AssignTo:  &installBtn,
-								Text:      "Install",
-								MinSize:   decl.Size{Width: 110, Height: 28},
-								OnClicked: startInstall,
-							},
-							decl.HSpacer{Size: 10},
-							decl.PushButton{
-								AssignTo:  &cancelBtn,
-								Text:      "Cancel",
-								MinSize:   decl.Size{Width: 110, Height: 28},
-								OnClicked: onCancel,
-							},
+					decl.HSpacer{},
+				},
+			},
+			// Launch Button Container
+			decl.Composite{
+				AssignTo:   &launchContainer,
+				Visible:    false,
+				Background: decl.SolidColorBrush{Color: walk.RGB(255, 255, 255)},
+				Layout:     decl.HBox{MarginsZero: true},
+				Children: []decl.Widget{
+					decl.HSpacer{},
+					decl.PushButton{
+						AssignTo: &launchPushBtn,
+						Text:     "Launch Portal",
+						MinSize:  decl.Size{Width: 140, Height: 34},
+						OnClicked: func() {
+							launchDashboard(opts.BinaryPath())
+							mw.Close()
 						},
 					},
+					decl.HSpacer{},
 				},
 			},
 		},
@@ -286,6 +305,8 @@ func runWizard() error {
 	if err != nil {
 		return fmt.Errorf("create wizard window: %w", err)
 	}
+
+
 
 	mw.Run()
 	return nil

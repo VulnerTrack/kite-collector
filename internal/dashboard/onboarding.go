@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -25,6 +27,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -49,6 +52,7 @@ type onboardingDeps struct {
 	// existing /api/v1/scan handler uses to gate real scan starts vs the
 	// read-only placeholder).
 	ScanEnabled bool
+	TLSConfig   config.TLSConfig
 }
 
 // registerOnboardingRoutes mounts every RFC-0112 dashboard route onto mux.
@@ -59,7 +63,19 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 		deps.Logger = slog.Default()
 	}
 	if deps.ProbeClient == nil {
-		deps.ProbeClient = &http.Client{Timeout: 8 * time.Second}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		if deps.TLSConfig.Enabled {
+			tlsCfg, err := buildTLSConfig(deps.TLSConfig)
+			if err == nil {
+				transport.TLSClientConfig = tlsCfg
+			} else {
+				deps.Logger.Warn("onboarding: failed to build TLS config for ProbeClient", "error", err)
+			}
+		}
+		deps.ProbeClient = &http.Client{
+			Transport: transport,
+			Timeout:   8 * time.Second,
+		}
 	}
 
 	mux.HandleFunc("GET /onboarding", serveOnboardingPage)
@@ -742,6 +758,15 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 		}
 	}
 
+	var tlsCfg *tls.Config
+	if deps.TLSConfig.Enabled {
+		var err error
+		tlsCfg, err = buildTLSConfig(deps.TLSConfig)
+		if err != nil {
+			deps.Logger.Warn("onboarding: failed to build TLS config for TLS probe", "error", err)
+		}
+	}
+
 	// reachDone is closed when the reach probe finishes; the clock goroutine
 	// blocks on this channel so it can consume reachDateHeader without a
 	// data race (channel close happens-before the read after receive).
@@ -770,7 +795,7 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 			if enrolledURL.Scheme != "https" {
 				return probeResult{Result: "skip", Diagnostic: "endpoint is plain http"}
 			}
-			return runTLSProbe(ctx, enrolledURL)
+			return runTLSProbe(ctx, enrolledURL, tlsCfg)
 		})
 	}()
 
@@ -966,7 +991,7 @@ func runDNSProbe(ctx context.Context, host string) probeResult {
 
 // runTLSProbe dials the endpoint host:port and completes a TLS handshake,
 // failing on any cert validation error.
-func runTLSProbe(ctx context.Context, u *url.URL) probeResult {
+func runTLSProbe(ctx context.Context, u *url.URL, tlsCfg *tls.Config) probeResult {
 	host := u.Hostname()
 	port := u.Port()
 	if port == "" {
@@ -974,7 +999,9 @@ func runTLSProbe(ctx context.Context, u *url.URL) probeResult {
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	d := tls.Dialer{}
+	d := tls.Dialer{
+		Config: tlsCfg,
+	}
 	conn, err := d.DialContext(dialCtx, "tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		return probeResult{Result: "fail", Diagnostic: "TLS dial: " + err.Error()}
@@ -1535,3 +1562,61 @@ func newOnboardingWrapKey() ([]byte, error) {
 // ensure uuid import is retained — registerOnboardingRoutes indirectly uses
 // uuid via sqlite.ProbeResultRecord.
 var _ = uuid.Nil
+
+// buildTLSConfig constructs a *tls.Config for onboarding connection checks using config.TLSConfig.
+func buildTLSConfig(cfg config.TLSConfig) (*tls.Config, error) {
+	// Build trusted pool: system roots extended with our private CA.
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		pool = x509.NewCertPool()
+	}
+	if cfg.CAFile != "" {
+		caPEM, readErr := os.ReadFile(cfg.CAFile)
+		if readErr != nil {
+			return nil, fmt.Errorf("read CA file %q: %w", cfg.CAFile, readErr)
+		}
+		pool.AppendCertsFromPEM(caPEM)
+	}
+
+	tlsCfg := &tls.Config{
+		RootCAs:    pool,
+		MinVersion: tls.VersionTLS12,
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return fmt.Errorf("server presented no certificate")
+			}
+			intermediates := x509.NewCertPool()
+			for _, c := range cs.PeerCertificates[1:] {
+				intermediates.AddCert(c)
+			}
+			// Pass 1: full verification — hostname + CA chain (public certs).
+			if _, err := cs.PeerCertificates[0].Verify(x509.VerifyOptions{
+				DNSName:       cs.ServerName,
+				Roots:         pool,
+				Intermediates: intermediates,
+			}); err == nil {
+				return nil
+			}
+			// Pass 2: CA-chain only — private PKI cert issued for internal name.
+			_, err := cs.PeerCertificates[0].Verify(x509.VerifyOptions{
+				Roots:         pool,
+				Intermediates: intermediates,
+				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+			})
+			if err != nil {
+				return fmt.Errorf("verify peer certificate: %w", err)
+			}
+			return nil
+		},
+	}
+
+	if cfg.CertFile != "" && cfg.KeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("load client certificate: %w", err)
+		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
+	}
+
+	return tlsCfg, nil
+}

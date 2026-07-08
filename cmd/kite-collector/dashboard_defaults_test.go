@@ -54,3 +54,12 @@ func TestNewDashboardCmd_HasDefaultOnFlags(t *testing.T) {
 		assert.NotEmpty(t, certs.DefValue, "--certs-dir must have an OS-appropriate default")
 	}
 }
+
+func TestDashboardLoginURL_UsesLocalKiteRoute(t *testing.T) {
+	assert.Equal(t,
+		"http://127.0.0.1:9090/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090",
+		dashboardLoginURL(":9090"))
+	assert.Equal(t,
+		"http://127.0.0.1:9090/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090",
+		dashboardLoginURL("0.0.0.0:9090"))
+}

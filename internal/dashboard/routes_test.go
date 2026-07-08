@@ -125,6 +125,48 @@ func TestRoute_GET_Root_RedirectsToAssetsWhenEnrolled(t *testing.T) {
 		"enrolled host should land on /assets, the steady-state home")
 }
 
+func TestRoute_GET_KiteLogin_ReturnsLaunchAuthPage(t *testing.T) {
+	handler := newTestHandler(t)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `<body class="kite-auth-page">`)
+	assert.Contains(t, body, "Vulnertrack")
+	assert.Contains(t, body, "Sign In")
+	assert.Contains(t, body, "Create Account")
+	assert.Contains(t, body, "http://127.0.0.1:9090")
+}
+
+func TestRoute_GET_KiteSuccess_ReturnsAccessGrantedPage(t *testing.T) {
+	handler := newTestHandler(t)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/kite-success", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `<body class="kite-success-page">`)
+	assert.Contains(t, body, "Success!")
+	assert.Contains(t, body, "You've granted Kite Collector access")
+	assert.Contains(t, body, "Go to Dashboard")
+	assert.Contains(t, body, `href="/assets"`)
+}
+
+func TestRoute_GET_RootWithOAuthParams_ReturnsAccessGrantedPage(t *testing.T) {
+	handler := newTestHandler(t)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?state=abc&code=xyz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `<body class="kite-success-page">`)
+	assert.Contains(t, body, "Go to Dashboard")
+}
+
 // TestRoute_GET_TablesByName_Plain_ReturnsFullShellWithTableContent — a
 // drill-in URL like /tables/scan_runs (a table the migration always creates)
 // MUST also return the full shell with the Tables nav highlighted and the

@@ -69,6 +69,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 	}
 
+	mux.HandleFunc("GET /kite-login", serveKiteLoginPage)
+	mux.HandleFunc("GET /kite-success", serveKiteSuccessPage)
+
 	// Dashboard root — context-aware redirect. Fresh hosts (no enrolled
 	// identity) land on /onboarding so the operator sees the install/enroll
 	// flow immediately instead of an empty /assets page. Once enrollment is
@@ -76,6 +79,11 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	// 307 preserves the request method on the off chance a non-GET client
 	// hits "/".
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("code") || r.URL.Query().Has("state") {
+			serveKiteSuccessPage(w, r)
+			return
+		}
+
 		target := "/assets"
 		if sqliteStore, ok := st.(*sqlite.SQLiteStore); ok {
 			if _, err := sqliteStore.GetEnrolledIdentity(r.Context()); err != nil {
@@ -331,6 +339,10 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		if keyErr != nil {
 			logger.Warn("dashboard: onboarding disabled — no wrap key", "error", keyErr)
 		} else {
+			var tlsCfg config.TLSConfig
+			if opts.BaseConfig != nil {
+				tlsCfg = opts.BaseConfig.Streaming.OTLP.TLS
+			}
 			registerOnboardingRoutes(mux, onboardingDeps{
 				Store:            sqliteStore,
 				StreamCtrl:       opts.StreamController,
@@ -342,6 +354,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				ProbeDuration:    onboardingProbeDurationHistogram(),
 				Installer:        opts.Installer,
 				ScanEnabled:      opts.Coordinator != nil && opts.BaseConfig != nil,
+				TLSConfig:        tlsCfg,
 			})
 		}
 	} else {
