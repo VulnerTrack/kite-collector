@@ -100,6 +100,12 @@ irm https://get.kite-collector.dev/install.ps1 | iex
 make build
 ```
 
+#### Cross-compile for Windows
+
+```bash
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H=windowsgui" -o bin/kite-collector.exe ./cmd/kite-collector
+```
+
 ## Usage
 
 ```bash
