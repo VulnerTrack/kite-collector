@@ -106,7 +106,9 @@ func (c *ContainerEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]m
 
 	containerID := extractContainerIDTag(asset.Tags)
 	if containerID == "" {
-		slog.Warn("container_env_secrets: asset has no container_id tag, skipping", "asset_id", asset.ID)
+		slog.Warn("container_env_secrets: asset has no container_id tag, skipping",
+			"code", string(LogCodeContainerEnvMissingTag),
+			"asset_id", asset.ID)
 		return nil, nil
 	}
 
@@ -126,7 +128,9 @@ func (c *ContainerEnvSecrets) envFor(ctx context.Context, shortID string) (docke
 	if !c.cacheLoaded {
 		envs, err := c.lister.ListContainerEnvs(ctx, c.dockerCfg)
 		if err != nil {
-			slog.Warn("container_env_secrets: list failed, scan skipped", "error", err)
+			slog.Warn("container_env_secrets: list failed, scan skipped",
+				"code", string(LogCodeContainerEnvListFailed),
+				"error", err)
 			c.cache = map[string]dockerdisc.ContainerEnv{}
 			c.cacheLoaded = true
 			return dockerdisc.ContainerEnv{}, false
@@ -136,6 +140,7 @@ func (c *ContainerEnvSecrets) envFor(ctx context.Context, shortID string) (docke
 		for _, e := range envs {
 			if count >= c.maxScan {
 				slog.Warn("container_env_secrets: reached max containers cap; remainder skipped",
+					"code", string(LogCodeContainerEnvMaxCapReached),
 					"max", c.maxScan)
 				break
 			}
@@ -207,7 +212,8 @@ func scanContainerEnv(asset model.Asset, env dockerdisc.ContainerEnv, denyPrefix
 	}
 
 	if len(findings) > 0 {
-		slog.Info("container_env_secrets: findings detected",
+		slog.Info(
+			"container_env_secrets: findings detected",
 			"asset_id", asset.ID,
 			"container_id", shortID,
 			"container_name", env.Name,

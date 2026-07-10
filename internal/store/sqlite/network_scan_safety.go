@@ -24,7 +24,8 @@ func (s *SQLiteStore) WriteScanEvent(ctx context.Context, ev network.ScanEvent) 
 		return fmt.Errorf("network scan event: scan_id is required")
 	}
 	completed := nullTimePtr(ev.CompletedAt)
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(
+		ctx, `
 		INSERT INTO network_scan_events (
 			scan_id, agent_id, scope_hash,
 			started_at, completed_at,
@@ -94,7 +95,8 @@ func (s *SQLiteStore) WriteOpenPorts(
 		if protocol == "" {
 			protocol = "tcp"
 		}
-		if _, execErr := stmt.ExecContext(ctx,
+		if _, execErr := stmt.ExecContext(
+			ctx,
 			id.String(), scanID, p.IPAddress, p.Port, protocol,
 			p.ProbeAt.UTC().Format(time.RFC3339Nano),
 		); execErr != nil {
@@ -119,7 +121,8 @@ func (s *SQLiteStore) WriteGuardEvent(
 		return fmt.Errorf("uuid v7 for guard event: %w", err)
 	}
 	scanID := nullStr(ev.ScanID)
-	_, err = s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(
+		ctx, `
 		INSERT INTO safety_guard_events (
 			id, guard_type, action_taken,
 			triggered_at, input_summary,
@@ -283,7 +286,8 @@ func (s *SQLiteStore) ListNetworkOpenPorts(
 	if offset < 0 {
 		offset = 0
 	}
-	rows, err := s.db.QueryContext(ctx, query,
+	rows, err := s.db.QueryContext(
+		ctx, query,
 		sinceArg, sinceArg,
 		f.ScanID, f.ScanID,
 		limit, offset,
@@ -334,7 +338,8 @@ func (s *SQLiteStore) ListSafetyGuardEvents(
 	if offset < 0 {
 		offset = 0
 	}
-	rows, err := s.db.QueryContext(ctx, query,
+	rows, err := s.db.QueryContext(
+		ctx, query,
 		sinceArg, sinceArg,
 		f.GuardType, f.GuardType,
 		limit, offset,

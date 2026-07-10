@@ -65,7 +65,8 @@ type ReconcileResult struct {
 func (r *Reconciler) ReconcileScan(ctx context.Context, scanID uuid.UUID) (ReconcileResult, error) {
 	res := ReconcileResult{}
 
-	r.logger.Info("reconcile starting",
+	r.logger.Info(
+		"reconcile starting",
 		"code", string(LogCodeReconcileStart),
 		"scan_id", scanID,
 		"canary_expected", len(r.canary.ExpectedCollectors),
@@ -93,7 +94,8 @@ func (r *Reconciler) ReconcileScan(ctx context.Context, scanID uuid.UUID) (Recon
 		// produces a signature that verifies.
 		if !identity.Verify(pub, hb.CanonicalPayload(), hb.Signature) {
 			res.BadSignatures++
-			r.logger.Warn("heartbeat signature failed verification",
+			r.logger.Warn(
+				"heartbeat signature failed verification",
 				"code", string(LogCodeTamperBadSignature),
 				"scan_id", scanID,
 				"source", hb.Source,
@@ -109,7 +111,8 @@ func (r *Reconciler) ReconcileScan(ctx context.Context, scanID uuid.UUID) (Recon
 		// admin wiped the field) — skip silently.
 		if expectedHash != "" && hb.BinaryHash != "" && hb.BinaryHash != expectedHash {
 			res.BinaryHashDrift++
-			r.logger.Warn("running binary hash diverges from expected",
+			r.logger.Warn(
+				"running binary hash diverges from expected",
 				"code", string(LogCodeTamperBinaryDrift),
 				"scan_id", scanID,
 				"source", hb.Source,
@@ -148,7 +151,8 @@ func (r *Reconciler) ReconcileScan(ctx context.Context, scanID uuid.UUID) (Recon
 		sort.Strings(res.ExtraCollectors)
 
 		if len(res.MissingCollectors) > 0 {
-			r.logger.Warn("canary baseline drift: missing collectors",
+			r.logger.Warn(
+				"canary baseline drift: missing collectors",
 				"code", string(LogCodeCanaryMissing),
 				"scan_id", scanID,
 				"missing", res.MissingCollectors,
@@ -158,7 +162,8 @@ func (r *Reconciler) ReconcileScan(ctx context.Context, scanID uuid.UUID) (Recon
 				&res)
 		}
 		if len(res.ExtraCollectors) > 0 {
-			r.logger.Warn("canary baseline drift: extra collectors",
+			r.logger.Warn(
+				"canary baseline drift: extra collectors",
 				"code", string(LogCodeCanaryExtra),
 				"scan_id", scanID,
 				"extra", res.ExtraCollectors,
@@ -169,7 +174,8 @@ func (r *Reconciler) ReconcileScan(ctx context.Context, scanID uuid.UUID) (Recon
 		}
 	}
 
-	r.logger.Info("reconcile complete",
+	r.logger.Info(
+		"reconcile complete",
 		"code", string(LogCodeReconcileComplete),
 		"scan_id", scanID,
 		"heartbeats_checked", res.HeartbeatsChecked,
@@ -206,7 +212,9 @@ func (r *Reconciler) raiseIncident(
 		CreatedAt:    time.Now().UTC(),
 	}
 	if err := r.store.InsertRuntimeIncident(ctx, inc); err != nil {
-		r.logger.Error("reconciler incident persist failed",
+		r.logger.Error(
+			"reconciler incident persist failed",
+			"code", string(LogCodeReconcileIncidentPersistFailed),
 			"scan_id", scanID,
 			"incident_type", kind,
 			"error", err,

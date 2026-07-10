@@ -32,44 +32,54 @@ type EcoTraderFields struct {
 // passwordRE matches a line-anchored credential row in INI /
 // XML / JSON configs.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`)
+	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>` on a single
 // line (Eco Trader settings.xml).
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`)
+	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`,
+)
 
 // loginRE matches `<login>NNN</login>` / `login = NNN`.
 var loginRE = regexp.MustCompile(
-	`(?im)(?:^\s*"?login"?\s*[:=]\s*"?(\d{3,15})"?|<\s*login\s*>(\d{3,15})<\s*/\s*login\s*>)`)
+	`(?im)(?:^\s*"?login"?\s*[:=]\s*"?(\d{3,15})"?|<\s*login\s*>(\d{3,15})<\s*/\s*login\s*>)`,
+)
 
 // serverRE matches `<server>…</server>` / `server = …`.
 var serverRE = regexp.MustCompile(
-	`(?im)(?:^\s*"?(?:server|servidor|host|gateway|endpoint|broker_host)"?\s*[:=]\s*"?([A-Za-z0-9_.\-:/]{3,128})"?|<\s*(?:server|servidor|host|gateway)\s*>([A-Za-z0-9_.\-:/]{3,128})<\s*/\s*(?:server|servidor|host|gateway)\s*>)`)
+	`(?im)(?:^\s*"?(?:server|servidor|host|gateway|endpoint|broker_host)"?\s*[:=]\s*"?([A-Za-z0-9_.\-:/]{3,128})"?|<\s*(?:server|servidor|host|gateway)\s*>([A-Za-z0-9_.\-:/]{3,128})<\s*/\s*(?:server|servidor|host|gateway)\s*>)`,
+)
 
 // fixSessionRE detects a FIX 4.4 session token in a config.
 var fixSessionRE = regexp.MustCompile(
-	`(?i)(?:8=FIX\.4\.4|SenderCompID|TargetCompID|BeginString=FIX|fix[_\- ]?session|fix[_\- ]?initiator|FIX\.4\.4|fix44\.cfg)`)
+	`(?i)(?:8=FIX\.4\.4|SenderCompID|TargetCompID|BeginString=FIX|fix[_\- ]?session|fix[_\- ]?initiator|FIX\.4\.4|fix44\.cfg)`,
+)
 
 // demoAccountRE detects a demo account marker.
 var demoAccountRE = regexp.MustCompile(
-	`(?i)\b(?:demo|simulator|sandbox|paper[_\- ]?trading|cuenta[_\- ]?demo|account[_\- ]?demo|test[_\- ]?env)\b`)
+	`(?i)\b(?:demo|simulator|sandbox|paper[_\- ]?trading|cuenta[_\- ]?demo|account[_\- ]?demo|test[_\- ]?env)\b`,
+)
 
 // matriculaINIRE matches matrícula in INI / settings.xml row.
 var matriculaINIRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:matricula|matr[íi]cula|broker[_\- ]?matricula|rofex[_\- ]?matricula|alyc[_\- ]?matricula)"?\s*[:=]\s*"?(\d{1,5})"?`)
+	`(?im)^\s*"?(?:matricula|matr[íi]cula|broker[_\- ]?matricula|rofex[_\- ]?matricula|alyc[_\- ]?matricula)"?\s*[:=]\s*"?(\d{1,5})"?`,
+)
 
 // matriculaXMLRE matches `<matricula>NN</matricula>` in XML.
 var matriculaXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:matricula|matr[íi]cula|broker_?matricula|rofex_?matricula|alyc_?matricula)\s*>(\d{1,5})<\s*/\s*(?:matricula|matr[íi]cula|broker_?matricula|rofex_?matricula|alyc_?matricula)\s*>`)
+	`(?i)<\s*(?:matricula|matr[íi]cula|broker_?matricula|rofex_?matricula|alyc_?matricula)\s*>(\d{1,5})<\s*/\s*(?:matricula|matr[íi]cula|broker_?matricula|rofex_?matricula|alyc_?matricula)\s*>`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>NN-NNNNNNNN-N</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // cuitFromBody runs the key and XML form variants.
 func cuitFromBody(body []byte) string {
@@ -84,25 +94,30 @@ func cuitFromBody(body []byte) string {
 
 // timestampRE matches `YYYY-MM-DD HH:MM[:SS]`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // symbolRowRE matches a watchlist / positions symbol entry
 // (INI / JSON form, not line-anchored).
 var symbolRowRE = regexp.MustCompile(
-	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|instrument|instrumento|underlying)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|instrument|instrumento|underlying)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // symbolXMLRE matches `<symbol>…</symbol>` in XML watchlist.
 var symbolXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:symbol|simbolo|ticker|instrument)\s*>([A-Za-z0-9_\-\./]{2,32})<\s*/\s*(?:symbol|simbolo|ticker|instrument)\s*>`)
+	`(?i)<\s*(?:symbol|simbolo|ticker|instrument)\s*>([A-Za-z0-9_\-\./]{2,32})<\s*/\s*(?:symbol|simbolo|ticker|instrument)\s*>`,
+)
 
 // lotsRE matches a per-position lot count (INI / JSON form,
 // not line-anchored).
 var lotsRE = regexp.MustCompile(
-	`(?i)"?(?:lots?|lotes?|quantity|cantidad|qty|size)"?\s*[:=]\s*"?(\d{1,7})"?`)
+	`(?i)"?(?:lots?|lotes?|quantity|cantidad|qty|size)"?\s*[:=]\s*"?(\d{1,7})"?`,
+)
 
 // concertacionRE detects session concertación markers.
 var concertacionRE = regexp.MustCompile(
-	`(?i)(?:concertaci[oó]n|trade[_\- ]?confirmed|fill|execution[_\- ]?report|execrpt|execution[_\- ]?confirmed|order[_\- ]?filled)`)
+	`(?i)(?:concertaci[oó]n|trade[_\- ]?confirmed|fill|execution[_\- ]?report|execrpt|execution[_\- ]?confirmed|order[_\- ]?filled)`,
+)
 
 // ParseEcoTraderConfig parses settings.xml / settings.ini.
 func ParseEcoTraderConfig(body []byte) EcoTraderFields {

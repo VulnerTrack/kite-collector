@@ -359,7 +359,8 @@ func ExchangeFromPath(path string) Exchange {
 		return ExchangeUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	// Order matters — more-specific names first to avoid false
 	// substring matches.
 	type entry struct {

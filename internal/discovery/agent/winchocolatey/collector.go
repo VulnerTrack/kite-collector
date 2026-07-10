@@ -162,7 +162,8 @@ func (c *fileCollector) consider(path, user string, out *[]Row) {
 					row.Description = truncate(fields.Description, 512)
 					row.Tags = fields.Tags
 					row.DPDSClass = ClassifyDPDS(
-						row.PackageID, row.Title, row.Tags)
+						row.PackageID, row.Title, row.Tags,
+					)
 				}
 			}
 		}

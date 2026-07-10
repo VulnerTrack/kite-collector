@@ -624,7 +624,8 @@ func TestHTTPProbeHostDerivationPriority(t *testing.T) {
 func TestHTTPProbeUnreachableErrors(t *testing.T) {
 	// 127.0.0.1:1 will reject immediately on linux/darwin.
 	_, err := HTTPProbe{Timeout: 200 * time.Millisecond}.Probe(
-		context.Background(), SchemeHTTP, Target{IP: "127.0.0.1", Port: 1})
+		context.Background(), SchemeHTTP, Target{IP: "127.0.0.1", Port: 1},
+	)
 	if err == nil {
 		t.Fatal("expected probe error against unreachable port")
 	}

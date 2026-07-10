@@ -73,7 +73,7 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 	if collectInterfaces {
 		ifaces, err := collectNetworkInterfaces()
 		if err != nil {
-			slog.Warn("agent probe: failed to collect interfaces", "error", err)
+			slog.Warn("agent probe: failed to collect interfaces", "code", string(LogCodeProbeInterfacesCollectFailed), "error", err)
 		} else {
 			slog.Info("agent probe: collected interfaces", "count", len(ifaces))
 			// Store interfaces as a detail we can use after dedup assigns IDs.
@@ -90,7 +90,7 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 	if collectSoftware {
 		software, err := collectInstalledSoftware(ctx)
 		if err != nil {
-			slog.Warn("agent probe: failed to collect software", "error", err)
+			slog.Warn("agent probe: failed to collect software", "code", string(LogCodeProbeSoftwareCollectFailed), "error", err)
 		} else {
 			slog.Info("agent probe: collected software", "count", len(software))
 		}
@@ -105,7 +105,7 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 	if collectDrivers {
 		drivers, bindings, err := collectLoadedDrivers(ctx)
 		if err != nil {
-			slog.Warn("agent probe: failed to collect drivers", "error", err)
+			slog.Warn("agent probe: failed to collect drivers", "code", string(LogCodeProbeDriversCollectFailed), "error", err)
 		} else {
 			slog.Info("agent probe: collected drivers",
 				"drivers", len(drivers), "bindings", len(bindings))
@@ -127,7 +127,7 @@ func collectLoadedDrivers(ctx context.Context) ([]driver.LoadedDriver, []driver.
 	reg := driver.NewRegistry()
 	res := reg.Collect(ctx)
 	if res.HasErrors() {
-		slog.Warn("agent probe: driver collector errors", "count", res.TotalErrors())
+		slog.Warn("agent probe: driver collector errors", "code", string(LogCodeProbeDriverCollectorErrors), "count", res.TotalErrors())
 	}
 	return res.Drivers, res.Bindings, nil
 }
@@ -208,7 +208,7 @@ func collectNetworkInterfaces() ([]model.NetworkInterface, error) {
 		addrs, err := iface.Addrs()
 		if err != nil {
 			slog.Warn("agent probe: failed to get addrs",
-				"interface", iface.Name, "error", err)
+				"code", string(LogCodeProbeInterfaceAddrsFailed), "interface", iface.Name, "error", err)
 			continue
 		}
 
@@ -251,7 +251,7 @@ func collectInstalledSoftware(ctx context.Context) ([]model.InstalledSoftware, e
 	reg := software.NewRegistry()
 	result := reg.Collect(ctx)
 	if result.HasErrors() {
-		slog.Warn("agent probe: software parse errors", "count", result.TotalErrors())
+		slog.Warn("agent probe: software parse errors", "code", string(LogCodeProbeSoftwareParseErrors), "count", result.TotalErrors())
 	}
 	return result.Items, nil
 }

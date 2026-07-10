@@ -13,8 +13,9 @@ const (
 	LogCodeHeartbeatPersistErr LogCode = "observability.heartbeat.persist_failed"
 	LogCodeHeartbeatEmitErr    LogCode = "observability.heartbeat.emit_failed"
 
-	LogCodeReconcileStart    LogCode = "observability.reconcile.start"
-	LogCodeReconcileComplete LogCode = "observability.reconcile.complete"
+	LogCodeReconcileStart                 LogCode = "observability.reconcile.start"
+	LogCodeReconcileComplete              LogCode = "observability.reconcile.complete"
+	LogCodeReconcileIncidentPersistFailed LogCode = "observability.reconcile.incident_persist_failed"
 
 	LogCodeTamperBadSignature LogCode = "observability.tamper.bad_signature"
 	LogCodeTamperBinaryDrift  LogCode = "observability.tamper.binary_hash_drift"

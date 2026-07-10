@@ -149,7 +149,8 @@ func scanAssets(rows pgx.Rows) ([]model.Asset, error) {
 func (s *PostgresStore) UpsertAsset(ctx context.Context, asset model.Asset) error {
 	asset.ComputeNaturalKey()
 
-	_, err := s.pool.Exec(ctx, `
+	_, err := s.pool.Exec(
+		ctx, `
 		INSERT INTO assets (`+assetColumns+`)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		ON CONFLICT(hostname, asset_type) DO UPDATE SET
@@ -207,7 +208,8 @@ func (s *PostgresStore) UpsertAssets(ctx context.Context, assets []model.Asset) 
 		assets[i].ComputeNaturalKey()
 
 		var xmax uint32
-		err = tx.QueryRow(ctx, `
+		err = tx.QueryRow(
+			ctx, `
 			INSERT INTO assets (`+assetColumns+`)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 			ON CONFLICT(hostname, asset_type) DO UPDATE SET
@@ -379,7 +381,8 @@ func (s *PostgresStore) ListAssets(ctx context.Context, filter store.AssetFilter
 // threshold measured from the current time.
 func (s *PostgresStore) GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error) {
 	cutoff := time.Now().UTC().Add(-threshold)
-	rows, err := s.pool.Query(ctx,
+	rows, err := s.pool.Query(
+		ctx,
 		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < $1 ORDER BY last_seen_at ASC, id ASC`,
 		cutoff,
 	)
@@ -435,7 +438,8 @@ func scanEvents(rows pgx.Rows) ([]model.AssetEvent, error) {
 
 // InsertEvent persists a single asset lifecycle event.
 func (s *PostgresStore) InsertEvent(ctx context.Context, event model.AssetEvent) error {
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`INSERT INTO events (`+eventColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		event.ID,
 		string(event.EventType),
@@ -460,7 +464,8 @@ func (s *PostgresStore) InsertEvents(ctx context.Context, events []model.AssetEv
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	for i := range events {
-		_, err = tx.Exec(ctx,
+		_, err = tx.Exec(
+			ctx,
 			`INSERT INTO events (`+eventColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 			events[i].ID,
 			string(events[i].EventType),
@@ -582,7 +587,8 @@ func (s *PostgresStore) CreateScanRun(ctx context.Context, run model.ScanRun) er
 	if triggerSource == "" {
 		triggerSource = "cli"
 	}
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`INSERT INTO scan_runs (`+scanRunColumns+`)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		run.ID,
@@ -616,7 +622,8 @@ func (s *PostgresStore) CompleteScanRun(ctx context.Context, id uuid.UUID, resul
 	if result.Status != "" {
 		status = result.Status
 	}
-	tag, err := s.pool.Exec(ctx, `
+	tag, err := s.pool.Exec(
+		ctx, `
 		UPDATE scan_runs SET
 			completed_at     = $1,
 			status           = $2,
@@ -673,7 +680,8 @@ func (s *PostgresStore) ListScanRuns(ctx context.Context, limit int) ([]model.Sc
 	if limit > 1000 {
 		limit = 1000
 	}
-	rows, err := s.pool.Query(ctx,
+	rows, err := s.pool.Query(
+		ctx,
 		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT $1`,
 		limit,
 	)
@@ -775,7 +783,8 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, s
 	}
 
 	for i := range software {
-		_, err = tx.Exec(ctx,
+		_, err = tx.Exec(
+			ctx,
 			`INSERT INTO installed_software (`+softwareColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 			software[i].ID,
 			assetID,
@@ -800,7 +809,8 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, s
 // ListSoftware returns all installed software records for the given asset,
 // ordered by software name.
 func (s *PostgresStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
-	rows, err := s.pool.Query(ctx,
+	rows, err := s.pool.Query(
+		ctx,
 		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = $1 ORDER BY software_name ASC, version ASC, id ASC`,
 		assetID,
 	)
@@ -890,7 +900,8 @@ func (s *PostgresStore) InsertFindings(ctx context.Context, findings []model.Con
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	for i := range findings {
-		_, err = tx.Exec(ctx,
+		_, err = tx.Exec(
+			ctx,
 			`INSERT INTO config_findings (`+findingColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 			findings[i].ID,
 			findings[i].AssetID,
@@ -972,7 +983,8 @@ func (s *PostgresStore) ListFindings(ctx context.Context, filter store.FindingFi
 // ---------------------------------------------------------------------------
 
 func (s *PostgresStore) InsertRuntimeIncident(ctx context.Context, incident model.RuntimeIncident) error {
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`INSERT INTO runtime_incidents
 		(id, incident_type, component, error_message, stack_trace, scan_run_id,
 		 severity, recovered, error_code, created_at)
@@ -1076,7 +1088,8 @@ func (s *PostgresStore) ListRuntimeIncidents(ctx context.Context, filter store.I
 // ---------------------------------------------------------------------------
 
 func (s *PostgresStore) RecordHeartbeat(ctx context.Context, hb model.ProbeHeartbeat) error {
-	_, err := s.pool.Exec(ctx,
+	_, err := s.pool.Exec(
+		ctx,
 		`INSERT INTO probe_heartbeats
 		(id, scan_run_id, source, status, items_emitted, duration_ms,
 		 binary_hash, signature, created_at)

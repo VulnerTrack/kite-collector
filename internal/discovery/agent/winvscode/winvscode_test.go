@@ -289,7 +289,8 @@ func TestFileCollectorWalksPerUserAndEditor(t *testing.T) {
 		filepath.Join(aliceVSCode, "ms-python.python-2024.0.1", "package.json"),
 		[]byte(`{"name":"python","publisher":"ms-python","version":"2024.0.1",
                 "activationEvents":["onLanguage:python"],
-                "contributes":{"commands":[]}}`), 0o644))
+                "contributes":{"commands":[]}}`), 0o644,
+	))
 
 	// alice's Cursor extensions — third-party with debug contributes.
 	aliceCursor := filepath.Join(tmp, "alice", ".cursor", "extensions")
@@ -298,7 +299,8 @@ func TestFileCollectorWalksPerUserAndEditor(t *testing.T) {
 		filepath.Join(aliceCursor, "smallvendor.debug-helper-1.2.3", "package.json"),
 		[]byte(`{"name":"debug-helper","publisher":"smallvendor","version":"1.2.3",
                 "activationEvents":["*"],
-                "contributes":{"debuggers":[]}}`), 0o644))
+                "contributes":{"debuggers":[]}}`), 0o644,
+	))
 
 	// bob's VSCode-Insiders extension with workspace-trust opt-out.
 	bobInsiders := filepath.Join(tmp, "bob", ".vscode-insiders", "extensions")
@@ -306,14 +308,16 @@ func TestFileCollectorWalksPerUserAndEditor(t *testing.T) {
 	must(t, os.WriteFile(
 		filepath.Join(bobInsiders, "vendor.needs-trust-1.0.0", "package.json"),
 		[]byte(`{"name":"needs-trust","publisher":"vendor","version":"1.0.0",
-                "capabilities":{"untrustedWorkspaces":{"supported":false}}}`), 0o644))
+                "capabilities":{"untrustedWorkspaces":{"supported":false}}}`), 0o644,
+	))
 
 	// Public pseudo-profile must be skipped.
 	pubExt := filepath.Join(tmp, "Public", ".vscode", "extensions")
 	must(t, os.MkdirAll(filepath.Join(pubExt, "evil.skip-1.0.0"), 0o755))
 	must(t, os.WriteFile(
 		filepath.Join(pubExt, "evil.skip-1.0.0", "package.json"),
-		[]byte(`{"name":"skip","publisher":"evil","version":"1.0.0"}`), 0o644))
+		[]byte(`{"name":"skip","publisher":"evil","version":"1.0.0"}`), 0o644,
+	))
 
 	c := &fileCollector{
 		usersBases: []string{tmp},

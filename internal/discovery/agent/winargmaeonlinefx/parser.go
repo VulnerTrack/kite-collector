@@ -34,43 +34,53 @@ type MAEFXFields struct {
 
 // passwordRE matches a password row (line-anchored INI/JSON/XML).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`)
+	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>` on a single line.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`)
+	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`,
+)
 
 // fixDropCopyRE detects FIX 4.x drop-copy session markers.
 var fixDropCopyRE = regexp.MustCompile(
-	`(?i)(?:8=FIX\.4\.[24]|8=FIXT\.1\.1|drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP|TradeCaptureReport)`)
+	`(?i)(?:8=FIX\.4\.[24]|8=FIXT\.1\.1|drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP|TradeCaptureReport)`,
+)
 
 // fixSenderRE matches FIX SenderCompID.
 var fixSenderRE = regexp.MustCompile(
-	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // fixTargetRE matches FIX TargetCompID.
 var fixTargetRE = regexp.MustCompile(
-	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM[:SS]`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // tradeEventRE matches a per-row trade marker.
 var tradeEventRE = regexp.MustCompile(
-	`(?i)(?:trade_id|trade[_\- ]?id|operacion_id|operacion[_\- ]?id|deal[_\- ]?id|ticket[_\- ]?id|nro[_\- ]?operacion)`)
+	`(?i)(?:trade_id|trade[_\- ]?id|operacion_id|operacion[_\- ]?id|deal[_\- ]?id|ticket[_\- ]?id|nro[_\- ]?operacion)`,
+)
 
 // usdAmountRE captures a USD-denominated amount row.
 var usdAmountRE = regexp.MustCompile(
-	`(?i)(?:notional[_\- ]?usd|usd[_\- ]?amount|amount[_\- ]?usd|importe[_\- ]?usd|monto[_\- ]?usd|notional|importe|monto)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:notional[_\- ]?usd|usd[_\- ]?amount|amount[_\- ]?usd|importe[_\- ]?usd|monto[_\- ]?usd|notional|importe|monto)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|counterparty[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|counterparty[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>…</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit|counterparty[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit|counterparty[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // ParseMAEFXCredentials parses a config / credentials body.
 func ParseMAEFXCredentials(body []byte) MAEFXFields {

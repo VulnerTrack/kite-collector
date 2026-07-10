@@ -31,58 +31,71 @@ type IBFields struct {
 
 // passwordRE matches a password row (line-anchored INI/JSON).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|TwsPassword)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|TwsPassword)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiSocketRE matches the TWS API socket-port config row in
 // jts.ini / gateway.cfg.
 var apiSocketRE = regexp.MustCompile(
-	`(?im)^\s*(?:LocalServerPort|api[_\-]?socket[_\-]?port|socketPort|tws[_\-]?api[_\-]?port|gateway[_\-]?port)\s*[:=]\s*(\d{4,5})`)
+	`(?im)^\s*(?:LocalServerPort|api[_\-]?socket[_\-]?port|socketPort|tws[_\-]?api[_\-]?port|gateway[_\-]?port)\s*[:=]\s*(\d{4,5})`,
+)
 
 // ibConnectRE matches a Python `ib.connect(host, port, ...)` /
 // `IB().connect(host, port, ...)` call (ibapi / ib_insync).
 var ibConnectRE = regexp.MustCompile(
-	`(?i)\bconnect\s*\(\s*["'][^"']{1,64}["']\s*,\s*(\d{4,5})`)
+	`(?i)\bconnect\s*\(\s*["'][^"']{1,64}["']\s*,\s*(\d{4,5})`,
+)
 
 // apiSocketAddrRE matches the TWS API bind-address row.
 var apiSocketAddrRE = regexp.MustCompile(
-	`(?im)^\s*(?:LocalServerAddress|api[_\-]?socket[_\-]?addr|socketAddr|bind[_\-]?address)\s*[:=]\s*([0-9a-fA-F\.:]+)`)
+	`(?im)^\s*(?:LocalServerAddress|api[_\-]?socket[_\-]?addr|socketAddr|bind[_\-]?address)\s*[:=]\s*([0-9a-fA-F\.:]+)`,
+)
 
 // liveModeRE detects live-trading mode markers.
 var liveModeRE = regexp.MustCompile(
-	`(?i)(?:live[_\-]?mode\s*[:=]\s*(?:true|1|yes)|live[_\-]?trading\s*[:=]\s*(?:true|1|yes)|TradingMode\s*[:=]\s*live|ibgateway[_\-]?live)`)
+	`(?i)(?:live[_\-]?mode\s*[:=]\s*(?:true|1|yes)|live[_\-]?trading\s*[:=]\s*(?:true|1|yes)|TradingMode\s*[:=]\s*live|ibgateway[_\-]?live)`,
+)
 
 // usernameRE matches IB username (often `TwsUsername` or
 // `LoginId` in jts.ini).
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:TwsUsername|LoginId|UserId|username|user|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:TwsUsername|LoginId|UserId|username|user|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // ibAccountKeyRE matches a `IBAccount: U1234567` key form.
 var ibAccountKeyRE = regexp.MustCompile(
-	`(?i)"?(?:ib[_\-]?account|account[_\-]?id|accountId|account[_\-]?nr|ibkr[_\-]?account)"?\s*[:=]\s*"?(U\d{7})`)
+	`(?i)"?(?:ib[_\-]?account|account[_\-]?id|accountId|account[_\-]?nr|ibkr[_\-]?account)"?\s*[:=]\s*"?(U\d{7})`,
+)
 
 // usdAmountRE captures a USD amount row.
 var usdAmountRE = regexp.MustCompile(
-	`(?i)(?:notional[_\- ]?usd|usd[_\- ]?amount|importe[_\- ]?usd|monto[_\- ]?usd|valor[_\- ]?usd|market[_\- ]?value|portfolio[_\- ]?value|aum[_\- ]?usd|cash[_\- ]?balance)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:notional[_\- ]?usd|usd[_\- ]?amount|importe[_\- ]?usd|monto[_\- ]?usd|valor[_\- ]?usd|market[_\- ]?value|portfolio[_\- ]?value|aum[_\- ]?usd|cash[_\- ]?balance)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // flexExportRE detects Flex Query XML / CSV header markers.
 var flexExportRE = regexp.MustCompile(
-	`(?i)(?:FlexQueryResponse|FlexStatement|<FlexStatements|<Trade |<CashTransactions|FlexQuery|<AccountInformation)`)
+	`(?i)(?:FlexQueryResponse|FlexStatement|<FlexStatements|<Trade |<CashTransactions|FlexQuery|<AccountInformation)`,
+)
 
 // importIbapiRE detects ibapi / ib-insync Python import.
 var importIbapiRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+ibapi|import\s+ibapi|from\s+ib_insync|import\s+ib_insync)`)
+	`(?im)^\s*(?:from\s+ibapi|import\s+ibapi|from\s+ib_insync|import\s+ib_insync)`,
+)
 
 // symbolEntryRE matches a symbol entry in JSON/INI/XML form.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)"?(?:symbol|ticker|instrument|contract|conid)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./\.]{2,32})`)
+	`(?i)"?(?:symbol|ticker|instrument|contract|conid)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./\.]{2,32})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseIBConfig parses a jts.ini / IB Gateway config body.
 func ParseIBConfig(body []byte) IBFields {

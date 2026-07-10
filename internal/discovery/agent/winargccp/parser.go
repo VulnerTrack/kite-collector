@@ -30,51 +30,63 @@ type CCPFields struct {
 
 // marginRequiredRE matches `margin_required` / `margen_requerido`.
 var marginRequiredRE = regexp.MustCompile(
-	`(?i)("|')?(margin[_\- ]?required|margen[_\- ]?requerido|requerido)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(margin[_\- ]?required|margen[_\- ]?requerido|requerido)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // marginPostedRE matches `margin_posted` / `margen_aportado` / `posted_collateral`.
 var marginPostedRE = regexp.MustCompile(
-	`(?i)("|')?(margin[_\- ]?posted|margen[_\- ]?aportado|posted[_\- ]?collateral|aportado|garantia_aportada)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(margin[_\- ]?posted|margen[_\- ]?aportado|posted[_\- ]?collateral|aportado|garantia_aportada)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // marginCallRE matches `margin_call_amount` / `llamada_margen_monto`.
 var marginCallRE = regexp.MustCompile(
-	`(?i)("|')?(margin[_\- ]?call(?:[_\- ]?amount)?|llamada[_\- ]?margen(?:[_\- ]?monto)?|call[_\- ]?amount)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(margin[_\- ]?call(?:[_\- ]?amount)?|llamada[_\- ]?margen(?:[_\- ]?monto)?|call[_\- ]?amount)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // haircutRE matches a `haircut`/`aforo` percent row.
 var haircutRE = regexp.MustCompile(
-	`(?i)("|')?(haircut|aforo|risk[_\- ]?factor)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]+)?)\s*%?`)
+	`(?i)("|')?(haircut|aforo|risk[_\- ]?factor)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]+)?)\s*%?`,
+)
 
 // compensadorBalanceRE matches `compensador_balance` row.
 var compensadorBalanceRE = regexp.MustCompile(
-	`(?i)("|')?(compensador[_\- ]?balance|saldo[_\- ]?compensador|clearing[_\- ]?balance|balance)("|')?\s*[:=>]\s*"?(-?[0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(compensador[_\- ]?balance|saldo[_\- ]?compensador|clearing[_\- ]?balance|balance)("|')?\s*[:=>]\s*"?(-?[0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // defaultFundRE matches `default_fund_contribution`.
 var defaultFundRE = regexp.MustCompile(
-	`(?i)("|')?(default[_\- ]?fund(?:[_\- ]?contribution)?|fondo[_\- ]?garantia(?:[_\- ]?aporte)?|contribucion[_\- ]?fondo)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(default[_\- ]?fund(?:[_\- ]?contribution)?|fondo[_\- ]?garantia(?:[_\- ]?aporte)?|contribucion[_\- ]?fondo)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // stressTestVarRE matches `stress_test_var` / `var_99`.
 var stressTestVarRE = regexp.MustCompile(
-	`(?i)("|')?(stress[_\- ]?test[_\- ]?var|var[_\- ]?99|var_estress)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(stress[_\- ]?test[_\- ]?var|var[_\- ]?99|var_estress)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // settlementDateRE matches `settlement_date: YYYY-MM-DD`.
 var settlementDateRE = regexp.MustCompile(
-	`(?i)("|')?(settlement[_\- ]?date|fecha[_\- ]?liquidacion|fecha_liq)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(settlement[_\- ]?date|fecha[_\- ]?liquidacion|fecha_liq)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // stressBreachRE detects a stress-test-breach marker.
 var stressBreachRE = regexp.MustCompile(
-	`(?i)(?:stress[_\- ]?breach|stress[_\- ]?failed|test[_\- ]?breach|excede[_\- ]?umbral|breach[_\- ]?threshold)`)
+	`(?i)(?:stress[_\- ]?breach|stress[_\- ]?failed|test[_\- ]?breach|excede[_\- ]?umbral|breach[_\- ]?threshold)`,
+)
 
 // defaultFundCallRE detects an extra default-fund call.
 var defaultFundCallRE = regexp.MustCompile(
-	`(?i)(?:default[_\- ]?fund[_\- ]?call|extra[_\- ]?contribution|aporte[_\- ]?extraordinario|llamada[_\- ]?fondo)`)
+	`(?i)(?:default[_\- ]?fund[_\- ]?call|extra[_\- ]?contribution|aporte[_\- ]?extraordinario|llamada[_\- ]?fondo)`,
+)
 
 // matriculaIniRE matches `clearing_member_matricula` row.
 var matriculaIniRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:matricula|clearing[_\- ]?member|compensador[_\- ]?matricula)"?\s*[:=>]\s*"?(\d{1,5})"?`)
+	`(?im)^\s*"?(?:matricula|clearing[_\- ]?member|compensador[_\- ]?matricula)"?\s*[:=>]\s*"?(\d{1,5})"?`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseCCPArtifact parses a CCP body (XML / JSON / CSV) and
 // extracts margin / settlement / haircut scalars.

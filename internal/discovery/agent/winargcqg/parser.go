@@ -30,71 +30,87 @@ type CQGFields struct {
 
 // passwordRE matches a password row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|cqg[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|cqg[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|cqg_secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|cqg_secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches a CQG API key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:cqg[_\-]?api[_\-]?key|cqg[_\-]?token|api[_\-]?key|api[_\-]?token|continuum[_\-]?key)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:cqg[_\-]?api[_\-]?key|cqg[_\-]?token|api[_\-]?key|api[_\-]?token|continuum[_\-]?key)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches CQG username.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:cqg[_\-]?username|cqg[_\-]?user|username|user|email|login[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:cqg[_\-]?username|cqg[_\-]?user|username|user|email|login[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // accountIDRE matches a CQG account ID.
 var accountIDRE = regexp.MustCompile(
-	`(?i)"?(?:cqg[_\-]?account|account[_\-]?id|accountId|trader[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`)
+	`(?i)"?(?:cqg[_\-]?account|account[_\-]?id|accountId|trader[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`,
+)
 
 // fixContinuumRE detects CQG Continuum FIX session markers.
 var fixContinuumRE = regexp.MustCompile(
-	`(?i)(?:8=FIX\.4\.4|8=FIXT\.1\.1|continuum[_\- ]?fix|cqg[_\- ]?continuum|continuum[_\- ]?session)`)
+	`(?i)(?:8=FIX\.4\.4|8=FIXT\.1\.1|continuum[_\- ]?fix|cqg[_\- ]?continuum|continuum[_\- ]?session)`,
+)
 
 // fixDropCopyRE detects FIX drop-copy session markers.
 var fixDropCopyRE = regexp.MustCompile(
-	`(?i)(?:drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP|TradeCaptureReport)`)
+	`(?i)(?:drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP|TradeCaptureReport)`,
+)
 
 // fixSenderRE matches FIX SenderCompID.
 var fixSenderRE = regexp.MustCompile(
-	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // fixTargetRE matches FIX TargetCompID.
 var fixTargetRE = regexp.MustCompile(
-	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // algoSEMarkerRE detects CQG Algo SE strategy markers.
 var algoSEMarkerRE = regexp.MustCompile(
-	`(?i)(?:AlgoSE|algo[_\- ]?strategy|algo[_\- ]?se|cqg[_\- ]?algo|strategy[_\- ]?engine)`)
+	`(?i)(?:AlgoSE|algo[_\- ]?strategy|algo[_\- ]?se|cqg[_\- ]?algo|strategy[_\- ]?engine)`,
+)
 
 // qtraderMarkerRE detects CQG QTrader (block-trading) markers.
 var qtraderMarkerRE = regexp.MustCompile(
-	`(?i)(?:qtrader|q[_\- ]?trader|block[_\- ]?trade|block[_\- ]?workspace|pre[_\- ]?arranged|negotiated[_\- ]?cross)`)
+	`(?i)(?:qtrader|q[_\- ]?trader|block[_\- ]?trade|block[_\- ]?workspace|pre[_\- ]?arranged|negotiated[_\- ]?cross)`,
+)
 
 // blockTradeEventRE matches a per-row block-trade entry.
 var blockTradeEventRE = regexp.MustCompile(
-	`(?i)(?:block_id|trade_id|operacion_id|bloque_id|pre_arranged_id)`)
+	`(?i)(?:block_id|trade_id|operacion_id|bloque_id|pre_arranged_id)`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM:SS`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // messageMarkerRE matches per-message FIX/log markers used to
 // estimate message rate.
 var messageMarkerRE = regexp.MustCompile(
-	`(?i)(?:35=W|35=X|35=D|35=8|MarketDataIncrementalRefresh|md_update|order_event|execution_report)`)
+	`(?i)(?:35=W|35=X|35=D|35=8|MarketDataIncrementalRefresh|md_update|order_event|execution_report)`,
+)
 
 // symbolEntryRE matches a JSON/INI symbol entry or FIX
 // tag `55=DLR`. `symbol_N` / `symbol_<word>` variants accepted
 // to match Algo SE strategies that label legs as `symbol_1`,
 // `symbol_2` etc.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:\b55=|"?(?:symbol(?:_\w+)?|simbolo|ticker|instrument|contract|conid)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)(?:\b55=|"?(?:symbol(?:_\w+)?|simbolo|ticker|instrument|contract|conid)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseCQGConfig parses a CQG terminal config body.
 func ParseCQGConfig(body []byte) CQGFields {

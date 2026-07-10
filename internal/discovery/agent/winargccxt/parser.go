@@ -32,60 +32,73 @@ type CCXTFields struct {
 
 // passwordRE matches a password row (line-anchored INI/JSON).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line in Python.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|apiKey|secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|apiKey|secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // exchangeIDRE matches a CCXT `exchange = ccxt.<id>(...)` form
 // or `"exchange": "<id>"` config form.
 var exchangeIDRE = regexp.MustCompile(
-	`(?i)(?:ccxt\.|"exchange"\s*[:=]\s*"|exchange_id\s*[:=]\s*"|"id"\s*[:=]\s*")([a-z0-9_\-]{2,32})`)
+	`(?i)(?:ccxt\.|"exchange"\s*[:=]\s*"|exchange_id\s*[:=]\s*"|"id"\s*[:=]\s*")([a-z0-9_\-]{2,32})`,
+)
 
 // exchangeKeyRE matches a generic API key / secret. CCXT's
 // canonical form is `apiKey` and `secret`.
 var exchangeKeyRE = regexp.MustCompile(
-	`(?i)"?(?:apiKey|api[_\-]?key|api[_\-]?secret|secret|private[_\-]?key|access[_\-]?token|consumer[_\-]?secret)"?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)"?(?:apiKey|api[_\-]?key|api[_\-]?secret|secret|private[_\-]?key|access[_\-]?token|consumer[_\-]?secret)"?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // ccxtImportRE detects ccxt import in a Python source file.
 // Word-boundary at end so `import ccxt` matches the same as
 // `import ccxt as X` and `import ccxt.async_support`.
 var ccxtImportRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+ccxt|import\s+ccxt\b)`)
+	`(?im)^\s*(?:from\s+ccxt|import\s+ccxt\b)`,
+)
 
 // arbitrageRE detects arbitrage / triangular / spread markers.
 var arbitrageRE = regexp.MustCompile(
-	`(?i)(?:arbitrage|arbitraje|triangular|cross[_\- ]?exchange|spread[_\- ]?bot|price[_\- ]?spread|funding[_\- ]?spread)`)
+	`(?i)(?:arbitrage|arbitraje|triangular|cross[_\- ]?exchange|spread[_\- ]?bot|price[_\- ]?spread|funding[_\- ]?spread)`,
+)
 
 // fundingRateRE detects perp funding-rate strategy markers.
 var fundingRateRE = regexp.MustCompile(
-	`(?i)(?:funding[_\- ]?rate|fundingrate|fr[_\- ]?arb|perp[_\- ]?spot|basis[_\- ]?trade)`)
+	`(?i)(?:funding[_\- ]?rate|fundingrate|fr[_\- ]?arb|perp[_\- ]?spot|basis[_\- ]?trade)`,
+)
 
 // strategyNameRE matches a Python class / function name that
 // looks like a strategy.
 var strategyNameRE = regexp.MustCompile(
-	`(?im)(?:^\s*class\s+|^\s*def\s+)([A-Z][A-Za-z0-9_]{2,64}|[a-z][a-z0-9_]{2,64})\s*[\(:]`)
+	`(?im)(?:^\s*class\s+|^\s*def\s+)([A-Z][A-Za-z0-9_]{2,64}|[a-z][a-z0-9_]{2,64})\s*[\(:]`,
+)
 
 // usdtARSRE detects USDT/ARS or USDT-ARS markers.
 var usdtARSRE = regexp.MustCompile(
-	`(?i)(?:USDT/ARS|USDTARS|USDT-ARS|usdt_ars|usdt-ars)`)
+	`(?i)(?:USDT/ARS|USDTARS|USDT-ARS|usdt_ars|usdt-ars)`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM:SS`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // apiCallRE detects per-line API-call markers in trade logs.
 var apiCallRE = regexp.MustCompile(
-	`(?i)(?:GET\s+/|POST\s+/|fetch[_\-]?ticker|fetch[_\-]?order|fetch[_\-]?balance|create[_\-]?order|cancel[_\-]?order|fetch[_\-]?trades|api[_\-]?call)`)
+	`(?i)(?:GET\s+/|POST\s+/|fetch[_\-]?ticker|fetch[_\-]?order|fetch[_\-]?balance|create[_\-]?order|cancel[_\-]?order|fetch[_\-]?trades|api[_\-]?call)`,
+)
 
 // usdtAmountRE matches `usdt_amount=NN.NN` rows.
 var usdtAmountRE = regexp.MustCompile(
-	`(?i)(?:usdt[_\- ]?amount|usdt[_\- ]?volume|amount[_\- ]?usdt|volume[_\- ]?usdt|notional[_\- ]?usdt)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:usdt[_\- ]?amount|usdt[_\- ]?volume|amount[_\- ]?usdt|volume[_\- ]?usdt|notional[_\- ]?usdt)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseCCXTConfig parses a config / credentials body.
 func ParseCCXTConfig(body []byte) CCXTFields {

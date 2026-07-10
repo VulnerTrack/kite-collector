@@ -31,72 +31,89 @@ type QuantowerFields struct {
 
 // passwordRE matches a password row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|quantower[_\-]?password|broker[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|quantower[_\-]?password|broker[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|quantower[_\-]?password|quantower[_\-]?secret|broker[_\-]?password|broker[_\-]?secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|quantower[_\-]?password|quantower[_\-]?secret|broker[_\-]?password|broker[_\-]?secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches a Quantower / plug-in API key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:quantower[_\-]?api[_\-]?key|quantower[_\-]?token|binance[_\-]?api[_\-]?key|bybit[_\-]?api[_\-]?key|cqg[_\-]?token|rithmic[_\-]?token|broker[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:quantower[_\-]?api[_\-]?key|quantower[_\-]?token|binance[_\-]?api[_\-]?key|bybit[_\-]?api[_\-]?key|cqg[_\-]?token|rithmic[_\-]?token|broker[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // apiSecretRE matches a Quantower / plug-in API secret.
 var apiSecretRE = regexp.MustCompile(
-	`(?i)("|')?(?:api[_\-]?secret|binance[_\-]?api[_\-]?secret|bybit[_\-]?api[_\-]?secret|secret[_\-]?key|hmac[_\-]?secret)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:api[_\-]?secret|binance[_\-]?api[_\-]?secret|bybit[_\-]?api[_\-]?secret|secret[_\-]?key|hmac[_\-]?secret)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches Quantower / broker login.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:quantower[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:quantower[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // accountIDRE matches a Quantower account ID.
 var accountIDRE = regexp.MustCompile(
-	`(?i)"?(?:quantower[_\-]?account|account[_\-]?id|accountid|broker[_\-]?account|trader[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`)
+	`(?i)"?(?:quantower[_\-]?account|account[_\-]?id|accountid|broker[_\-]?account|trader[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`,
+)
 
 // domArmedRE detects DOM Trading panel armed state.
 var domArmedRE = regexp.MustCompile(
-	`(?i)(?:dom[_\- ]?armed\s*=\s*(?:1|true|on|yes)|dom[_\- ]?trading[_\- ]?enabled\s*=\s*(?:1|true)|auto[_\- ]?execute"?\s*[:=]\s*"?(?:true|1|on|yes)|one[_\- ]?click[_\- ]?trading\s*=\s*(?:1|true|on|yes))`)
+	`(?i)(?:dom[_\- ]?armed\s*=\s*(?:1|true|on|yes)|dom[_\- ]?trading[_\- ]?enabled\s*=\s*(?:1|true)|auto[_\- ]?execute"?\s*[:=]\s*"?(?:true|1|on|yes)|one[_\- ]?click[_\- ]?trading\s*=\s*(?:1|true|on|yes))`,
+)
 
 // paperTradingRE detects paper-trading mode markers.
 var paperTradingRE = regexp.MustCompile(
-	`(?i)(?:paper[_\- ]?trading\s*[:=]\s*(?:true|1|on|enabled)|paper[_\- ]?mode\s*=\s*(?:true|1|on)|sim[_\- ]?account|simulation[_\- ]?mode|demo[_\- ]?account)`)
+	`(?i)(?:paper[_\- ]?trading\s*[:=]\s*(?:true|1|on|enabled)|paper[_\- ]?mode\s*=\s*(?:true|1|on)|sim[_\- ]?account|simulation[_\- ]?mode|demo[_\- ]?account)`,
+)
 
 // strategyRE matches strategy / indicator class declarations
 // in C# algo scripts.
 var strategyRE = regexp.MustCompile(
-	`(?i)(?:public\s+class\s+\w+\s*:\s*Strategy|public\s+class\s+\w+\s*:\s*Indicator|\bAddStrategy\(|\bRunStrategy\()`)
+	`(?i)(?:public\s+class\s+\w+\s*:\s*Strategy|public\s+class\s+\w+\s*:\s*Indicator|\bAddStrategy\(|\bRunStrategy\()`,
+)
 
 // pluginConfigRE matches a broker-plugin config section header.
 var pluginConfigRE = regexp.MustCompile(
-	`(?i)\[(?:Binance|Bybit|Bitfinex|Kraken|Coinbase|Rithmic|CQG|Continuum|TT|TradingTechnologies|IB|TWS|IBController|dxFeed|OANDA)\]`)
+	`(?i)\[(?:Binance|Bybit|Bitfinex|Kraken|Coinbase|Rithmic|CQG|Continuum|TT|TradingTechnologies|IB|TWS|IBController|dxFeed|OANDA)\]`,
+)
 
 // pluginCredentialRE matches plug-in cleartext credential row.
 var pluginCredentialRE = regexp.MustCompile(
-	`(?i)(?:tws[_\- ]?port|ib[_\- ]?port|rithmic[_\- ]?(?:user|server)|cqg[_\- ]?user|binance[_\- ]?api[_\-]?key|bybit[_\- ]?api[_\-]?key|hmac[_\- ]?secret|api[_\- ]?username|client[_\- ]?id)\s*[:=]\s*\S+`)
+	`(?i)(?:tws[_\- ]?port|ib[_\- ]?port|rithmic[_\- ]?(?:user|server)|cqg[_\- ]?user|binance[_\- ]?api[_\-]?key|bybit[_\- ]?api[_\-]?key|hmac[_\- ]?secret|api[_\- ]?username|client[_\- ]?id)\s*[:=]\s*\S+`,
+)
 
 // usdtArsArbitrageRE detects USDT/ARS arbitrage logic.
 var usdtArsArbitrageRE = regexp.MustCompile(
-	`(?i)(?:brecha[_\- ]?cambiaria|dolar[_\- ]?(?:blue|mep|ccl|tarjeta|oficial)|usdt[_\- ]?ars|usdc[_\- ]?ars|arbitrage|arbitraje|cross[_\- ]?venue[_\- ]?price)`)
+	`(?i)(?:brecha[_\- ]?cambiaria|dolar[_\- ]?(?:blue|mep|ccl|tarjeta|oficial)|usdt[_\- ]?ars|usdc[_\- ]?ars|arbitrage|arbitraje|cross[_\- ]?venue[_\- ]?price)`,
+)
 
 // orderEventRE matches per-fill marker in trade log.
 var orderEventRE = regexp.MustCompile(
-	`(?i)(?:OrderFilled|FillEvent|FillID|fill[_\- ]?id|^\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}|execution[_\- ]?report)`)
+	`(?i)(?:OrderFilled|FillEvent|FillID|fill[_\- ]?id|^\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}|execution[_\- ]?report)`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM:SS`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // messageMarkerRE matches per-message rate markers.
 var messageMarkerRE = regexp.MustCompile(
-	`(?i)(?:MarketDataUpdate|MarketDepthUpdate|DOMUpdate|HeartBeat|LogonResponse|TradeUpdate|OrderUpdate|QuoteUpdate|trade\s+received|depth\s+update)`)
+	`(?i)(?:MarketDataUpdate|MarketDepthUpdate|DOMUpdate|HeartBeat|LogonResponse|TradeUpdate|OrderUpdate|QuoteUpdate|trade\s+received|depth\s+update)`,
+)
 
 // symbolEntryRE matches Quantower symbol entries.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument|root)"?\s*[:=]\s*"?|<symbol[^>]*>|AddSymbol\(\s*"|Symbol\(\s*")([A-Za-z0-9_\-\./]{1,32})`)
+	`(?i)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument|root)"?\s*[:=]\s*"?|<symbol[^>]*>|AddSymbol\(\s*"|Symbol\(\s*")([A-Za-z0-9_\-\./]{1,32})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseQuantowerConfig parses a generic Quantower cfg body.
 func ParseQuantowerConfig(body []byte) QuantowerFields {

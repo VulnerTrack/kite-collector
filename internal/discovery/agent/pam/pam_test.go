@@ -102,7 +102,8 @@ func TestSplitMergeContinuationsPAM(t *testing.T) {
 func TestSplitTokensRespectingBrackets(t *testing.T) {
 	// The classic PAM bracketed control syntax.
 	got := splitTokensRespectingBrackets(
-		`auth [success=2 default=ignore] pam_unix.so try_first_pass`)
+		`auth [success=2 default=ignore] pam_unix.so try_first_pass`,
+	)
 	want := []string{
 		"auth",
 		"[success=2 default=ignore]",

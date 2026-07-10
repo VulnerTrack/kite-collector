@@ -26,6 +26,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeScanStreamingStarting, LogCodeScanInitialFailed, LogCodeScanInitialComplete,
 		LogCodeScanPeriodicFailed, LogCodeScanPeriodicComplete,
 		LogCodeAgentShutdown,
+		LogCodeEngineIdentityUnavailable,
 		LogCodeCLIFlushWriter, LogCodeCLIConfigLoadFallback,
 		LogCodeEnrollRequestSubmitted, LogCodeEnrollComplete,
 	}
@@ -62,6 +63,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 		LogCodeScanStreamingStarting, LogCodeScanInitialFailed, LogCodeScanInitialComplete,
 		LogCodeScanPeriodicFailed, LogCodeScanPeriodicComplete,
 		LogCodeAgentShutdown,
+		LogCodeEngineIdentityUnavailable,
 		LogCodeCLIFlushWriter, LogCodeCLIConfigLoadFallback,
 		LogCodeEnrollRequestSubmitted, LogCodeEnrollComplete,
 	}

@@ -31,49 +31,59 @@ type CryptoFields struct {
 
 // apiKeyRE matches an `api_key` row in JSON/INI/YAML body.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(api[_-]?key)("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-]{16,})`)
+	`(?i)("|')?(api[_-]?key)("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-]{16,})`,
+)
 
 // apiSecretRE matches an `api_secret`/`secret_key` row.
 var apiSecretRE = regexp.MustCompile(
-	`(?i)("|')?(api[_-]?secret|secret[_-]?key|client[_-]?secret)("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-\+/=]{16,})`)
+	`(?i)("|')?(api[_-]?secret|secret[_-]?key|client[_-]?secret)("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-\+/=]{16,})`,
+)
 
 // otcMarkerRE detects OTC P2P trade markers in a log body.
 var otcMarkerRE = regexp.MustCompile(
-	`(?i)(?:\botc\b|\bp2p\b|peer[\s_-]*to[\s_-]*peer|seller_id|buyer_id|advertisement_id)`)
+	`(?i)(?:\botc\b|\bp2p\b|peer[\s_-]*to[\s_-]*peer|seller_id|buyer_id|advertisement_id)`,
+)
 
 // stablecoinAmountRE matches `USDT_amount=NN.NN` / `usdc_value=NN`.
 // The captured numeric value is bounded so trailing CSV fields
 // (commas with 3-digit fee, etc.) don't get pulled in.
 var stablecoinAmountRE = regexp.MustCompile(
-	`(?i)(?:USDT|USDC|DAI|BUSD)[\s_-]*(?:amount|value|ars|notional|total)\s*[:=]\s*([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:USDT|USDC|DAI|BUSD)[\s_-]*(?:amount|value|ars|notional|total)\s*[:=]\s*([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // notionalRE matches a generic notional row. Same bounded
 // numeric capture as stablecoinAmountRE.
 var notionalRE = regexp.MustCompile(
-	`(?i)(?:notional|amount|total|valor|importe|monto)\s*[:=]\s*([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:notional|amount|total|valor|importe|monto)\s*[:=]\s*([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // pairRE matches a ticker pair like `BTC/ARS`, `USDT-ARS`.
 var pairRE = regexp.MustCompile(
-	`\b([A-Z]{3,8})[/_\-]([A-Z]{3,8})\b`)
+	`\b([A-Z]{3,8})[/_\-]([A-Z]{3,8})\b`,
+)
 
 // timestampMinRE matches a timestamp at line start.
 var timestampMinRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // strategyImportRE detects ccxt / python-binance / pybitso /
 // pybinance imports in .py / .ipynb bodies.
 var strategyImportRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+ccxt|import\s+ccxt|from\s+python_binance|import\s+python_binance|from\s+binance|import\s+binance|from\s+pybitso|import\s+pybitso)`)
+	`(?im)^\s*(?:from\s+ccxt|import\s+ccxt|from\s+python_binance|import\s+python_binance|from\s+binance|import\s+binance|from\s+pybitso|import\s+pybitso)`,
+)
 
 // afipMarkerRE detects AFIP-marker tokens (BIENES PERSONALES,
 // RG 5193, RG 5527) that indicate the trader is reporting to
 // AFIP.
 var afipMarkerRE = regexp.MustCompile(
-	`(?i)(?:bienes[\s_-]*personales|rg[\s_-]*5193|rg[\s_-]*5527|afip[\s_-]*cripto|declaraci[oó]n[\s_-]*jurada)`)
+	`(?i)(?:bienes[\s_-]*personales|rg[\s_-]*5193|rg[\s_-]*5527|afip[\s_-]*cripto|declaraci[oó]n[\s_-]*jurada)`,
+)
 
 // clienteCuitKeyRE matches a labeled cliente CUIT.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // bip39MarkerRE detects the canonical 12 / 24-word BIP39
 // seed-phrase shape by counting common BIP39-wordlist words

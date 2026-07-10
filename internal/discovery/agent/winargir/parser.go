@@ -24,61 +24,75 @@ type IRFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|ir[_\-]?password|autopista[_\-]?password|portal[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|ir[_\-]?password|autopista[_\-]?password|portal[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|ir[_\-]?password|autopista[_\-]?password|portal[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|ir[_\-]?password|autopista[_\-]?password|portal[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|ir[_\-]?password|autopista[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|ir[_\-]?password|autopista[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // cnvFilingIDRE matches a CNV Autopista filing-id field.
 var cnvFilingIDRE = regexp.MustCompile(
-	`(?i)"?(?:cnv[_\- ]?filing[_\- ]?id|nro[_\- ]?presentacion|filing[_\- ]?id|autopista[_\- ]?id|nro[_\- ]?autopista)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:cnv[_\- ]?filing[_\- ]?id|nro[_\- ]?presentacion|filing[_\- ]?id|autopista[_\- ]?id|nro[_\- ]?autopista)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // issuerNameRE matches the issuer name.
 var issuerNameRE = regexp.MustCompile(
-	`(?i)"?(?:issuer[_\- ]?name|emisor|company[_\- ]?name|denominacion|razon[_\- ]?social)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_&,']{4,80})"?`)
+	`(?i)"?(?:issuer[_\- ]?name|emisor|company[_\- ]?name|denominacion|razon[_\- ]?social)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_&,']{4,80})"?`,
+)
 
 // issuerClassRE matches the issuer-class field.
 var issuerClassRE = regexp.MustCompile(
-	`(?i)"?(?:issuer[_\- ]?class|tipo[_\- ]?emisor|asset[_\- ]?class|panel)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`)
+	`(?i)"?(?:issuer[_\- ]?class|tipo[_\- ]?emisor|asset[_\- ]?class|panel)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`,
+)
 
 // disclosurePhaseRE matches an earnings-cycle phase field.
 var disclosurePhaseRE = regexp.MustCompile(
-	`(?i)"?(?:disclosure[_\- ]?phase|earnings[_\- ]?phase|quarter|fase[_\- ]?disclosure)"?\s*[:=>]\s*"?([A-Za-z0-9\-_ ]{1,30})`)
+	`(?i)"?(?:disclosure[_\- ]?phase|earnings[_\- ]?phase|quarter|fase[_\- ]?disclosure)"?\s*[:=>]\s*"?([A-Za-z0-9\-_ ]{1,30})`,
+)
 
 // prePublicationDraftRE matches DRAFT / RESERVADO / EYES-ONLY
 // markers in pre-publication IR documents.
 var prePublicationDraftRE = regexp.MustCompile(
-	`(?im)\b(?:DRAFT|BORRADOR|PRELIMINARY|PRELIMINAR|FOR[_\- ]?DISCUSSION[_\- ]?ONLY|FOR[_\- ]?INTERNAL[_\- ]?USE|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|INTERNO|INTERNAL[_\- ]?ONLY|EYES[_\- ]?ONLY|CONFIDENCIAL|CONFIDENTIAL|RESERVADO|EMBARGOED|BAJO[_\- ]?EMBARGO|MNPI)\b`)
+	`(?im)\b(?:DRAFT|BORRADOR|PRELIMINARY|PRELIMINAR|FOR[_\- ]?DISCUSSION[_\- ]?ONLY|FOR[_\- ]?INTERNAL[_\- ]?USE|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|INTERNO|INTERNAL[_\- ]?ONLY|EYES[_\- ]?ONLY|CONFIDENCIAL|CONFIDENTIAL|RESERVADO|EMBARGOED|BAJO[_\- ]?EMBARGO|MNPI)\b`,
+)
 
 // crossListedRE matches a cross-listed-issuer marker.
 var crossListedRE = regexp.MustCompile(
-	`(?i)\b(?:NYSE|NASDAQ|ADR|SEC[_\- ]?REGISTERED|20[_\- ]?F|6[_\- ]?K|REG[_\- ]?FD|SOX|cross[_\- ]?listed|us[_\- ]?listed|sec[_\- ]?filing)\b`)
+	`(?i)\b(?:NYSE|NASDAQ|ADR|SEC[_\- ]?REGISTERED|20[_\- ]?F|6[_\- ]?K|REG[_\- ]?FD|SOX|cross[_\- ]?listed|us[_\- ]?listed|sec[_\- ]?filing)\b`,
+)
 
 // insiderCountRE matches an insider-count field.
 var insiderCountRE = regexp.MustCompile(
-	`(?i)"?(?:insider[_\- ]?count|cantidad[_\- ]?iniciados|nro[_\- ]?iniciados|total[_\- ]?insiders)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:insider[_\- ]?count|cantidad[_\- ]?iniciados|nro[_\- ]?iniciados|total[_\- ]?insiders)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // insiderRowRE matches a per-insider CSV row.
 var insiderRowRE = regexp.MustCompile(
-	`(?im)^[A-Z0-9\-]+,\d{2}-?\d{8}-?\d,`)
+	`(?im)^[A-Z0-9\-]+,\d{2}-?\d{8}-?\d,`,
+)
 
 // analystCountRE matches an analyst-count field.
 var analystCountRE = regexp.MustCompile(
-	`(?i)"?(?:analyst[_\- ]?count|cantidad[_\- ]?analistas|nro[_\- ]?analistas)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:analyst[_\- ]?count|cantidad[_\- ]?analistas|nro[_\- ]?analistas)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // clienteEmisorCuitKeyRE matches `cliente_emisor_cuit:
 // NN-NNNNNNNN-N`.
 var clienteEmisorCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?emisor[_\- ]?cuit|emisor[_\- ]?cuit|issuer[_\- ]?cuit|cuit[_\- ]?emisor|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?emisor[_\- ]?cuit|emisor[_\- ]?cuit|issuer[_\- ]?cuit|cuit[_\- ]?emisor|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // insiderCuilKeyRE matches `insider_cuil: NN-NNNNNNNN-N`.
 var insiderCuilKeyRE = regexp.MustCompile(
-	`(?i)"?(?:insider[_\- ]?cuil|iniciado[_\- ]?cuil|director[_\- ]?cuil|officer[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:insider[_\- ]?cuil|iniciado[_\- ]?cuil|director[_\- ]?cuil|officer[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseHechoRelevanteDraft parses a hecho relevante draft body.
 func ParseHechoRelevanteDraft(body []byte) IRFields {

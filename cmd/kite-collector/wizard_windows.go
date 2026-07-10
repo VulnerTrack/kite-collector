@@ -306,8 +306,6 @@ func runWizard() error {
 		return fmt.Errorf("create wizard window: %w", err)
 	}
 
-
-
 	mw.Run()
 	return nil
 }

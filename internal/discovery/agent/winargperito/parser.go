@@ -28,82 +28,101 @@ type PeritoFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|auditor[_\-]?password|portal[_\-]?password|workpaper[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|auditor[_\-]?password|portal[_\-]?password|workpaper[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|auditor[_\-]?password|portal[_\-]?password|workpaper[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|auditor[_\-]?password|portal[_\-]?password|workpaper[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|auditor[_\-]?password|portal[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|auditor[_\-]?password|portal[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // engagementIDRE matches an engagement identifier.
 var engagementIDRE = regexp.MustCompile(
-	`(?i)"?(?:engagement[_\- ]?id|nro[_\- ]?engagement|engagement[_\- ]?number|client[_\- ]?engagement)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:engagement[_\- ]?id|nro[_\- ]?engagement|engagement[_\- ]?number|client[_\- ]?engagement)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // clientNameRE matches the client name.
 var clientNameRE = regexp.MustCompile(
-	`(?i)"?(?:client[_\- ]?name|nombre[_\- ]?cliente|client|cliente)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_&,]{4,80})"?`)
+	`(?i)"?(?:client[_\- ]?name|nombre[_\- ]?cliente|client|cliente)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_&,]{4,80})"?`,
+)
 
 // auditFirmRE matches the audit-firm self-identification.
 var auditFirmRE = regexp.MustCompile(
-	`(?i)"?(?:audit[_\- ]?firm|auditor[_\- ]?firm|firma[_\- ]?auditora|estudio[_\- ]?contable)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_&]{3,40})`)
+	`(?i)"?(?:audit[_\- ]?firm|auditor[_\- ]?firm|firma[_\- ]?auditora|estudio[_\- ]?contable)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_&]{3,40})`,
+)
 
 // clientClassRE matches the client-class field.
 var clientClassRE = regexp.MustCompile(
-	`(?i)"?(?:client[_\- ]?class|tipo[_\- ]?cliente|asset[_\- ]?class)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`)
+	`(?i)"?(?:client[_\- ]?class|tipo[_\- ]?cliente|asset[_\- ]?class)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`,
+)
 
 // auditPhaseRE matches an audit-phase indicator.
 var auditPhaseRE = regexp.MustCompile(
-	`(?i)"?(?:audit[_\- ]?phase|fase[_\- ]?auditoria|phase|fase)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,30})`)
+	`(?i)"?(?:audit[_\- ]?phase|fase[_\- ]?auditoria|phase|fase)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,30})`,
+)
 
 // draftMarkerRE matches DRAFT / RESERVADO / CONFIDENCIAL / etc.
 var draftMarkerRE = regexp.MustCompile(
-	`(?im)\b(?:DRAFT|BORRADOR|RESERVADO|RESTRICTED|CONFIDENCIAL|CONFIDENTIAL|FOR[_\- ]?INTERNAL[_\- ]?USE[_\- ]?ONLY|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|PRELIMINARY|PRELIMINAR|INTERNO|INTERNAL[_\- ]?ONLY|EYES[_\- ]?ONLY)\b`)
+	`(?im)\b(?:DRAFT|BORRADOR|RESERVADO|RESTRICTED|CONFIDENCIAL|CONFIDENTIAL|FOR[_\- ]?INTERNAL[_\- ]?USE[_\- ]?ONLY|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|PRELIMINARY|PRELIMINAR|INTERNO|INTERNAL[_\- ]?ONLY|EYES[_\- ]?ONLY)\b`,
+)
 
 // confirmationCountRE matches a confirmation count field.
 var confirmationCountRE = regexp.MustCompile(
-	`(?i)"?(?:confirmation[_\- ]?count|cantidad[_\- ]?confirmaciones|nro[_\- ]?confirmaciones)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:confirmation[_\- ]?count|cantidad[_\- ]?confirmaciones|nro[_\- ]?confirmaciones)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // confirmationRowRE matches a per-confirmation CSV row.
 var confirmationRowRE = regexp.MustCompile(
-	`(?im)^(?:CONF|CONFIRM)[_\- ]?\d+,`)
+	`(?im)^(?:CONF|CONFIRM)[_\- ]?\d+,`,
+)
 
 // deficiencyCountRE matches an internal-control-deficiency count.
 var deficiencyCountRE = regexp.MustCompile(
-	`(?i)"?(?:deficiency[_\- ]?count|deficiencias[_\- ]?count|nro[_\- ]?deficiencias|control[_\- ]?weakness[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:deficiency[_\- ]?count|deficiencias[_\- ]?count|nro[_\- ]?deficiencias|control[_\- ]?weakness[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // deficiencyRowRE matches a per-deficiency CSV row.
 var deficiencyRowRE = regexp.MustCompile(
-	`(?im)^(?:DEF|DEFICIENCY)[_\- ]?\d+,`)
+	`(?im)^(?:DEF|DEFICIENCY)[_\- ]?\d+,`,
+)
 
 // auditFeeRE matches the audit fee amount. Word-boundary
 // anchored to avoid matching `non_audit_fee` as `audit_fee`.
 var auditFeeRE = regexp.MustCompile(
-	`(?i)"?\b(?:audit[_\- ]?fee|honorarios[_\- ]?auditoria)\b"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?\b(?:audit[_\- ]?fee|honorarios[_\- ]?auditoria)\b"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // nonAuditFeeRE matches the non-audit fee amount (tax-advisory,
 // consulting, M&A advisory side-engagement).
 var nonAuditFeeRE = regexp.MustCompile(
-	`(?i)"?\b(?:non[_\- ]?audit[_\- ]?fee|tax[_\- ]?advisory[_\- ]?fee|consulting[_\- ]?fee|advisory[_\- ]?fee|honorarios[_\- ]?asesoria|honorarios[_\- ]?consultoria)\b"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?\b(?:non[_\- ]?audit[_\- ]?fee|tax[_\- ]?advisory[_\- ]?fee|consulting[_\- ]?fee|advisory[_\- ]?fee|honorarios[_\- ]?asesoria|honorarios[_\- ]?consultoria)\b"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // workpaperCountRE matches a workpaper count.
 var workpaperCountRE = regexp.MustCompile(
-	`(?i)"?(?:workpaper[_\- ]?count|papeles[_\- ]?trabajo[_\- ]?count|cantidad[_\- ]?papeles)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:workpaper[_\- ]?count|papeles[_\- ]?trabajo[_\- ]?count|cantidad[_\- ]?papeles)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // clienteEmisorCuitKeyRE matches `cliente_emisor_cuit: NN-NNNNNNNN-N`.
 var clienteEmisorCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cliente[_\- ]?emisor[_\- ]?cuit|emisor[_\- ]?cuit|client[_\- ]?cuit|cuit[_\- ]?cliente|cuit[_\- ]?emisor|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cliente[_\- ]?emisor[_\- ]?cuit|emisor[_\- ]?cuit|client[_\- ]?cuit|cuit[_\- ]?cliente|cuit[_\- ]?emisor|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // auditorCuilKeyRE matches `auditor_cuil: NN-NNNNNNNN-N`.
 var auditorCuilKeyRE = regexp.MustCompile(
-	`(?i)"?(?:auditor[_\- ]?cuil|cuil[_\- ]?auditor|engagement[_\- ]?partner[_\- ]?cuil|partner[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:auditor[_\- ]?cuil|cuil[_\- ]?auditor|engagement[_\- ]?partner[_\- ]?cuil|partner[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // crossListedRE matches a marker for US-cross-listed issuers
 // (PCAOB-relevant).
 var crossListedRE = regexp.MustCompile(
-	`(?i)\b(?:NYSE|NASDAQ|ADR|PCAOB|SOX|SARBANES[_\- ]?OXLEY|cross[_\- ]?listed|us[_\- ]?listed)\b`)
+	`(?i)\b(?:NYSE|NASDAQ|ADR|PCAOB|SOX|SARBANES[_\- ]?OXLEY|cross[_\- ]?listed|us[_\- ]?listed)\b`,
+)
 
 // ParseWorkpaper parses a working paper body.
 func ParseWorkpaper(body []byte) PeritoFields {

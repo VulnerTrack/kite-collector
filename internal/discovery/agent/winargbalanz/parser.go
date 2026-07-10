@@ -30,73 +30,90 @@ type BalanzFields struct {
 
 // bearerRE matches an `access_token` / `bearer` in credentials.
 var bearerRE = regexp.MustCompile(
-	`(?i)("|')?(?:access[_-]?token|bearer|api[_-]?token|jwt)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?(?:access[_-]?token|bearer|api[_-]?token|jwt)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // usernameRE matches `username` / `user` / `email`.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:username|user|email|usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:username|user|email|usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // passwordRE matches a password row (line-anchored INI/JSON/XML).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`)
+	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>` on a single
 // line (Balanz Trader Pro settings.xml).
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`)
+	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line in
 // Python source (pyBalanz scripts).
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|clave|passwd)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|clave|passwd)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiClientRE detects pyBalanz import in a strategy script.
 var apiClientRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+pybalanz|import\s+pybalanz|from\s+balanz_api|import\s+balanz_api|from\s+balanz\s+import)`)
+	`(?im)^\s*(?:from\s+pybalanz|import\s+pybalanz|from\s+balanz_api|import\s+balanz_api|from\s+balanz\s+import)`,
+)
 
 // demoAccountRE detects a demo account marker.
 var demoAccountRE = regexp.MustCompile(
-	`(?i)\b(?:demo|simulator|sandbox|paper[_\- ]?trading|cuenta[_\- ]?demo|account[_\- ]?demo|test[_\- ]?env)\b`)
+	`(?i)\b(?:demo|simulator|sandbox|paper[_\- ]?trading|cuenta[_\- ]?demo|account[_\- ]?demo|test[_\- ]?env)\b`,
+)
 
 // timestampMinRE matches `YYYY-MM-DD HH:MM[:SS]`.
 var timestampMinRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>…</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // symbolEntryRE matches a JSON/INI symbol entry.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // positionEntryRE matches a position object marker.
 var positionEntryRE = regexp.MustCompile(
-	`(?i)"(?:positions?|posici[oó]nes?|holdings?|tenencias?|titulos?)"`)
+	`(?i)"(?:positions?|posici[oó]nes?|holdings?|tenencias?|titulos?)"`,
+)
 
 // cedearEntryRE matches a CEDEAR entry header.
 var cedearEntryRE = regexp.MustCompile(
-	`(?i)"(?:cedear|cedeares|cedears)"`)
+	`(?i)"(?:cedear|cedeares|cedears)"`,
+)
 
 // letrasEntryRE matches a Letra entry header.
 var letrasEntryRE = regexp.MustCompile(
-	`(?i)"(?:letras?|lecap|boncer|bonte|tesoro)"`)
+	`(?i)"(?:letras?|lecap|boncer|bonte|tesoro)"`,
+)
 
 // onEntryRE matches an ON-corporate entry header.
 var onEntryRE = regexp.MustCompile(
-	`(?i)"(?:obligaciones[_\- ]?negociables|on[_\- ]?corporate|on[_\- ]?cache|corporate[_\- ]?bonds?|on_listing)"`)
+	`(?i)"(?:obligaciones[_\- ]?negociables|on[_\- ]?corporate|on[_\- ]?cache|corporate[_\- ]?bonds?|on_listing)"`,
+)
 
 // fciSubRE matches an FCI subscription entry.
 var fciSubRE = regexp.MustCompile(
-	`(?i)"(?:fci_id|fci_name|fondo_comun|subscripcion_fci|balanz_fci|balanz_capital)"`)
+	`(?i)"(?:fci_id|fci_name|fondo_comun|subscripcion_fci|balanz_fci|balanz_capital)"`,
+)
 
 // caucionAmountRE matches a caución amount row.
 var caucionAmountRE = regexp.MustCompile(
-	`(?i)(?:caucion[_\- ]?amount|caucion[_\- ]?notional|caucion[_\- ]?monto|notional|importe|monto|valor)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:caucion[_\- ]?amount|caucion[_\- ]?notional|caucion[_\- ]?monto|notional|importe|monto|valor)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // ParseBalanzCredentials parses a credentials.json / api_key.json.
 func ParseBalanzCredentials(body []byte) BalanzFields {

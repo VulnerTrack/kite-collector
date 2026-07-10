@@ -30,87 +30,107 @@ type FFFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|ff[_\-]?password|fiduciario[_\-]?password|bacs[_\-]?password|tmf[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|ff[_\-]?password|fiduciario[_\-]?password|bacs[_\-]?password|tmf[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|ff[_\-]?password|fiduciario[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|ff[_\-]?password|fiduciario[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|ff[_\-]?password|fiduciario[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|ff[_\-]?password|fiduciario[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // seriesIDRE matches an FF series identifier.
 var seriesIDRE = regexp.MustCompile(
-	`(?i)"?(?:series[_\- ]?id|nro[_\- ]?serie|serie[_\- ]?nro|series|serie)"?\s*[:=>]\s*"?([A-Z0-9\-]{1,32})"?`)
+	`(?i)"?(?:series[_\- ]?id|nro[_\- ]?serie|serie[_\- ]?nro|series|serie)"?\s*[:=>]\s*"?([A-Z0-9\-]{1,32})"?`,
+)
 
 // cnvAuthIDRE matches a CNV authorization ID.
 var cnvAuthIDRE = regexp.MustCompile(
-	`(?i)"?(?:cnv[_\- ]?authorization|cnv[_\- ]?id|cnv[_\- ]?aut|cnv[_\- ]?registro|authorization[_\- ]?cnv)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:cnv[_\- ]?authorization|cnv[_\- ]?id|cnv[_\- ]?aut|cnv[_\- ]?registro|authorization[_\- ]?cnv)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // ffNameRE matches the trust name itself (e.g. "FF Tarjeta
 // Naranja Trust XXIV").
 var ffNameRE = regexp.MustCompile(
-	`(?i)"?(?:fideicomiso[_\- ]?nombre|ff[_\- ]?name|trust[_\- ]?name|denominacion)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_]{4,80})"?`)
+	`(?i)"?(?:fideicomiso[_\- ]?nombre|ff[_\- ]?name|trust[_\- ]?name|denominacion)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_]{4,80})"?`,
+)
 
 // preIssuanceMarkerRE matches "DRAFT" / "BORRADOR" / "CONFIDENCIAL"
 // stamps in pre-issuance documents.
 var preIssuanceMarkerRE = regexp.MustCompile(
-	`(?im)\b(?:DRAFT|BORRADOR|PRELIMINARY|PRELIMINAR|CONFIDENCIAL|CONFIDENTIAL|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|INTERNO|INTERNAL[_\- ]?ONLY)\b`)
+	`(?im)\b(?:DRAFT|BORRADOR|PRELIMINARY|PRELIMINAR|CONFIDENCIAL|CONFIDENTIAL|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|INTERNO|INTERNAL[_\- ]?ONLY)\b`,
+)
 
 // receivableCountRE matches a per-receivable CSV row. AR cobranza
 // CSVs have header `Fecha,CUIT,Cuota,Importe,Estado`. Data rows
 // start with a date in `dd/mm/YYYY` form.
 var receivableRowRE = regexp.MustCompile(
-	`(?im)^\d{2}[/-]\d{2}[/-]\d{4},\d{2}-?\d{8}-?\d,`)
+	`(?im)^\d{2}[/-]\d{2}[/-]\d{4},\d{2}-?\d{8}-?\d,`,
+)
 
 // receivableCountKeyRE matches a `receivable_count: N` field.
 var receivableCountKeyRE = regexp.MustCompile(
-	`(?i)"?(?:receivable[_\- ]?count|cantidad[_\- ]?creditos|creditos[_\- ]?total|nro[_\- ]?creditos)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:receivable[_\- ]?count|cantidad[_\- ]?creditos|creditos[_\- ]?total|nro[_\- ]?creditos)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // collectionTotalRE matches a `collection_total: ARS N` field.
 var collectionTotalRE = regexp.MustCompile(
-	`(?i)"?(?:collection[_\- ]?total|cobranza[_\- ]?total|total[_\- ]?cobrado|recaudado[_\- ]?total)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:collection[_\- ]?total|cobranza[_\- ]?total|total[_\- ]?cobrado|recaudado[_\- ]?total)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // moraCountRE matches a `mora_count: N` field.
 var moraCountRE = regexp.MustCompile(
-	`(?i)"?(?:mora[_\- ]?count|cantidad[_\- ]?mora|nro[_\- ]?moras|defaulted[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:mora[_\- ]?count|cantidad[_\- ]?mora|nro[_\- ]?moras|defaulted[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // moraAmountRE matches a `mora_amount: ARS N` field.
 var moraAmountRE = regexp.MustCompile(
-	`(?i)"?(?:mora[_\- ]?amount|monto[_\- ]?mora|importe[_\- ]?mora|defaulted[_\- ]?amount)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:mora[_\- ]?amount|monto[_\- ]?mora|importe[_\- ]?mora|defaulted[_\- ]?amount)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // investorCountRE matches an investor count field.
 var investorCountRE = regexp.MustCompile(
-	`(?i)"?(?:investor[_\- ]?count|cantidad[_\- ]?inversores|nro[_\- ]?inversores)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:investor[_\- ]?count|cantidad[_\- ]?inversores|nro[_\- ]?inversores)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // issuanceAmountRE matches the per-series issuance amount.
 var issuanceAmountRE = regexp.MustCompile(
-	`(?i)"?(?:issuance[_\- ]?amount|monto[_\- ]?emision|vn[_\- ]?serie|valor[_\- ]?nominal[_\- ]?serie)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:issuance[_\- ]?amount|monto[_\- ]?emision|vn[_\- ]?serie|valor[_\- ]?nominal[_\- ]?serie)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // trancheRE matches a tranche-class field.
 var trancheRE = regexp.MustCompile(
-	`(?i)"?(?:tranche|tramo|clase[_\- ]?titulo|class)"?\s*[:=>]\s*"?(VRD[_\- ]?(?:Senior|Mezzanine|Subordinated|Sr|Mez|Sub)|CP[_\- ]?(?:Equity|Senior|Eq|Sr))`)
+	`(?i)"?(?:tranche|tramo|clase[_\- ]?titulo|class)"?\s*[:=>]\s*"?(VRD[_\- ]?(?:Senior|Mezzanine|Subordinated|Sr|Mez|Sub)|CP[_\- ]?(?:Equity|Senior|Eq|Sr))`,
+)
 
 // ratingRE matches a credit-rating field.
 var ratingRE = regexp.MustCompile(
-	`(?i)"?(?:rating|calificacion|calificación)"?\s*[:=>]\s*"?(AAA|AA[+\-]?|A[+\-]?|BBB[+\-]?|BB[+\-]?|B[+\-]?|CCC[+\-]?|CC|C|D)\b`)
+	`(?i)"?(?:rating|calificacion|calificación)"?\s*[:=>]\s*"?(AAA|AA[+\-]?|A[+\-]?|BBB[+\-]?|BB[+\-]?|B[+\-]?|CCC[+\-]?|CC|C|D)\b`,
+)
 
 // underlyingRE matches an underlying-asset-class field.
 var underlyingRE = regexp.MustCompile(
-	`(?i)"?(?:underlying|activo[_\- ]?subyacente|tipo[_\- ]?activo|asset[_\- ]?class)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`)
+	`(?i)"?(?:underlying|activo[_\- ]?subyacente|tipo[_\- ]?activo|asset[_\- ]?class)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|deudor[_\- ]?cuit|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|deudor[_\- ]?cuit|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // originadorCuitKeyRE matches `originador_cuit: NN-NNNNNNNN-N`.
 var originadorCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:originador[_\- ]?cuit|cuit[_\- ]?originador|emisor[_\- ]?cuit|originator[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:originador[_\- ]?cuit|cuit[_\- ]?originador|emisor[_\- ]?cuit|originator[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // fiduciarioCuitKeyRE matches `fiduciario_cuit: NN-NNNNNNNN-N`.
 var fiduciarioCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:fiduciario[_\- ]?cuit|cuit[_\- ]?fiduciario|trustee[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:fiduciario[_\- ]?cuit|cuit[_\- ]?fiduciario|trustee[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseProspecto parses a base prospecto body.
 func ParseProspecto(body []byte) FFFields {

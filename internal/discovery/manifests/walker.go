@@ -39,11 +39,13 @@ func Walk(ctx context.Context, cfg WalkerConfig, fn func(WalkMatch) error) error
 		info, err := os.Lstat(root)
 		if err != nil {
 			slog.Warn("manifest walker: root path inaccessible",
+				"code", string(LogCodeWalkerRootInaccessible),
 				"path", root, "error", err)
 			continue
 		}
 		if !info.IsDir() {
 			slog.Warn("manifest walker: root path is not a directory",
+				"code", string(LogCodeWalkerRootNotDirectory),
 				"path", root)
 			continue
 		}
@@ -53,6 +55,7 @@ func Walk(ctx context.Context, cfg WalkerConfig, fn func(WalkMatch) error) error
 				return fmt.Errorf("walk cancelled: %w", ctxErr)
 			}
 			slog.Warn("manifest walker: walk error",
+				"code", string(LogCodeWalkerWalkError),
 				"root", root, "error", err)
 		}
 	}

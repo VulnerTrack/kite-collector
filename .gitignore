@@ -50,3 +50,8 @@ data/
 internal/discovery/network/jsfingerprint/jsfingerprint_test.go
 identity.json
 cmd/kite-collector/web_fingerprint_test.go:
+
+# Local-only e2e tests that hit real daemons/CLIs on the dev machine
+# (build-tagged `e2e`, so go test ./... ignores them anyway, but we
+# keep them out of git to avoid tying expectations to a specific host).
+internal/discovery/agent/vpn/source_tailscale_e2e_test.go

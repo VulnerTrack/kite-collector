@@ -320,7 +320,8 @@ func TerminalFromPath(path string) Terminal {
 		return TerminalUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "/edge/") ||
 		strings.Contains(lower, "byma_edge") ||

@@ -388,7 +388,8 @@ func TestExtractComputer(t *testing.T) {
 }
 
 func TestExtractComputer_DisabledAccount(t *testing.T) {
-	e := newComputerEntry("CN=OLD,DC=corp,DC=acme,DC=com",
+	e := newComputerEntry(
+		"CN=OLD,DC=corp,DC=acme,DC=com",
 		map[string][]string{
 			"sAMAccountName":     {"OLD$"},
 			"userAccountControl": {"4098"}, // workstation + disabled

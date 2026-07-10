@@ -62,7 +62,8 @@ func (m *Manager) checkHealth(ctx context.Context, ep *Endpoint, timeout time.Du
 		AgentId: "health-check",
 	})
 	if err != nil {
-		m.logger.Debug("endpoint health check failed",
+		m.logger.Debug(
+			"endpoint health check failed",
 			"name", ep.Config.Name,
 			"error", err,
 		)
@@ -85,12 +86,12 @@ func (m *Manager) recordFailure(ep *Endpoint) {
 	case StateHealthy:
 		if ep.consecutiveFailures >= failuresToDegrade {
 			ep.State = StateDegraded
-			m.logger.Warn("endpoint degraded", "name", ep.Config.Name)
+			m.logger.Warn("endpoint degraded", "code", string(LogCodeHealthDegraded), "name", ep.Config.Name)
 		}
 	case StateDegraded:
 		if ep.consecutiveFailures >= failuresToUnreachable {
 			ep.State = StateUnreachable
-			m.logger.Error("endpoint unreachable", "name", ep.Config.Name)
+			m.logger.Error("endpoint unreachable", "code", string(LogCodeHealthUnreachable), "name", ep.Config.Name)
 		}
 	case StateUnreachable, StateUntrusted:
 		// Already in terminal state; wait for success.

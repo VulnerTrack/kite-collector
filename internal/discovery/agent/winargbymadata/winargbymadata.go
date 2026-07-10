@@ -322,7 +322,8 @@ func ArtifactKindFromName(name string) ArtifactKind {
 
 // basicTierRE matches a basic-tier marker.
 var basicTierRE = regexp.MustCompile(
-	`(?i)"tier"\s*:\s*"basic"|\btier\s*=\s*basic\b|top_of_book|\blevel[_]?1\b`)
+	`(?i)"tier"\s*:\s*"basic"|\btier\s*=\s*basic\b|top_of_book|\blevel[_]?1\b`,
+)
 
 // SubscriptionTierFromBody classifies a body's subscription
 // tier from per-feed markers.

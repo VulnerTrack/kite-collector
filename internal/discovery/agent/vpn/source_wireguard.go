@@ -251,4 +251,4 @@ func sortStrings(s []string) {
 }
 
 // silence "imported but not used" if a future refactor drops fs.
-var _ fs.DirEntry = (os.DirEntry)(nil)
+var _ fs.DirEntry = os.DirEntry(nil)

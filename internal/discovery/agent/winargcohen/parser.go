@@ -26,54 +26,64 @@ type CohenFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|cohen[_\-]?password|cliente[_\-]?password|backoffice[_\-]?password|fix[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|cohen[_\-]?password|cliente[_\-]?password|backoffice[_\-]?password|fix[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|cohen[_\-]?password|cohen[_\-]?secret|cliente[_\-]?password|backoffice[_\-]?password|fix[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|cohen[_\-]?password|cohen[_\-]?secret|cliente[_\-]?password|backoffice[_\-]?password|fix[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|cohen[_\-]?password|backoffice[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|cohen[_\-]?password|backoffice[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // oauthRefreshTokenRE matches an OAuth2 refresh token field.
 // Cohen Mobile uses standard OAuth2 with `refresh_token` /
 // `access_token` JSON keys.
 var oauthRefreshTokenRE = regexp.MustCompile(
-	`(?i)"?(?:refresh_token|access_token|oauth_token|cohen[_\-]?token|bearer[_\-]?token)"?\s*[:=>]\s*"([A-Za-z0-9_\-\.\+/=]{20,})"?`)
+	`(?i)"?(?:refresh_token|access_token|oauth_token|cohen[_\-]?token|bearer[_\-]?token)"?\s*[:=>]\s*"([A-Za-z0-9_\-\.\+/=]{20,})"?`,
+)
 
 // usernameRE matches Cohen / cliente login. INI / JSON / XML
 // separator forms (`[:=>]`) all supported.
 var usernameRE = regexp.MustCompile(
-	`(?i)"?(?:cohen[_\-]?username|cohen[_\-]?user|cliente[_\-]?user|backoffice[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=>]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?i)"?(?:cohen[_\-]?username|cohen[_\-]?user|cliente[_\-]?user|backoffice[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=>]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // cuentaComitenteRE matches the Cuenta Comitente number — 4 to
 // 8 digit broker-side account identifier. Cohen specifically
 // uses 4-6 digit numbers.
 var cuentaComitenteRE = regexp.MustCompile(
-	`(?i)"?(?:cuenta[_\- ]?comitente|comitente[_\- ]?nro|cta[_\- ]?comitente|nro[_\- ]?cuenta)"?\s*[:=>]\s*"?(\d{4,8})"?`)
+	`(?i)"?(?:cuenta[_\- ]?comitente|comitente[_\- ]?nro|cta[_\- ]?comitente|nro[_\- ]?cuenta)"?\s*[:=>]\s*"?(\d{4,8})"?`,
+)
 
 // fixSenderCompIDRE matches a FIX SenderCompID — sign of a
 // FIX session config to MAE / BYMA.
 var fixSenderCompIDRE = regexp.MustCompile(
-	`(?i)(?:SenderCompID|49=|sender[_\-]?comp[_\-]?id)\s*[:=>]\s*"?([A-Za-z0-9_\-\.]{2,32})`)
+	`(?i)(?:SenderCompID|49=|sender[_\-]?comp[_\-]?id)\s*[:=>]\s*"?([A-Za-z0-9_\-\.]{2,32})`,
+)
 
 // cuotaparteCountRE matches a per-receipt cuotaparte count.
 // Cohen AM receipts include `cuotapartes_emitidas` or
 // `cantidad_cuotapartes` numeric field.
 var cuotaparteCountRE = regexp.MustCompile(
-	`(?i)"?(?:cuotapartes[_\- ]?emitidas|cantidad[_\- ]?cuotapartes|cuotapartes[_\- ]?suscriptas|cuotapartes[_\- ]?rescatadas|cuotaparte[_\- ]?count|nro[_\- ]?cuotapartes)"?\s*[:=>]\s*"?(\d{1,12}(?:[.,]\d+)?)`)
+	`(?i)"?(?:cuotapartes[_\- ]?emitidas|cantidad[_\- ]?cuotapartes|cuotapartes[_\- ]?suscriptas|cuotapartes[_\- ]?rescatadas|cuotaparte[_\- ]?count|nro[_\- ]?cuotapartes)"?\s*[:=>]\s*"?(\d{1,12}(?:[.,]\d+)?)`,
+)
 
 // liquidacionRowRE matches a per-liquidación CSV row. Cohen
 // daily liquidación PDFs sometimes export to CSV with header
 // `Fecha,Cuenta,Especie,Cantidad,Precio,Importe`. Data rows
 // start with a date.
 var liquidacionRowRE = regexp.MustCompile(
-	`(?im)^\d{2}[/-]\d{2}[/-]\d{4},\d+,[A-Z][A-Z0-9.\-]{1,8},`)
+	`(?im)^\d{2}[/-]\d{2}[/-]\d{4},\d+,[A-Z][A-Z0-9.\-]{1,8},`,
+)
 
 // optionsSymbolRE matches an OCC-style option chain symbol.
 var optionsSymbolRE = regexp.MustCompile(
-	`(?i)\b([A-Z]{1,5}_\d{6}[CP]\d{8})\b`)
+	`(?i)\b([A-Z]{1,5}_\d{6}[CP]\d{8})\b`,
+)
 
 // symbolEntryRE matches a per-symbol entry in profile /
 // statement / liquidación. Cohen profile JSON has `"especie":
@@ -82,11 +92,13 @@ var optionsSymbolRE = regexp.MustCompile(
 // `<date>,<acct>,<TICKER>` data-row form (no per-row keyword
 // markers).
 var symbolEntryRE = regexp.MustCompile(
-	`(?im)(?:"?(?:especie\d*|symbol(?:_?\w+)?|sym|ticker|instrument)"?\s*[:=]\s*"?|<(?:especie\d*|symbol|instrument)[^>]*>|^\d{2}[/-]\d{2}[/-]\d{4},\d+,)([A-Z][A-Z0-9_\-\./]{0,7})`)
+	`(?im)(?:"?(?:especie\d*|symbol(?:_?\w+)?|sym|ticker|instrument)"?\s*[:=]\s*"?|<(?:especie\d*|symbol|instrument)[^>]*>|^\d{2}[/-]\d{2}[/-]\d{4},\d+,)([A-Z][A-Z0-9_\-\./]{0,7})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseCohenProfile parses a Cohen NetTrader profile body.
 func ParseCohenProfile(body []byte) CohenFields {
@@ -136,7 +148,8 @@ func ParseCohenFCISubscription(body []byte) CohenFields {
 	out := ParseCohenProfile(body)
 	if m := cuotaparteCountRE.FindSubmatch(body); len(m) > 1 {
 		raw := strings.ReplaceAll(strings.ReplaceAll(
-			string(m[1]), ",", ""), ".", "")
+			string(m[1]), ",", "",
+		), ".", "")
 		if v, err := strconv.ParseInt(raw, 10, 64); err == nil {
 			out.CuotaparteCount = v
 		}

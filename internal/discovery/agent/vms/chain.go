@@ -44,13 +44,13 @@ func (c *chainCollector) Collect(ctx context.Context) ([]VM, error) {
 		got, err := sub.Collect(ctx)
 		if err != nil {
 			slog.Warn("vms: hypervisor collector failed",
-				"hypervisor", sub.Name(), "error", err)
+				"code", string(LogCodeChainHypervisorCollectorFailed), "hypervisor", sub.Name(), "error", err)
 			continue
 		}
 		for _, v := range got {
 			if len(out) >= MaxVMs {
 				slog.Warn("vms: cap reached, dropping later hypervisors",
-					"cap", MaxVMs)
+					"code", string(LogCodeChainCapReached), "cap", MaxVMs)
 				SortVMs(out)
 				return out, nil
 			}

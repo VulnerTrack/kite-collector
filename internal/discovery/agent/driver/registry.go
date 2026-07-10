@@ -67,7 +67,7 @@ func (r *Registry) Collect(ctx context.Context) *Result {
 			defer mu.Unlock()
 
 			if err != nil {
-				slog.Warn("driver: collector failed", "name", c.Name(), "error", err)
+				slog.Warn("driver: collector failed", "code", string(LogCodeRegistryCollectorFailed), "name", c.Name(), "error", err)
 				merged.Errs = append(merged.Errs, CollectError{
 					Collector: c.Name(),
 					Err:       err,
@@ -79,7 +79,8 @@ func (r *Registry) Collect(ctx context.Context) *Result {
 				return nil
 			}
 			merged.Merge(res)
-			slog.Info("driver: collector completed",
+			slog.Info(
+				"driver: collector completed",
 				"name", c.Name(),
 				"drivers", len(res.Drivers),
 				"bindings", len(res.Bindings),

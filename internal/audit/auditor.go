@@ -96,6 +96,7 @@ func (r *Registry) AuditAll(ctx context.Context, asset model.Asset) ([]model.Con
 		res := <-ch
 		if res.err != nil {
 			slog.Warn("audit: auditor failed",
+				"code", string(LogCodeAuditorFailed),
 				"auditor", res.name, "error", res.err)
 		}
 		if len(res.findings) > 0 {

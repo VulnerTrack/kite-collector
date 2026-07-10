@@ -42,7 +42,8 @@ func CheckTOFU(credDir string, serverCert *x509.Certificate, logger *slog.Logger
 		if writeErr := os.WriteFile(fpPath, []byte(actual), 0o600); writeErr != nil {
 			return fmt.Errorf("pin server fingerprint: %w", writeErr)
 		}
-		logger.Info("TOFU: pinned server certificate fingerprint",
+		logger.Info(
+			"TOFU: pinned server certificate fingerprint",
 			"fingerprint", actual,
 			"path", fpPath,
 		)
@@ -54,7 +55,9 @@ func CheckTOFU(credDir string, serverCert *x509.Certificate, logger *slog.Logger
 
 	expected := strings.TrimSpace(string(stored))
 	if actual != expected {
-		logger.Error("TOFU: server certificate fingerprint MISMATCH",
+		logger.Error(
+			"TOFU: server certificate fingerprint MISMATCH",
+			"code", string(LogCodeTOFUMismatch),
 			"expected", expected,
 			"actual", actual,
 		)
@@ -76,7 +79,8 @@ func AcceptNewFingerprint(credDir string, logger *slog.Logger) error {
 	}
 
 	if logger != nil {
-		logger.Info("TOFU: fingerprint reset — next connection will pin new certificate",
+		logger.Info(
+			"TOFU: fingerprint reset — next connection will pin new certificate",
 			"path", fpPath,
 		)
 	}

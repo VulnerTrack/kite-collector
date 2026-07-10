@@ -44,7 +44,8 @@ type ProbeHeartbeat struct {
 // values (scan UUID, source name validated against the closed enum, status
 // enum, integer-formatted counters, sha256: hex hash).
 func (h ProbeHeartbeat) CanonicalPayload() []byte {
-	return []byte(fmt.Sprintf("v1|%s|%s|%s|%d|%d|%s",
+	return []byte(fmt.Sprintf(
+		"v1|%s|%s|%s|%d|%d|%s",
 		h.ScanRunID.String(),
 		h.Source,
 		string(h.Status),

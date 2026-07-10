@@ -22,51 +22,63 @@ type SOCFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|soc[_\-]?password|splunk[_\-]?password|elastic[_\-]?password|api[_\-]?token)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|soc[_\-]?password|splunk[_\-]?password|elastic[_\-]?password|api[_\-]?token)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|soc[_\-]?password|splunk[_\-]?password|elastic[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|soc[_\-]?password|splunk[_\-]?password|elastic[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|soc[_\-]?password|splunk[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|soc[_\-]?password|splunk[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // incidentIDRE matches an incident identifier.
 var incidentIDRE = regexp.MustCompile(
-	`(?i)"?(?:incident[_\- ]?id|case[_\- ]?id|inc[_\- ]?id|ticket)"?\s*[:=>]\s*"?([A-Z0-9\-]{3,32})"?`)
+	`(?i)"?(?:incident[_\- ]?id|case[_\- ]?id|inc[_\- ]?id|ticket)"?\s*[:=>]\s*"?([A-Z0-9\-]{3,32})"?`,
+)
 
 // tlpRE matches a TLP classification field.
 var tlpRE = regexp.MustCompile(
-	`(?i)\b(?:tlp:?\s*(clear|white|green|amber|amber\+strict|amber-strict|red))\b`)
+	`(?i)\b(?:tlp:?\s*(clear|white|green|amber|amber\+strict|amber-strict|red))\b`,
+)
 
 // severityRE matches an incident-severity field.
 var severityRE = regexp.MustCompile(
-	`(?i)"?(?:severity|sev|criticality|priority|incident[_\- ]?severity)"?\s*[:=>]\s*"?(informational|info|low|medium|med|high|critical|crit)"?`)
+	`(?i)"?(?:severity|sev|criticality|priority|incident[_\- ]?severity)"?\s*[:=>]\s*"?(informational|info|low|medium|med|high|critical|crit)"?`,
+)
 
 // siemPlatformRE matches a SIEM platform marker in body.
 var siemPlatformRE = regexp.MustCompile(
-	`(?i)\b(splunk|elastic|elasticsearch|microsoft sentinel|sentinel|qradar|sumo logic|sumologic|devo)\b`)
+	`(?i)\b(splunk|elastic|elasticsearch|microsoft sentinel|sentinel|qradar|sumo logic|sumologic|devo)\b`,
+)
 
 // cveCountRE matches a total CVE count.
 var cveCountRE = regexp.MustCompile(
-	`(?i)"?(?:cve[_\- ]?count|cve[_\- ]?total|vulnerabilities[_\- ]?count|total[_\- ]?cves)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:cve[_\- ]?count|cve[_\- ]?total|vulnerabilities[_\- ]?count|total[_\- ]?cves)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // criticalCVECountRE matches a critical CVE count.
 var criticalCVECountRE = regexp.MustCompile(
-	`(?i)"?(?:critical[_\- ]?cve[_\- ]?count|critical[_\- ]?count|critical[_\- ]?vulns|cvss[_\- ]?critical)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:critical[_\- ]?cve[_\- ]?count|critical[_\- ]?count|critical[_\- ]?vulns|cvss[_\- ]?critical)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // detectionRuleCountRE matches a detection-rule count.
 var detectionRuleCountRE = regexp.MustCompile(
-	`(?i)"?(?:detection[_\- ]?rule[_\- ]?count|rules[_\- ]?count|detection[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:detection[_\- ]?rule[_\- ]?count|rules[_\- ]?count|detection[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // iocCountRE matches an IOC count.
 var iocCountRE = regexp.MustCompile(
-	`(?i)"?(?:ioc[_\- ]?count|indicators[_\- ]?count|total[_\- ]?iocs)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:ioc[_\- ]?count|indicators[_\- ]?count|total[_\- ]?iocs)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // csirtOrgCuitKeyRE matches `csirt_org_cuit: NN-NNNNNNNN-N`.
 var csirtOrgCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:csirt[_\- ]?org[_\- ]?cuit|org[_\- ]?cuit|entidad[_\- ]?cuit|cnv[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:csirt[_\- ]?org[_\- ]?cuit|org[_\- ]?cuit|entidad[_\- ]?cuit|cnv[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseSOC parses any SOC artifact body (shared parser).
 func ParseSOC(body []byte) SOCFields {

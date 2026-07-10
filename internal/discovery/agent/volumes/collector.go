@@ -63,7 +63,7 @@ func (c *gopsutilCollector) Collect(ctx context.Context) ([]Volume, error) {
 	}
 	if len(parts) > MaxVolumes {
 		slog.Warn("volumes: capping inventory at MaxVolumes",
-			"observed", len(parts), "cap", MaxVolumes)
+			"code", string(LogCodeCollectorInventoryCapped), "observed", len(parts), "cap", MaxVolumes)
 		parts = parts[:MaxVolumes]
 	}
 

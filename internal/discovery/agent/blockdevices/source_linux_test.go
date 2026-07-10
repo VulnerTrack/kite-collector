@@ -53,7 +53,8 @@ func TestLinuxSourceEnumeratesBlock(t *testing.T) {
 	root := t.TempDir()
 
 	// SATA SSD.
-	writeBlk(t, root, "sda",
+	writeBlk(
+		t, root, "sda",
 		map[string]string{"size": "1953525168", "removable": "0", "ro": "0"},
 		map[string]string{"rotational": "0", "logical_block_size": "512", "physical_block_size": "4096", "nr_requests": "256"},
 		map[string]string{"model": "Samsung SSD 870", "vendor": "ATA", "firmware_rev": "SVT0", "serial": "S5XYZ1"},
@@ -61,7 +62,8 @@ func TestLinuxSourceEnumeratesBlock(t *testing.T) {
 	)
 
 	// USB stick (removable).
-	writeBlk(t, root, "sdb",
+	writeBlk(
+		t, root, "sdb",
 		map[string]string{"size": "30965760", "removable": "1", "ro": "0"},
 		map[string]string{"rotational": "0", "logical_block_size": "512", "physical_block_size": "512"},
 		map[string]string{"model": "DataTraveler 3.0", "vendor": "Kingston"},
@@ -69,14 +71,16 @@ func TestLinuxSourceEnumeratesBlock(t *testing.T) {
 	)
 
 	// NVMe SSD.
-	writeBlk(t, root, "nvme0n1",
+	writeBlk(
+		t, root, "nvme0n1",
 		map[string]string{"size": "1000215216", "removable": "0", "ro": "0", "wwid": "eui.abc"},
 		map[string]string{"rotational": "0", "logical_block_size": "512", "physical_block_size": "512"},
 		nil, nil,
 	)
 
 	// LUKS-encrypted dm volume.
-	writeBlk(t, root, "dm-0",
+	writeBlk(
+		t, root, "dm-0",
 		map[string]string{"size": "1000000000", "removable": "0", "ro": "0"},
 		map[string]string{"rotational": "0", "logical_block_size": "512", "physical_block_size": "512"},
 		nil,
@@ -126,7 +130,8 @@ func TestLinuxSourceMissingRootReturnsEmpty(t *testing.T) {
 
 func TestCollectorOnLinuxRiskAnnotations(t *testing.T) {
 	root := t.TempDir()
-	writeBlk(t, root, "sdb",
+	writeBlk(
+		t, root, "sdb",
 		map[string]string{"size": "100", "removable": "1", "ro": "0"},
 		map[string]string{"rotational": "0", "logical_block_size": "512", "physical_block_size": "512"},
 		map[string]string{"serial": "USB-STICK-1"},

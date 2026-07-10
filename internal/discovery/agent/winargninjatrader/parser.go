@@ -24,37 +24,44 @@ type NTFields struct {
 // accountLoginRE matches `Login=NNN` / `Account=NNN` rows
 // in INI / JSON config.
 var accountLoginRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:Login|Account|AccountName|AccountID)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})"?`)
+	`(?im)^\s*"?(?:Login|Account|AccountName|AccountID)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})"?`,
+)
 
 // accountLoginXMLRE matches `<Login>NNN</Login>` /
 // `<Account>NNN</Account>` in connections.xml.
 var accountLoginXMLRE = regexp.MustCompile(
-	`(?i)<(?:Login|Account|AccountName|AccountID)>([A-Za-z0-9_\-]{3,32})</`)
+	`(?i)<(?:Login|Account|AccountName|AccountID)>([A-Za-z0-9_\-]{3,32})</`,
+)
 
 // strategyNameCSRE matches `public class <name> : Strategy`
 // in a NinjaScript .cs file.
 var strategyNameCSRE = regexp.MustCompile(
-	`(?m)public\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:Strategy|Indicator|BarsType|DrawingTool|AddOn)`)
+	`(?m)public\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:Strategy|Indicator|BarsType|DrawingTool|AddOn)`,
+)
 
 // optimizerIterationsRE matches an Optimizer XML
 // `<Iterations>NN</Iterations>` row.
 var optimizerIterationsRE = regexp.MustCompile(
-	`(?i)<\s*(?:iterations|optimizer[_\- ]?iterations|total[_\- ]?iterations)\s*>\s*([0-9]+)\s*<`)
+	`(?i)<\s*(?:iterations|optimizer[_\- ]?iterations|total[_\- ]?iterations)\s*>\s*([0-9]+)\s*<`,
+)
 
 // dataProviderLoginRE matches `<Username>`, `<Password>`,
 // `<APIKey>` in connections.xml.
 var dataProviderLoginRE = regexp.MustCompile(
-	`(?i)<\s*(?:Username|Password|APIKey|Login)\s*>\s*[^<]+\s*<`)
+	`(?i)<\s*(?:Username|Password|APIKey|Login)\s*>\s*[^<]+\s*<`,
+)
 
 // replayMarkerRE detects a market-replay file marker
 // (NT8 stores replay sessions under db\replay\).
 var replayMarkerRE = regexp.MustCompile(
-	`(?i)(?:market[_\- ]?replay|replay[_\- ]?session|replay[_\- ]?dump|nt[_\- ]?replay)`)
+	`(?i)(?:market[_\- ]?replay|replay[_\- ]?session|replay[_\- ]?dump|nt[_\- ]?replay)`,
+)
 
 // instrumentCountRE counts instrument entries in the
 // instrument DB / connection config.
 var instrumentCountRE = regexp.MustCompile(
-	`(?i)<\s*(?:Instrument|Symbol|Ticker|MasterInstrument)\s*>`)
+	`(?i)<\s*(?:Instrument|Symbol|Ticker|MasterInstrument)\s*>`,
+)
 
 // ParseNTArtifact parses an NT8 body (XML / CS / log) and
 // extracts scalar fields.

@@ -23,45 +23,54 @@ type TVFields struct {
 
 // strategyFnRE matches `strategy("Name", ...)` Pine call.
 var strategyFnRE = regexp.MustCompile(
-	`(?i)\bstrategy\s*\(\s*["']?([^"',)]{2,80})`)
+	`(?i)\bstrategy\s*\(\s*["']?([^"',)]{2,80})`,
+)
 
 // indicatorFnRE matches `indicator("Name", ...)` Pine call.
 var indicatorFnRE = regexp.MustCompile(
-	`(?i)\bindicator\s*\(\s*["']?([^"',)]{2,80})`)
+	`(?i)\bindicator\s*\(\s*["']?([^"',)]{2,80})`,
+)
 
 // pineVersionRE matches `//@version=N` Pine version comment.
 var pineVersionRE = regexp.MustCompile(
-	`(?m)^\s*//\s*@\s*version\s*=\s*(\d)`)
+	`(?m)^\s*//\s*@\s*version\s*=\s*(\d)`,
+)
 
 // webhookURLRE matches a webhook URL row in alert config JSON.
 var webhookURLRE = regexp.MustCompile(
-	`(?i)("|')?(webhook[_\- ]?url|webhook|hook[_\- ]?url)("|')?\s*[:=]\s*"?(https?://[^\s"'<>]{8,})`)
+	`(?i)("|')?(webhook[_\- ]?url|webhook|hook[_\- ]?url)("|')?\s*[:=]\s*"?(https?://[^\s"'<>]{8,})`,
+)
 
 // secretInWebhookRE matches a bearer / api_key / secret inside
 // a webhook payload or header. Skips the optional `Bearer ` /
 // `Basic ` scheme prefix before the captured value.
 var secretInWebhookRE = regexp.MustCompile(
-	`(?i)("|')?(api[_-]?key|bearer|secret|access[_-]?token|authorization)("|')?\s*[:=]\s*("|')?(?:Bearer\s+|Basic\s+)?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(api[_-]?key|bearer|secret|access[_-]?token|authorization)("|')?\s*[:=]\s*("|')?(?:Bearer\s+|Basic\s+)?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // alertEntryRE counts alert entries in a TradingView alert
 // config body.
 var alertEntryRE = regexp.MustCompile(
-	`(?i)"(?:alert_name|alert_id|alertId|alertName)"\s*:`)
+	`(?i)"(?:alert_name|alert_id|alertId|alertName)"\s*:`,
+)
 
 // watchlistTickerRE matches a ticker entry in a watchlist
 // CSV / JSON. Accepts `_` and `(` as closer so Pine strings
 // like `"GGAL_momentum"` still surface their leading ticker.
 var watchlistTickerRE = regexp.MustCompile(
-	`(?:^|[\s\|;,>"'<])([A-Z][A-Z0-9]{1,5})(?:[\s\|;,<"'/_()]|$)`)
+	`(?:^|[\s\|;,>"'<])([A-Z][A-Z0-9]{1,5})(?:[\s\|;,<"'/_()]|$)`,
+)
 
 // apiKeyInPineRE matches API key declarations inside a Pine
 // source (in comments or strings).
 var apiKeyInPineRE = regexp.MustCompile(
-	`(?i)(?://|"|')\s*(api[_-]?key|bearer|secret|access[_-]?token)\s*[:=]\s*"?([A-Za-z0-9_\-]{16,})`)
+	`(?i)(?://|"|')\s*(api[_-]?key|bearer|secret|access[_-]?token)\s*[:=]\s*"?([A-Za-z0-9_\-]{16,})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseTVPineScript parses a .pine source body and extracts
 // strategy/indicator name, Pine version, Argentine tickers,

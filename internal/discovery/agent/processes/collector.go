@@ -62,7 +62,7 @@ func (c *gopsutilCollector) Collect(ctx context.Context) ([]Process, error) {
 	}
 	if len(handles) > MaxProcesses {
 		slog.Warn("processes: capping inventory at MaxProcesses",
-			"observed", len(handles), "cap", MaxProcesses)
+			"code", string(LogCodeCollectorInventoryCapped), "observed", len(handles), "cap", MaxProcesses)
 		handles = handles[:MaxProcesses]
 	}
 

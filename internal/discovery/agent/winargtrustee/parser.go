@@ -24,59 +24,73 @@ type TrusteeFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|trustee[_\-]?password|tmf[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|trustee[_\-]?password|tmf[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|trustee[_\-]?password|tmf[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|trustee[_\-]?password|tmf[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|trustee[_\-]?password|tmf[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|trustee[_\-]?password|tmf[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // trusteeFirmRE matches a trustee-firm marker in body.
 var trusteeFirmRE = regexp.MustCompile(
-	`(?i)\b(tmf trust|tmf-trust|tmf argentina|tmf-argentina|bny mellon|bny-mellon|first trust|first-trust|equity trust|equity-trust|bice fideicomisos|bice-fideicomisos|rosario administradora|cohen trustee|cohen-trustee|hsbc trust|santander trust|aval federal trust|aval-federal-trust)\b`)
+	`(?i)\b(tmf trust|tmf-trust|tmf argentina|tmf-argentina|bny mellon|bny-mellon|first trust|first-trust|equity trust|equity-trust|bice fideicomisos|bice-fideicomisos|rosario administradora|cohen trustee|cohen-trustee|hsbc trust|santander trust|aval federal trust|aval-federal-trust)\b`,
+)
 
 // onClassRE matches an ON-class field.
 var onClassRE = regexp.MustCompile(
-	`(?i)"?(?:on[_\- ]?class|tipo[_\- ]?on|on[_\- ]?type|obligacion[_\- ]?tipo)"?\s*[:=>]\s*"?(on[_\- ]?simple|simple|on[_\- ]?convertible|convertible|on[_\- ]?subordinated|subordinated|on[_\- ]?secured|secured|on[_\- ]?vrd[_\- ]?mixed|vrd[_\- ]?mixed|on[_\- ]?pyme|pyme|green[_\- ]?bond|social[_\- ]?bond|sustainability[_\- ]?linked|slb)"?`)
+	`(?i)"?(?:on[_\- ]?class|tipo[_\- ]?on|on[_\- ]?type|obligacion[_\- ]?tipo)"?\s*[:=>]\s*"?(on[_\- ]?simple|simple|on[_\- ]?convertible|convertible|on[_\- ]?subordinated|subordinated|on[_\- ]?secured|secured|on[_\- ]?vrd[_\- ]?mixed|vrd[_\- ]?mixed|on[_\- ]?pyme|pyme|green[_\- ]?bond|social[_\- ]?bond|sustainability[_\- ]?linked|slb)"?`,
+)
 
 // defaultStatusRE matches a default-status field.
 var defaultStatusRE = regexp.MustCompile(
-	`(?i)"?(?:default[_\- ]?status|estado[_\- ]?incumplimiento|status)"?\s*[:=>]\s*"?(performing|cumpliendo|covenant[_\- ]?breach|incumplimiento[_\- ]?covenant|payment[_\- ]?default|default[_\- ]?pago|cross[_\- ]?default|acceleration|aceleracion|restructured|reestructurada|collateral[_\- ]?execution|ejecucion[_\- ]?garantia)"?`)
+	`(?i)"?(?:default[_\- ]?status|estado[_\- ]?incumplimiento|status)"?\s*[:=>]\s*"?(performing|cumpliendo|covenant[_\- ]?breach|incumplimiento[_\- ]?covenant|payment[_\- ]?default|default[_\- ]?pago|cross[_\- ]?default|acceleration|aceleracion|restructured|reestructurada|collateral[_\- ]?execution|ejecucion[_\- ]?garantia)"?`,
+)
 
 // issuerCuitKeyRE matches issuer CUIT field.
 var issuerCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:issuer[_\- ]?cuit|emisor[_\- ]?cuit|deudor[_\- ]?cuit|cuit[_\- ]?emisor)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:issuer[_\- ]?cuit|emisor[_\- ]?cuit|deudor[_\- ]?cuit|cuit[_\- ]?emisor)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // trusteeCuitKeyRE matches trustee firm CUIT field.
 var trusteeCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:trustee[_\- ]?cuit|fiduciario[_\- ]?cuit|representante[_\- ]?cuit|cuit[_\- ]?fiduciario|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:trustee[_\- ]?cuit|fiduciario[_\- ]?cuit|representante[_\- ]?cuit|cuit[_\- ]?fiduciario|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // onSeriesIDRE matches ON series identifier (e.g., "YPF-Serie-12").
 var onSeriesIDRE = regexp.MustCompile(
-	`(?i)"?(?:on[_\- ]?series[_\- ]?id|on[_\- ]?series|serie[_\- ]?on|obligacion[_\- ]?serie|series[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9][A-Z0-9\-\._]{1,64})"?`)
+	`(?i)"?(?:on[_\- ]?series[_\- ]?id|on[_\- ]?series|serie[_\- ]?on|obligacion[_\- ]?serie|series[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9][A-Z0-9\-\._]{1,64})"?`,
+)
 
 // bondholderCountRE matches bondholder count.
 var bondholderCountRE = regexp.MustCompile(
-	`(?i)"?(?:bondholder[_\- ]?count|obligacionistas[_\- ]?count|titulares[_\- ]?count|holders[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:bondholder[_\- ]?count|obligacionistas[_\- ]?count|titulares[_\- ]?count|holders[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // outstandingPrincipalRE matches outstanding principal in ARS.
 var outstandingPrincipalRE = regexp.MustCompile(
-	`(?i)"?(?:outstanding[_\- ]?principal[_\- ]?ars|principal[_\- ]?vivo[_\- ]?ars|capital[_\- ]?vivo[_\- ]?ars|vn[_\- ]?vivo[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:outstanding[_\- ]?principal[_\- ]?ars|principal[_\- ]?vivo[_\- ]?ars|capital[_\- ]?vivo[_\- ]?ars|vn[_\- ]?vivo[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // accruedInterestRE matches accrued interest in ARS.
 var accruedInterestRE = regexp.MustCompile(
-	`(?i)"?(?:accrued[_\- ]?interest[_\- ]?ars|intereses[_\- ]?devengados[_\- ]?ars|intereses[_\- ]?acumulados[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:accrued[_\- ]?interest[_\- ]?ars|intereses[_\- ]?devengados[_\- ]?ars|intereses[_\- ]?acumulados[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // covenantBreachCountRE matches covenant-breach count.
 var covenantBreachCountRE = regexp.MustCompile(
-	`(?i)"?(?:covenant[_\- ]?breach[_\- ]?count|breach[_\- ]?count|incumplimiento[_\- ]?covenant[_\- ]?count|covenants[_\- ]?en[_\- ]?breach)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:covenant[_\- ]?breach[_\- ]?count|breach[_\- ]?count|incumplimiento[_\- ]?covenant[_\- ]?count|covenants[_\- ]?en[_\- ]?breach)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // daysPastDueRE matches days past due field.
 var daysPastDueRE = regexp.MustCompile(
-	`(?i)"?(?:days[_\- ]?past[_\- ]?due|dias[_\- ]?en[_\- ]?mora|dpd|days[_\- ]?in[_\- ]?arrears)"?\s*[:=>]\s*"?(\d{1,7})`)
+	`(?i)"?(?:days[_\- ]?past[_\- ]?due|dias[_\- ]?en[_\- ]?mora|dpd|days[_\- ]?in[_\- ]?arrears)"?\s*[:=>]\s*"?(\d{1,7})`,
+)
 
 // ParseTrustee parses any trustee artifact body (shared parser).
 func ParseTrustee(body []byte) TrusteeFields {

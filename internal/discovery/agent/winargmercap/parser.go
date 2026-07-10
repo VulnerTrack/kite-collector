@@ -25,50 +25,61 @@ type MercapFields struct {
 
 // saldoRE matches `saldo: <signed-decimal>` rows.
 var saldoRE = regexp.MustCompile(
-	`(?i)("|')?(saldo|saldo[_\- ]?cliente|balance|saldo[_\- ]?cuenta)("|')?\s*[:=>]\s*"?(-?[0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(saldo|saldo[_\- ]?cliente|balance|saldo[_\- ]?cuenta)("|')?\s*[:=>]\s*"?(-?[0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // settleDaysRE matches `T+N` settlement-day markers.
 var settleDaysRE = regexp.MustCompile(
-	`(?i)\bT\+([0-9]{1,2})\b`)
+	`(?i)\bT\+([0-9]{1,2})\b`,
+)
 
 // commissionRE matches `comision: NN.NN%` / `commission_pct=NN`.
 var commissionRE = regexp.MustCompile(
-	`(?i)("|')?(comisi[oó]n|commission|fee)([_\- ]?pct)?("|')?\s*[:=>]\s*"?([0-9]+(?:[.,][0-9]+)?)\s*%?`)
+	`(?i)("|')?(comisi[oó]n|commission|fee)([_\- ]?pct)?("|')?\s*[:=>]\s*"?([0-9]+(?:[.,][0-9]+)?)\s*%?`,
+)
 
 // commissionAmountRE matches `commission_amount=NN` AND trade
 // notional for ratio computation. Used as secondary signal.
 var commissionAmountRE = regexp.MustCompile(
-	`(?i)("|')?(commission[_\- ]?amount|comision[_\- ]?monto)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(commission[_\- ]?amount|comision[_\- ]?monto)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // notionalRE matches a trade notional row.
 var notionalRE = regexp.MustCompile(
-	`(?i)("|')?(importe|monto|valor|nominal|notional|total)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(importe|monto|valor|nominal|notional|total)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // reconciliationDiffRE matches `diferencia_cvsa: <signed>`.
 var reconciliationDiffRE = regexp.MustCompile(
-	`(?i)("|')?(diferencia[_\- ]?cvsa|reconciliation[_\- ]?diff|mismatch[_\- ]?amount|delta_cvsa)("|')?\s*[:=>]\s*"?(-?[0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(diferencia[_\- ]?cvsa|reconciliation[_\- ]?diff|mismatch[_\- ]?amount|delta_cvsa)("|')?\s*[:=>]\s*"?(-?[0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // kycReviewDateRE matches `kyc_last_review_date: YYYY-MM-DD`.
 var kycReviewDateRE = regexp.MustCompile(
-	`(?i)("|')?(kyc[_\- ]?last[_\- ]?review[_\- ]?date|fecha[_\- ]?revision[_\- ]?kyc|ultima[_\- ]?revision[_\- ]?kyc)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(kyc[_\- ]?last[_\- ]?review[_\- ]?date|fecha[_\- ]?revision[_\- ]?kyc|ultima[_\- ]?revision[_\- ]?kyc)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // matriculaIniRE matches `BrokerMatricula=NNN` / `Matricula=NNN`
 // in INI / JSON / YAML bodies (line-anchored).
 var matriculaIniRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:Matricula|BrokerMatricula|MatriculaBroker|Alyc[_\- ]?Matricula)"?\s*[:=>]\s*"?(\d{1,5})"?`)
+	`(?im)^\s*"?(?:Matricula|BrokerMatricula|MatriculaBroker|Alyc[_\- ]?Matricula)"?\s*[:=>]\s*"?(\d{1,5})"?`,
+)
 
 // matriculaXMLRE matches `<matricula>NNN</matricula>` so XML
 // bodies don't need a separate parser.
 var matriculaXMLRE = regexp.MustCompile(
-	`(?i)<(?:matricula|broker_matricula|matricula_broker)>(\d{1,5})</`)
+	`(?i)<(?:matricula|broker_matricula|matricula_broker)>(\d{1,5})</`,
+)
 
 // cuentaKeyRE matches `cuenta_comitente: NNNNN`.
 var cuentaKeyRE = regexp.MustCompile(
-	`(?i)("|')?(cuenta[_\- ]?comitente|cuenta[_\- ]?id|account[_\- ]?id|comitente)("|')?\s*[:=>]\s*"?(\d{4,12})"?`)
+	`(?i)("|')?(cuenta[_\- ]?comitente|cuenta[_\- ]?id|account[_\- ]?id|comitente)("|')?\s*[:=>]\s*"?(\d{4,12})"?`,
+)
 
 // clienteCuitKeyRE matches a labeled cliente CUIT.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseMercapArtifact parses a Mercap body (XML / CSV / JSON /
 // INI) and extracts scalar fields.

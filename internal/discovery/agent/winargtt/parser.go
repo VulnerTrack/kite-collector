@@ -32,85 +32,103 @@ type TTFields struct {
 
 // passwordRE matches a password row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|tt[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|tt[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_secret|app_secret|tt_secret|tt_app_secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_secret|app_secret|tt_secret|tt_app_secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches a TT API key / app key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:tt[_\-]?api[_\-]?key|tt[_\-]?app[_\-]?key|tt[_\-]?token|app[_\-]?key|api[_\-]?key|api[_\-]?token|access[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:tt[_\-]?api[_\-]?key|tt[_\-]?app[_\-]?key|tt[_\-]?token|app[_\-]?key|api[_\-]?key|api[_\-]?token|access[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches TT username.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:tt[_\-]?username|tt[_\-]?user|username|user|email|login[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:tt[_\-]?username|tt[_\-]?user|username|user|email|login[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // accountIDRE matches a TT account ID.
 var accountIDRE = regexp.MustCompile(
-	`(?i)"?(?:tt[_\-]?account|account[_\-]?id|accountId|trader[_\-]?id|account[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`)
+	`(?i)"?(?:tt[_\-]?account|account[_\-]?id|accountId|trader[_\-]?id|account[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`,
+)
 
 // ttFIXSessionRE detects TT FIX 4.4 institutional gateway
 // session markers.
 var ttFIXSessionRE = regexp.MustCompile(
-	`(?i)(?:8=FIX\.4\.4|8=FIXT\.1\.1|tt[_\- ]?fix|tt[_\- ]?gateway|fix[_\- ]?adapter|tt[_\- ]?adapter)`)
+	`(?i)(?:8=FIX\.4\.4|8=FIXT\.1\.1|tt[_\- ]?fix|tt[_\- ]?gateway|fix[_\- ]?adapter|tt[_\- ]?adapter)`,
+)
 
 // fixDropCopyRE detects FIX drop-copy session markers.
 var fixDropCopyRE = regexp.MustCompile(
-	`(?i)(?:drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP|TradeCaptureReport)`)
+	`(?i)(?:drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP|TradeCaptureReport)`,
+)
 
 // fixSenderRE matches FIX SenderCompID.
 var fixSenderRE = regexp.MustCompile(
-	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // fixTargetRE matches FIX TargetCompID.
 var fixTargetRE = regexp.MustCompile(
-	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // adlMarkerRE detects TT ADL (Algo Development Language)
 // visual-algo strategy markers.
 var adlMarkerRE = regexp.MustCompile(
-	`(?i)(?:\.adl\b|<adl[_\- ]?strategy|adl[_\- ]?block|adl[_\- ]?canvas|adl[_\- ]?algo|tt[_\- ]?adl|algo[_\- ]?development[_\- ]?language)`)
+	`(?i)(?:\.adl\b|<adl[_\- ]?strategy|adl[_\- ]?block|adl[_\- ]?canvas|adl[_\- ]?algo|tt[_\- ]?adl|algo[_\- ]?development[_\- ]?language)`,
+)
 
 // algoSEMarkerRE detects TT Algo SE strategy markers.
 var algoSEMarkerRE = regexp.MustCompile(
-	`(?i)(?:algo[_\- ]?se|algose|tt[_\- ]?algo[_\- ]?se|strategy[_\- ]?engine|server[_\- ]?strategy)`)
+	`(?i)(?:algo[_\- ]?se|algose|tt[_\- ]?algo[_\- ]?se|strategy[_\- ]?engine|server[_\- ]?strategy)`,
+)
 
 // auroraMarkerRE detects TT Aurora HFT-grade execution
 // platform markers.
 var auroraMarkerRE = regexp.MustCompile(
-	`(?i)(?:tt[_\- ]?aurora|aurora[_\- ]?engine|aurora[_\- ]?execution|hft[_\- ]?aurora)`)
+	`(?i)(?:tt[_\- ]?aurora|aurora[_\- ]?engine|aurora[_\- ]?execution|hft[_\- ]?aurora)`,
+)
 
 // scoreMarkerRE detects TT Score algo-monitoring/audit
 // report markers.
 var scoreMarkerRE = regexp.MustCompile(
-	`(?i)(?:tt[_\- ]?score|\.score\b|score[_\- ]?report|algo[_\- ]?monitor|algo[_\- ]?audit)`)
+	`(?i)(?:tt[_\- ]?score|\.score\b|score[_\- ]?report|algo[_\- ]?monitor|algo[_\- ]?audit)`,
+)
 
 // ttasMarkerRE detects TTAS (TT Access Service) — TT broker
 // connectivity tier (the bridge to MATba-Rofex via local
 // broker).
 var ttasMarkerRE = regexp.MustCompile(
-	`(?i)(?:\bttas\b|tt[_\- ]?access[_\- ]?service|matba[_\- ]?rofex[_\- ]?routing|tt[_\- ]?broker[_\- ]?connect)`)
+	`(?i)(?:\bttas\b|tt[_\- ]?access[_\- ]?service|matba[_\- ]?rofex[_\- ]?routing|tt[_\- ]?broker[_\- ]?connect)`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM:SS`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // messageMarkerRE matches per-message FIX/log markers used to
 // estimate message rate.
 var messageMarkerRE = regexp.MustCompile(
-	`(?i)(?:35=W|35=X|35=D|35=8|MarketDataIncrementalRefresh|md_update|order_event|execution_report)`)
+	`(?i)(?:35=W|35=X|35=D|35=8|MarketDataIncrementalRefresh|md_update|order_event|execution_report)`,
+)
 
 // symbolEntryRE matches a JSON/INI symbol entry or FIX
 // tag `55=DLR`. `symbol_N` / `symbol_<word>` variants accepted
 // to match Algo SE/ADL strategies that label legs as
 // `symbol_1`, `symbol_2` etc.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:\b55=|"?(?:symbol(?:_\w+)?|simbolo|ticker|instrument|contract|conid)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)(?:\b55=|"?(?:symbol(?:_\w+)?|simbolo|ticker|instrument|contract|conid)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseTTConfig parses a TT terminal config body.
 func ParseTTConfig(body []byte) TTFields {

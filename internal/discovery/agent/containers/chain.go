@@ -39,13 +39,13 @@ func (c *chainCollector) Collect(ctx context.Context) ([]Container, error) {
 		got, err := sub.Collect(ctx)
 		if err != nil {
 			slog.Warn("containers: runtime collector failed",
-				"runtime", sub.Name(), "error", err)
+				"code", string(LogCodeChainRuntimeCollectorFailed), "runtime", sub.Name(), "error", err)
 			continue
 		}
 		for _, c := range got {
 			if len(out) >= MaxContainers {
 				slog.Warn("containers: cap reached, dropping later runtimes",
-					"cap", MaxContainers)
+					"code", string(LogCodeChainCapReached), "cap", MaxContainers)
 				SortContainers(out)
 				return out, nil
 			}

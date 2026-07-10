@@ -78,7 +78,8 @@ func (g *NetworkScopeGuard) Validate(cidrs []string) (int, error) {
 				prefix.Addr().IsLoopback() {
 				return 0, fmt.Errorf(
 					"CIDR %q intersects RFC-3927 link-local or loopback range "+
-						"(set KITE_ALLOW_LINK_LOCAL=true to override)", cidr)
+						"(set KITE_ALLOW_LINK_LOCAL=true to override)", cidr,
+				)
 			}
 		}
 
@@ -88,7 +89,8 @@ func (g *NetworkScopeGuard) Validate(cidrs []string) (int, error) {
 			return total, fmt.Errorf(
 				"scope exceeds maximum %d IPs (expanded so far: %d) — "+
 					"split into smaller CIDRs or raise KITE_MAX_SCAN_IPS",
-				g.MaxIPs, total)
+				g.MaxIPs, total,
+			)
 		}
 	}
 
@@ -153,6 +155,7 @@ func ClampConcurrency(requested int) int {
 	}
 	if requested > hardCap {
 		slog.Warn("network scanner: max_concurrent clamped",
+			"code", string(LogCodeScopeGuardConcurrencyClamped),
 			"requested", requested,
 			"effective", hardCap,
 			"reason", "exceeds KITE_MAX_SCAN_CONCURRENCY hard cap")
@@ -187,6 +190,7 @@ func positiveIntEnv(key string, fallback int) int {
 	n, err := strconv.Atoi(v)
 	if err != nil || n <= 0 {
 		slog.Warn("invalid integer env var, using default",
+			"code", string(LogCodeScopeGuardInvalidIntEnv),
 			"key", strconv.Quote(key), "value", strconv.Quote(v), "default", fallback)
 		return fallback
 	}

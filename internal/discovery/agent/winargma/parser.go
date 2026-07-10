@@ -29,90 +29,110 @@ type MAFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|ib[_\-]?password|deal[_\-]?password|dataroom[_\-]?password|intralinks[_\-]?password|datasite[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|ib[_\-]?password|deal[_\-]?password|dataroom[_\-]?password|intralinks[_\-]?password|datasite[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|ib[_\-]?password|deal[_\-]?password|dataroom[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|ib[_\-]?password|deal[_\-]?password|dataroom[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|ib[_\-]?password|deal[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|ib[_\-]?password|deal[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // dealIDRE matches a deal identifier (e.g. "DEAL-2026-0123" or
 // "Project Tango").
 var dealIDRE = regexp.MustCompile(
-	`(?i)"?(?:deal[_\- ]?id|project[_\- ]?id|mandate[_\- ]?id|engagement[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:deal[_\- ]?id|project[_\- ]?id|mandate[_\- ]?id|engagement[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // projectNameRE matches the project codename.
 var projectNameRE = regexp.MustCompile(
-	`(?i)"?(?:project[_\- ]?name|codename|deal[_\- ]?codename|operation[_\- ]?name)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_]{3,60})"?`)
+	`(?i)"?(?:project[_\- ]?name|codename|deal[_\- ]?codename|operation[_\- ]?name)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_]{3,60})"?`,
+)
 
 // advisorFirmRE matches the advisor-firm self-identification.
 var advisorFirmRE = regexp.MustCompile(
-	`(?i)"?(?:advisor[_\- ]?firm|advisor|firm|investment[_\- ]?bank|asesor[_\- ]?financiero)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_&]{3,60})`)
+	`(?i)"?(?:advisor[_\- ]?firm|advisor|firm|investment[_\- ]?bank|asesor[_\- ]?financiero)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_&]{3,60})`,
+)
 
 // mandateTypeRE matches a mandate-type field.
 var mandateTypeRE = regexp.MustCompile(
-	`(?i)"?(?:mandate[_\- ]?type|mandate|tipo[_\- ]?mandato)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,30})`)
+	`(?i)"?(?:mandate[_\- ]?type|mandate|tipo[_\- ]?mandato)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,30})`,
+)
 
 // dealStageRE matches a deal-stage field.
 var dealStageRE = regexp.MustCompile(
-	`(?i)"?(?:deal[_\- ]?stage|stage|etapa|fase[_\- ]?deal)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,30})`)
+	`(?i)"?(?:deal[_\- ]?stage|stage|etapa|fase[_\- ]?deal)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,30})`,
+)
 
 // preAnnouncementMarkerRE matches DRAFT / RESTRICTED /
 // CONFIDENTIAL / "NOT FOR DISTRIBUTION" markers in pre-
 // announcement M&A documents.
 var preAnnouncementMarkerRE = regexp.MustCompile(
-	`(?im)\b(?:DRAFT|BORRADOR|RESTRICTED|CONFIDENTIAL|CONFIDENCIAL|PRIVILEGED|PRIVILEGED[_\- ]?AND[_\- ]?CONFIDENTIAL|FOR[_\- ]?DISCUSSION[_\- ]?ONLY|FOR[_\- ]?INTERNAL[_\- ]?USE|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|EYES[_\- ]?ONLY|PROJECT[_\- ]?CODENAME)\b`)
+	`(?im)\b(?:DRAFT|BORRADOR|RESTRICTED|CONFIDENTIAL|CONFIDENCIAL|PRIVILEGED|PRIVILEGED[_\- ]?AND[_\- ]?CONFIDENTIAL|FOR[_\- ]?DISCUSSION[_\- ]?ONLY|FOR[_\- ]?INTERNAL[_\- ]?USE|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|EYES[_\- ]?ONLY|PROJECT[_\- ]?CODENAME)\b`,
+)
 
 // publicTargetRE matches a marker indicating the target is
 // publicly traded (BYMA-listed, US ADR, or bare exchange ticker
 // in document body).
 var publicTargetRE = regexp.MustCompile(
-	`(?i)\b(?:public[_\- ]?target|publicly[_\- ]?traded|listed[_\- ]?company|byma[_\- ]?listed|nyse[_\- ]?listed|nasdaq[_\- ]?listed|adr|cnv[_\- ]?listed|nyse|nasdaq|byma|merval|panel[_\- ]?lider)\b`)
+	`(?i)\b(?:public[_\- ]?target|publicly[_\- ]?traded|listed[_\- ]?company|byma[_\- ]?listed|nyse[_\- ]?listed|nasdaq[_\- ]?listed|adr|cnv[_\- ]?listed|nyse|nasdaq|byma|merval|panel[_\- ]?lider)\b`,
+)
 
 // crossBorderRE matches a marker indicating cross-border target.
 var crossBorderRE = regexp.MustCompile(
-	`(?i)\b(?:cross[_\- ]?border|foreign[_\- ]?target|us[_\- ]?target|brazil[_\- ]?target|cross[_\- ]?jurisdiction|inbound|outbound[_\- ]?ma)\b`)
+	`(?i)\b(?:cross[_\- ]?border|foreign[_\- ]?target|us[_\- ]?target|brazil[_\- ]?target|cross[_\- ]?jurisdiction|inbound|outbound[_\- ]?ma)\b`,
+)
 
 // bidderCountRE matches a bidder-count field.
 var bidderCountRE = regexp.MustCompile(
-	`(?i)"?(?:bidder[_\- ]?count|cantidad[_\- ]?oferentes|nro[_\- ]?oferentes|num[_\- ]?bidders)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:bidder[_\- ]?count|cantidad[_\- ]?oferentes|nro[_\- ]?oferentes|num[_\- ]?bidders)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // bidderRosterRowRE matches a per-bidder CSV row anchored on
 // CUIT pattern.
 var bidderRosterRowRE = regexp.MustCompile(
-	`(?im)^[A-Z0-9\-]+,\d{2}-?\d{8}-?\d,`)
+	`(?im)^[A-Z0-9\-]+,\d{2}-?\d{8}-?\d,`,
+)
 
 // dataroomFileCountRE matches a dataroom-file-count field.
 var dataroomFileCountRE = regexp.MustCompile(
-	`(?i)"?(?:dataroom[_\- ]?file[_\- ]?count|file[_\- ]?count|cantidad[_\- ]?archivos|nro[_\- ]?archivos|total[_\- ]?files)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:dataroom[_\- ]?file[_\- ]?count|file[_\- ]?count|cantidad[_\- ]?archivos|nro[_\- ]?archivos|total[_\- ]?files)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // dataroomRowRE matches a per-file row in dataroom manifest
 // CSV.
 var dataroomRowRE = regexp.MustCompile(
-	`(?im)^(?:DOC|FILE|F)[_\- ]?\d+,`)
+	`(?im)^(?:DOC|FILE|F)[_\- ]?\d+,`,
+)
 
 // enterpriseValueRE matches enterprise value in ARS.
 var enterpriseValueRE = regexp.MustCompile(
-	`(?i)"?(?:enterprise[_\- ]?value|ev|valor[_\- ]?empresa|equity[_\- ]?value|deal[_\- ]?value|deal[_\- ]?size)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:enterprise[_\- ]?value|ev|valor[_\- ]?empresa|equity[_\- ]?value|deal[_\- ]?value|deal[_\- ]?size)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // advisoryFeeRE matches advisory fee in ARS.
 var advisoryFeeRE = regexp.MustCompile(
-	`(?i)"?(?:advisory[_\- ]?fee|honorarios[_\- ]?asesoria|fee[_\- ]?advisor)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:advisory[_\- ]?fee|honorarios[_\- ]?asesoria|fee[_\- ]?advisor)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // successFeeBPSRE matches success-fee basis-points.
 var successFeeBPSRE = regexp.MustCompile(
-	`(?i)"?(?:success[_\- ]?fee[_\- ]?bps|success[_\- ]?fee|fee[_\- ]?bps)"?\s*[:=>]\s*"?(\d{1,6})(?:\s*bps)?`)
+	`(?i)"?(?:success[_\- ]?fee[_\- ]?bps|success[_\- ]?fee|fee[_\- ]?bps)"?\s*[:=>]\s*"?(\d{1,6})(?:\s*bps)?`,
+)
 
 // targetCuitKeyRE matches `target_cuit: NN-NNNNNNNN-N`.
 var targetCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:target[_\- ]?cuit|cuit[_\- ]?target|seller[_\- ]?cuit|cuit[_\- ]?seller|emisor[_\- ]?cuit|cuit[_\- ]?emisor|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:target[_\- ]?cuit|cuit[_\- ]?target|seller[_\- ]?cuit|cuit[_\- ]?seller|emisor[_\- ]?cuit|cuit[_\- ]?emisor|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // bidderCuitKeyRE matches `bidder_cuit: NN-NNNNNNNN-N`.
 var bidderCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:bidder[_\- ]?cuit|cuit[_\- ]?bidder|buyer[_\- ]?cuit|cuit[_\- ]?buyer|oferente[_\- ]?cuit|cuit[_\- ]?oferente)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:bidder[_\- ]?cuit|cuit[_\- ]?bidder|buyer[_\- ]?cuit|cuit[_\- ]?buyer|oferente[_\- ]?cuit|cuit[_\- ]?oferente)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParsePitchDeck parses a pitch deck body.
 func ParsePitchDeck(body []byte) MAFields {

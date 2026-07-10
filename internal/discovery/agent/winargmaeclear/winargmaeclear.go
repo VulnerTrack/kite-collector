@@ -395,7 +395,8 @@ func DistinctCounterpartiesInBody(body []byte) int64 {
 // Char class includes `>` so XML tag-form `<mae_id>987</...>`
 // is matched alongside INI/JSON `participant_id: 987`.
 var participantRE = regexp.MustCompile(
-	`(?i)(?:participant[_\- ]?id|participante|mae[_\- ]?id|alyc[_\- ]?id|matr[íi]cula)["'>\s:#=\w\.\-]{0,30}?(\d{1,5})`)
+	`(?i)(?:participant[_\- ]?id|participante|mae[_\- ]?id|alyc[_\- ]?id|matr[íi]cula)["'>\s:#=\w\.\-]{0,30}?(\d{1,5})`,
+)
 
 // ParticipantIDFromText extracts a participant ID.
 func ParticipantIDFromText(text string) string {

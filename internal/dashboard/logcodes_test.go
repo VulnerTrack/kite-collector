@@ -32,6 +32,19 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeUninstallConfirmRender,
 		LogCodeAgentUninstall,
 		LogCodeAgentStateIdentity,
+		LogCodeInstallJSONEncode,
+		LogCodeServeStaticSubFS,
+		LogCodeServeFragmentRender,
+		LogCodeServeTabPageRender,
+		LogCodeServeTablePageRender,
+		LogCodeExportAssetsCSV,
+		LogCodeExportSoftwareCSV,
+		LogCodeExportFindingsCSV,
+		LogCodeExportTableCSV,
+		LogCodeScanTrigger,
+		LogCodeOnboardingDisabledNoWrapKey,
+		LogCodeOnboardingDisabledNoSQLite,
+		LogCodeOnboardingFragmentRender,
 	}
 
 	for _, c := range codes {
@@ -65,6 +78,14 @@ func TestLogCodes_AreUnique(t *testing.T) {
 		LogCodeSupportBundleManifest,
 		LogCodeAgentInstall, LogCodeInstallStatusRender,
 		LogCodeUninstallConfirmRender, LogCodeAgentUninstall, LogCodeAgentStateIdentity,
+		LogCodeInstallJSONEncode,
+		LogCodeServeStaticSubFS, LogCodeServeFragmentRender,
+		LogCodeServeTabPageRender, LogCodeServeTablePageRender,
+		LogCodeExportAssetsCSV, LogCodeExportSoftwareCSV,
+		LogCodeExportFindingsCSV, LogCodeExportTableCSV,
+		LogCodeScanTrigger,
+		LogCodeOnboardingDisabledNoWrapKey, LogCodeOnboardingDisabledNoSQLite,
+		LogCodeOnboardingFragmentRender,
 	}
 	for _, c := range all {
 		assert.False(t, seen[c],

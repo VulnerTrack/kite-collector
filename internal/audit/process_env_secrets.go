@@ -114,7 +114,9 @@ func (p *ProcessEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]mod
 	entries, err := os.ReadDir(p.procRoot)
 	if err != nil {
 		// /proc not readable — degrade gracefully.
-		slog.Warn("process_env_secrets: read proc failed", "proc", p.procRoot, "error", err)
+		slog.Warn("process_env_secrets: read proc failed",
+			"code", string(LogCodeProcessEnvReadProcFailed),
+			"proc", p.procRoot, "error", err)
 		return nil, nil
 	}
 
@@ -145,6 +147,7 @@ func (p *ProcessEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]mod
 		}
 		if scanned >= p.maxPIDs {
 			slog.Warn("process_env_secrets: reached max pids cap; remainder skipped",
+				"code", string(LogCodeProcessEnvMaxCapReached),
 				"max", p.maxPIDs)
 			break
 		}
@@ -177,7 +180,8 @@ func (p *ProcessEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]mod
 	}
 
 	if len(findings) > 0 {
-		slog.Info("process_env_secrets: findings detected",
+		slog.Info(
+			"process_env_secrets: findings detected",
 			"asset_id", asset.ID,
 			"count", len(findings),
 			"scanned", scanned,

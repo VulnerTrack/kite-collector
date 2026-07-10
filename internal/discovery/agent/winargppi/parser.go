@@ -29,63 +29,78 @@ type PPIFields struct {
 
 // bearerRE matches an access-token / bearer / api-token.
 var bearerRE = regexp.MustCompile(
-	`(?i)("|')?(?:access[_-]?token|bearer|api[_-]?token|jwt|ppi[_-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?(?:access[_-]?token|bearer|api[_-]?token|jwt|ppi[_-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // galiciaSSORE matches a Banco Galicia SSO token / session.
 var galiciaSSORE = regexp.MustCompile(
-	`(?i)("|')?(?:galicia[_-]?sso|galicia[_-]?token|bg[_-]?sso|sso[_-]?galicia|bg[_-]?session|galicia[_-]?session)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?(?:galicia[_-]?sso|galicia[_-]?token|bg[_-]?sso|sso[_-]?galicia|bg[_-]?session|galicia[_-]?session)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // usernameRE matches `username` / `user` / `email`.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:username|user|email|usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:username|user|email|usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // passwordRE matches a password row (line-anchored INI/JSON).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|clave|pass|passwd)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|clave|pass|passwd)"?\s*[:=]\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>`.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`)
+	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line in Py source.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|clave|passwd)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|clave|passwd)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // ppiQuantImportRE detects PPI Quant SDK import.
 var ppiQuantImportRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+ppi_?quant|import\s+ppi_?quant|from\s+ppi_api|import\s+ppi_api|from\s+pyppi|import\s+pyppi)`)
+	`(?im)^\s*(?:from\s+ppi_?quant|import\s+ppi_?quant|from\s+ppi_api|import\s+ppi_api|from\s+pyppi|import\s+pyppi)`,
+)
 
 // wealthMarkerRE detects PPI Wealth markers.
 var wealthMarkerRE = regexp.MustCompile(
-	`(?i)(?:ppi[_\- ]?wealth|wealth[_\- ]?portfolio|managed[_\- ]?portfolio|portafolio[_\- ]?sugerido|portfolio[_\- ]?advisor)`)
+	`(?i)(?:ppi[_\- ]?wealth|wealth[_\- ]?portfolio|managed[_\- ]?portfolio|portafolio[_\- ]?sugerido|portfolio[_\- ]?advisor)`,
+)
 
 // corporateMarkerRE detects Cuenta Empresa / corporate-treasury markers.
 var corporateMarkerRE = regexp.MustCompile(
-	`(?i)(?:cuenta[_\- ]?empresa|cuenta[_\- ]?corporativa|corporate[_\- ]?treasury|tesoreria[_\- ]?corporativa|persona[_\- ]?juridica|cuit[_\- ]?empresa)`)
+	`(?i)(?:cuenta[_\- ]?empresa|cuenta[_\- ]?corporativa|corporate[_\- ]?treasury|tesoreria[_\- ]?corporativa|persona[_\- ]?juridica|cuit[_\- ]?empresa)`,
+)
 
 // internacionalMarkerRE detects PPI Internacional / US-equity markers.
 var internacionalMarkerRE = regexp.MustCompile(
-	`(?i)(?:ppi[_\- ]?internacional|cuenta[_\- ]?internacional|us[_\- ]?equity|us[_\- ]?stocks|cedear[_\- ]?internacional|international[_\- ]?portfolio)`)
+	`(?i)(?:ppi[_\- ]?internacional|cuenta[_\- ]?internacional|us[_\- ]?equity|us[_\- ]?stocks|cedear[_\- ]?internacional|international[_\- ]?portfolio)`,
+)
 
 // perfilInversorMarkerRE detects a Perfil del Inversor survey body.
 var perfilInversorMarkerRE = regexp.MustCompile(
-	`(?i)(?:perfil[_\- ]?inversor|perfil[_\- ]?del[_\- ]?inversor|tolerancia[_\- ]?al[_\- ]?riesgo|risk[_\- ]?tolerance|horizonte[_\- ]?temporal|objetivo[_\- ]?inversion)`)
+	`(?i)(?:perfil[_\- ]?inversor|perfil[_\- ]?del[_\- ]?inversor|tolerancia[_\- ]?al[_\- ]?riesgo|risk[_\- ]?tolerance|horizonte[_\- ]?temporal|objetivo[_\- ]?inversion)`,
+)
 
 // symbolEntryRE matches a JSON/INI symbol entry.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // notionalUSDRE matches USD-denominated amounts.
 var notionalUSDRE = regexp.MustCompile(
-	`(?i)(?:notional[_\- ]?usd|usd[_\- ]?amount|importe[_\- ]?usd|monto[_\- ]?usd|valor[_\- ]?usd|valor_mercado_usd|market_value_usd|aum_usd)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:notional[_\- ]?usd|usd[_\- ]?amount|importe[_\- ]?usd|monto[_\- ]?usd|valor[_\- ]?usd|valor_mercado_usd|market_value_usd|aum_usd)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>…</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // ParsePPICredentials parses a credentials / config body.
 func ParsePPICredentials(body []byte) PPIFields {

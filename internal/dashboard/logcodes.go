@@ -48,4 +48,25 @@ const (
 	LogCodeUninstallConfirmRender LogCode = "dashboard.install.uninstall_confirm_render_failed"
 	LogCodeAgentUninstall         LogCode = "dashboard.install.agent_uninstall_failed"
 	LogCodeAgentStateIdentity     LogCode = "dashboard.install.agent_state_identity_failed"
+	LogCodeInstallJSONEncode      LogCode = "dashboard.install.json_encode_failed"
+
+	// server bootstrap surface — Serve()
+	LogCodeServeStaticSubFS     LogCode = "dashboard.serve.static_sub_fs_failed"
+	LogCodeServeFragmentRender  LogCode = "dashboard.serve.fragment_render_failed"
+	LogCodeServeTabPageRender   LogCode = "dashboard.serve.tab_page_render_failed"
+	LogCodeServeTablePageRender LogCode = "dashboard.serve.table_page_render_failed"
+
+	// csv export surface — /api/v1/{assets,software,findings,tables}/export.csv
+	LogCodeExportAssetsCSV   LogCode = "dashboard.export.assets_csv_failed"
+	LogCodeExportSoftwareCSV LogCode = "dashboard.export.software_csv_failed"
+	LogCodeExportFindingsCSV LogCode = "dashboard.export.findings_csv_failed"
+	LogCodeExportTableCSV    LogCode = "dashboard.export.table_csv_failed"
+
+	// scan surface — POST /api/v1/scan
+	LogCodeScanTrigger LogCode = "dashboard.scan.trigger_failed"
+
+	// onboarding bootstrap surface — Serve() onboarding wiring
+	LogCodeOnboardingDisabledNoWrapKey LogCode = "dashboard.onboarding.disabled_no_wrap_key"
+	LogCodeOnboardingDisabledNoSQLite  LogCode = "dashboard.onboarding.disabled_store_not_sqlite"
+	LogCodeOnboardingFragmentRender    LogCode = "dashboard.onboarding.fragment_render_failed"
 )

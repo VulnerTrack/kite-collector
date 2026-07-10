@@ -112,7 +112,8 @@ func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 
 		zones, zErr := a.listZones(ctx, token, subID)
 		if zErr != nil {
-			slog.Error("Azure DNS list-zones failed",
+			slog.Error(
+				"Azure DNS list-zones failed",
 				"code", string(LogCodeAzureDNSListZonesFailed),
 				"error", zErr,
 				"subscription_id", subID,
@@ -127,7 +128,8 @@ func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 
 			records, rErr := a.listRecordSets(ctx, token, z.ID, isPrivate)
 			if rErr != nil {
-				slog.Error("Azure DNS list-record-sets failed; emitting partial zone data",
+				slog.Error(
+					"Azure DNS list-record-sets failed; emitting partial zone data",
 					"code", string(LogCodeAzureDNSListRecordsFailed),
 					"error", rErr,
 					"zone", z.ID,
@@ -162,7 +164,8 @@ func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 			for _, rec := range records {
 				recType := strings.ToUpper(extractAzureRecordType(rec.Type))
 				if !IsValidDNSRecordType(recType) {
-					slog.Debug("Azure DNS skipping unsupported record type",
+					slog.Debug(
+						"Azure DNS skipping unsupported record type",
 						"code", string(LogCodeAzureDNSSkipUnsupportedType),
 						"zone", z.ID,
 						"type", rec.Type,
@@ -188,7 +191,8 @@ func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 					LastSyncedAt: now,
 				})
 
-				slog.Info("cloud DNS record discovered",
+				slog.Info(
+					"cloud DNS record discovered",
 					"code", string(LogCodeDNSRecordDiscovered),
 					"cloud_dns.provider", DNSProviderAzureDNS,
 					"cloud_dns.zone_id", z.ID,
@@ -200,7 +204,8 @@ func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 				)
 			}
 
-			slog.Info("cloud DNS zone discovered",
+			slog.Info(
+				"cloud DNS zone discovered",
 				"code", string(LogCodeDNSZoneDiscovered),
 				"cloud_dns.provider", DNSProviderAzureDNS,
 				"cloud_dns.zone_id", z.ID,
@@ -217,7 +222,8 @@ func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 	a.lastSnapshot = snap
 	a.mu.Unlock()
 
-	slog.Info("Azure DNS discovery complete",
+	slog.Info(
+		"Azure DNS discovery complete",
 		"code", string(LogCodeAzureDNSComplete),
 		"zones", len(snap.Zones),
 		"records", len(snap.Records),

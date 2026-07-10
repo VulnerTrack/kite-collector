@@ -26,6 +26,7 @@ func UnaryRecoveryInterceptor(counter *prometheus.CounterVec) grpc.UnaryServerIn
 			if r := recover(); r != nil {
 				stack := string(debug.Stack())
 				slog.Error("panic recovered in gRPC unary handler",
+					"code", string(LogCodeInterceptorsUnaryPanicRecovered),
 					"component", "grpc",
 					"method", info.FullMethod,
 					"error", fmt.Sprint(r),
@@ -54,6 +55,7 @@ func StreamRecoveryInterceptor(counter *prometheus.CounterVec) grpc.StreamServer
 			if r := recover(); r != nil {
 				stack := string(debug.Stack())
 				slog.Error("panic recovered in gRPC stream handler",
+					"code", string(LogCodeInterceptorsStreamPanicRecovered),
 					"component", "grpc",
 					"method", info.FullMethod,
 					"error", fmt.Sprint(r),

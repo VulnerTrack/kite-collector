@@ -25,63 +25,78 @@ type OMSFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|oms[_\-]?password|fix[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|oms[_\-]?password|fix[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|oms[_\-]?password|fix[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|oms[_\-]?password|fix[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|oms[_\-]?password|fix[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|oms[_\-]?password|fix[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // omsPlatformRE matches an OMS platform marker in body.
 var omsPlatformRE = regexp.MustCompile(
-	`(?i)\b(charles river|charles-river|crims|fidessa|bloomberg aim|bloomberg-aim|bloomberg emsx|bloomberg-emsx|flextrade|eze[_\- ]?(?:soft|oms)?|itiviti|tradingscreen|imatch|portware)\b`)
+	`(?i)\b(charles river|charles-river|crims|fidessa|bloomberg aim|bloomberg-aim|bloomberg emsx|bloomberg-emsx|flextrade|eze[_\- ]?(?:soft|oms)?|itiviti|tradingscreen|imatch|portware)\b`,
+)
 
 // orderSideRE matches an order-side field.
 var orderSideRE = regexp.MustCompile(
-	`(?i)"?(?:order[_\- ]?side|side)"?\s*[:=>]\s*"?(buy|sell|short[_\- ]?sell|short|buy[_\- ]?cover|cover)"?`)
+	`(?i)"?(?:order[_\- ]?side|side)"?\s*[:=>]\s*"?(buy|sell|short[_\- ]?sell|short|buy[_\- ]?cover|cover)"?`,
+)
 
 // orderTypeRE matches an order-type field.
 var orderTypeRE = regexp.MustCompile(
-	`(?i)"?(?:order[_\- ]?type|ord_type)"?\s*[:=>]\s*"?(market|mkt|limit|lmt|stop[_\- ]?limit|stop|vwap|twap|pegged|iceberg|dark[_\- ]?pool)"?`)
+	`(?i)"?(?:order[_\- ]?type|ord_type)"?\s*[:=>]\s*"?(market|mkt|limit|lmt|stop[_\- ]?limit|stop|vwap|twap|pegged|iceberg|dark[_\- ]?pool)"?`,
+)
 
 // executionVenueRE matches an execution-venue field.
 var executionVenueRE = regexp.MustCompile(
-	`(?i)"?(?:execution[_\- ]?venue|venue|exchange|mercado|ex[_\- ]?destination)"?\s*[:=>]\s*"?(byma|bcba|mae|matba[_\- ]?rofex|matba|rofex|mav|nyse|nasdaq|arca|bats|otc|dark[_\- ]?pool)"?`)
+	`(?i)"?(?:execution[_\- ]?venue|venue|exchange|mercado|ex[_\- ]?destination)"?\s*[:=>]\s*"?(byma|bcba|mae|matba[_\- ]?rofex|matba|rofex|mav|nyse|nasdaq|arca|bats|otc|dark[_\- ]?pool)"?`,
+)
 
 // sociedadGerenteCuitKeyRE matches sociedad-gerente CUIT field.
 var sociedadGerenteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:sociedad[_\- ]?gerente[_\- ]?cuit|sg[_\- ]?cuit|gerente[_\- ]?cuit|alyc[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:sociedad[_\- ]?gerente[_\- ]?cuit|sg[_\- ]?cuit|gerente[_\- ]?cuit|alyc[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // fixSenderCompIDRE matches FIX SenderCompID field.
 var fixSenderCompIDRE = regexp.MustCompile(
-	`(?im)(?:^|[^a-z])(?:SenderCompID|sender[_\- ]?comp[_\- ]?id)\s*[:=>]\s*"?([A-Z0-9._\-]{1,64})"?`)
+	`(?im)(?:^|[^a-z])(?:SenderCompID|sender[_\- ]?comp[_\- ]?id)\s*[:=>]\s*"?([A-Z0-9._\-]{1,64})"?`,
+)
 
 // fixTargetCompIDRE matches FIX TargetCompID field.
 var fixTargetCompIDRE = regexp.MustCompile(
-	`(?im)(?:^|[^a-z])(?:TargetCompID|target[_\- ]?comp[_\- ]?id)\s*[:=>]\s*"?([A-Z0-9._\-]{1,64})"?`)
+	`(?im)(?:^|[^a-z])(?:TargetCompID|target[_\- ]?comp[_\- ]?id)\s*[:=>]\s*"?([A-Z0-9._\-]{1,64})"?`,
+)
 
 // orderCountRE matches a total-order count.
 var orderCountRE = regexp.MustCompile(
-	`(?i)"?(?:order[_\- ]?count|total[_\- ]?orders|orders[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:order[_\- ]?count|total[_\- ]?orders|orders[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // fillCountRE matches a total-fill count.
 var fillCountRE = regexp.MustCompile(
-	`(?i)"?(?:fill[_\- ]?count|total[_\- ]?fills|fills[_\- ]?total|executions[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:fill[_\- ]?count|total[_\- ]?fills|fills[_\- ]?total|executions[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // brokerCountRE matches a broker-list count.
 var brokerCountRE = regexp.MustCompile(
-	`(?i)"?(?:broker[_\- ]?count|approved[_\- ]?brokers[_\- ]?count|brokers[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:broker[_\- ]?count|approved[_\- ]?brokers[_\- ]?count|brokers[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // restrictedCountRE matches a restricted-ticker count.
 var restrictedCountRE = regexp.MustCompile(
-	`(?i)"?(?:restricted[_\- ]?ticker[_\- ]?count|restricted[_\- ]?count|restricted[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:restricted[_\- ]?ticker[_\- ]?count|restricted[_\- ]?count|restricted[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // largestNotionalARSRE matches the largest-order notional in ARS.
 var largestNotionalARSRE = regexp.MustCompile(
-	`(?i)"?(?:largest[_\- ]?order[_\- ]?notional[_\- ]?ars|largest[_\- ]?notional[_\- ]?ars|max[_\- ]?notional[_\- ]?ars|biggest[_\- ]?order[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:largest[_\- ]?order[_\- ]?notional[_\- ]?ars|largest[_\- ]?notional[_\- ]?ars|max[_\- ]?notional[_\- ]?ars|biggest[_\- ]?order[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // ParseOMS parses any OMS artifact body (shared parser).
 func ParseOMS(body []byte) OMSFields {

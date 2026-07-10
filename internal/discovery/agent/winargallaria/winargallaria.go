@@ -390,7 +390,8 @@ func CuitFingerprint(text string) (prefix, suffix4 string) {
 // `>` so XML-tag form `<matricula>117</matricula>` is matched
 // alongside INI/JSON `matricula: 117`.
 var matriculaRE = regexp.MustCompile(
-	`(?i)(?:matr[íi]cula|alyc[_\- ]?matricula|broker[_\- ]?matricula|allaria[_\- ]?matricula)["'>\s:#=\w\.\-]{0,30}?(\d{1,5})`)
+	`(?i)(?:matr[íi]cula|alyc[_\- ]?matricula|broker[_\- ]?matricula|allaria[_\- ]?matricula)["'>\s:#=\w\.\-]{0,30}?(\d{1,5})`,
+)
 
 // MatriculaFromText extracts the matrícula.
 func MatriculaFromText(text string) string {

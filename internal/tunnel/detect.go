@@ -90,7 +90,8 @@ func Detect(ctx context.Context, logger *slog.Logger) []TunnelProvider {
 		// Best-effort version detection.
 		provider.Version = detectVersion(ctx, path, meta.Name)
 
-		logger.Info("tunnel provider detected",
+		logger.Info(
+			"tunnel provider detected",
 			"provider", meta.Name,
 			"path", path,
 			"version", provider.Version,

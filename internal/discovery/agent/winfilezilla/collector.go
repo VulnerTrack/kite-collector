@@ -82,10 +82,12 @@ func (c *fileCollector) Collect(_ context.Context) ([]Site, error) {
 			}
 			c.harvest(
 				filepath.Join(append([]string{base, name}, SitemanagerRelComponentsPosix()...)...),
-				name, &out)
+				name, &out,
+			)
 			c.harvest(
 				filepath.Join(append([]string{base, name}, SitemanagerRelComponentsWindows()...)...),
-				name, &out)
+				name, &out,
+			)
 			if len(out) >= MaxSites {
 				break
 			}

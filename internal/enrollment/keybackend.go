@@ -34,7 +34,8 @@ func EnforceMinKeyBackend(currentBackend, minBackend string, logger *slog.Logger
 	}
 
 	if currentRank < minRank {
-		logger.Warn("key_backend below policy minimum; enrollment rejected",
+		logger.Warn(
+			"key_backend below policy minimum; enrollment rejected",
 			"code", string(LogCodeEnrollmentKeyBackendBelowPolicy),
 			"current", currentBackend,
 			"current_rank", currentRank,
@@ -48,7 +49,8 @@ func EnforceMinKeyBackend(currentBackend, minBackend string, logger *slog.Logger
 		)
 	}
 
-	logger.Info("key_backend meets enrollment policy",
+	logger.Info(
+		"key_backend meets enrollment policy",
 		"code", string(LogCodeEnrollmentKeyBackendOK),
 		"current", currentBackend,
 		"required", minBackend,

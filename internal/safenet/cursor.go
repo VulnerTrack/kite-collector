@@ -66,7 +66,8 @@ func sanitizeCursor(raw string) (string, error) {
 		if !isCursorByte(c) {
 			return "", fmt.Errorf(
 				"cursor contains disallowed character %q at offset %d "+
-					"(allowlist: [a-zA-Z0-9+/=_\\-:@.])", c, i)
+					"(allowlist: [a-zA-Z0-9+/=_\\-:@.])", c, i,
+			)
 		}
 	}
 	return raw, nil

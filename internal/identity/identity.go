@@ -177,6 +177,7 @@ func LoadOrCreate(dataDir string, logger *slog.Logger) (*Identity, error) {
 			id.ExpectedBinaryHash = id.BinaryHash
 			if perr := persist(id, idPath); perr != nil {
 				logger.Warn("stamp expected_binary_hash on existing identity failed",
+					"code", string(LogCodeLifecycleStampExpectedHashFailed),
 					"path", idPath, "error", perr)
 			}
 		}
@@ -202,6 +203,7 @@ func populateBinaryHash(id *Identity, logger *slog.Logger) {
 	hash, err := ComputeBinaryHash()
 	if err != nil {
 		logger.Warn("binary hash unavailable; tamper check disabled for this run",
+			"code", string(LogCodeLifecycleBinaryHashUnavailable),
 			"error", err)
 		return
 	}
@@ -272,6 +274,7 @@ func generate(path string, logger *slog.Logger) (*Identity, error) {
 		id.ExpectedBinaryHash = hash
 	} else {
 		logger.Warn("expected binary hash unavailable at first boot; will stamp on next launch",
+			"code", string(LogCodeLifecycleExpectedHashUnavailable),
 			"error", herr)
 	}
 
@@ -284,7 +287,8 @@ func generate(path string, logger *slog.Logger) (*Identity, error) {
 		return nil, fmt.Errorf("write identity file: %w", err)
 	}
 
-	logger.Info("generated new agent identity",
+	logger.Info(
+		"generated new agent identity",
 		"agent_id", id.AgentID,
 		"fingerprint", id.Fingerprint(),
 		"path", path,

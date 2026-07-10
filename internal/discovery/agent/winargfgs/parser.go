@@ -27,72 +27,88 @@ type FGSFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|fgs[_\-]?password|anses[_\-]?password|portal[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|fgs[_\-]?password|anses[_\-]?password|portal[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|fgs[_\-]?password|anses[_\-]?password|portal[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|fgs[_\-]?password|anses[_\-]?password|portal[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|fgs[_\-]?password|anses[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|fgs[_\-]?password|anses[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // fgsSeriesCodeRE matches a LIC series identifier. LICs are
 // labeled by issue date / series (e.g. `LIC2024-001`).
 var fgsSeriesCodeRE = regexp.MustCompile(
-	`(?i)"?(?:lic[_\- ]?series|series[_\- ]?lic|fgs[_\- ]?series|nro[_\- ]?lic)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:lic[_\- ]?series|series[_\- ]?lic|fgs[_\- ]?series|nro[_\- ]?lic)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // auctionIDRE matches a primary-market auction identifier.
 var auctionIDRE = regexp.MustCompile(
-	`(?i)"?(?:auction[_\- ]?id|subasta[_\- ]?id|licitacion[_\- ]?id|nro[_\- ]?subasta|nro[_\- ]?licitacion)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:auction[_\- ]?id|subasta[_\- ]?id|licitacion[_\- ]?id|nro[_\- ]?subasta|nro[_\- ]?licitacion)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // actaIDRE matches a board / committee minutes identifier.
 var actaIDRE = regexp.MustCompile(
-	`(?i)"?(?:acta[_\- ]?id|nro[_\- ]?acta|acta[_\- ]?nro|acta[_\- ]?numero)"?\s*[:=>]\s*"?([A-Z0-9\-]{1,16})"?`)
+	`(?i)"?(?:acta[_\- ]?id|nro[_\- ]?acta|acta[_\- ]?nro|acta[_\- ]?numero)"?\s*[:=>]\s*"?([A-Z0-9\-]{1,16})"?`,
+)
 
 // instrumentRowRE matches `<Instrumento>` / `<Tenencia>` in
 // cartera XMLs.
 var instrumentRowRE = regexp.MustCompile(
-	`(?i)<(?:fgs:|cartera:)?(?:Instrumento|Tenencia|Position|Holding)\b`)
+	`(?i)<(?:fgs:|cartera:)?(?:Instrumento|Tenencia|Position|Holding)\b`,
+)
 
 // instrumentRowJSONRE matches a JSON position-array row.
 var instrumentRowJSONRE = regexp.MustCompile(
-	`(?im)^\s*\{[^}]*"?(?:especie|symbol|ticker|instrumento)"?\s*[:=]\s*"?[A-Z][A-Z0-9.\-]{1,12}`)
+	`(?im)^\s*\{[^}]*"?(?:especie|symbol|ticker|instrumento)"?\s*[:=]\s*"?[A-Z][A-Z0-9.\-]{1,12}`,
+)
 
 // licFaceValueRE matches LIC face value in ARS millions or
 // in absolute ARS. LICs are large-denomination instruments.
 var licFaceValueRE = regexp.MustCompile(
-	`(?i)"?(?:lic[_\- ]?face[_\- ]?value|valor[_\- ]?nominal[_\- ]?lic|lic[_\- ]?vn|face[_\- ]?value)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:lic[_\- ]?face[_\- ]?value|valor[_\- ]?nominal[_\- ]?lic|lic[_\- ]?vn|face[_\- ]?value)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // auctionBidAmountRE matches an auction bid amount in ARS.
 var auctionBidAmountRE = regexp.MustCompile(
-	`(?i)"?(?:bid[_\- ]?amount|monto[_\- ]?subasta|oferta[_\- ]?monto|amount[_\- ]?ofrecido)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:bid[_\- ]?amount|monto[_\- ]?subasta|oferta[_\- ]?monto|amount[_\- ]?ofrecido)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // auctionWindowRE matches the auction window / venue identifier.
 var auctionWindowRE = regexp.MustCompile(
-	`(?i)"?(?:auction[_\- ]?window|ventana[_\- ]?subasta|window|venue|organismo)"?\s*[:=>]\s*"?([A-Za-z\-_]{4,40})`)
+	`(?i)"?(?:auction[_\- ]?window|ventana[_\- ]?subasta|window|venue|organismo)"?\s*[:=>]\s*"?([A-Za-z\-_]{4,40})`,
+)
 
 // sipaPensionerCountRE matches a count of SIPA pensioners in
 // a pension roster.
 var sipaPensionerCountRE = regexp.MustCompile(
-	`(?i)"?(?:sipa[_\- ]?pensioner[_\- ]?count|pensionados[_\- ]?count|cantidad[_\- ]?pensionados|count[_\- ]?pensioners)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:sipa[_\- ]?pensioner[_\- ]?count|pensionados[_\- ]?count|cantidad[_\- ]?pensionados|count[_\- ]?pensioners)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // sipaCSVRowRE matches a per-pensioner CSV row.
 var sipaCSVRowRE = regexp.MustCompile(
-	`(?im)^\d+,\d{2}-?\d{8}-?\d,`)
+	`(?im)^\d+,\d{2}-?\d{8}-?\d,`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|emisora[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|emisora[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // trabajadorCuilKeyRE matches `trabajador_cuil: NN-NNNNNNNN-N`.
 var trabajadorCuilKeyRE = regexp.MustCompile(
-	`(?i)"?(?:trabajador[_\- ]?cuil|cuil[_\- ]?trabajador|pensioner[_\- ]?cuil|pensionado[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:trabajador[_\- ]?cuil|cuil[_\- ]?trabajador|pensioner[_\- ]?cuil|pensionado[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // symbolEntryRE matches a per-symbol entry in cartera /
 // auction / acta bodies.
 var symbolEntryRE = regexp.MustCompile(
-	`(?im)(?:"?(?:especie|symbol|sym|ticker|instrumento)"?\s*[:=]\s*"?|<(?:especie|symbol|instrumento)[^>]*>)([A-Z][A-Z0-9_\-\./]{0,11})`)
+	`(?im)(?:"?(?:especie|symbol|sym|ticker|instrumento)"?\s*[:=]\s*"?|<(?:especie|symbol|instrumento)[^>]*>)([A-Z][A-Z0-9_\-\./]{0,11})`,
+)
 
 // ParseCartera parses an FGS cartera XML / XLSX body.
 func ParseCartera(body []byte) FGSFields {

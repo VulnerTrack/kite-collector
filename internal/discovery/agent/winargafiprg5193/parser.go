@@ -30,11 +30,13 @@ type AFIPFields struct {
 // afipTokenRE matches AFIP Clave Fiscal session token / JWT
 // in INI / JSON form (`key: value` or `key=value`).
 var afipTokenRE = regexp.MustCompile(
-	`(?i)("|')?(?:clave[_\- ]?fiscal|afip[_\- ]?token|session[_\- ]?token|afip[_\- ]?sign|wsaa[_\- ]?token|ticket[_\- ]?acceso|sign[_\- ]?value)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?(?:clave[_\- ]?fiscal|afip[_\- ]?token|session[_\- ]?token|afip[_\- ]?sign|wsaa[_\- ]?token|ticket[_\- ]?acceso|sign[_\- ]?value)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // afipTokenXMLRE matches XML-tag form `<clave_fiscal>X</...>`.
 var afipTokenXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:clave[_\-]?fiscal|afip[_\-]?token|session[_\-]?token|wsaa[_\-]?token|ticket[_\-]?acceso|sign[_\-]?value)\s*>([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)<\s*(?:clave[_\-]?fiscal|afip[_\-]?token|session[_\-]?token|wsaa[_\-]?token|ticket[_\-]?acceso|sign[_\-]?value)\s*>([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // afipTokenFromBody extracts an AFIP token from either form.
 func afipTokenFromBody(body []byte) string {
@@ -49,19 +51,23 @@ func afipTokenFromBody(body []byte) string {
 
 // passwordRE matches a password row (line-anchored INI/JSON/XML).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd|clave[_\- ]?fiscal)"?\s*(?:[:=>]|>)\s*\S+`)
+	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd|clave[_\- ]?fiscal)"?\s*(?:[:=>]|>)\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>` on a single line.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave|clave[_\-]?fiscal)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave|clave[_\-]?fiscal)\s*>`)
+	`(?i)<\s*(?:password|clave|clave[_\-]?fiscal)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave|clave[_\-]?fiscal)\s*>`,
+)
 
 // reporterCuitRE matches a `reporter_cuit: NN-NNNNNNNN-N`.
 var reporterCuitRE = regexp.MustCompile(
-	`(?i)"?(?:reporter[_\- ]?cuit|cuit[_\- ]?informante|informante[_\- ]?cuit|alyc[_\- ]?cuit|broker[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:reporter[_\- ]?cuit|cuit[_\- ]?informante|informante[_\- ]?cuit|alyc[_\- ]?cuit|broker[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // reporterCuitXMLRE matches `<reporter_cuit>X</reporter_cuit>`.
 var reporterCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:reporter[_\-]?cuit|cuit[_\-]?informante|informante[_\-]?cuit|alyc[_\-]?cuit|broker[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:reporter[_\-]?cuit|cuit[_\-]?informante|informante[_\-]?cuit|alyc[_\-]?cuit|broker[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // reporterCuitFromBody extracts the reporter CUIT from either
 // INI/JSON or XML-tag form.
@@ -77,47 +83,58 @@ func reporterCuitFromBody(body []byte) string {
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|usuario[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|usuario[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>…</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit|usuario[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit|usuario[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // dniRE matches an Argentine DNI (7-8 digits).
 var dniRE = regexp.MustCompile(
-	`(?i)(?:^|\b)(?:dni|documento|d\.n\.i\.)\s*[:=#]?\s*(\d{7,8})\b`)
+	`(?i)(?:^|\b)(?:dni|documento|d\.n\.i\.)\s*[:=#]?\s*(\d{7,8})\b`,
+)
 
 // fullNameRE matches an apellido + nombre PII bundle (loose).
 var fullNameRE = regexp.MustCompile(
-	`(?i)(?:apellido_nombre|apellido[\s_-]?y[\s_-]?nombre|nombre[\s_-]?completo|full[\s_-]?name|nombre[\s_-]?apellido)["'\s:=>]+([A-ZÁÉÍÓÚÑa-záéíóúñ\s,\.]{4,80})`)
+	`(?i)(?:apellido_nombre|apellido[\s_-]?y[\s_-]?nombre|nombre[\s_-]?completo|full[\s_-]?name|nombre[\s_-]?apellido)["'\s:=>]+([A-ZÁÉÍÓÚÑa-záéíóúñ\s,\.]{4,80})`,
+)
 
 // transactionEventRE matches a per-row transaction marker.
 var transactionEventRE = regexp.MustCompile(
-	`(?i)(?:operacion_id|operacion[_\- ]?id|transaction_id|transaccion[_\- ]?id|comprobante[_\- ]?id|nro[_\- ]?operacion|trade_id)`)
+	`(?i)(?:operacion_id|operacion[_\- ]?id|transaction_id|transaccion[_\- ]?id|comprobante[_\- ]?id|nro[_\- ]?operacion|trade_id)`,
+)
 
 // cryptoMarkerRE detects crypto-asset reporting markers.
 var cryptoMarkerRE = regexp.MustCompile(
-	`(?i)(?:cripto|crypto|btc|eth|usdt|usdc|stablecoin|criptoactivo|criptomoneda|wallet[_\- ]?address|wallet_id|psav[_\- ]?id|exchange_id)`)
+	`(?i)(?:cripto|crypto|btc|eth|usdt|usdc|stablecoin|criptoactivo|criptomoneda|wallet[_\- ]?address|wallet_id|psav[_\- ]?id|exchange_id)`,
+)
 
 // gananciasRE detects income-tax retention markers.
 var gananciasRE = regexp.MustCompile(
-	`(?i)(?:ganancias[_\- ]?retencion|retencion[_\- ]?ganancias|impuesto[_\- ]?ganancias|rg830|rg[_\- ]?830|retencion[_\- ]?cuarta[_\- ]?categoria)`)
+	`(?i)(?:ganancias[_\- ]?retencion|retencion[_\- ]?ganancias|impuesto[_\- ]?ganancias|rg830|rg[_\- ]?830|retencion[_\- ]?cuarta[_\- ]?categoria)`,
+)
 
 // bienesPersonalesRE detects bienes-personales markers.
 var bienesPersonalesRE = regexp.MustCompile(
-	`(?i)(?:bienes[_\- ]?personales|bienes[_\- ]?pers|wealth[_\- ]?tax|patrimonio[_\- ]?total|alicuota[_\- ]?bienes|patrimonio[_\- ]?neto)`)
+	`(?i)(?:bienes[_\- ]?personales|bienes[_\- ]?pers|wealth[_\- ]?tax|patrimonio[_\- ]?total|alicuota[_\- ]?bienes|patrimonio[_\- ]?neto)`,
+)
 
 // crossBorderRE detects cross-border transfer markers.
 var crossBorderRE = regexp.MustCompile(
-	`(?i)(?:cross[_\- ]?border|transferencia[_\- ]?exterior|foreign[_\- ]?transfer|external[_\- ]?wallet|exterior[_\- ]?cuit|cuenta[_\- ]?exterior|swift[_\- ]?code|iban|f8125|f_8125|f-8125)`)
+	`(?i)(?:cross[_\- ]?border|transferencia[_\- ]?exterior|foreign[_\- ]?transfer|external[_\- ]?wallet|exterior[_\- ]?cuit|cuenta[_\- ]?exterior|swift[_\- ]?code|iban|f8125|f_8125|f-8125)`,
+)
 
 // arsAmountRE captures an ARS-denominated amount row.
 var arsAmountRE = regexp.MustCompile(
-	`(?i)(?:importe[_\- ]?ars|monto[_\- ]?ars|valor[_\- ]?ars|amount[_\- ]?ars|ars[_\- ]?amount|notional[_\- ]?ars|importe|monto)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:importe[_\- ]?ars|monto[_\- ]?ars|valor[_\- ]?ars|amount[_\- ]?ars|ars[_\- ]?amount|notional[_\- ]?ars|importe|monto)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // usdAmountRE captures a USD-denominated amount row.
 var usdAmountRE = regexp.MustCompile(
-	`(?i)(?:importe[_\- ]?usd|monto[_\- ]?usd|valor[_\- ]?usd|amount[_\- ]?usd|usd[_\- ]?amount|notional[_\- ]?usd|dolares?|dollar[_\- ]?amount)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:importe[_\- ]?usd|monto[_\- ]?usd|valor[_\- ]?usd|amount[_\- ]?usd|usd[_\- ]?amount|notional[_\- ]?usd|dolares?|dollar[_\- ]?amount)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // ParseAFIPCredentials parses an api_key / clave-fiscal /
 // config body.

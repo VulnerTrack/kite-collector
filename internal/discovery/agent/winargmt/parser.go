@@ -25,38 +25,46 @@ type MTFields struct {
 // passwordIniRE matches `Password=NNN` / `password=NNN` in
 // terminal.ini / accounts.ini.
 var passwordIniRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:Password|Clave|AccountPassword|InvestorPassword)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:Password|Clave|AccountPassword|InvestorPassword)"?\s*[:=]\s*\S+`,
+)
 
 // signalProviderRE matches a TradingSignal / SignalsProvider /
 // SignalSubscription row indicating a paid signal service.
 var signalProviderRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:TradingSignal|SignalsProvider|SignalSubscription|Signal_|SignalUser|SignalLogin)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:TradingSignal|SignalsProvider|SignalSubscription|Signal_|SignalUser|SignalLogin)"?\s*[:=]\s*\S+`,
+)
 
 // accountLoginRE matches `Login=NNNNNN` / `AccountNumber=NNNNNN`.
 var accountLoginRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:Login|AccountNumber|Account)"?\s*[:=]\s*"?(\d{4,10})"?`)
+	`(?im)^\s*"?(?:Login|AccountNumber|Account)"?\s*[:=]\s*"?(\d{4,10})"?`,
+)
 
 // serverNameRE matches `Server=<name>` / `ServerName=<name>`.
 var serverNameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:Server|ServerName|TradeServer)"?\s*[:=]\s*"?([A-Za-z0-9_.\-]{3,80})"?`)
+	`(?im)^\s*"?(?:Server|ServerName|TradeServer)"?\s*[:=]\s*"?([A-Za-z0-9_.\-]{3,80})"?`,
+)
 
 // eaNameRE matches `EA=<name>` / `Expert=<name>` in optimize/
 // backtest reports.
 var eaNameRE = regexp.MustCompile(
-	`(?i)("|')?(?:expert|ea|advisor|strategy)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-. ]{2,80})"?`)
+	`(?i)("|')?(?:expert|ea|advisor|strategy)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-. ]{2,80})"?`,
+)
 
 // optimizerInSampleRE matches `In-Sample Profit: NN.NN`.
 var optimizerInSampleRE = regexp.MustCompile(
-	`(?i)(?:in[\s_-]?sample[\s_-]?profit|in[\s_-]?sample[\s_-]?net[\s_-]?profit|is[\s_-]?profit)\s*[:=]\s*\$?\s*(-?[0-9]+(?:[.,][0-9]+)?)`)
+	`(?i)(?:in[\s_-]?sample[\s_-]?profit|in[\s_-]?sample[\s_-]?net[\s_-]?profit|is[\s_-]?profit)\s*[:=]\s*\$?\s*(-?[0-9]+(?:[.,][0-9]+)?)`,
+)
 
 // optimizerOutSampleRE matches `Out-of-Sample Profit: NN.NN`.
 var optimizerOutSampleRE = regexp.MustCompile(
-	`(?i)(?:out[\s_-]?of[\s_-]?sample[\s_-]?profit|out[\s_-]?sample[\s_-]?profit|oos[\s_-]?profit|forward[\s_-]?profit)\s*[:=]\s*\$?\s*(-?[0-9]+(?:[.,][0-9]+)?)`)
+	`(?i)(?:out[\s_-]?of[\s_-]?sample[\s_-]?profit|out[\s_-]?sample[\s_-]?profit|oos[\s_-]?profit|forward[\s_-]?profit)\s*[:=]\s*\$?\s*(-?[0-9]+(?:[.,][0-9]+)?)`,
+)
 
 // brokerHostExtractRE matches a broker host token in origin.txt
 // or servers list line.
 var brokerHostExtractRE = regexp.MustCompile(
-	`(?i)([A-Za-z0-9][A-Za-z0-9_\-]*\.(?:com|com\.ar|net|org|io)(?:\.[a-z]{2,3})?)`)
+	`(?i)([A-Za-z0-9][A-Za-z0-9_\-]*\.(?:com|com\.ar|net|org|io)(?:\.[a-z]{2,3})?)`,
+)
 
 // ParseMTTerminalConfig parses a terminal.ini / accounts.ini /
 // servers.dat-style text body.

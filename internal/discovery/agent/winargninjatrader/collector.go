@@ -216,7 +216,8 @@ func (c *fileCollector) mergeFields(row *Row, body []byte) {
 // broker name (e.g. `Rithmic_live`).
 func accountTypeFromPath(path string) AccountType {
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "sim101") ||
 		strings.Contains(lower, "sim404") ||

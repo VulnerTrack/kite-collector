@@ -736,7 +736,8 @@ func DefaultCatalog() []Signature {
 			Patterns: []Pattern{{
 				Name: "issuer-letsencrypt",
 				IssuerRegex: regexp.MustCompile(
-					`Let's Encrypt|^R1[01]$|^R3$|^E[15-9]$`),
+					`Let's Encrypt|^R1[01]$|^R3$|^E[15-9]$`,
+				),
 				Kind: SignalIssuerName, Confidence: ConfidenceMedium,
 			}},
 		},

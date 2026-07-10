@@ -19,7 +19,8 @@ const heartbeatColumns = `id, scan_run_id, source, status, items_emitted, ` +
 // unique index makes duplicate inserts surface as a SQLite constraint
 // violation; the caller treats that as a registry bug, not an alert.
 func (s *SQLiteStore) RecordHeartbeat(ctx context.Context, hb model.ProbeHeartbeat) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.db.ExecContext(
+		ctx,
 		`INSERT INTO probe_heartbeats (`+heartbeatColumns+`) `+
 			`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		hb.ID.String(),

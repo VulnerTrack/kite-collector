@@ -34,35 +34,43 @@ type LemonFields struct {
 
 // passwordRE matches a password row in .env / config.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|lemon[_\-]?password|client[_\-]?secret|app[_\-]?secret|LEMON_CLIENT_SECRET)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|lemon[_\-]?password|client[_\-]?secret|app[_\-]?secret|LEMON_CLIENT_SECRET)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|lemon[_\-]?password|lemon[_\-]?secret|client[_\-]?secret|app[_\-]?secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|lemon[_\-]?password|lemon[_\-]?secret|client[_\-]?secret|app[_\-]?secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // accessTokenRE matches a Lemon OAuth2 access token.
 var accessTokenRE = regexp.MustCompile(
-	`(?i)("|')?(?:lemon[_\-]?access[_\-]?token|access[_\-]?token|LEMON_ACCESS_TOKEN|access_token|bearer)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{24,})`)
+	`(?i)("|')?(?:lemon[_\-]?access[_\-]?token|access[_\-]?token|LEMON_ACCESS_TOKEN|access_token|bearer)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{24,})`,
+)
 
 // refreshTokenRE matches a Lemon OAuth2 refresh token.
 var refreshTokenRE = regexp.MustCompile(
-	`(?i)("|')?(?:lemon[_\-]?refresh[_\-]?token|refresh[_\-]?token|LEMON_REFRESH_TOKEN|refresh_token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{24,})`)
+	`(?i)("|')?(?:lemon[_\-]?refresh[_\-]?token|refresh[_\-]?token|LEMON_REFRESH_TOKEN|refresh_token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{24,})`,
+)
 
 // clientIDRE matches a Lemon application client_id.
 var clientIDRE = regexp.MustCompile(
-	`(?i)"?(?:lemon[_\-]?client[_\-]?id|client[_\-]?id|LEMON_CLIENT_ID|app[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{8,64})`)
+	`(?i)"?(?:lemon[_\-]?client[_\-]?id|client[_\-]?id|LEMON_CLIENT_ID|app[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{8,64})`,
+)
 
 // userIDRE matches a Lemon user_id.
 var userIDRE = regexp.MustCompile(
-	`(?i)"?(?:lemon[_\-]?user[_\-]?id|user[_\-]?id|LEMON_USER_ID)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{6,32})`)
+	`(?i)"?(?:lemon[_\-]?user[_\-]?id|user[_\-]?id|LEMON_USER_ID)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{6,32})`,
+)
 
 // usernameRE matches Lemon login.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:lemon[_\-]?username|lemon[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:lemon[_\-]?username|lemon[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // webhookSecretRE matches a webhook signing key.
 var webhookSecretRE = regexp.MustCompile(
-	`(?i)("|')?(?:webhook[_\-]?secret|webhook[_\-]?signing[_\-]?key|LEMON_WEBHOOK_SECRET|x-?signature|notification[_\-]?secret)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:webhook[_\-]?secret|webhook[_\-]?signing[_\-]?key|LEMON_WEBHOOK_SECRET|x-?signature|notification[_\-]?secret)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usdtArsArbitrageRE detects USDT/ARS arbitrage logic — common
 // surfaces:
@@ -72,53 +80,63 @@ var webhookSecretRE = regexp.MustCompile(
 //  2. USDT/ARS pair references.
 //  3. Cross-venue price snapshots (Binance + Lemon).
 var usdtArsArbitrageRE = regexp.MustCompile(
-	`(?i)(?:brecha[_\- ]?cambiaria|dolar[_\- ]?(?:blue|mep|ccl|tarjeta|oficial)|usdt[_\- ]?ars|usdc[_\- ]?ars|arbitrage|arbitraje|cross[_\- ]?venue[_\- ]?price)`)
+	`(?i)(?:brecha[_\- ]?cambiaria|dolar[_\- ]?(?:blue|mep|ccl|tarjeta|oficial)|usdt[_\- ]?ars|usdc[_\- ]?ars|arbitrage|arbitraje|cross[_\- ]?venue[_\- ]?price)`,
+)
 
 // kycMarkerRE detects KYC dump markers — KYC payloads
 // typically carry `selfie`, `dni_front`, `dni_back`, AML
 // screening, or PEP flag.
 var kycMarkerRE = regexp.MustCompile(
-	`(?i)(?:selfie[_\- ]?(?:ref|url|s3|file)|dni[_\- ]?(?:front|back|image)|aml[_\- ]?screen|pep[_\- ]?(?:flag|check)|kyc[_\- ]?(?:level|tier|approved|status)|liveness[_\- ]?(?:score|check))`)
+	`(?i)(?:selfie[_\- ]?(?:ref|url|s3|file)|dni[_\- ]?(?:front|back|image)|aml[_\- ]?screen|pep[_\- ]?(?:flag|check)|kyc[_\- ]?(?:level|tier|approved|status)|liveness[_\- ]?(?:score|check))`,
+)
 
 // tradeRowRE matches a per-trade row in trade-log. We accept
 // CSV-style `,t-\d+,` row IDs in addition to keyword markers
 // because Lemon trade-log exports often elide the `trade_id`
 // header keyword on data rows.
 var tradeRowRE = regexp.MustCompile(
-	`(?i)(?:trade[_\- ]?id|swap[_\- ]?id|buy[_\- ]?id|sell[_\- ]?id|,t-\d+,|,swap-\d+,|^\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}|OrderFilled|FillEvent)`)
+	`(?i)(?:trade[_\- ]?id|swap[_\- ]?id|buy[_\- ]?id|sell[_\- ]?id|,t-\d+,|,swap-\d+,|^\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}|OrderFilled|FillEvent)`,
+)
 
 // cardTxRowRE matches a per-row crypto-card transaction.
 var cardTxRowRE = regexp.MustCompile(
-	`(?i)(?:card[_\- ]?tx[_\- ]?id|merchant[_\- ]?id|merchant[_\- ]?name|mcc[_\- ]?code|authorization[_\- ]?id|settlement[_\- ]?id|card[_\- ]?transaction)`)
+	`(?i)(?:card[_\- ]?tx[_\- ]?id|merchant[_\- ]?id|merchant[_\- ]?name|mcc[_\- ]?code|authorization[_\- ]?id|settlement[_\- ]?id|card[_\- ]?transaction)`,
+)
 
 // earnRowRE matches a per-row Lemon Earn yield-position entry.
 var earnRowRE = regexp.MustCompile(
-	`(?i)(?:earn[_\- ]?position|yield[_\- ]?apy|apy|stake[_\- ]?id|reward[_\- ]?id|yield[_\- ]?balance)`)
+	`(?i)(?:earn[_\- ]?position|yield[_\- ]?apy|apy|stake[_\- ]?id|reward[_\- ]?id|yield[_\- ]?balance)`,
+)
 
 // assetEntryRE matches a per-asset balance line — used for
 // distinct-asset and balance sums.
 var assetEntryRE = regexp.MustCompile(
-	`(?i)(?:asset|currency|coin|ticker|symbol)\s*[:=]\s*"?([A-Za-z0-9_\-/]{2,20})`)
+	`(?i)(?:asset|currency|coin|ticker|symbol)\s*[:=]\s*"?([A-Za-z0-9_\-/]{2,20})`,
+)
 
 // balanceUSDRE matches `balance_usd=` / `usd_amount` fields.
 // The `"?` after the key handles JSON-form `"balance_usd":
 // 5000` in addition to INI / .env form.
 var balanceUSDRE = regexp.MustCompile(
-	`(?i)(?:balance[_\- ]?usd|usd[_\- ]?amount|importe[_\- ]?usd|saldo[_\- ]?usd|monto[_\- ]?dolares)"?\s*[:=]\s*"?(\d+(?:[.,]\d+)?)`)
+	`(?i)(?:balance[_\- ]?usd|usd[_\- ]?amount|importe[_\- ]?usd|saldo[_\- ]?usd|monto[_\- ]?dolares)"?\s*[:=]\s*"?(\d+(?:[.,]\d+)?)`,
+)
 
 // clienteDNIRE matches an AR DNI (`dni: 12345678`) — the `"?`
 // after the key handles JSON-form `"dni": "12345678"`.
 var clienteDNIRE = regexp.MustCompile(
-	`(?i)\b(?:dni|documento|nro_documento|numero_documento)"?\s*[:=]\s*"?(\d{7,8})`)
+	`(?i)\b(?:dni|documento|nro_documento|numero_documento)"?\s*[:=]\s*"?(\d{7,8})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // nameRE matches a `name` / `nombre` field — used for PII
 // bundle detection.
 var nameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:name|nombre|first_name|last_name|apellido|full_name)"?\s*[:=]\s*"?[A-Za-zÁÉÍÓÚáéíóúÑñ]{2,40}`)
+	`(?im)^\s*"?(?:name|nombre|first_name|last_name|apellido|full_name)"?\s*[:=]\s*"?[A-Za-zÁÉÍÓÚáéíóúÑñ]{2,40}`,
+)
 
 // ParseLemonConfig parses a generic Lemon cfg / .env body.
 func ParseLemonConfig(body []byte) LemonFields {
@@ -328,7 +346,8 @@ func sumUSDBalances(body []byte) int64 {
 	var total float64
 	for _, m := range balanceUSDRE.FindAllSubmatch(body, -1) {
 		raw := strings.ReplaceAll(strings.ReplaceAll(
-			string(m[1]), ".", ""), ",", ".")
+			string(m[1]), ".", "",
+		), ",", ".")
 		v, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
 			continue

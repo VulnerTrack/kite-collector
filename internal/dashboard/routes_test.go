@@ -136,7 +136,6 @@ func TestRoute_GET_KiteLogin_ReturnsLaunchAuthPage(t *testing.T) {
 	assert.Contains(t, body, `<body class="kite-auth-page">`)
 	assert.Contains(t, body, "Vulnertrack")
 	assert.Contains(t, body, "Sign In")
-	assert.Contains(t, body, "Create Account")
 	assert.Contains(t, body, "http://127.0.0.1:9090")
 }
 

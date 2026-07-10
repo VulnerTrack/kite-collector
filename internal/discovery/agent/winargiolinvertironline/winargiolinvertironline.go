@@ -321,7 +321,8 @@ func CuitFingerprint(text string) (prefix, suffix4 string) {
 
 // accountRE matches `cuenta=NNNNNN` / `account=NNNNNN`.
 var accountRE = regexp.MustCompile(
-	`(?i)(?:cuenta|account|comitente|cuenta_comitente)\s*[:=]\s*"?(\d{4,12})"?`)
+	`(?i)(?:cuenta|account|comitente|cuenta_comitente)\s*[:=]\s*"?(\d{4,12})"?`,
+)
 
 // AccountSuffix4 extracts the last 4 digits of cuenta-comitente.
 func AccountSuffix4(text string) string {

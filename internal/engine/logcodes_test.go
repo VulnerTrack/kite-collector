@@ -49,6 +49,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeScanRunCompleteFailed,
 		LogCodeScanRunComplete,
 		LogCodeRetryAttemptFailed,
+		LogCodeObservabilityReconcileFailed,
 	}
 
 	for _, c := range codes {
@@ -87,6 +88,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 		LogCodeEventsPersistFailed, LogCodeEventsEmitFailed,
 		LogCodeScanRunCompleteFailed, LogCodeScanRunComplete,
 		LogCodeRetryAttemptFailed,
+		LogCodeObservabilityReconcileFailed,
 	}
 	for _, c := range all {
 		assert.False(t, seen[c],

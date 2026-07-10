@@ -122,7 +122,9 @@ func (s *Service) Name() string { return "service" }
 func (s *Service) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
 	ports, err := discoverListeningPorts(ctx)
 	if err != nil {
-		slog.Warn("service auditor: failed to discover ports", "error", err)
+		slog.Warn("service auditor: failed to discover ports",
+			"code", string(LogCodeServicePortDiscoveryFailed),
+			"error", err)
 		return nil, nil
 	}
 

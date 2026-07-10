@@ -46,13 +46,14 @@ type onboardingDeps struct {
 	Commit           string
 	PlatformEndpoint string
 	WrapKey          []byte
+	TLSConfig        config.TLSConfig
 	// ScanEnabled tells the post-completion launcher panel whether to surface
 	// the "Run your first scan" CTA. True when the dashboard was wired with
 	// both a scan.Coordinator and a config.Config (the same condition the
 	// existing /api/v1/scan handler uses to gate real scan starts vs the
-	// read-only placeholder).
+	// read-only placeholder). Kept last so the pointerless bool falls outside
+	// the struct's GC pointer-scan region (govet fieldalignment).
 	ScanEnabled bool
-	TLSConfig   config.TLSConfig
 }
 
 // registerOnboardingRoutes mounts every RFC-0112 dashboard route onto mux.
@@ -431,7 +432,9 @@ func writeFocusStepStyle(w io.Writer, step string) {
 func renderOnboardingFragment(w http.ResponseWriter, logger *slog.Logger, name string, render func(io.Writer) error) {
 	var buf bytes.Buffer
 	if err := render(&buf); err != nil {
-		logger.Error("dashboard: onboarding render "+name, "error", err)
+		logger.Error("dashboard: onboarding render "+name,
+			"code", string(LogCodeOnboardingFragmentRender),
+			"error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -600,7 +603,8 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 		return
 	}
 
-	deps.Logger.Info("platform identity enrolled",
+	deps.Logger.Info(
+		"platform identity enrolled",
 		"code", string(LogCodeEnrollSuccess),
 		"endpoint", deps.PlatformEndpoint,
 		"fingerprint", shortFingerprint(fingerprint),

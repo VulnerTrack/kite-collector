@@ -23,8 +23,18 @@ func NewChainCollector() Collector {
 			NewTailscaleCollector(),
 			NewZeroTierCollector(),
 			NewNebulaCollector(),
+			NewNetBirdCollector(),
 			NewWindowsBuiltinCollector(),
 			NewMacOSBuiltinCollector(),
+			// Commercial / enterprise clients added in iter 14
+			NewCiscoAnyConnectCollector(),
+			NewMullvadCollector(),
+			NewGlobalProtectCollector(),
+			NewFortinetCollector(),
+			NewCheckPointCollector(),
+			NewDirectAccessCollector(),
+			NewNordLayerCollector(),
+			NewProtonVPNCollector(),
 		},
 	}
 }
@@ -40,13 +50,13 @@ func (c *chainCollector) Collect(ctx context.Context) ([]Profile, error) {
 		got, err := sub.Collect(ctx)
 		if err != nil {
 			slog.Warn("vpn: source collector failed",
-				"source", sub.Name(), "error", err)
+				"code", string(LogCodeChainSourceCollectorFailed), "source", sub.Name(), "error", err)
 			continue
 		}
 		for _, p := range got {
 			if len(out) >= MaxProfiles {
 				slog.Warn("vpn: cap reached, dropping later sources",
-					"cap", MaxProfiles)
+					"code", string(LogCodeChainCapReached), "cap", MaxProfiles)
 				SortProfiles(out)
 				return out, nil
 			}

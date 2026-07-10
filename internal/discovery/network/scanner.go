@@ -251,7 +251,9 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		return nil, nil
 	}
 
-	slog.Info("network scanner: starting scan",
+	slog.Info(
+		"network scanner: starting scan",
+		"code", string(LogCodeScannerStarting),
 		"scan_id", scanID,
 		"ips", len(ips),
 		"ports", parsed.TCPPorts,
@@ -334,7 +336,9 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 // surface validation errors directly to the caller, not to depend on a
 // healthy SQLite for correct rejection behavior.
 func (s *Scanner) recordGuardEvent(ctx context.Context, scanID string, ge safenet.GuardEvent) {
-	slog.Warn("safety guard fired",
+	slog.Warn(
+		"safety guard fired",
+		"code", string(LogCodeScannerSafetyGuardFired),
 		"guard_type", string(ge.GuardType),
 		"action", string(ge.Action),
 		"input_summary", ge.InputSummary,
@@ -345,7 +349,9 @@ func (s *Scanner) recordGuardEvent(ctx context.Context, scanID string, ge safene
 	}
 	ge.ScanID = scanID
 	if err := s.sink.WriteGuardEvent(ctx, ge); err != nil {
-		slog.Error("failed to persist guard event",
+		slog.Error(
+			"failed to persist guard event",
+			"code", string(LogCodeScannerGuardEventPersistFail),
 			"error", err.Error(),
 			"guard_type", string(ge.GuardType),
 		)
@@ -357,7 +363,9 @@ func (s *Scanner) recordScanEvent(ctx context.Context, ev ScanEvent) {
 		return
 	}
 	if err := s.sink.WriteScanEvent(ctx, ev); err != nil {
-		slog.Error("failed to persist scan event",
+		slog.Error(
+			"failed to persist scan event",
+			"code", string(LogCodeScannerScanEventPersistFail),
 			"error", err.Error(),
 			"scan_id", ev.ScanID,
 		)
@@ -369,7 +377,9 @@ func (s *Scanner) recordOpenPorts(ctx context.Context, scanID string, ports []Op
 		return
 	}
 	if err := s.sink.WriteOpenPorts(ctx, scanID, ports); err != nil {
-		slog.Error("failed to persist open ports",
+		slog.Error(
+			"failed to persist open ports",
+			"code", string(LogCodeScannerOpenPortsPersistFail),
 			"error", err.Error(),
 			"scan_id", scanID,
 			"ports", len(ports),
@@ -383,6 +393,7 @@ func enumerateIPs(cidrs []string) []netip.Addr {
 		prefix, err := netip.ParsePrefix(cidr)
 		if err != nil {
 			slog.Warn("network scanner: skipping invalid CIDR",
+				"code", string(LogCodeScannerInvalidCIDRSkipped),
 				"cidr", cidr, "error", err)
 			continue
 		}

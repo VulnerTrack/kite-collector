@@ -28,19 +28,23 @@ type AmiFields struct {
 
 // passwordRE matches a password row in Broker.txt / config.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|ami[_\-]?password|broker[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|ami[_\-]?password|broker[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|ami[_\-]?password|broker[_\-]?password|broker[_\-]?secret|tws[_\-]?password)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|ami[_\-]?password|broker[_\-]?password|broker[_\-]?secret|tws[_\-]?password)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches an AmiBroker / plug-in API key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:ami[_\-]?api[_\-]?key|ami[_\-]?token|broker[_\-]?token|iol[_\-]?token|cocos[_\-]?token|ib[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:ami[_\-]?api[_\-]?key|ami[_\-]?token|broker[_\-]?token|iol[_\-]?token|cocos[_\-]?token|ib[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches AmiBroker / broker username.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:ami[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:ami[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // autotradeArmedRE detects AutoTrade Window armed state. Two
 // distinct surfaces:
@@ -49,31 +53,37 @@ var usernameRE = regexp.MustCompile(
 //  2. AFL pragma: `EnableScript("AutoTrade")`, `EnableTextOutput`.
 //  3. AmiBroker AFP API: `aamibrokerAutoTrade.Enable(true)`.
 var autotradeArmedRE = regexp.MustCompile(
-	`(?i)(?:autotradeenabled\s*=\s*(?:1|true|on|yes)|auto[_\- ]?trade\s*[:=]\s*(?:true|1|on|yes)|automatic[_\- ]?execution|auto[_\- ]?trading\s*=\s*(?:1|true|on|yes)|aamibrokerautotrade\.enable\s*\(\s*true)`)
+	`(?i)(?:autotradeenabled\s*=\s*(?:1|true|on|yes)|auto[_\- ]?trade\s*[:=]\s*(?:true|1|on|yes)|automatic[_\- ]?execution|auto[_\- ]?trading\s*=\s*(?:1|true|on|yes)|aamibrokerautotrade\.enable\s*\(\s*true)`,
+)
 
 // aflOrderRE detects AFL Buy/Sell/Cover/Short statements that
 // indicate an algo-strategy formula (vs purely indicators).
 var aflOrderRE = regexp.MustCompile(
-	`(?im)\b(?:Buy|Sell|Short|Cover|BuyPrice|SellPrice|ShortPrice|CoverPrice|PlaceTrade|TradeRequest|PositionSize)\s*=`)
+	`(?im)\b(?:Buy|Sell|Short|Cover|BuyPrice|SellPrice|ShortPrice|CoverPrice|PlaceTrade|TradeRequest|PositionSize)\s*=`,
+)
 
 // orderEventRE matches an order/fill event in a trade-log
 // row (one fill per line).
 var orderEventRE = regexp.MustCompile(
-	`(?i)(?:OrderFilled|FillEvent|order[_\- ]?id|fill[_\- ]?id|executed[_\- ]?qty|^\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}.*\bFILL\b)`)
+	`(?i)(?:OrderFilled|FillEvent|order[_\- ]?id|fill[_\- ]?id|executed[_\- ]?qty|^\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}.*\bFILL\b)`,
+)
 
 // pluginDLLRE matches a known broker-plug-in DLL filename.
 var pluginDLLRE = regexp.MustCompile(
-	`(?i)(amibroker_ib\.dll|ami_ib\.dll|ib_plugin\.dll|tws_plugin\.dll|amibroker_iol\.dll|iol_plugin\.dll|amibroker_cocos\.dll|cocos_plugin\.dll|amibroker_byma\.dll|byma_plugin\.dll|amibroker_rofex\.dll|rofex_plugin\.dll)`)
+	`(?i)(amibroker_ib\.dll|ami_ib\.dll|ib_plugin\.dll|tws_plugin\.dll|amibroker_iol\.dll|iol_plugin\.dll|amibroker_cocos\.dll|cocos_plugin\.dll|amibroker_byma\.dll|byma_plugin\.dll|amibroker_rofex\.dll|rofex_plugin\.dll)`,
+)
 
 // pluginConfigRE matches a plug-in config section header used
 // in Broker.txt / plug-in INI files.
 var pluginConfigRE = regexp.MustCompile(
-	`(?i)\[(?:IB|IBController|TWS|IOL|InvertirOnline|Cocos|CocosCapital|BYMA|Bymadata|Rofex|MATbaRofex)\]`)
+	`(?i)\[(?:IB|IBController|TWS|IOL|InvertirOnline|Cocos|CocosCapital|BYMA|Bymadata|Rofex|MATbaRofex)\]`,
+)
 
 // pluginCredentialRE matches a plug-in cleartext credential
 // row (port + username pattern is typical for IB TWS).
 var pluginCredentialRE = regexp.MustCompile(
-	`(?i)(?:tws[_\- ]?port|ib[_\- ]?port|gateway[_\- ]?port|gateway[_\- ]?host|api[_\- ]?username|client[_\- ]?id)\s*[:=]\s*\S+`)
+	`(?i)(?:tws[_\- ]?port|ib[_\- ]?port|gateway[_\- ]?port|gateway[_\- ]?host|api[_\- ]?username|client[_\- ]?id)\s*[:=]\s*\S+`,
+)
 
 // tickerEntryRE matches AFL/APX/workspace ticker entries:
 //   - AFL: `Buy = (Symbol() == "GGAL")`
@@ -83,18 +93,21 @@ var pluginCredentialRE = regexp.MustCompile(
 // Trimmed to ≤8 chars to limit false positives on ALL-CAPS
 // English words. AR tickers ≤6 chars (e.g. `MERVAL` = 6).
 var tickerEntryRE = regexp.MustCompile(
-	`(?i)(?:"?(?:symbol(?:_\w+)?|ticker|instrument|stock|equity|name)"?\s*[:=]\s*"?|<symbol[^>]*>|Symbol\(\s*"|AddSymbol\(\s*")([A-Z][A-Z0-9.\-]{1,7})`)
+	`(?i)(?:"?(?:symbol(?:_\w+)?|ticker|instrument|stock|equity|name)"?\s*[:=]\s*"?|<symbol[^>]*>|Symbol\(\s*"|AddSymbol\(\s*")([A-Z][A-Z0-9.\-]{1,7})`,
+)
 
 // aflSymbolCmpRE matches the AFL idiom `Symbol() == "TICKER"`
 // or `Name() == "TICKER"` (and reverse-order comparison).
 // Distinct pattern because the ticker is on the RHS of `==`
 // rather than after an `=` assignment.
 var aflSymbolCmpRE = regexp.MustCompile(
-	`(?i)(?:Symbol|Name)\s*\(\s*\)\s*={2,3}\s*"([A-Z][A-Z0-9.\-]{1,7})"`)
+	`(?i)(?:Symbol|Name)\s*\(\s*\)\s*={2,3}\s*"([A-Z][A-Z0-9.\-]{1,7})"`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseAmiConfig parses Broker.txt / plug-in cfg body.
 func ParseAmiConfig(body []byte) AmiFields {

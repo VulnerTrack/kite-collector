@@ -30,66 +30,79 @@ type SierraFields struct {
 
 // passwordRE matches a password row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|sierra[_\-]?password|dtc[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|sierra[_\-]?password|dtc[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|sierra[_\-]?password|dtc[_\-]?password|sierra[_\-]?secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|sierra[_\-]?password|dtc[_\-]?password|sierra[_\-]?secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches a Sierra Chart API key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:sierra[_\-]?api[_\-]?key|sierra[_\-]?token|api[_\-]?key|api[_\-]?token|dtc[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:sierra[_\-]?api[_\-]?key|sierra[_\-]?token|api[_\-]?key|api[_\-]?token|dtc[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches Sierra Chart username.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:sierra[_\-]?username|sierra[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:sierra[_\-]?username|sierra[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // accountIDRE matches a Sierra Chart account ID.
 var accountIDRE = regexp.MustCompile(
-	`(?i)"?(?:sierra[_\-]?account|account[_\-]?id|accountid|trader[_\-]?id|account[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`)
+	`(?i)"?(?:sierra[_\-]?account|account[_\-]?id|accountid|trader[_\-]?id|account[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`,
+)
 
 // dtcServerRE detects a DTC server URL — `dtc_server=host:port`
 // or `Server=host:port`. The DTC protocol is the binary
 // low-latency wire used by Sierra Chart.
 var dtcServerRE = regexp.MustCompile(
-	`(?i)(?:dtc[_\-]?server|dtc[_\-]?host|server[_\-]?address|server)\s*[:=]\s*"?([A-Za-z0-9_.\-]{3,253})\s*[:]?\s*(\d{2,5})?`)
+	`(?i)(?:dtc[_\-]?server|dtc[_\-]?host|server[_\-]?address|server)\s*[:=]\s*"?([A-Za-z0-9_.\-]{3,253})\s*[:]?\s*(\d{2,5})?`,
+)
 
 // dtcSessionRE detects a DTC session-log marker. Sierra Chart
 // DTC logs prefix lines with "DTC " or contain
 // `EncodingResponse`, `LogonRequest`, `Heartbeat`, or
 // `MarketDataUpdate` keywords from the DTC spec.
 var dtcSessionRE = regexp.MustCompile(
-	`(?i)(?:DTC[_\- ]?(?:server|client|session|protocol)|EncodingResponse|LogonRequest|HeartBeat|MarketDataUpdate(?:Trade|BidAsk|LastTradeSnapshot)|TradeAccountResponse)`)
+	`(?i)(?:DTC[_\- ]?(?:server|client|session|protocol)|EncodingResponse|LogonRequest|HeartBeat|MarketDataUpdate(?:Trade|BidAsk|LastTradeSnapshot)|TradeAccountResponse)`,
+)
 
 // autotradeRE detects spreadsheet auto-trade activation
 // markers (`AutoTradeEnabled`, `auto_trade=true`, etc.).
 var autotradeRE = regexp.MustCompile(
-	`(?i)(?:autotradeenabled|auto[_\- ]?trade\s*[:=]\s*(?:true|1|on|yes)|autotrade=true|spreadsheettrading.*enabled)`)
+	`(?i)(?:autotradeenabled|auto[_\- ]?trade\s*[:=]\s*(?:true|1|on|yes)|autotrade=true|spreadsheettrading.*enabled)`,
+)
 
 // fillEventRE matches a per-fill order entry in
 // tradingactivity.txt (Sierra writes one line per fill).
 var fillEventRE = regexp.MustCompile(
-	`(?i)(?:OrderFilled|FillEvent|^\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}.*\bFill\b|fill[_\-]?id\s*[:=])`)
+	`(?i)(?:OrderFilled|FillEvent|^\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}.*\bFill\b|fill[_\-]?id\s*[:=])`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM:SS`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // messageMarkerRE matches per-message DTC markers used to
 // estimate message rate.
 var messageMarkerRE = regexp.MustCompile(
-	`(?i)(?:MarketDataUpdate|MarketDepthUpdate|HeartBeat|LogonResponse|TradeAccountResponse|ExecutionReport|OrderUpdate)`)
+	`(?i)(?:MarketDataUpdate|MarketDepthUpdate|HeartBeat|LogonResponse|TradeAccountResponse|ExecutionReport|OrderUpdate)`,
+)
 
 // symbolEntryRE matches a Sierra workspace/chartbook/log
 // symbol entry. Supports `Symbol=DLR`, `"symbol":"ES"`,
 // or quoted XML `<symbol>NQ</symbol>` (the `>` and `<`
 // chars open the value match).
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:"?(?:symbol(?:_\w+)?|simbolo|ticker|instrument|contract|root)"?\s*[:=]\s*"?|<symbol[^>]*>)([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)(?:"?(?:symbol(?:_\w+)?|simbolo|ticker|instrument|contract|root)"?\s*[:=]\s*"?|<symbol[^>]*>)([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseSierraConfig parses sierra.config or similar.
 func ParseSierraConfig(body []byte) SierraFields {

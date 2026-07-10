@@ -28,48 +28,57 @@ type DASFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|das[_\-]?password|das[_\-]?passwd|trader[_\-]?password|clearing[_\-]?password|stratos[_\-]?password|centerpoint[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|das[_\-]?password|das[_\-]?passwd|trader[_\-]?password|clearing[_\-]?password|stratos[_\-]?password|centerpoint[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|das[_\-]?password|das[_\-]?secret|trader[_\-]?password|clearing[_\-]?password|fix[_\-]?password|mobile[_\-]?secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|das[_\-]?password|das[_\-]?secret|trader[_\-]?password|clearing[_\-]?password|fix[_\-]?password|mobile[_\-]?secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches DAS / DAS Mobile / clearing API key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:das[_\-]?api[_\-]?key|das[_\-]?token|das[_\-]?mobile[_\-]?token|clearing[_\-]?token|fix[_\-]?token|api[_\-]?key|api[_\-]?token|access[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:das[_\-]?api[_\-]?key|das[_\-]?token|das[_\-]?mobile[_\-]?token|clearing[_\-]?token|fix[_\-]?token|api[_\-]?key|api[_\-]?token|access[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches DAS / clearing login.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:das[_\-]?username|das[_\-]?user|trader[_\-]?user|clearing[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:das[_\-]?username|das[_\-]?user|trader[_\-]?user|clearing[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // traderIDRE matches a DAS trader ID. DAS uses uppercase
 // alphanumeric short tickers (3-8 chars) per trader / branch.
 var traderIDRE = regexp.MustCompile(
-	`(?i)"?(?:trader[_\-]?id|das[_\-]?trader[_\-]?id|trader[_\-]?code|account[_\-]?id|user[_\-]?id|registration[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,16})`)
+	`(?i)"?(?:trader[_\-]?id|das[_\-]?trader[_\-]?id|trader[_\-]?code|account[_\-]?id|user[_\-]?id|registration[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,16})`,
+)
 
 // dasScriptSendOrderRE matches a DASScript order-submission
 // call. DASScript exposes `SEND_ORDER`, `PLACE_ORDER`, and
 // `SUBMIT_ORDER` as keywords for placing orders programmatically.
 var dasScriptSendOrderRE = regexp.MustCompile(
-	`(?i)\b(?:SEND_ORDER|SUBMIT_ORDER|PLACE_ORDER|ROUTE_ORDER|EXEC_ORDER|SENDORDER|SENDMARKETORDER|SENDLIMITORDER|SENDSTOPORDER)\s*\(`)
+	`(?i)\b(?:SEND_ORDER|SUBMIT_ORDER|PLACE_ORDER|ROUTE_ORDER|EXEC_ORDER|SENDORDER|SENDMARKETORDER|SENDLIMITORDER|SENDSTOPORDER)\s*\(`,
+)
 
 // hotkeyRE matches a HotKey binding row. DAS HotKey forms span
 // single-key (`F2=BUY`), single-mod (`Ctrl-1=SELL`), and chord
 // (`Ctrl-Alt-1=BUY` two modifiers). Action keywords cover the
 // DAS hotkey action lexicon (BUY/SELL/SHORT/COVER/CXL etc.).
 var hotkeyRE = regexp.MustCompile(
-	`(?i)(?:(?:Ctrl|Alt|Shift)[\-+](?:(?:Ctrl|Alt|Shift)[\-+])?\w+|F\d{1,2})\s*=\s*(?:BUY|SELL|SHORT|COVER|CANCEL|CXL|FLATTEN|EXIT|MARKET|LIMIT|STOP|ROUTE)`)
+	`(?i)(?:(?:Ctrl|Alt|Shift)[\-+](?:(?:Ctrl|Alt|Shift)[\-+])?\w+|F\d{1,2})\s*=\s*(?:BUY|SELL|SHORT|COVER|CANCEL|CXL|FLATTEN|EXIT|MARKET|LIMIT|STOP|ROUTE)`,
+)
 
 // chordHotkeyRE matches a chord (two-modifier) HotKey row.
 // Sign of an advanced scalper's binding set.
 var chordHotkeyRE = regexp.MustCompile(
-	`(?i)(?:Ctrl|Alt|Shift)[\-+](?:Ctrl|Alt|Shift)[\-+]\w+\s*=\s*(?:BUY|SELL|SHORT|COVER|CANCEL|CXL|FLATTEN|EXIT|MARKET|LIMIT|STOP|ROUTE)`)
+	`(?i)(?:Ctrl|Alt|Shift)[\-+](?:Ctrl|Alt|Shift)[\-+]\w+\s*=\s*(?:BUY|SELL|SHORT|COVER|CANCEL|CXL|FLATTEN|EXIT|MARKET|LIMIT|STOP|ROUTE)`,
+)
 
 // dasInetRouteRE matches a DAS Inet routing keyword. DAS Inet
 // is DAS's direct-market-access route layer; presence of the
 // keyword signals a DMA-route config.
 var dasInetRouteRE = regexp.MustCompile(
-	`(?i)\b(?:DASINET|DAS_INET|DAS-INET|INET[_\-]?ROUTE|ROUTE[_\-]?INET|DIRECT[_\-]?ROUTE|ARCA|EDGX|BATS|NSDQ|NYSE|IEX)\b`)
+	`(?i)\b(?:DASINET|DAS_INET|DAS-INET|INET[_\-]?ROUTE|ROUTE[_\-]?INET|DIRECT[_\-]?ROUTE|ARCA|EDGX|BATS|NSDQ|NYSE|IEX)\b`,
+)
 
 // orderFillRE matches a per-fill row in DAS Trader OrderLog.csv.
 // DAS OrderLog header: `Time,OrderID,Symbol,Side,Qty,Price,...`
@@ -79,27 +88,32 @@ var dasInetRouteRE = regexp.MustCompile(
 // B=Buy, S=Sell, SS=Short, BC=BuyCover, plus long-form
 // BUY/SELL/SHORT/COVER.
 var orderFillRE = regexp.MustCompile(
-	`(?im)^(?:[\d:.]+,)?\d+,[A-Z][A-Z0-9.\-]{0,8},(?:BUY|SELL|SHORT|COVER|B|S|SS|BC),`)
+	`(?im)^(?:[\d:.]+,)?\d+,[A-Z][A-Z0-9.\-]{0,8},(?:BUY|SELL|SHORT|COVER|B|S|SS|BC),`,
+)
 
 // shortLocateRE matches a short-locate request row.
 var shortLocateRE = regexp.MustCompile(
-	`(?i)(?:short[_\- ]?locate|locate[_\- ]?req|locate[_\- ]?id|borrow[_\- ]?req|borrow[_\- ]?id|hard[_\- ]?to[_\- ]?borrow|htb[_\- ]?req)`)
+	`(?i)(?:short[_\- ]?locate|locate[_\- ]?req|locate[_\- ]?id|borrow[_\- ]?req|borrow[_\- ]?id|hard[_\- ]?to[_\- ]?borrow|htb[_\- ]?req)`,
+)
 
 // optionsSymbolRE matches an OCC-style option chain symbol.
 // DAS uses `<root>_<expiry><strike><CP>` form.
 var optionsSymbolRE = regexp.MustCompile(
-	`(?i)\b([A-Z]{1,5}_\d{6}[CP]\d{8})\b`)
+	`(?i)\b([A-Z]{1,5}_\d{6}[CP]\d{8})\b`,
+)
 
 // symbolEntryRE matches a per-symbol entry in layouts / orderlog
 // / chart def. Includes CSV-style rows because DAS OrderLog.csv
 // lacks per-row keyword markers; matches `[<Time>,]<OrderID>,<TICKER>`.
 var symbolEntryRE = regexp.MustCompile(
-	`(?im)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument)"?\s*[:=]\s*"?|<symbol[^>]*>|^(?:[\d:.]+,)?\d+,)([A-Z][A-Z0-9_\-\./]{0,7})`)
+	`(?im)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument)"?\s*[:=]\s*"?|<symbol[^>]*>|^(?:[\d:.]+,)?\d+,)([A-Z][A-Z0-9_\-\./]{0,7})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N` in
 // INI, JSON, or XML form (`[:=>]` separator class).
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseDASConfig parses a generic DAS cfg body.
 func ParseDASConfig(body []byte) DASFields {

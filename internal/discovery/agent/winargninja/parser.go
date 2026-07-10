@@ -33,79 +33,94 @@ type NinjaFields struct {
 
 // passwordRE matches a password row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|ninja[_\-]?password|ninja[_\-]?secret|broker[_\-]?password|connection[_\-]?password|continuum[_\-]?password|rithmic[_\-]?password|cqg[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|ninja[_\-]?password|ninja[_\-]?secret|broker[_\-]?password|connection[_\-]?password|continuum[_\-]?password|rithmic[_\-]?password|cqg[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line in INI or
 // JSON-quoted form.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|ninja[_\-]?password|ninja[_\-]?secret|broker[_\-]?password|connection[_\-]?password|continuum[_\-]?password|rithmic[_\-]?password|cqg[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|ninja[_\-]?password|ninja[_\-]?secret|broker[_\-]?password|connection[_\-]?password|continuum[_\-]?password|rithmic[_\-]?password|cqg[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` for
 // Connections.xml form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|ninja[_\-]?password|broker[_\-]?password|connection[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|ninja[_\-]?password|broker[_\-]?password|connection[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // apiKeyRE matches NinjaTrader / broker API key / token. INI,
 // JSON, and XML separator forms (`[:=>]`) all supported.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:ninja[_\-]?api[_\-]?key|ninja[_\-]?token|broker[_\-]?token|continuum[_\-]?token|rithmic[_\-]?token|cqg[_\-]?token|api[_\-]?key|api[_\-]?token|access[_\-]?token)("|')?\s*[:=>]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:ninja[_\-]?api[_\-]?key|ninja[_\-]?token|broker[_\-]?token|continuum[_\-]?token|rithmic[_\-]?token|cqg[_\-]?token|api[_\-]?key|api[_\-]?token|access[_\-]?token)("|')?\s*[:=>]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches NinjaTrader / broker login. INI / JSON /
 // XML separator forms (`[:=>]`) all supported.
 var usernameRE = regexp.MustCompile(
-	`(?i)"?(?:ninja[_\-]?username|ninja[_\-]?user|broker[_\-]?user|continuum[_\-]?user|rithmic[_\-]?user|cqg[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=>]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?i)"?(?:ninja[_\-]?username|ninja[_\-]?user|broker[_\-]?user|continuum[_\-]?user|rithmic[_\-]?user|cqg[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=>]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // accountIDRE matches a NinjaTrader account ID. Apex / TopstepX
 // use uppercase alphanumeric short tickers. INI / JSON / XML
 // separator forms (`[:=>]`) all supported.
 var accountIDRE = regexp.MustCompile(
-	`(?i)"?(?:account[_\-]?id|ninja[_\-]?account[_\-]?id|account[_\-]?number|account[_\-]?code|user[_\-]?id|registration[_\-]?id)"?\s*[:=>]\s*"?([A-Za-z0-9_\-]{3,32})`)
+	`(?i)"?(?:account[_\-]?id|ninja[_\-]?account[_\-]?id|account[_\-]?number|account[_\-]?code|user[_\-]?id|registration[_\-]?id)"?\s*[:=>]\s*"?([A-Za-z0-9_\-]{3,32})`,
+)
 
 // strategyClassRE matches a NinjaScript Strategy class definition.
 var strategyClassRE = regexp.MustCompile(
-	`(?im)(?:^|\s)public\s+class\s+\w+\s*:\s*Strategy\b`)
+	`(?im)(?:^|\s)public\s+class\s+\w+\s*:\s*Strategy\b`,
+)
 
 // indicatorClassRE matches a NinjaScript Indicator class definition.
 var indicatorClassRE = regexp.MustCompile(
-	`(?im)(?:^|\s)public\s+class\s+\w+\s*:\s*Indicator\b`)
+	`(?im)(?:^|\s)public\s+class\s+\w+\s*:\s*Indicator\b`,
+)
 
 // addOnClassRE matches a NinjaScript AddOnBase class definition.
 var addOnClassRE = regexp.MustCompile(
-	`(?im)(?:^|\s)public\s+class\s+\w+\s*:\s*(?:AddOnBase|NTWindow)\b`)
+	`(?im)(?:^|\s)public\s+class\s+\w+\s*:\s*(?:AddOnBase|NTWindow)\b`,
+)
 
 // enterOrderRE matches a NinjaScript order-submission call.
 // `EnterLong`, `EnterShort`, `ExitLong`, `ExitShort`,
 // `SubmitOrderUnmanaged`, `SubmitOrder` are the documented
 // NinjaScript order-API surface.
 var enterOrderRE = regexp.MustCompile(
-	`(?i)\b(?:EnterLong|EnterShort|EnterLongLimit|EnterShortLimit|EnterLongStopMarket|EnterShortStopMarket|ExitLong|ExitShort|ExitLongLimit|ExitShortLimit|SubmitOrderUnmanaged|SubmitOrder)\s*\(`)
+	`(?i)\b(?:EnterLong|EnterShort|EnterLongLimit|EnterShortLimit|EnterLongStopMarket|EnterShortStopMarket|ExitLong|ExitShort|ExitLongLimit|ExitShortLimit|SubmitOrderUnmanaged|SubmitOrder)\s*\(`,
+)
 
 // pythonBridgeRE matches Python bridge invocation. NinjaTrader 8
 // can host IronPython via a custom AddOn / pluggable runtime.
 var pythonBridgeRE = regexp.MustCompile(
-	`(?i)\b(?:IronPython|PythonScriptEngine|Py_Initialize|PyRun_String|Microsoft\.Scripting\.Hosting|python\.exe|python3\.exe)\b`)
+	`(?i)\b(?:IronPython|PythonScriptEngine|Py_Initialize|PyRun_String|Microsoft\.Scripting\.Hosting|python\.exe|python3\.exe)\b`,
+)
 
 // addOnReferenceRE matches an AddOn-class-reference idiom (used
 // to count distinct AddOns).
 var addOnReferenceRE = regexp.MustCompile(
-	`(?im)(?:^|\s)public\s+class\s+(\w+)\s*:\s*(?:AddOnBase|NTWindow)\b`)
+	`(?im)(?:^|\s)public\s+class\s+(\w+)\s*:\s*(?:AddOnBase|NTWindow)\b`,
+)
 
 // optionsSymbolRE matches an OCC-style option chain symbol.
 var optionsSymbolRE = regexp.MustCompile(
-	`(?i)\b([A-Z]{1,5}_\d{6}[CP]\d{8})\b`)
+	`(?i)\b([A-Z]{1,5}_\d{6}[CP]\d{8})\b`,
+)
 
 // futureSymbolRE matches a CME-style continuous futures symbol
 // (e.g. `ES 09-26`, `MES 09-26`, `MNQ-09-26`, `MES_09-26`).
 // NinjaScript also supports bare stem references.
 var futureSymbolRE = regexp.MustCompile(
-	`(?i)\b([A-Z]{2,4})[_\s\-]?(\d{2}[\-/]\d{2})\b`)
+	`(?i)\b([A-Z]{2,4})[_\s\-]?(\d{2}[\-/]\d{2})\b`,
+)
 
 // symbolEntryRE matches a per-symbol entry in workspaces /
 // templates / trade-performance / chart def. TradePerformance.csv
 // data rows start with `<Time>,<Account>,<Instrument>,<Side>,...`
 // — anchor on `^<time>,<acct>,<TICKER>,` and on keyword markers.
 var symbolEntryRE = regexp.MustCompile(
-	`(?im)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument|fullname)"?\s*[:=]\s*"?|<(?:symbol|instrument|fullname)[^>]*>|^(?:[\d:.]+,)?[A-Za-z0-9_\-]+,)([A-Z][A-Z0-9_\-\./]{0,7})`)
+	`(?im)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument|fullname)"?\s*[:=]\s*"?|<(?:symbol|instrument|fullname)[^>]*>|^(?:[\d:.]+,)?[A-Za-z0-9_\-]+,)([A-Z][A-Z0-9_\-\./]{0,7})`,
+)
 
 // orderFillRE matches a per-fill row in NinjaTrader 8
 // TradePerformance CSV. Header form:
@@ -113,12 +128,14 @@ var symbolEntryRE = regexp.MustCompile(
 // Data rows have an instrument (CME-stem-with-contract or bare
 // ticker), an account ID, a strategy name, and a position side.
 var orderFillRE = regexp.MustCompile(
-	`(?im)^[A-Z][A-Z0-9_\-\. /]{1,16},[A-Za-z0-9_\-]+,[A-Za-z0-9_\-]+,(?:Long|Short|LONG|SHORT|Flat|FLAT|Buy|Sell|BUY|SELL),`)
+	`(?im)^[A-Z][A-Z0-9_\-\. /]{1,16},[A-Za-z0-9_\-]+,[A-Za-z0-9_\-]+,(?:Long|Short|LONG|SHORT|Flat|FLAT|Buy|Sell|BUY|SELL),`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N` in INI,
 // JSON, or XML form (`[:=>]` separator class).
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseNinjaConfig parses a generic NinjaTrader cfg / XML body.
 func ParseNinjaConfig(body []byte) NinjaFields {

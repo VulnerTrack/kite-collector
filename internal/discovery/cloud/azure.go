@@ -43,7 +43,8 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	regions := toStringSlice(cfg["regions"])
 	subscriptionID := toString(cfg["subscription_id"])
 
-	slog.Info("Azure VM discovery starting",
+	slog.Info(
+		"Azure VM discovery starting",
 		"code", string(LogCodeAzureVMStarting),
 		"regions", regions,
 		"subscription_id_set", subscriptionID != "",
@@ -71,7 +72,8 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		if cfg != nil {
 			return nil, fmt.Errorf("azure_vm: source enabled but failed to acquire OAuth2 token: %w", err)
 		}
-		slog.Warn("Azure VM OAuth2 token acquire failed; skipping discovery",
+		slog.Warn(
+			"Azure VM OAuth2 token acquire failed; skipping discovery",
 			"code", string(LogCodeAzureVMTokenAcquireFailed),
 			"error", err,
 			"tenant_id", creds.tenantID,
@@ -91,7 +93,8 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			"tenant_id", creds.tenantID)
 		enumerated, enumErr := az.listSubscriptions(ctx, token)
 		if enumErr != nil {
-			slog.Warn("Azure VM enumerate subscriptions failed; skipping discovery",
+			slog.Warn(
+				"Azure VM enumerate subscriptions failed; skipping discovery",
 				"code", string(LogCodeAzureVMEnumerateSubsFailed),
 				"error", enumErr,
 				"tenant_id", creds.tenantID,
@@ -130,7 +133,8 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 		vms, vmErr := az.listVirtualMachines(ctx, subID, token)
 		if vmErr != nil {
-			slog.Error("Azure VM list-VMs call failed; returning partial results",
+			slog.Error(
+				"Azure VM list-VMs call failed; returning partial results",
 				"code", string(LogCodeAzureVMListVMsFailed),
 				"error", vmErr,
 				"subscription_id", subID,

@@ -25,66 +25,81 @@ type PSPFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|psp[_\-]?password|merchant[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|psp[_\-]?password|merchant[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|psp[_\-]?password|merchant[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|psp[_\-]?password|merchant[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|psp[_\-]?password|merchant[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|psp[_\-]?password|merchant[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // pspNetworkRE matches a PSP-network marker in body. The
 // `ualá` variant accommodates the AR-Spanish accent. The
 // trailing `\b` is omitted because Go RE2 `\b` is ASCII-only
 // and would fail to match between `á` and a non-letter.
 var pspNetworkRE = regexp.MustCompile(
-	`(?i)\b(banelco|link|prisma|mercado[_\- ]?pago|ualá|uala|modo|naranja[_\- ]?x|personal[_\- ]?pay|cuenta[_\- ]?dni[_\- ]?bapro|cuenta[_\- ]?dni|brubank|lemon|nubi|belo)`)
+	`(?i)\b(banelco|link|prisma|mercado[_\- ]?pago|ualá|uala|modo|naranja[_\- ]?x|personal[_\- ]?pay|cuenta[_\- ]?dni[_\- ]?bapro|cuenta[_\- ]?dni|brubank|lemon|nubi|belo)`,
+)
 
 // settlementRailRE matches a settlement-rail field.
 var settlementRailRE = regexp.MustCompile(
-	`(?i)"?(?:settlement[_\- ]?rail|rail|liquidacion[_\- ]?rail|sistema[_\- ]?pago)"?\s*[:=>]\s*"?(compe|mep|coelsa|debin|transfer[_\- ]?3[_\- ]?0|transferencias[_\- ]?3[_\- ]?0|pix[_\- ]?ar)"?`)
+	`(?i)"?(?:settlement[_\- ]?rail|rail|liquidacion[_\- ]?rail|sistema[_\- ]?pago)"?\s*[:=>]\s*"?(compe|mep|coelsa|debin|transfer[_\- ]?3[_\- ]?0|transferencias[_\- ]?3[_\- ]?0|pix[_\- ]?ar)"?`,
+)
 
 // transactionTypeRE matches a transaction-type field.
 var transactionTypeRE = regexp.MustCompile(
-	`(?i)"?(?:transaction[_\- ]?type|tx[_\- ]?type|tipo[_\- ]?transaccion)"?\s*[:=>]\s*"?(p2p|p2m|m2p|b2b|payroll|nomina|vep[_\- ]?afip|tax[_\- ]?collection|impuestos|utility[_\- ]?payment|servicios|subscription|suscripcion)"?`)
+	`(?i)"?(?:transaction[_\- ]?type|tx[_\- ]?type|tipo[_\- ]?transaccion)"?\s*[:=>]\s*"?(p2p|p2m|m2p|b2b|payroll|nomina|vep[_\- ]?afip|tax[_\- ]?collection|impuestos|utility[_\- ]?payment|servicios|subscription|suscripcion)"?`,
+)
 
 // pspCuitKeyRE matches PSP CUIT field.
 var pspCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:psp[_\- ]?cuit|cuit[_\- ]?psp|entidad[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:psp[_\- ]?cuit|cuit[_\- ]?psp|entidad[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // merchantCuitKeyRE matches merchant CUIT field.
 var merchantCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:merchant[_\- ]?cuit|comercio[_\- ]?cuit|cuit[_\- ]?comercio|cuit[_\- ]?merchant)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:merchant[_\- ]?cuit|comercio[_\- ]?cuit|cuit[_\- ]?comercio|cuit[_\- ]?merchant)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // customerCVURE matches customer CVU/CBU (22 digits).
 var customerCVURE = regexp.MustCompile(
-	`(?i)"?(?:customer[_\- ]?cvu|cliente[_\- ]?cvu|cvu|cbu)"?\s*[:=>]\s*"?(\d{22})"?`)
+	`(?i)"?(?:customer[_\- ]?cvu|cliente[_\- ]?cvu|cvu|cbu)"?\s*[:=>]\s*"?(\d{22})"?`,
+)
 
 // batchIDRE matches a batch identifier.
 var batchIDRE = regexp.MustCompile(
-	`(?i)"?(?:batch[_\- ]?id|lote[_\- ]?id|lote)"?\s*[:=>]\s*"?([A-Z0-9][A-Z0-9\-\._]{3,64})"?`)
+	`(?i)"?(?:batch[_\- ]?id|lote[_\- ]?id|lote)"?\s*[:=>]\s*"?([A-Z0-9][A-Z0-9\-\._]{3,64})"?`,
+)
 
 // transactionCountRE matches a transaction count.
 var transactionCountRE = regexp.MustCompile(
-	`(?i)"?(?:transaction[_\- ]?count|tx[_\- ]?count|transacciones[_\- ]?total|operaciones[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:transaction[_\- ]?count|tx[_\- ]?count|transacciones[_\- ]?total|operaciones[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // customerCountRE matches a customer count.
 var customerCountRE = regexp.MustCompile(
-	`(?i)"?(?:customer[_\- ]?count|clientes[_\- ]?count|unique[_\- ]?customers|usuarios[_\- ]?unicos)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:customer[_\- ]?count|clientes[_\- ]?count|unique[_\- ]?customers|usuarios[_\- ]?unicos)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // merchantCountRE matches a merchant count.
 var merchantCountRE = regexp.MustCompile(
-	`(?i)"?(?:merchant[_\- ]?count|comercios[_\- ]?count|merchants[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:merchant[_\- ]?count|comercios[_\- ]?count|merchants[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // batchValueRE matches batch aggregate value in ARS.
 var batchValueRE = regexp.MustCompile(
-	`(?i)"?(?:batch[_\- ]?value[_\- ]?ars|monto[_\- ]?lote[_\- ]?ars|valor[_\- ]?batch[_\- ]?ars|importe[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:batch[_\- ]?value[_\- ]?ars|monto[_\- ]?lote[_\- ]?ars|valor[_\- ]?batch[_\- ]?ars|importe[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // chargebackCountRE matches chargeback count.
 var chargebackCountRE = regexp.MustCompile(
-	`(?i)"?(?:chargeback[_\- ]?count|contracargos[_\- ]?count|cb[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:chargeback[_\- ]?count|contracargos[_\- ]?count|cb[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // ParsePSP parses any PSP artifact body (shared parser).
 func ParsePSP(body []byte) PSPFields {

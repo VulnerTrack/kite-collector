@@ -94,7 +94,8 @@ func (m *CertExpiryMonitor) Run(ctx context.Context, endpointNames []string) {
 		case <-ticker.C:
 			for _, name := range endpointNames {
 				if err := m.checkFunc(ctx, name); err != nil {
-					m.logger.Error("periodic certificate check failed",
+					m.logger.Error(
+						"periodic certificate check failed",
 						"code", string(LogCodeEnrollmentCertCheckFailed),
 						"endpoint", name,
 						"error", err,

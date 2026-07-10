@@ -54,11 +54,26 @@ const (
 	TypeCiscoAnyConnect Type = "cisco-anyconnect"
 	TypeFortinet        Type = "fortinet"
 	TypePulse           Type = "pulse"
+	TypeGlobalProtect   Type = "globalprotect" // Palo Alto Networks
+	TypeCheckPoint      Type = "checkpoint"    // Check Point Remote Secure Access
+	TypeDirectAccess    Type = "directaccess"  // Microsoft DirectAccess
+	TypeNordLayer       Type = "nordlayer"     // NordLayer (NordVPN Teams)
+	TypeProtonVPN       Type = "protonvpn"     // Proton VPN / Proton VPN for Business
+	TypeMullvad         Type = "mullvad"       // Mullvad VPN
 	TypeUnknown         Type = "unknown"
 )
 
 // Profile is the cross-VPN record produced by every collector. Mirrors
 // host_vpn_profiles' column shape.
+//
+// SharedPeers lists the DNS names of mesh peers that belong to a
+// DIFFERENT identity than the one running this collector — i.e. nodes
+// shared INTO this user's view from another tailnet user. Tailscale
+// supports this via node sharing, and a non-empty list on an
+// employee-owned device is a privilege-exposure smell: end-users
+// rarely should hold cross-account routes into other people's hosts.
+// Empty for non-mesh VPNs and for personal accounts where every peer
+// is owned by the same user.
 type Profile struct {
 	LastHandshakeAt     string   `json:"last_handshake_at,omitempty"`
 	Name                string   `json:"name"`
@@ -68,6 +83,7 @@ type Profile struct {
 	Type                Type     `json:"type"`
 	DNSServers          []string `json:"dns_servers,omitempty"`
 	RoutedSubnets       []string `json:"routed_subnets,omitempty"`
+	SharedPeers         []string `json:"shared_peers,omitempty"`
 	Port                int      `json:"port,omitempty"`
 	MTU                 int      `json:"mtu,omitempty"`
 	Enabled             bool     `json:"enabled"`

@@ -29,61 +29,75 @@ type BookmapFields struct {
 
 // passwordRE matches a password row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|bookmap[_\-]?password|broker[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|bookmap[_\-]?password|broker[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|bookmap[_\-]?password|bookmap[_\-]?secret|broker[_\-]?password)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|bookmap[_\-]?password|bookmap[_\-]?secret|broker[_\-]?password)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches a Bookmap / plug-in API key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:bookmap[_\-]?api[_\-]?key|bookmap[_\-]?token|rithmic[_\-]?token|cqg[_\-]?token|binance[_\-]?api[_\-]?key|broker[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:bookmap[_\-]?api[_\-]?key|bookmap[_\-]?token|rithmic[_\-]?token|cqg[_\-]?token|binance[_\-]?api[_\-]?key|broker[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches Bookmap / broker login.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:bookmap[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:bookmap[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // accountIDRE matches a Bookmap account ID.
 var accountIDRE = regexp.MustCompile(
-	`(?i)"?(?:bookmap[_\-]?account|account[_\-]?id|accountid|broker[_\-]?account|trader[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`)
+	`(?i)"?(?:bookmap[_\-]?account|account[_\-]?id|accountid|broker[_\-]?account|trader[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`,
+)
 
 // speedOfTapeRE detects Speed of Tape auto-trade armed state.
 var speedOfTapeRE = regexp.MustCompile(
-	`(?i)(?:speed[_\- ]?of[_\- ]?tape[_\- ]?(?:armed|enabled|auto)\s*=\s*(?:1|true|on|yes)|sot[_\- ]?(?:armed|enabled)\s*=\s*(?:1|true|on)|cluster[_\- ]?auto[_\- ]?trade|iceberg[_\- ]?auto[_\- ]?trade|spoof[_\- ]?detection[_\- ]?armed)`)
+	`(?i)(?:speed[_\- ]?of[_\- ]?tape[_\- ]?(?:armed|enabled|auto)\s*=\s*(?:1|true|on|yes)|sot[_\- ]?(?:armed|enabled)\s*=\s*(?:1|true|on)|cluster[_\- ]?auto[_\- ]?trade|iceberg[_\- ]?auto[_\- ]?trade|spoof[_\- ]?detection[_\- ]?armed)`,
+)
 
 // mboMarkerRE detects MBO (Market By Order) subscription
 // markers. MBO is a premium L3 feed; CME charges $5K+/month.
 var mboMarkerRE = regexp.MustCompile(
-	`(?i)(?:mbo[_\- ]?(?:subscription|feed|data|enabled)|market[_\- ]?by[_\- ]?order|l3[_\- ]?(?:depth|feed|data|orderbook)|order[_\- ]?level[_\- ]?data)`)
+	`(?i)(?:mbo[_\- ]?(?:subscription|feed|data|enabled)|market[_\- ]?by[_\- ]?order|l3[_\- ]?(?:depth|feed|data|orderbook)|order[_\- ]?level[_\- ]?data)`,
+)
 
 // pluginConfigRE matches a broker-plugin config section header.
 var pluginConfigRE = regexp.MustCompile(
-	`(?i)\[(?:IB|IBController|TWS|Rithmic|CQG|Continuum|TT|TradingTechnologies|DAS|DASInet|Kraken|Binance|Bitfinex)\]`)
+	`(?i)\[(?:IB|IBController|TWS|Rithmic|CQG|Continuum|TT|TradingTechnologies|DAS|DASInet|Kraken|Binance|Bitfinex)\]`,
+)
 
 // pluginCredentialRE matches plug-in cleartext credential row.
 var pluginCredentialRE = regexp.MustCompile(
-	`(?i)(?:tws[_\- ]?port|ib[_\- ]?port|rithmic[_\- ]?(?:user|server)|cqg[_\- ]?user|das[_\- ]?(?:user|server)|binance[_\- ]?api[_\-]?key|hmac[_\- ]?secret|api[_\- ]?username|client[_\- ]?id)\s*[:=]\s*\S+`)
+	`(?i)(?:tws[_\- ]?port|ib[_\- ]?port|rithmic[_\- ]?(?:user|server)|cqg[_\- ]?user|das[_\- ]?(?:user|server)|binance[_\- ]?api[_\-]?key|hmac[_\- ]?secret|api[_\- ]?username|client[_\- ]?id)\s*[:=]\s*\S+`,
+)
 
 // indicatorClassRE matches Java indicator class declarations
 // in Bookmap Indicator SDK code.
 var indicatorClassRE = regexp.MustCompile(
-	`(?im)(?:public\s+class\s+\w+\s+implements\s+(?:CustomIndicator|MultiInstrumentIndicator|BookmapIndicator)\b|@Layer\b|@MarketplacePlugin\b)`)
+	`(?im)(?:public\s+class\s+\w+\s+implements\s+(?:CustomIndicator|MultiInstrumentIndicator|BookmapIndicator)\b|@Layer\b|@MarketplacePlugin\b)`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM:SS`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // messageMarkerRE matches per-message rate markers.
 var messageMarkerRE = regexp.MustCompile(
-	`(?i)(?:MarketDataUpdate|DOMUpdate|HeartBeat|LogonResponse|TradeUpdate|OrderUpdate|book[_\- ]?update|tick[_\- ]?received|depth[_\- ]?update)`)
+	`(?i)(?:MarketDataUpdate|DOMUpdate|HeartBeat|LogonResponse|TradeUpdate|OrderUpdate|book[_\- ]?update|tick[_\- ]?received|depth[_\- ]?update)`,
+)
 
 // symbolEntryRE matches Bookmap symbol entries.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument|root)"?\s*[:=]\s*"?|<symbol[^>]*>|subscribe\(\s*"|addSymbol\(\s*")([A-Za-z0-9_\-\./]{1,32})`)
+	`(?i)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument|root)"?\s*[:=]\s*"?|<symbol[^>]*>|subscribe\(\s*"|addSymbol\(\s*")([A-Za-z0-9_\-\./]{1,32})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseBookmapConfig parses a generic Bookmap cfg body.
 func ParseBookmapConfig(body []byte) BookmapFields {

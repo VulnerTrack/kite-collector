@@ -88,6 +88,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		extra, err := LoadSignaturesFromFile(path)
 		if err != nil {
 			slog.Warn("storage_fingerprint signature_file load failed; using built-in catalogue only",
+				"code", string(LogCodeSignaturesLoadFailed),
 				"source", s.Name(),
 				"path", path,
 				"error", err)
@@ -142,6 +143,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		pageResults, err := analyzer.AnalyzePage(ctx, page)
 		if err != nil {
 			slog.Warn("storage_fingerprint page crawl failed",
+				"code", string(LogCodeCrawlPageFailed),
 				"source", s.Name(),
 				"page", page,
 				"error", err)
@@ -150,6 +152,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		for _, pr := range pageResults {
 			if pr.Err != nil {
 				slog.Warn("storage_fingerprint script probe failed",
+					"code", string(LogCodeCrawlScriptProbeFailed),
 					"source", s.Name(),
 					"page", page,
 					"target", pr.Target,
@@ -170,6 +173,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		res, err := analyzer.Analyze(ctx, target)
 		if err != nil {
 			slog.Warn("storage_fingerprint probe failed",
+				"code", string(LogCodeCrawlDirectProbeFailed),
 				"source", s.Name(),
 				"target", target,
 				"error", err)

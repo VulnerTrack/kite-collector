@@ -329,7 +329,8 @@ func PlatformFromPath(path string) Platform {
 		return PlatformUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "metatrader 5") ||
 		strings.Contains(lower, "metatrader5") ||

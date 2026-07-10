@@ -23,47 +23,58 @@ type BloombergFields struct {
 
 // passwordRE matches a password row (line-anchored INI/JSON).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|BLPPassword|bbg[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|BLPPassword|bbg[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|bbg_secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|bbg_secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // sessionTokenRE matches a Bloomberg session token / cookie.
 var sessionTokenRE = regexp.MustCompile(
-	`(?i)("|')?(?:bbg[_-]?session[_-]?token|blp[_-]?session|session[_-]?id|bloomberg[_-]?token|bbg[_-]?auth)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?(?:bbg[_-]?session[_-]?token|blp[_-]?session|session[_-]?id|bloomberg[_-]?token|bbg[_-]?auth)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // licenseIDRE matches a Bloomberg license / subscription ID.
 var licenseIDRE = regexp.MustCompile(
-	`(?i)("|')?(?:license[_\- ]?id|licenseId|sub[_\- ]?id|account[_\- ]?id|UUID|customer[_\- ]?id)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-]{8,})`)
+	`(?i)("|')?(?:license[_\- ]?id|licenseId|sub[_\- ]?id|account[_\- ]?id|UUID|customer[_\- ]?id)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-]{8,})`,
+)
 
 // usernameRE matches Bloomberg username.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:BLPUsername|bbg[_\-]?username|terminal[_\-]?user|username|user|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:BLPUsername|bbg[_\-]?username|terminal[_\-]?user|username|user|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // blpapiImportRE detects BLPAPI SDK import in Python/Java/C#.
 var blpapiImportRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+blpapi|import\s+blpapi|using\s+Bloomberglp\.Blpapi|import\s+com\.bloomberglp\.blpapi)`)
+	`(?im)^\s*(?:from\s+blpapi|import\s+blpapi|using\s+Bloomberglp\.Blpapi|import\s+com\.bloomberglp\.blpapi)`,
+)
 
 // excelBLPRE detects Excel BLP add-in formula usage.
 var excelBLPRE = regexp.MustCompile(
-	`(?i)(?:=BDP\s*\(|=BDH\s*\(|=BDS\s*\(|=BLP\s*\(|=BCURVE\s*\(|=BLPAddin)`)
+	`(?i)(?:=BDP\s*\(|=BDH\s*\(|=BDS\s*\(|=BLP\s*\(|=BCURVE\s*\(|=BLPAddin)`,
+)
 
 // tickerEntryRE matches a JSON/INI/Excel ticker entry.
 var tickerEntryRE = regexp.MustCompile(
-	`(?i)"?(?:ticker|symbol|security|secid|bbg[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./\s]{3,32}(?:Equity|Govt|Corp|Index|Comdty|Curncy|AR|US|LN))`)
+	`(?i)"?(?:ticker|symbol|security|secid|bbg[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./\s]{3,32}(?:Equity|Govt|Corp|Index|Comdty|Curncy|AR|US|LN))`,
+)
 
 // arTickerKeyRE matches a bare AR ticker in Bloomberg syntax.
 var arTickerKeyRE = regexp.MustCompile(
-	`(?i)(?:GGAL|YPFD|PAMP|BMA|BBAR|EDN|SUPV|TXAR|COME|TRAN|MIRG|ALUA|TGSU2|TGNO4|AL30|GD30|AL35|GD35|AL41|GD41|AY24|AE38|BOPREAL|BPY26|TX26|TX28|TC25|TC27|LECAP|BONCER|BONTE|YPCUO|YPF)\s+(?:AR|Govt|Corp|Equity|Index)`)
+	`(?i)(?:GGAL|YPFD|PAMP|BMA|BBAR|EDN|SUPV|TXAR|COME|TRAN|MIRG|ALUA|TGSU2|TGNO4|AL30|GD30|AL35|GD35|AL41|GD41|AY24|AE38|BOPREAL|BPY26|TX26|TX28|TC25|TC27|LECAP|BONCER|BONTE|YPCUO|YPF)\s+(?:AR|Govt|Corp|Equity|Index)`,
+)
 
 // userLoginRE matches a per-user login event line in bbg.log.
 var userLoginRE = regexp.MustCompile(
-	`(?im)(?:^|\s)(?:login[_\- ]?user|logged[_\- ]?in[_\- ]?as|user[_\- ]?id|session[_\- ]?user)\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,40})"?`)
+	`(?im)(?:^|\s)(?:login[_\- ]?user|logged[_\- ]?in[_\- ]?as|user[_\- ]?id|session[_\- ]?user)\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,40})"?`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseBloombergConfig parses a BBG terminal / Anywhere config.
 func ParseBloombergConfig(body []byte) BloombergFields {

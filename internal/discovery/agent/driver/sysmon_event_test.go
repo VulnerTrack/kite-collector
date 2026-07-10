@@ -35,7 +35,8 @@ func TestSysmonImageLoadEvent_FullDriver(t *testing.T) {
 	assert.Equal(t, "true", ev[SysmonAttrSigned])
 	assert.Equal(t, "MICRO-STAR INTERNATIONAL CO., LTD.", ev[SysmonAttrSignature])
 	assert.Equal(t, "Valid", ev[SysmonAttrSignatureStatus])
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		"Authentihash=DEADBEEF,IMPHASH=FEEDFACE,SHA256=0123456789ABCDEF",
 		ev[SysmonAttrHashes],
 	)

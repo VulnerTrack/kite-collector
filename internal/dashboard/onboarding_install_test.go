@@ -215,7 +215,8 @@ func TestAgentState_AggregatesInstallAndIdentity(t *testing.T) {
 
 	// Pre-enroll so the identity slot has fingerprint stamps.
 	form := url.Values{"api_key": {"sk-agent-state-0123456789ABCDEF"}}
-	_ = h.do(t, "POST", "/api/v1/identity/enroll",
+	_ = h.do(
+		t, "POST", "/api/v1/identity/enroll",
 		strings.NewReader(form.Encode()),
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	)

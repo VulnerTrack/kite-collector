@@ -43,7 +43,8 @@ func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 	regions := toStringSlice(cfg["regions"])
 	project := toString(cfg["project"])
 
-	slog.Info("GCP Compute discovery starting",
+	slog.Info(
+		"GCP Compute discovery starting",
 		"code", string(LogCodeGCPComputeStarting),
 		"regions", regions,
 		"project", project,
@@ -63,7 +64,8 @@ func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 		if cfg != nil {
 			return nil, fmt.Errorf("gcp_compute: source enabled but could not obtain access token: %w", err)
 		}
-		slog.Warn("GCP Compute access token acquire failed; skipping discovery",
+		slog.Warn(
+			"GCP Compute access token acquire failed; skipping discovery",
 			"code", string(LogCodeGCPComputeTokenAcquireFailed),
 			"error", err,
 			"project", project,
@@ -117,7 +119,8 @@ func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 		assets = append(assets, asset)
 	}
 
-	slog.Info("GCP Compute discovery complete",
+	slog.Info(
+		"GCP Compute discovery complete",
 		"code", string(LogCodeGCPComputeComplete),
 		"total_instances", len(instances),
 		"matched_assets", len(assets),
@@ -163,7 +166,8 @@ func obtainGCPToken(ctx context.Context) (string, error) {
 			return token, nil
 		}
 		if err != nil {
-			slog.Debug("GCP Compute credentials file token exchange failed", //#nosec G706 -- error from internal file read, not user HTTP input
+			slog.Debug(
+				"GCP Compute credentials file token exchange failed", //#nosec G706 -- error from internal file read, not user HTTP input
 				"code", string(LogCodeGCPComputeTokenCredsFileFailed),
 				"error", err,
 				"file", credFile,
@@ -241,7 +245,8 @@ func tokenFromCredentialsFile(ctx context.Context, path string) (string, error) 
 		"client_secret": {cred.ClientSecret},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodPost,
 		"https://oauth2.googleapis.com/token",
 		strings.NewReader(form.Encode()),
 	)

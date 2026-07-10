@@ -39,13 +39,13 @@ func (c *chainCollector) Collect(ctx context.Context) ([]Rule, error) {
 		got, err := sub.Collect(ctx)
 		if err != nil {
 			slog.Warn("firewall: engine collector failed",
-				"engine", sub.Name(), "error", err)
+				"code", string(LogCodeChainEngineCollectorFailed), "engine", sub.Name(), "error", err)
 			continue
 		}
 		for _, r := range got {
 			if len(out) >= MaxRules {
 				slog.Warn("firewall: cap reached, dropping later engines",
-					"cap", MaxRules)
+					"code", string(LogCodeChainCapReached), "cap", MaxRules)
 				SortRules(out)
 				return out, nil
 			}

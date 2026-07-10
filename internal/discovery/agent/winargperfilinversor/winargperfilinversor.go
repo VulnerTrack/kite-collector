@@ -272,7 +272,8 @@ func AgenteClassFromPath(path string) AgenteClass {
 		return AgenteUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "/aag/") ||
 		strings.Contains(lower, "aag_") ||

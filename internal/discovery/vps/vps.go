@@ -119,7 +119,8 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 
 		if attempt > 0 {
 			delay := retryBackoff(attempt)
-			slog.Debug("VPS HTTP retry after backoff delay",
+			slog.Debug(
+				"VPS HTTP retry after backoff delay",
 				"code", string(LogCodeVPSRetryBackoff),
 				"caller", c.name,
 				"attempt", attempt+1,
@@ -135,7 +136,8 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 		resp, err := fn()
 		if err != nil {
 			lastErr = fmt.Errorf("%s: request failed: %w", c.name, err)
-			slog.Warn("VPS HTTP network error; will retry",
+			slog.Warn(
+				"VPS HTTP network error; will retry",
 				"code", string(LogCodeVPSRetryNetworkError),
 				"caller", c.name,
 				"attempt", attempt+1,
@@ -156,7 +158,8 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 			body := drainBody(resp, 200)
 			lastErr = fmt.Errorf("%s: rate limited (429): %s", c.name, body)
-			slog.Warn("VPS HTTP rate-limited (429); will retry after server-suggested delay",
+			slog.Warn(
+				"VPS HTTP rate-limited (429); will retry after server-suggested delay",
 				"code", string(LogCodeVPSRetryRateLimited),
 				"caller", c.name,
 				"attempt", attempt+1,
@@ -174,7 +177,8 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 		case resp.StatusCode >= 500:
 			body := drainBody(resp, 500)
 			lastErr = fmt.Errorf("%s: server error (%d): %s", c.name, resp.StatusCode, body)
-			slog.Warn("VPS HTTP server error (5xx); will retry",
+			slog.Warn(
+				"VPS HTTP server error (5xx); will retry",
 				"code", string(LogCodeVPSRetryServerError),
 				"caller", c.name,
 				"attempt", attempt+1,

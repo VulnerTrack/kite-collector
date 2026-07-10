@@ -24,7 +24,8 @@ func Recover(component string, counter *prometheus.CounterVec, retErr *error) {
 		return
 	}
 	stack := string(debug.Stack())
-	slog.Error("panic recovered in goroutine; converted to error and surfaced to caller",
+	slog.Error(
+		"panic recovered in goroutine; converted to error and surfaced to caller",
 		"code", string(LogCodeSafetyPanicRecovered),
 		"component", component,
 		"error", fmt.Sprint(r),
@@ -43,7 +44,8 @@ func Recover(component string, counter *prometheus.CounterVec, retErr *error) {
 // helper when the caller handles recover() itself (e.g., when additional
 // cleanup such as a channel send is needed in the same defer).
 func LogPanic(component string, panicVal any, stack string, counter *prometheus.CounterVec) {
-	slog.Error("panic recovered by caller-driven helper; caller will perform cleanup",
+	slog.Error(
+		"panic recovered by caller-driven helper; caller will perform cleanup",
 		"code", string(LogCodeSafetyPanicRecovered),
 		"component", component,
 		"error", fmt.Sprint(panicVal),

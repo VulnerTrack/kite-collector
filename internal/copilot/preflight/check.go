@@ -84,7 +84,8 @@ func (r *Runner) Run(ctx context.Context, specs []CheckSpec) []CheckResult {
 				return
 			}
 			results[idx] = checker.Check(ctx, s.NodeID, s.Value, s.Resolved)
-			r.logger.Debug("preflight check",
+			r.logger.Debug(
+				"preflight check",
 				"node", s.NodeID,
 				"check", s.CheckTag,
 				"passed", results[idx].Passed,

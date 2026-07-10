@@ -64,7 +64,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	// Serve static files (embedded or from disk in dev mode).
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {
-		logger.Error("dashboard: failed to create sub filesystem", "error", err)
+		logger.Error("dashboard: failed to create sub filesystem",
+			"code", string(LogCodeServeStaticSubFS),
+			"error", err)
 	} else {
 		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 	}
@@ -101,7 +103,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	renderFragment := func(w http.ResponseWriter, name string, render func(io.Writer) error) {
 		var buf bytes.Buffer
 		if renderErr := render(&buf); renderErr != nil {
-			logger.Error("dashboard: render "+name, "error", renderErr)
+			logger.Error("dashboard: render "+name,
+				"code", string(LogCodeServeFragmentRender),
+				"error", renderErr)
 			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -130,7 +134,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			if renderErr := renderIndexPage(&buf, activeTab, func(fragBuf io.Writer) error {
 				return render(fragBuf, r.Context())
 			}); renderErr != nil {
-				logger.Error("dashboard: render page "+activeTab, "error", renderErr)
+				logger.Error("dashboard: render page "+activeTab,
+					"code", string(LogCodeServeTabPageRender),
+					"error", renderErr)
 				http.Error(w, renderErr.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -179,7 +185,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		if renderErr := renderIndexPage(&buf, "tables", func(fragBuf io.Writer) error {
 			return render(fragBuf, r.Context())
 		}); renderErr != nil {
-			logger.Error("dashboard: render page tables/"+name, "error", renderErr)
+			logger.Error("dashboard: render page tables/"+name,
+				"code", string(LogCodeServeTablePageRender),
+				"error", renderErr)
 			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -217,7 +225,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=assets_%s.csv", rc.ReportID[:8]))
 		if exportErr := exportAssetsCSV(w, r.Context(), st, rc); exportErr != nil {
-			logger.Error("dashboard: export assets csv", "error", exportErr)
+			logger.Error("dashboard: export assets csv",
+				"code", string(LogCodeExportAssetsCSV),
+				"error", exportErr)
 		}
 	})
 
@@ -225,7 +235,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=software_%s.csv", rc.ReportID[:8]))
 		if exportErr := exportSoftwareCSV(w, r.Context(), st, rc); exportErr != nil {
-			logger.Error("dashboard: export software csv", "error", exportErr)
+			logger.Error("dashboard: export software csv",
+				"code", string(LogCodeExportSoftwareCSV),
+				"error", exportErr)
 		}
 	})
 
@@ -233,7 +245,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=findings_%s.csv", rc.ReportID[:8]))
 		if exportErr := exportFindingsCSV(w, r.Context(), st, rc); exportErr != nil {
-			logger.Error("dashboard: export findings csv", "error", exportErr)
+			logger.Error("dashboard: export findings csv",
+				"code", string(LogCodeExportFindingsCSV),
+				"error", exportErr)
 		}
 	})
 
@@ -276,7 +290,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			// it will show "Scan running" for the in-flight scan.
 			var already *scan.AlreadyRunningError
 			if !errors.As(startErr, &already) {
-				logger.Error("dashboard: scan trigger failed", "error", startErr)
+				logger.Error("dashboard: scan trigger failed",
+					"code", string(LogCodeScanTrigger),
+					"error", startErr)
 			}
 		} else {
 			logger.Info("dashboard: scan triggered via UI")
@@ -323,7 +339,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s_%s.csv", name, rc.ReportID[:8]))
 		if exportErr := exportTableCSV(w, r.Context(), st, rc, name); exportErr != nil {
-			logger.Error("dashboard: export table csv", "table", name, "error", exportErr)
+			logger.Error("dashboard: export table csv",
+				"code", string(LogCodeExportTableCSV),
+				"table", name, "error", exportErr)
 			if errors.Is(exportErr, store.ErrUnknownTable) {
 				http.Error(w, "unknown table", http.StatusNotFound)
 			}
@@ -337,7 +355,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	if sqliteStore, ok := st.(*sqlite.SQLiteStore); ok {
 		wrapKey, keyErr := newOnboardingWrapKey()
 		if keyErr != nil {
-			logger.Warn("dashboard: onboarding disabled — no wrap key", "error", keyErr)
+			logger.Warn("dashboard: onboarding disabled — no wrap key",
+				"code", string(LogCodeOnboardingDisabledNoWrapKey),
+				"error", keyErr)
 		} else {
 			var tlsCfg config.TLSConfig
 			if opts.BaseConfig != nil {
@@ -358,7 +378,8 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			})
 		}
 	} else {
-		logger.Warn("dashboard: onboarding disabled — store is not sqlite-backed")
+		logger.Warn("dashboard: onboarding disabled — store is not sqlite-backed",
+			"code", string(LogCodeOnboardingDisabledNoSQLite))
 	}
 
 	return &http.Server{

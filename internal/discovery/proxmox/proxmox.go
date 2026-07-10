@@ -75,7 +75,7 @@ func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		// Enumerate QEMU VMs on this node.
 		vms, vmErr := client.listVMs(ctx, node.Node)
 		if vmErr != nil {
-			slog.Warn("proxmox: list VMs failed", "node", node.Node, "error", vmErr)
+			slog.Warn("proxmox: list VMs failed", "code", string(LogCodeEnumerateVMsFailed), "node", node.Node, "error", vmErr)
 		} else {
 			for _, vm := range vms {
 				cfg, snapshots := fetchVMDetails(ctx, client, node.Node, vm.VMID)
@@ -86,7 +86,7 @@ func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		// Enumerate LXC containers on this node.
 		lxcs, lxcErr := client.listLXC(ctx, node.Node)
 		if lxcErr != nil {
-			slog.Warn("proxmox: list LXC failed", "node", node.Node, "error", lxcErr)
+			slog.Warn("proxmox: list LXC failed", "code", string(LogCodeEnumerateLXCFailed), "node", node.Node, "error", lxcErr)
 		} else {
 			for _, lxc := range lxcs {
 				assets = append(assets, lxcToAsset(node.Node, lxc, now))
@@ -101,11 +101,11 @@ func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 func fetchVMDetails(ctx context.Context, client *pveClient, node string, vmid int) (*vmConfig, []snapshot) {
 	cfg, err := client.getVMConfig(ctx, node, vmid)
 	if err != nil {
-		slog.Warn("proxmox: get VM config failed", "node", node, "vmid", vmid, "error", err)
+		slog.Warn("proxmox: get VM config failed", "code", string(LogCodeEnumerateVMConfigFailed), "node", node, "vmid", vmid, "error", err)
 	}
 	snaps, err := client.listSnapshots(ctx, node, vmid)
 	if err != nil {
-		slog.Warn("proxmox: list snapshots failed", "node", node, "vmid", vmid, "error", err)
+		slog.Warn("proxmox: list snapshots failed", "code", string(LogCodeEnumerateSnapshotsFailed), "node", node, "vmid", vmid, "error", err)
 	}
 	return cfg, snaps
 }

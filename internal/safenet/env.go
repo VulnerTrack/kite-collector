@@ -23,6 +23,7 @@ func ParseBoolEnv(key string) bool {
 	b, err := strconv.ParseBool(v)
 	if err != nil {
 		slog.Warn("invalid boolean env var, treating as false", //#nosec G706 -- control chars stripped; operator-configured env var
+			"code", string(LogCodeEnvInvalidBool),
 			"key", key, "value", sanitizeLog(v))
 		return false
 	}
@@ -60,6 +61,7 @@ func SafeGo(wg *sync.WaitGroup, logger *slog.Logger, name string, fn func()) {
 		defer func() {
 			if r := recover(); r != nil {
 				logger.Error("goroutine panic recovered",
+					"code", string(LogCodeEnvGoroutinePanic),
 					"name", name, "panic", fmt.Sprint(r))
 			}
 		}()

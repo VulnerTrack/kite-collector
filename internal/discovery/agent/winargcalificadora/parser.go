@@ -30,94 +30,115 @@ type CalFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|calificadora[_\-]?password|portal[_\-]?password|rating[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|calificadora[_\-]?password|portal[_\-]?password|rating[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|calificadora[_\-]?password|portal[_\-]?password|rating[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|calificadora[_\-]?password|portal[_\-]?password|rating[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|calificadora[_\-]?password|portal[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|calificadora[_\-]?password|portal[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // ratingIDRE matches a rating action identifier (e.g.
 // "CAL-2026-0123").
 var ratingIDRE = regexp.MustCompile(
-	`(?i)"?(?:rating[_\- ]?id|calificacion[_\- ]?id|nro[_\- ]?calificacion|rating[_\- ]?action[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:rating[_\- ]?id|calificacion[_\- ]?id|nro[_\- ]?calificacion|rating[_\- ]?action[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // methodologyVersionRE matches a methodology version identifier
 // (calificadoras version their methodology docs: "v2.3.1").
 var methodologyVersionRE = regexp.MustCompile(
-	`(?i)"?(?:methodology[_\- ]?version|version[_\- ]?metodologia|metodologia[_\- ]?version|version)"?\s*[:=>]\s*"?(v?\d+\.\d+(?:\.\d+)?)"?`)
+	`(?i)"?(?:methodology[_\- ]?version|version[_\- ]?metodologia|metodologia[_\- ]?version|version)"?\s*[:=>]\s*"?(v?\d+\.\d+(?:\.\d+)?)"?`,
+)
 
 // seriesIDRE matches the series being rated (often references the
 // issuer's series ID; for FFs this is the trust certificate
 // tranche).
 var seriesIDRE = regexp.MustCompile(
-	`(?i)"?(?:series[_\- ]?id|nro[_\- ]?serie|serie[_\- ]?nro)"?\s*[:=>]\s*"?([A-Z0-9\-]{1,32})"?`)
+	`(?i)"?(?:series[_\- ]?id|nro[_\- ]?serie|serie[_\- ]?nro)"?\s*[:=>]\s*"?([A-Z0-9\-]{1,32})"?`,
+)
 
 // ratingRE matches a credit-rating string.
 var ratingRE = regexp.MustCompile(
-	`(?i)"?(?:rating|calificacion|calificación|nota)"?\s*[:=>]\s*"?(AAA|AA[+\-]?|A[+\-]?|BBB[+\-]?|BB[+\-]?|B[+\-]?|CCC[+\-]?|CC|C|D|NR|withdrawn)\b`)
+	`(?i)"?(?:rating|calificacion|calificación|nota)"?\s*[:=>]\s*"?(AAA|AA[+\-]?|A[+\-]?|BBB[+\-]?|BB[+\-]?|B[+\-]?|CCC[+\-]?|CC|C|D|NR|withdrawn)\b`,
+)
 
 // watchStatusRE matches a watch / outlook status field.
 var watchStatusRE = regexp.MustCompile(
-	`(?i)"?(?:watch[_\- ]?status|outlook|perspectiva|tendencia)"?\s*[:=>]\s*"?(positive|positiva|negative|negativa|developing|en[_\- ]?desarrollo|stable|estable|under[_\- ]?review|en[_\- ]?revision)`)
+	`(?i)"?(?:watch[_\- ]?status|outlook|perspectiva|tendencia)"?\s*[:=>]\s*"?(positive|positiva|negative|negativa|developing|en[_\- ]?desarrollo|stable|estable|under[_\- ]?review|en[_\- ]?revision)`,
+)
 
 // issuerClassRE matches the issuer-class field.
 var issuerClassRE = regexp.MustCompile(
-	`(?i)"?(?:issuer[_\- ]?class|tipo[_\- ]?emisor|asset[_\- ]?class|clase[_\- ]?emisor)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`)
+	`(?i)"?(?:issuer[_\- ]?class|tipo[_\- ]?emisor|asset[_\- ]?class|clase[_\- ]?emisor)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`,
+)
 
 // calificadoraIDRE matches the rating-agency self-identification.
 var calificadoraIDRE = regexp.MustCompile(
-	`(?i)"?(?:calificadora|rating[_\- ]?agency|agency[_\- ]?name)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_]{4,40})`)
+	`(?i)"?(?:calificadora|rating[_\- ]?agency|agency[_\- ]?name)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_]{4,40})`,
+)
 
 // issuerCountRE matches an issuer count field (used on roster).
 var issuerCountRE = regexp.MustCompile(
-	`(?i)"?(?:issuer[_\- ]?count|cantidad[_\- ]?emisores|nro[_\- ]?emisores)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:issuer[_\- ]?count|cantidad[_\- ]?emisores|nro[_\- ]?emisores)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // watchIssuerCountRE matches the watch-list issuer count.
 var watchIssuerCountRE = regexp.MustCompile(
-	`(?i)"?(?:watch[_\- ]?issuer[_\- ]?count|watch[_\- ]?count|cantidad[_\- ]?watch)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:watch[_\- ]?issuer[_\- ]?count|watch[_\- ]?count|cantidad[_\- ]?watch)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // dissentRE matches a dissenting-opinion count or marker.
 var dissentRE = regexp.MustCompile(
-	`(?i)"?(?:dissent(?:ing)?[_\- ]?(?:opinion[_\- ]?)?count|disidentes[_\- ]?count|votos[_\- ]?disidentes|opiniones[_\- ]?disidentes)"?\s*[:=>]\s*"?(\d{1,4})`)
+	`(?i)"?(?:dissent(?:ing)?[_\- ]?(?:opinion[_\- ]?)?count|disidentes[_\- ]?count|votos[_\- ]?disidentes|opiniones[_\- ]?disidentes)"?\s*[:=>]\s*"?(\d{1,4})`,
+)
 
 // methodologyChangeRE matches a methodology-change marker
 // (CHANGE / CHANGED / NUEVA_VERSION).
 var methodologyChangeRE = regexp.MustCompile(
-	`(?im)\b(?:METHODOLOGY[_\- ]?CHANG(?:E|ED)|CAMBIO[_\- ]?DE[_\- ]?METODOLOGIA|NUEVA[_\- ]?VERSION[_\- ]?METODOLOGIA|REVISED[_\- ]?METHODOLOGY)\b`)
+	`(?im)\b(?:METHODOLOGY[_\- ]?CHANG(?:E|ED)|CAMBIO[_\- ]?DE[_\- ]?METODOLOGIA|NUEVA[_\- ]?VERSION[_\- ]?METODOLOGIA|REVISED[_\- ]?METHODOLOGY)\b`,
+)
 
 // crossIssuerComparableRE matches a cross-issuer comparable
 // section marker.
 var crossIssuerComparableRE = regexp.MustCompile(
-	`(?i)\b(?:cross[_\- ]?issuer[_\- ]?comparable|peer[_\- ]?analysis|comparable[_\- ]?cohort|analisis[_\- ]?comparativo|peer[_\- ]?group)\b`)
+	`(?i)\b(?:cross[_\- ]?issuer[_\- ]?comparable|peer[_\- ]?analysis|comparable[_\- ]?cohort|analisis[_\- ]?comparativo|peer[_\- ]?group)\b`,
+)
 
 // feeAmountRE matches the per-issuer fee amount in ARS.
 var feeAmountRE = regexp.MustCompile(
-	`(?i)"?(?:fee[_\- ]?total|honorarios[_\- ]?total|monto[_\- ]?fee|fee[_\- ]?amount|honorarios[_\- ]?amount)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:fee[_\- ]?total|honorarios[_\- ]?total|monto[_\- ]?fee|fee[_\- ]?amount|honorarios[_\- ]?amount)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // modelInputParamRE matches model-input-parameter rows (PD/LGD
 // model XLSX exports). Each row corresponds to one risk factor.
 var modelInputParamRE = regexp.MustCompile(
-	`(?im)^\s*(?:param[_\-]?\d+|input[_\-]?\d+|factor[_\-]?\d+|risk[_\-]?factor[_\-]?\d+),`)
+	`(?im)^\s*(?:param[_\-]?\d+|input[_\-]?\d+|factor[_\-]?\d+|risk[_\-]?factor[_\-]?\d+),`,
+)
 
 // modelInputParamCountRE matches an explicit input-param count.
 var modelInputParamCountRE = regexp.MustCompile(
-	`(?i)"?(?:model[_\- ]?input[_\- ]?count|input[_\- ]?param[_\- ]?count|cantidad[_\- ]?parametros|nro[_\- ]?factores)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:model[_\- ]?input[_\- ]?count|input[_\- ]?param[_\- ]?count|cantidad[_\- ]?parametros|nro[_\- ]?factores)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // issuerRosterRowRE matches a per-issuer roster row (CUIT-anchored).
 var issuerRosterRowRE = regexp.MustCompile(
-	`(?im)^[A-Z0-9\-]+,\d{2}-?\d{8}-?\d,`)
+	`(?im)^[A-Z0-9\-]+,\d{2}-?\d{8}-?\d,`,
+)
 
 // clienteEmisorCuitKeyRE matches `cliente_emisor_cuit: NN-NNNNNNNN-N`.
 var clienteEmisorCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?emisor[_\- ]?cuit|emisor[_\- ]?cuit|issuer[_\- ]?cuit|cuit[_\- ]?emisor|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?emisor[_\- ]?cuit|emisor[_\- ]?cuit|issuer[_\- ]?cuit|cuit[_\- ]?emisor|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteAnalystCuilKeyRE matches `analyst_cuil: NN-NNNNNNNN-N`.
 var clienteAnalystCuilKeyRE = regexp.MustCompile(
-	`(?i)"?(?:analyst[_\- ]?cuil|analista[_\- ]?cuil|lead[_\- ]?analyst[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:analyst[_\- ]?cuil|analista[_\- ]?cuil|lead[_\- ]?analyst[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseRatingLetter parses a final rating letter body.
 func ParseRatingLetter(body []byte) CalFields {

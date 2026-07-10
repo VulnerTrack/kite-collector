@@ -29,7 +29,8 @@ func (c *hyperVCollector) Collect(ctx context.Context) ([]VM, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("context cancelled: %w", err)
 	}
-	out, err := c.run(ctx,
+	out, err := c.run(
+		ctx,
 		"-NoProfile", "-NonInteractive", "-NoLogo",
 		"-ExecutionPolicy", "Bypass",
 		"-OutputFormat", "Text",

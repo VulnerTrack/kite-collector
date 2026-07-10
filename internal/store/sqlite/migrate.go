@@ -104,7 +104,8 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 		}
 		current := sha256hex(sqlBytes)
 		if stored.checksum != current {
-			slog.Error("migration checksum mismatch; embedded file was modified after migration was applied",
+			slog.Error(
+				"migration checksum mismatch; embedded file was modified after migration was applied",
 				"code", string(LogCodeMigrateChecksumMismatch),
 				"version", version,
 				"applied_checksum", stored.checksum,
@@ -153,7 +154,8 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 			for i, stmt := range splitSQLStatements(sqlText) {
 				if _, execErr := tx.ExecContext(ctx, stmt); execErr != nil {
 					if isDuplicateColumnErr(execErr) {
-						slog.Warn("migration column already exists; treating as recovery no-op (file opted in via @tolerate header)",
+						slog.Warn(
+							"migration column already exists; treating as recovery no-op (file opted in via @tolerate header)",
 							"code", string(LogCodeMigrateColumnExists),
 							"migration", file,
 							"version", version,
@@ -171,7 +173,8 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 			return fmt.Errorf("migration %s failed: %w", version, execErr)
 		}
 
-		if _, execErr := tx.ExecContext(ctx,
+		if _, execErr := tx.ExecContext(
+			ctx,
 			`INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)`,
 			version, checksum, time.Now().UTC().Format(time.RFC3339),
 		); execErr != nil {
@@ -184,7 +187,8 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 		}
 
 		// R12: log elapsed time per migration.
-		slog.Info("migration applied",
+		slog.Info(
+			"migration applied",
 			"code", string(LogCodeMigrateApplied),
 			"version", version,
 			"checksum", checksum[:12],

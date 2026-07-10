@@ -79,7 +79,8 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, assets []model.Asset) (*
 		asset.ComputeNaturalKey()
 
 		if _, dup := seen[asset.NaturalKey]; dup {
-			slog.Info("intra-batch duplicate skipped",
+			slog.Info(
+				"intra-batch duplicate skipped",
 				"code", string(LogCodeDedupSkipIntraBatch),
 				"hostname", asset.Hostname,
 				"asset_type", asset.AssetType,
@@ -116,7 +117,8 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, assets []model.Asset) (*
 			result.Assets = append(result.Assets, merged)
 			result.UpdatedCount++
 
-			slog.Debug("existing asset merged into batch",
+			slog.Debug(
+				"existing asset merged into batch",
 				"code", string(LogCodeDedupUpdated),
 				"id", merged.ID,
 				"hostname", merged.Hostname,
@@ -130,7 +132,8 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, assets []model.Asset) (*
 			result.Assets = append(result.Assets, *asset)
 			result.NewCount++
 
-			slog.Debug("new asset assigned identity",
+			slog.Debug(
+				"new asset assigned identity",
 				"code", string(LogCodeDedupNew),
 				"id", asset.ID,
 				"hostname", asset.Hostname,
@@ -139,7 +142,8 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, assets []model.Asset) (*
 		}
 	}
 
-	slog.Info("dedup pass complete",
+	slog.Info(
+		"dedup pass complete",
 		"code", string(LogCodeDedupCompleted),
 		"total", len(result.Assets),
 		"new", result.NewCount,

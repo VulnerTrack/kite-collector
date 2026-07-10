@@ -85,7 +85,7 @@ func (u *UniFi) discoverCloud(ctx context.Context, apiKey string) ([]model.Asset
 	// List devices across all hosts.
 	devices, err := client.listDevices(ctx)
 	if err != nil {
-		slog.Warn("unifi cloud: failed to list devices", "error", err)
+		slog.Warn("unifi cloud: failed to list devices", "code", string(LogCodeCloudListDevicesFailed), "error", err)
 	} else {
 		for _, d := range devices {
 			assets = append(assets, cloudDeviceToAsset(d, now))
@@ -128,7 +128,8 @@ func (c *cloudClient) get(ctx context.Context, path string) ([]byte, error) {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, fmt.Errorf(
-			"HTTP 401 — invalid API key. Generate one at unifi.ui.com → Settings → API Keys")
+			"HTTP 401 — invalid API key. Generate one at unifi.ui.com → Settings → API Keys",
+		)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, fmt.Errorf("HTTP 429 — rate limited. Try again later")
@@ -276,7 +277,8 @@ func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.
 		return nil, fmt.Errorf(
 			"unifi: set KITE_UNIFI_API_KEY (cloud) or " +
 				"KITE_UNIFI_ENDPOINT + KITE_UNIFI_USERNAME + " +
-				"KITE_UNIFI_PASSWORD (local)")
+				"KITE_UNIFI_PASSWORD (local)",
+		)
 	}
 
 	// Validate endpoint — UniFi controllers may use HTTP on LAN.
@@ -302,7 +304,7 @@ func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.
 	// Enumerate clients (connected devices).
 	clients, err := client.listClients(ctx, site)
 	if err != nil {
-		slog.Warn("unifi: failed to list clients", "error", err)
+		slog.Warn("unifi: failed to list clients", "code", string(LogCodeLocalListClientsFailed), "error", err)
 	} else {
 		for _, c := range clients {
 			assets = append(assets, clientToAsset(c, now))
@@ -312,7 +314,7 @@ func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.
 	// Enumerate devices (APs, switches, gateways).
 	devices, err := client.listDevices(ctx, site)
 	if err != nil {
-		slog.Warn("unifi: failed to list devices", "error", err)
+		slog.Warn("unifi: failed to list devices", "code", string(LogCodeLocalListDevicesFailed), "error", err)
 	} else {
 		for _, d := range devices {
 			assets = append(assets, deviceToAsset(d, now))

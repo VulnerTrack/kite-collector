@@ -55,7 +55,7 @@ func (c *JWKSClient) GetKey(ctx context.Context, kid string) (jose.JSONWebKey, e
 	if err := c.refresh(ctx); err != nil {
 		// If refresh fails but we have a cached key, use it.
 		if ok {
-			c.logger.Warn("JWKS refresh failed, using cached key", "kid", kid, "error", err)
+			c.logger.Warn("JWKS refresh failed, using cached key", "code", string(LogCodeJWKSRefreshFailed), "kid", kid, "error", err)
 			return key, nil
 		}
 		return jose.JSONWebKey{}, fmt.Errorf("fetch JWKS: %w", err)

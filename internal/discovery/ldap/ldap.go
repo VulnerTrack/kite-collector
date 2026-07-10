@@ -114,7 +114,8 @@ func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 	if bindErr := conn.Bind(conf.bindDN, string(bindPwd)); bindErr != nil {
 		return nil, fmt.Errorf("ldap: bind to %s:%d failed: %w", dc.host, dc.port, bindErr)
 	}
-	slog.Info("ldap: bound to domain controller",
+	slog.Info(
+		"ldap: bound to domain controller",
 		"host", dc.host,
 		"port", dc.port,
 		"tls_mode", conf.tlsMode,
@@ -134,12 +135,14 @@ func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 	for _, entry := range result.Entries {
 		comp, exErr := extractComputer(entry, conf.baseDN)
 		if exErr != nil {
-			slog.Warn("ldap: skipping malformed entry", "dn", entry.DN, "error", exErr)
+			slog.Warn("ldap: skipping malformed entry", "code", string(LogCodeSearchSkipMalformedEntry), "dn", entry.DN, "error", exErr)
 			continue
 		}
 		assets = append(assets, comp.toAsset(now))
 		if len(assets) >= conf.maxObjects {
-			slog.Warn("ldap: max_objects circuit breaker tripped — truncating",
+			slog.Warn(
+				"ldap: max_objects circuit breaker tripped — truncating",
+				"code", string(LogCodeSearchMaxObjectsTripped),
 				"max_objects", conf.maxObjects,
 			)
 			break
@@ -164,7 +167,9 @@ func (l *LDAP) dialAny(ctx context.Context, conf *ldapConfig) (directoryConn, dc
 			return conn, dc, nil
 		}
 		errs = append(errs, fmt.Errorf("%s:%d: %w", dc.host, dc.port, err))
-		slog.Warn("ldap: dial failed, trying next DC",
+		slog.Warn(
+			"ldap: dial failed, trying next DC",
+			"code", string(LogCodeDialFailedNextDC),
 			"host", dc.host,
 			"port", dc.port,
 			"error", err,
@@ -187,7 +192,8 @@ func dialDC(ctx context.Context, conf *ldapConfig, dc dcEndpoint) (directoryConn
 	switch conf.tlsMode {
 	case "ldaps":
 		url := fmt.Sprintf("ldaps://%s:%d", dc.host, dc.port)
-		conn, dErr := ldapv3.DialURL(url,
+		conn, dErr := ldapv3.DialURL(
+			url,
 			ldapv3.DialWithTLSConfig(tlsCfg),
 			ldapv3.DialWithDialer(netDialer),
 		)

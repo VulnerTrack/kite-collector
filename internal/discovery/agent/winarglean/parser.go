@@ -32,66 +32,81 @@ type LeanFields struct {
 // brokerageNameRE matches a `brokerage`/`live-mode-brokerage` key
 // in a LEAN config (JSON or YAML form).
 var brokerageNameRE = regexp.MustCompile(
-	`(?i)"?(?:brokerage|live[_\-]?mode[_\-]?brokerage|live[_\-]?broker|broker(?:age)?[_\-]?type|live[_\-]?adapter)"?\s*[:=]\s*"?([A-Za-z0-9_\-\.]{3,64})"?`)
+	`(?i)"?(?:brokerage|live[_\-]?mode[_\-]?brokerage|live[_\-]?broker|broker(?:age)?[_\-]?type|live[_\-]?adapter)"?\s*[:=]\s*"?([A-Za-z0-9_\-\.]{3,64})"?`,
+)
 
 // liveModeRE detects `live-mode: true` / `"live-mode": true`.
 var liveModeRE = regexp.MustCompile(
-	`(?i)"?live[_\-]?mode"?\s*[:=]\s*"?(true|1|yes|on)"?`)
+	`(?i)"?live[_\-]?mode"?\s*[:=]\s*"?(true|1|yes|on)"?`,
+)
 
 // brokerageKeyRE matches a generic API key / secret in any of
 // the LEAN brokerage adapter forms.
 var brokerageKeyRE = regexp.MustCompile(
-	`(?i)"?(?:api[_\-]?key|api[_\-]?secret|access[_\-]?token|client[_\-]?secret|consumer[_\-]?key|private[_\-]?key|broker[_\-]?token|primary[_\-]?key|primary[_\-]?secret|ib[_\-]?user|ib[_\-]?password|alpaca[_\-]?key|alpaca[_\-]?secret|coinbase[_\-]?key|coinbase[_\-]?secret|binance[_\-]?key|binance[_\-]?secret)"?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)"?(?:api[_\-]?key|api[_\-]?secret|access[_\-]?token|client[_\-]?secret|consumer[_\-]?key|private[_\-]?key|broker[_\-]?token|primary[_\-]?key|primary[_\-]?secret|ib[_\-]?user|ib[_\-]?password|alpaca[_\-]?key|alpaca[_\-]?secret|coinbase[_\-]?key|coinbase[_\-]?secret|binance[_\-]?key|binance[_\-]?secret)"?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // qcUserTokenRE matches a QuantConnect user token / cloud creds.
 var qcUserTokenRE = regexp.MustCompile(
-	`(?i)"?(?:user[_\-]?token|qc[_\-]?token|api[_\-]?access[_\-]?token|cloud[_\-]?token|quantconnect[_\-]?token)"?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)"?(?:user[_\-]?token|qc[_\-]?token|api[_\-]?access[_\-]?token|cloud[_\-]?token|quantconnect[_\-]?token)"?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // passwordRE matches a password row (line-anchored INI/JSON/XML).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:<\s*)?"?(?:password|passwd|clave)"?\s*(?:[:=>]|>)\s*\S+`)
+	`(?im)^\s*(?:<\s*)?"?(?:password|passwd|clave)"?\s*(?:[:=>]|>)\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>` on a single line.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|passwd|clave)\s*>`)
+	`(?i)<\s*(?:password|passwd|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|passwd|clave)\s*>`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line in Python
 // or C# source.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|broker_token)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|broker_token)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // algorithmNameRE matches a LEAN algorithm class name (C#).
 var algorithmNameRE = regexp.MustCompile(
-	`(?im)(?:public\s+)?class\s+([A-Z][A-Za-z0-9_]{2,64})\s*:\s*QCAlgorithm`)
+	`(?im)(?:public\s+)?class\s+([A-Z][A-Za-z0-9_]{2,64})\s*:\s*QCAlgorithm`,
+)
 
 // algorithmPyNameRE matches a Python LEAN algorithm class name.
 var algorithmPyNameRE = regexp.MustCompile(
-	`(?im)class\s+([A-Z][A-Za-z0-9_]{2,64})\s*\(\s*QCAlgorithm\s*\)`)
+	`(?im)class\s+([A-Z][A-Za-z0-9_]{2,64})\s*\(\s*QCAlgorithm\s*\)`,
+)
 
 // algorithmConfigNameRE matches algorithm-name in config JSON.
 var algorithmConfigNameRE = regexp.MustCompile(
-	`(?i)"?(?:algorithm[_\-]?type[_\-]?name|algorithm[_\-]?name|algorithm[_\-]?class)"?\s*[:=]\s*"?([A-Za-z0-9_\.\-]{3,64})"?`)
+	`(?i)"?(?:algorithm[_\-]?type[_\-]?name|algorithm[_\-]?name|algorithm[_\-]?class)"?\s*[:=]\s*"?([A-Za-z0-9_\.\-]{3,64})"?`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>…</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // symbolEntryRE matches a JSON/INI symbol entry. LEAN often
 // uses `AddEquity("GGAL")` form, so also detect quoted args.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:Add(?:Equity|Option|Future|Forex|Crypto)\s*\(\s*"|"?(?:symbol|simbolo|ticker|instrument)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)(?:Add(?:Equity|Option|Future|Forex|Crypto)\s*\(\s*"|"?(?:symbol|simbolo|ticker|instrument)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // sharpeRE matches a Sharpe-ratio metric in a backtest result.
 var sharpeRE = regexp.MustCompile(
-	`(?i)"?(?:sharpe[_\-]?ratio|sharpe)"?\s*[:=]\s*"?(-?[0-9]+(?:\.[0-9]+)?)"?`)
+	`(?i)"?(?:sharpe[_\-]?ratio|sharpe)"?\s*[:=]\s*"?(-?[0-9]+(?:\.[0-9]+)?)"?`,
+)
 
 // annualReturnRE matches an annual-return metric.
 var annualReturnRE = regexp.MustCompile(
-	`(?i)"?(?:annual[_\-]?return|annualised[_\-]?return|annualized[_\-]?return|compounded[_\-]?annual[_\-]?return|cagr)"?\s*[:=]\s*"?(-?[0-9]+(?:\.[0-9]+)?)"?%?`)
+	`(?i)"?(?:annual[_\-]?return|annualised[_\-]?return|annualized[_\-]?return|compounded[_\-]?annual[_\-]?return|cagr)"?\s*[:=]\s*"?(-?[0-9]+(?:\.[0-9]+)?)"?%?`,
+)
 
 // ParseLeanConfig parses a lean.json / config.json body.
 func ParseLeanConfig(body []byte) LeanFields {
