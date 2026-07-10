@@ -86,52 +86,77 @@ discovery:
       enabled: false
       # Credentials: KITE_KAMATERA_CLIENT_ID, KITE_KAMATERA_SECRET
 
+    # MDM/CMDB connectors (RFC-0135). Every source below defaults to
+    # enabled: false and stays fully disabled in that state even if its KITE_*
+    # credential env vars are set (Finding F3 fix). api_url / instance_url /
+    # username / password / token / api_key / tenant_id / client_id /
+    # client_secret / table / site_id are now REAL config fields (previously
+    # silently dropped) — set them here or via env vars; config values take
+    # precedence. Secrets set here are never written to SQLite, logs, or events.
+    # Every source's base URL is validated (SSRF-guarded) before first use;
+    # private/loopback IPs are rejected except for the self-hosted connectors
+    # (sccm, netbox, device42).
+
     # MDM connectors — devices from these sources are marked is_managed = "managed"
     intune:
       enabled: false
-      # Microsoft Intune via Graph API (OAuth2 client credentials)
-      # Credentials via env vars:
-      #   KITE_INTUNE_TENANT_ID      – Azure AD tenant ID
-      #   KITE_INTUNE_CLIENT_ID      – Application (client) ID
-      #   KITE_INTUNE_CLIENT_SECRET  – Client secret value
+      # Microsoft Intune via Graph API (OAuth2 client credentials; fixed
+      # Microsoft endpoints — no api_url).
+      # tenant_id / client_id / client_secret here, or KITE_INTUNE_TENANT_ID /
+      # KITE_INTUNE_CLIENT_ID / KITE_INTUNE_CLIENT_SECRET
 
     jamf:
       enabled: false
-      # Jamf Pro Classic API
-      # api_url: https://myorg.jamfcloud.com
-      # Credentials via env vars:
-      #   KITE_JAMF_API_URL   – Jamf Pro instance URL (or set api_url above)
-      #   KITE_JAMF_USERNAME  – API account username
-      #   KITE_JAMF_PASSWORD  – API account password
+      # Jamf Pro Classic API (SaaS)
+      api_url: https://myorg.jamfcloud.com
+      # username / password here, or KITE_JAMF_USERNAME / KITE_JAMF_PASSWORD
 
     sccm:
       enabled: false
-      # Microsoft SCCM/ConfigMgr AdminService REST API
-      # api_url: https://sccm.corp.local
-      # Credentials via env vars:
-      #   KITE_SCCM_API_URL   – AdminService base URL (or set api_url above)
-      #   KITE_SCCM_USERNAME  – Account username
-      #   KITE_SCCM_PASSWORD  – Account password
+      # Microsoft SCCM/ConfigMgr AdminService REST API (self-hosted)
+      api_url: https://sccm.corp.local
+      # username / password here, or KITE_SCCM_USERNAME / KITE_SCCM_PASSWORD
+
+    workspace_one:
+      enabled: false
+      # Omnissa Workspace ONE UEM REST API (SaaS)
+      api_url: https://as1409.awmdm.com
+      # username / password / api_key (aw-tenant-code) here, or
+      # KITE_WORKSPACEONE_USERNAME / KITE_WORKSPACEONE_PASSWORD / KITE_WORKSPACEONE_API_KEY
+
+    kandji:
+      enabled: false
+      # Kandji Apple MDM REST API (SaaS)
+      api_url: https://contoso.api.kandji.io
+      # api_key here, or KITE_KANDJI_API_TOKEN (read-only)
 
     # CMDB connectors — CIs from these sources are marked is_authorized = "authorized"
     netbox:
       enabled: false
-      # NetBox REST API (DCIM/IPAM)
-      # api_url: https://netbox.corp.local
-      # Credentials via env vars:
-      #   KITE_NETBOX_API_URL – NetBox instance URL (or set api_url above)
-      #   KITE_NETBOX_TOKEN   – API authentication token (read-only)
+      # NetBox REST API (DCIM/IPAM; self-hosted)
+      api_url: https://netbox.corp.local
+      # token here, or KITE_NETBOX_TOKEN (read-only)
 
     servicenow:
       enabled: false
-      # ServiceNow Table API (CMDB)
-      # instance_url: https://myorg.service-now.com
-      # table: cmdb_ci_server
-      # Credentials via env vars:
-      #   KITE_SERVICENOW_INSTANCE_URL – Instance URL (or set instance_url above)
-      #   KITE_SERVICENOW_USERNAME     – API account username
-      #   KITE_SERVICENOW_PASSWORD     – API account password
-      #   KITE_SERVICENOW_TABLE        – CMDB table (default: cmdb_ci_server)
+      # ServiceNow Table API (CMDB; SaaS)
+      instance_url: https://myorg.service-now.com
+      table: cmdb_ci_server
+      # username / password here, or KITE_SERVICENOW_USERNAME /
+      # KITE_SERVICENOW_PASSWORD (KITE_SERVICENOW_TABLE overrides table)
+
+    device42:
+      enabled: false
+      # Device42 DCIM/ITAM REST API (self-hosted)
+      api_url: https://device42.corp.local
+      # username / password here, or KITE_DEVICE42_USERNAME / KITE_DEVICE42_PASSWORD
+
+    lansweeper:
+      enabled: false
+      # Lansweeper Data Export API (GraphQL; SaaS Cloud)
+      api_url: https://api.lansweeper.com/api/v2/graphql
+      site_id: "11111111-2222-3333-4444-555555555555"
+      # api_key here, or KITE_LANSWEEPER_API_KEY (KITE_LANSWEEPER_SITE_ID overrides site_id)
 
     # aws:                    # Future
     #   enabled: false

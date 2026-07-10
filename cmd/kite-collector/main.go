@@ -71,6 +71,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/osutil"
 	"github.com/vulnertrack/kite-collector/internal/policy"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/postgres"
@@ -372,6 +373,10 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(mdm.NewSCCM())
 	registry.Register(cmdb.NewServiceNow())
 	registry.Register(cmdb.NewNetBox())
+	registry.Register(mdm.NewWorkspaceOne())
+	registry.Register(mdm.NewKandji())
+	registry.Register(cmdb.NewDevice42())
+	registry.Register(cmdb.NewLansweeper())
 	registry.Register(dockerdisc.New())
 	registry.Register(unifi.New())
 	registry.Register(proxmox.New())
@@ -400,6 +405,23 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	// Set up metrics.
 	met := metrics.New()
 	safenet.SetGuardObserver(metrics.NewSafenetObserver(met))
+
+	// Attach the circuit breaker to the registry, metrics, and (for SQLite) the
+	// source_health writer — the production instantiation RFC-0062 shipped but
+	// never performed (Finding F2, RFC-0135 R5). Disabled via
+	// safety.circuit_breaker.enabled: false.
+	if cfg.Safety.CircuitBreaker.Enabled {
+		cb := safety.NewCircuitBreaker(safety.CircuitBreakerConfig{
+			FailureThreshold: cfg.Safety.CircuitBreaker.FailureThreshold,
+			CooldownDuration: cfg.CircuitBreakerCooldown(),
+			SuccessThreshold: cfg.Safety.CircuitBreaker.SuccessThreshold,
+		})
+		cb.SetMetrics(met.CircuitBreakerTrips, met.SourceHealth)
+		if p, ok := st.(safety.HealthPersister); ok {
+			cb.SetPersister(p)
+		}
+		registry.SetCircuitBreaker(cb)
+	}
 	var metricsSrv *http.Server
 	if cfg.Metrics.Enabled {
 		listen := cfg.Metrics.Listen
@@ -449,6 +471,7 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 		eng.SetIdentity(scanID)
 	} else {
 		slog.Warn("identity unavailable for engine; synthetic-finding observability disabled",
+			"code", string(LogCodeEngineIdentityUnavailable),
 			"error", idErr,
 			"identity_dir", identityDir)
 	}
@@ -705,7 +728,8 @@ func formatDiffTable(result DiffResult, showUnchanged bool) {
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 		_, _ = fmt.Fprintln(w, "HOSTNAME\tTYPE\tCHANGED FIELDS")
 		for _, c := range result.Changed {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n",
+			_, _ = fmt.Fprintf(
+				w, "%s\t%s\t%s\n",
 				c.After.Hostname,
 				c.After.AssetType,
 				strings.Join(c.Fields, ", "),
@@ -1007,7 +1031,8 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 
 		localAddr, tunnelErr := tunnelMgr.Start(ctx)
 		if tunnelErr != nil {
-			slog.Warn("tunnel start failed; continuing without tunnel",
+			slog.Warn(
+				"tunnel start failed; continuing without tunnel",
 				"code", string(LogCodeTunnelStartFailed),
 				"error", tunnelErr,
 				"provider", cfg.Connectivity.Tunnel.Provider,
@@ -1015,7 +1040,8 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			)
 		} else if localAddr != "" {
 			// Rewrite endpoint addresses to route through the tunnel.
-			slog.Info("tunnel active; rewriting endpoint addresses",
+			slog.Info(
+				"tunnel active; rewriting endpoint addresses",
 				"code", string(LogCodeTunnelRewroteEndpoint),
 				"local_addr", localAddr,
 				"original_target", cfg.Connectivity.Tunnel.Target,
@@ -1086,6 +1112,10 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	registry.Register(mdm.NewSCCM())
 	registry.Register(cmdb.NewServiceNow())
 	registry.Register(cmdb.NewNetBox())
+	registry.Register(mdm.NewWorkspaceOne())
+	registry.Register(mdm.NewKandji())
+	registry.Register(cmdb.NewDevice42())
+	registry.Register(cmdb.NewLansweeper())
 	registry.Register(dockerdisc.New())
 	registry.Register(unifi.New())
 	registry.Register(proxmox.New())
@@ -1105,6 +1135,23 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 
 	met := metrics.New()
 	safenet.SetGuardObserver(metrics.NewSafenetObserver(met))
+
+	// Attach the circuit breaker (RFC-0135 R5); nil when disabled via
+	// safety.circuit_breaker.enabled: false. Also handed to the REST handler
+	// below so /api/v1/source-health serves live circuit state.
+	var circuitBreaker *safety.CircuitBreaker
+	if cfg.Safety.CircuitBreaker.Enabled {
+		circuitBreaker = safety.NewCircuitBreaker(safety.CircuitBreakerConfig{
+			FailureThreshold: cfg.Safety.CircuitBreaker.FailureThreshold,
+			CooldownDuration: cfg.CircuitBreakerCooldown(),
+			SuccessThreshold: cfg.Safety.CircuitBreaker.SuccessThreshold,
+		})
+		circuitBreaker.SetMetrics(met.CircuitBreakerTrips, met.SourceHealth)
+		if p, ok := st.(safety.HealthPersister); ok {
+			circuitBreaker.SetPersister(p)
+		}
+		registry.SetCircuitBreaker(circuitBreaker)
+	}
 	var metricsSrv *http.Server
 	if cfg.Metrics.Enabled {
 		listen := cfg.Metrics.Listen
@@ -1172,7 +1219,8 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		}
 		em = otlpEmitter
 		defer func() { _ = otlpEmitter.Shutdown(context.Background()) }()
-		slog.Info("OTLP emitter configured; events will be streamed upstream",
+		slog.Info(
+			"OTLP emitter configured; events will be streamed upstream",
 			"code", string(LogCodeTelemetryOTLPConfigured),
 			"endpoint", cfg.Streaming.OTLP.Endpoint,
 			"protocol", cfg.Streaming.OTLP.Protocol,
@@ -1214,6 +1262,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		eng.SetIdentity(scanID)
 	} else {
 		slog.Warn("identity unavailable for engine; synthetic-finding observability disabled",
+			"code", string(LogCodeEngineIdentityUnavailable),
 			"error", idErr,
 			"identity_dir", engIdentityDir)
 	}
@@ -1228,6 +1277,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	apiHandler := rest.New(st, logger)
 	apiHandler.SetScanCoordinator(coord)
 	apiHandler.SetBaseConfig(cfg)
+	apiHandler.SetCircuitBreaker(circuitBreaker)
 	if reader, ok := st.(rest.NetworkScanReader); ok {
 		apiHandler.SetNetworkScanReader(reader)
 	}
@@ -1311,7 +1361,8 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			"code", string(LogCodeScanInitialFailed),
 			"error", scanErr)
 	} else {
-		slog.Info("initial scan complete",
+		slog.Info(
+			"initial scan complete",
 			"code", string(LogCodeScanInitialComplete),
 			"total", result.TotalAssets,
 			"new", result.NewAssets,
@@ -1350,7 +1401,8 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 					"error", scanErr,
 					"interval", scanInterval.String())
 			} else {
-				slog.Info("periodic scan complete",
+				slog.Info(
+					"periodic scan complete",
 					"code", string(LogCodeScanPeriodicComplete),
 					"total", result.TotalAssets,
 					"new", result.NewAssets,
@@ -1442,7 +1494,8 @@ func runReport(dbPath, format, outputPath string) error {
 		return formatHTMLReport(ctx, st, assets, latestRun)
 	default:
 		if latestRun != nil {
-			fmt.Printf("Latest scan: %s (total: %d, new: %d, stale: %d)\n\n",
+			fmt.Printf(
+				"Latest scan: %s (total: %d, new: %d, stale: %d)\n\n",
 				latestRun.StartedAt.Format(time.RFC3339),
 				latestRun.TotalAssets,
 				latestRun.NewAssets,
@@ -2015,7 +2068,8 @@ func formatTable(assets []model.Asset) {
 		if a.OSVersion != "" {
 			osInfo = a.OSVersion
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(
+			w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			a.Hostname,
 			a.AssetType,
 			osInfo,
@@ -2886,7 +2940,8 @@ func runEnroll(agentCode, token, certsDir string) error {
 	}
 
 	if result.Status == "pending" {
-		logger.Info("enrollment request submitted; awaiting server approval",
+		logger.Info(
+			"enrollment request submitted; awaiting server approval",
 			"code", string(LogCodeEnrollRequestSubmitted),
 			"agent_code", agentCode,
 			"status", result.Status,
@@ -2898,7 +2953,8 @@ func runEnroll(agentCode, token, certsDir string) error {
 		return fmt.Errorf("store certificates: %w", err)
 	}
 
-	logger.Info("enrollment complete; certificate issued",
+	logger.Info(
+		"enrollment complete; certificate issued",
 		"code", string(LogCodeEnrollComplete),
 		"agent_code", agentCode,
 		"status", result.Status,

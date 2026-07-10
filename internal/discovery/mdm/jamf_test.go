@@ -75,9 +75,9 @@ func TestJamf_Discover_Success(t *testing.T) {
 	srv := newMockJamfAPI(t)
 	defer srv.Close()
 
-	j := NewJamf()
+	j := &Jamf{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url":  srv.URL,
+		"enabled":  true,
 		"username": "admin",
 		"password": "secret",
 	}
@@ -94,17 +94,42 @@ func TestJamf_Discover_Success(t *testing.T) {
 	assert.Equal(t, "jamf", mac1.DiscoverySource)
 	assert.Equal(t, model.ManagedManaged, mac1.IsManaged)
 	assert.Equal(t, model.AuthorizationUnknown, mac1.IsAuthorized)
+	assert.Equal(t, "1", mac1.MDMEnrollmentID)
 	assert.NotEmpty(t, mac1.NaturalKey)
+
+	// Serial number is surfaced through Tags.
+	var mac1Tags map[string]any
+	require.NoError(t, json.Unmarshal([]byte(mac1.Tags), &mac1Tags))
+	assert.Equal(t, "C02ABC123", mac1Tags["serial_number"])
 
 	mac2 := findAsset(assets, "macbook-2")
 	require.NotNil(t, mac2)
 	assert.Equal(t, "darwin", mac2.OSFamily)
+	assert.Equal(t, "2", mac2.MDMEnrollmentID)
 }
 
 func TestJamf_Discover_MissingCredentials(t *testing.T) {
 	j := NewJamf()
 
-	assets, err := j.Discover(context.Background(), map[string]any{})
+	// Enabled, but no credentials configured → skip (nil, nil).
+	assets, err := j.Discover(context.Background(), map[string]any{"enabled": true})
+	require.NoError(t, err)
+	assert.Nil(t, assets)
+}
+
+func TestJamf_Discover_DisabledWithCredentials(t *testing.T) {
+	srv := newMockJamfAPI(t)
+	defer srv.Close()
+
+	j := &Jamf{baseURL: srv.URL}
+	// Credentials present but enabled is absent/false → discovery must not run.
+	cfg := map[string]any{
+		"enabled":  false,
+		"username": "admin",
+		"password": "secret",
+	}
+
+	assets, err := j.Discover(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.Nil(t, assets)
 }
@@ -113,17 +138,17 @@ func TestJamf_Discover_AuthFailure(t *testing.T) {
 	srv := newMockJamfAPI(t)
 	defer srv.Close()
 
-	j := NewJamf()
+	j := &Jamf{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url":  srv.URL,
+		"enabled":  true,
 		"username": "admin",
 		"password": "wrong",
 	}
 
-	// Auth failure returns nil, nil (Jamf returns nil on 401).
+	// Auth failure returns no assets (Jamf treats 401 as graceful skip).
 	assets, err := j.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Empty(t, assets)
 }
 
 func TestJamf_Discover_DetailFetchFailure(t *testing.T) {
@@ -142,9 +167,9 @@ func TestJamf_Discover_DetailFetchFailure(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	j := NewJamf()
+	j := &Jamf{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url":  srv.URL,
+		"enabled":  true,
 		"username": "admin",
 		"password": "secret",
 	}

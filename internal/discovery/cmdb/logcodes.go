@@ -37,4 +37,16 @@ const (
 	LogCodeServiceNowComplete        LogCode = "cmdb.servicenow.completed"
 	LogCodeServiceNowAuthFailed      LogCode = "cmdb.servicenow.auth_failed"
 	LogCodeServiceNowSkipUnparseable LogCode = "cmdb.servicenow.skip_unparseable_ci"
+
+	// --- Device42 ----------------------------------------------------
+	LogCodeDevice42Starting      LogCode = "cmdb.device42.starting"
+	LogCodeDevice42NotConfigured LogCode = "cmdb.device42.not_configured"
+	LogCodeDevice42Complete      LogCode = "cmdb.device42.completed"
+	LogCodeDevice42AuthFailed    LogCode = "cmdb.device42.auth_failed"
+
+	// --- Lansweeper --------------------------------------------------
+	LogCodeLansweeperStarting      LogCode = "cmdb.lansweeper.starting"
+	LogCodeLansweeperNotConfigured LogCode = "cmdb.lansweeper.not_configured"
+	LogCodeLansweeperComplete      LogCode = "cmdb.lansweeper.completed"
+	LogCodeLansweeperAuthFailed    LogCode = "cmdb.lansweeper.auth_failed"
 )

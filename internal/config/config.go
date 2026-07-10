@@ -171,6 +171,10 @@ type CircuitBreakerConfig struct {
 	Cooldown         string `mapstructure:"cooldown"` // duration like "5m"
 	FailureThreshold int    `mapstructure:"failure_threshold"`
 	SuccessThreshold int    `mapstructure:"success_threshold"`
+	// Enabled gates whether main.go attaches a live circuit breaker at all
+	// (RFC-0135 R5 / §10.2). Defaults to true (set in Load); set false to fall
+	// back to the previous always-retry behaviour with no source skipping.
+	Enabled bool `mapstructure:"enabled"`
 }
 
 // ScanDeadlineDuration parses the Safety.ScanDeadline string. Falls back
@@ -210,19 +214,36 @@ type DiscoveryConfig struct {
 // analyser; the on-disk YAML order is dictated by mapstructure tags, not
 // Go declaration order.
 type SourceConfig struct {
-	TLSCAFile          string   `mapstructure:"tls_ca_file"`
-	BindPasswordEnv    string   `mapstructure:"bind_password_env"`
-	BindDN             string   `mapstructure:"bind_dn"`
-	BaseDN             string   `mapstructure:"base_dn"`
-	TLSMode            string   `mapstructure:"tls_mode"`
-	Timeout            string   `mapstructure:"timeout"`
-	AssumeRole         string   `mapstructure:"assume_role"`
-	Project            string   `mapstructure:"project"`
-	SubscriptionID     string   `mapstructure:"subscription_id"`
-	Host               string   `mapstructure:"host"`
-	Endpoint           string   `mapstructure:"endpoint"`
-	Site               string   `mapstructure:"site"`
-	Community          string   `mapstructure:"community"`
+	TLSCAFile       string `mapstructure:"tls_ca_file"`
+	BindPasswordEnv string `mapstructure:"bind_password_env"`
+	BindDN          string `mapstructure:"bind_dn"`
+	BaseDN          string `mapstructure:"base_dn"`
+	TLSMode         string `mapstructure:"tls_mode"`
+	Timeout         string `mapstructure:"timeout"`
+	AssumeRole      string `mapstructure:"assume_role"`
+	Project         string `mapstructure:"project"`
+	SubscriptionID  string `mapstructure:"subscription_id"`
+	Host            string `mapstructure:"host"`
+	Endpoint        string `mapstructure:"endpoint"`
+	Site            string `mapstructure:"site"`
+	Community       string `mapstructure:"community"`
+	// MDM/CMDB connector fields (RFC-0135 R4). These make the YAML config the
+	// real, documented configuration surface for the nine MDM/CMDB connectors
+	// instead of undocumented env vars. Secret-bearing values (Password, Token,
+	// APIKey, ClientSecret) are never persisted to SQLite, logs, or ontology
+	// properties; the connector zeroes them post-auth. SourceConfig values take
+	// precedence over env vars when both are set (see engine.go).
+	APIURL             string   `mapstructure:"api_url"`
+	InstanceURL        string   `mapstructure:"instance_url"`
+	Username           string   `mapstructure:"username"`
+	Password           string   `mapstructure:"password"`
+	Token              string   `mapstructure:"token"`
+	APIKey             string   `mapstructure:"api_key"`
+	TenantID           string   `mapstructure:"tenant_id"`
+	ClientID           string   `mapstructure:"client_id"`
+	ClientSecret       string   `mapstructure:"client_secret"`
+	Table              string   `mapstructure:"table"`
+	SiteID             string   `mapstructure:"site_id"`
 	Regions            []string `mapstructure:"regions"`
 	Paths              []string `mapstructure:"paths"`
 	Scope              []string `mapstructure:"scope"`
@@ -397,6 +418,10 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("safety.circuit_breaker.failure_threshold", 3)
 	v.SetDefault("safety.circuit_breaker.cooldown", "5m")
 	v.SetDefault("safety.circuit_breaker.success_threshold", 1)
+	// Enabled default is true (RFC-0135 Phase 6): the breaker is attached fleet-
+	// wide. Set safety.circuit_breaker.enabled: false to fall back to the prior
+	// always-retry behaviour with no source skipping.
+	v.SetDefault("safety.circuit_breaker.enabled", true)
 	v.SetDefault("identity.data_dir", "/var/lib/kite-collector")
 	v.SetDefault("identity.key_backend", "auto")
 	v.SetDefault("connectivity.tunnel.enabled", false)

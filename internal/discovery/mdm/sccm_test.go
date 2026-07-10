@@ -29,18 +29,21 @@ func newMockSCCMAPI(t *testing.T) *httptest.Server {
 				{
 					"Name":                          "WIN-SRV-01",
 					"OperatingSystemNameandVersion": "Microsoft Windows Server 2022",
+					"ResourceID":                    16777001,
 					"LastActiveTime":                "2026-04-01T10:00:00Z",
 					"IsClient":                      true,
 				},
 				{
 					"Name":                          "WIN-WS-01",
 					"OperatingSystemNameandVersion": "Microsoft Windows 11 Enterprise",
+					"ResourceID":                    16777002,
 					"LastActiveTime":                "2026-04-02T12:00:00Z",
 					"IsClient":                      true,
 				},
 				{
 					"Name":                          "UNMANAGED-01",
 					"OperatingSystemNameandVersion": "Microsoft Windows 10",
+					"ResourceID":                    16777003,
 					"LastActiveTime":                "2026-03-15T08:00:00Z",
 					"IsClient":                      false,
 				},
@@ -59,9 +62,9 @@ func TestSCCM_Discover_Success(t *testing.T) {
 	srv := newMockSCCMAPI(t)
 	defer srv.Close()
 
-	s := NewSCCM()
+	s := &SCCM{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url":  srv.URL,
+		"enabled":  true,
 		"username": "sccm-user",
 		"password": "sccm-pass",
 	}
@@ -77,6 +80,7 @@ func TestSCCM_Discover_Success(t *testing.T) {
 	assert.Equal(t, "windows", winSrv.OSFamily)
 	assert.Equal(t, model.ManagedManaged, winSrv.IsManaged)
 	assert.Equal(t, "sccm", winSrv.DiscoverySource)
+	assert.Equal(t, "16777001", winSrv.MDMEnrollmentID)
 	assert.NotEmpty(t, winSrv.NaturalKey)
 
 	// Workstation with IsClient=true → managed.
@@ -84,6 +88,7 @@ func TestSCCM_Discover_Success(t *testing.T) {
 	require.NotNil(t, winWS)
 	assert.Equal(t, model.AssetTypeWorkstation, winWS.AssetType)
 	assert.Equal(t, model.ManagedManaged, winWS.IsManaged)
+	assert.Equal(t, "16777002", winWS.MDMEnrollmentID)
 
 	// IsClient=false → unknown management.
 	unmanaged := findAsset(assets, "UNMANAGED-01")
@@ -94,7 +99,25 @@ func TestSCCM_Discover_Success(t *testing.T) {
 func TestSCCM_Discover_MissingCredentials(t *testing.T) {
 	s := NewSCCM()
 
-	assets, err := s.Discover(context.Background(), map[string]any{})
+	// Enabled, but no credentials configured → skip (nil, nil).
+	assets, err := s.Discover(context.Background(), map[string]any{"enabled": true})
+	require.NoError(t, err)
+	assert.Nil(t, assets)
+}
+
+func TestSCCM_Discover_DisabledWithCredentials(t *testing.T) {
+	srv := newMockSCCMAPI(t)
+	defer srv.Close()
+
+	s := &SCCM{baseURL: srv.URL}
+	// Credentials present but enabled is false → discovery must not run.
+	cfg := map[string]any{
+		"enabled":  false,
+		"username": "sccm-user",
+		"password": "sccm-pass",
+	}
+
+	assets, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.Nil(t, assets)
 }
@@ -103,17 +126,17 @@ func TestSCCM_Discover_AuthFailure(t *testing.T) {
 	srv := newMockSCCMAPI(t)
 	defer srv.Close()
 
-	s := NewSCCM()
+	s := &SCCM{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url":  srv.URL,
+		"enabled":  true,
 		"username": "sccm-user",
 		"password": "wrong",
 	}
 
-	// Auth failure → nil (graceful).
+	// Auth failure → no assets (graceful).
 	assets, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Empty(t, assets)
 }
 
 func TestSCCM_Discover_MalformedResponse(t *testing.T) {
@@ -123,9 +146,9 @@ func TestSCCM_Discover_MalformedResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewSCCM()
+	s := &SCCM{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url":  srv.URL,
+		"enabled":  true,
 		"username": "u",
 		"password": "p",
 	}

@@ -110,6 +110,26 @@ var sourceEnvVars = map[string]map[string]string{ //#nosec G101 -- values are en
 		"password":     "KITE_SERVICENOW_PASSWORD",
 		"table":        "KITE_SERVICENOW_TABLE",
 	},
+	"workspace_one": {
+		"api_url":  "KITE_WORKSPACEONE_API_URL",
+		"username": "KITE_WORKSPACEONE_USERNAME",
+		"password": "KITE_WORKSPACEONE_PASSWORD", // #nosec G101 -- env var name, not a credential
+		"api_key":  "KITE_WORKSPACEONE_API_KEY",  // #nosec G101 -- env var name, not a credential
+	},
+	"kandji": {
+		"api_url": "KITE_KANDJI_API_URL",
+		"api_key": "KITE_KANDJI_API_TOKEN", // #nosec G101 -- env var name, not a credential
+	},
+	"device42": {
+		"api_url":  "KITE_DEVICE42_API_URL",
+		"username": "KITE_DEVICE42_USERNAME",
+		"password": "KITE_DEVICE42_PASSWORD", // #nosec G101 -- env var name, not a credential
+	},
+	"lansweeper": {
+		"api_url": "KITE_LANSWEEPER_API_URL",
+		"api_key": "KITE_LANSWEEPER_API_KEY", // #nosec G101 -- env var name, not a credential
+		"site_id": "KITE_LANSWEEPER_SITE_ID",
+	},
 }
 
 func New(
@@ -215,11 +235,30 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			"max_service_principals": src.MaxServicePrincipals,
 			"max_groups":             src.MaxGroups,
 			"max_devices":            src.MaxDevices,
+			// MDM/CMDB connector fields (RFC-0135 R4). Sourced from SourceConfig
+			// so the YAML file is the real configuration surface; empty values
+			// fall back to the env vars overlaid below.
+			"api_url":       src.APIURL,
+			"instance_url":  src.InstanceURL,
+			"username":      src.Username,
+			"password":      src.Password,
+			"token":         src.Token,
+			"api_key":       src.APIKey,
+			"tenant_id":     src.TenantID,
+			"client_id":     src.ClientID,
+			"client_secret": src.ClientSecret,
+			"table":         src.Table,
+			"site_id":       src.SiteID,
 		}
-		// Bind MDM/CMDB credential environment variables into the
-		// config map so connectors receive them via the standard
-		// cfg parameter. Credentials never appear in config files.
+		// Overlay MDM/CMDB credential environment variables onto the config
+		// map so connectors receive them via the standard cfg parameter.
+		// SourceConfig (YAML) takes precedence: an env var only fills a field
+		// the YAML left empty (R4). Credentials never appear in config files
+		// unless the operator puts them there explicitly.
 		for key, envVar := range sourceEnvVars[name] {
+			if existing, ok := m[key].(string); ok && existing != "" {
+				continue
+			}
 			if val := os.Getenv(envVar); val != "" {
 				m[key] = val
 			}
@@ -248,7 +287,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	discovered, err := e.registry.DiscoverAll(scanCtx, configs)
 	if err != nil {
 		if scanCtx.Err() == context.DeadlineExceeded {
-			slog.Warn("discovery exceeded scan deadline; processing partial results",
+			slog.Warn(
+				"discovery exceeded scan deadline; processing partial results",
 				"code", string(LogCodeDiscoveryDeadlineExceeded),
 				"scan_id", scanID,
 				"partial_assets", len(discovered),
@@ -295,7 +335,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 		fetched, perr := e.store.GetAssetsByNaturalKeys(ctx, keys)
 		if perr != nil {
-			slog.Warn("prior-asset fingerprint snapshot failed; degrading to update-only event classification",
+			slog.Warn(
+				"prior-asset fingerprint snapshot failed; degrading to update-only event classification",
 				"code", string(LogCodeAssetsFingerprintSnapshot),
 				"error", perr,
 				"scan_id", scanID,
@@ -341,7 +382,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 								"parse_errors", swResult.TotalErrors())
 							softwareErrors++
 						} else {
-							slog.Info("software inventory persisted",
+							slog.Info(
+								"software inventory persisted",
 								"code", string(LogCodeSoftwarePersisted),
 								"scan_id", scanID,
 								"asset_id", agentID,
@@ -466,7 +508,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"finding_count", len(codeFindings))
 			} else {
 				findingsCount += len(codeFindings)
-				slog.Info("code-audit phase complete",
+				slog.Info(
+					"code-audit phase complete",
 					"code", string(LogCodeAuditCodeComplete),
 					"scan_id", scanID,
 					"asset_id", a.ID,
@@ -528,7 +571,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 				}
 				findingsCount += len(envFindings)
 				e.recordFindingMetrics(envFindings)
-				slog.Info("container-env-secret audit complete",
+				slog.Info(
+					"container-env-secret audit complete",
 					"code", string(LogCodeAuditContainerEnvComplete),
 					"scan_id", scanID,
 					"asset_id", a.ID,
@@ -649,7 +693,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			if entraSrc, ok := src.(*entrasrc.EntraID); ok {
 				snap := entraSrc.Snapshot()
 				if pErr := e.store.UpsertEntraSnapshot(ctx, snap); pErr != nil {
-					slog.Warn("entra tenant snapshot persist failed",
+					slog.Warn(
+						"entra tenant snapshot persist failed",
 						"code", string(LogCodeAuditEntraSnapshotPersist),
 						"error", pErr,
 						"scan_id", scanID,
@@ -674,7 +719,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					} else {
 						findingsCount += len(tenantFindings)
 						e.recordFindingMetrics(tenantFindings)
-						slog.Info("entra tenant audit complete",
+						slog.Info(
+							"entra tenant audit complete",
 							"code", string(LogCodeAuditEntraTenantComplete),
 							"scan_id", scanID,
 							"findings", len(tenantFindings),
@@ -693,7 +739,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	for _, dnsSrc := range cloudDNSSnapshotSources(e.registry) {
 		if snap := dnsSrc.Snapshot(); snap != nil {
 			if pErr := e.store.UpsertCloudDNSSnapshot(ctx, snap); pErr != nil {
-				slog.Warn("cloud-DNS snapshot persist failed",
+				slog.Warn(
+					"cloud-DNS snapshot persist failed",
 					"code", string(LogCodeCloudDNSSnapshotPersist),
 					"error", pErr,
 					"scan_id", scanID,
@@ -866,7 +913,9 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			e.identity, e.store, cfg.Observability.Canary, slog.Default(),
 		)
 		if _, rerr := rec.ReconcileScan(ctx, scanID); rerr != nil {
-			slog.Warn("observability reconcile failed",
+			slog.Warn(
+				"observability reconcile failed",
+				"code", string(LogCodeObservabilityReconcileFailed),
 				"scan_id", scanID,
 				"error", rerr,
 			)
@@ -881,7 +930,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			"status", result.Status)
 	}
 
-	slog.Info("scan run complete",
+	slog.Info(
+		"scan run complete",
 		"code", string(LogCodeScanRunComplete),
 		"scan_id", scanID,
 		"total", result.TotalAssets,
@@ -978,7 +1028,8 @@ func logSoftwareParseErrors(errs []software.CollectError) {
 		if len(raw) > maxRawLineLog {
 			raw = raw[:maxRawLineLog] + "…"
 		}
-		slog.Warn("software-inventory parse error",
+		slog.Warn(
+			"software-inventory parse error",
 			"code", string(LogCodeSoftwareParseError),
 			"collector", e.Collector,
 			"line", e.Line,
@@ -987,7 +1038,8 @@ func logSoftwareParseErrors(errs []software.CollectError) {
 		)
 	}
 	if len(errs) > maxParseErrorLogs {
-		slog.Warn("software-inventory parse-error log truncated to avoid journal flood",
+		slog.Warn(
+			"software-inventory parse-error log truncated to avoid journal flood",
 			"code", string(LogCodeSoftwareParseTruncated),
 			"shown", maxParseErrorLogs,
 			"total", len(errs),

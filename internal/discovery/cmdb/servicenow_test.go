@@ -103,12 +103,12 @@ func TestServiceNow_Discover_Success(t *testing.T) {
 	srv := newMockServiceNowAPI(t)
 	defer srv.Close()
 
-	s := NewServiceNow()
+	s := &ServiceNow{baseURL: srv.URL}
 	cfg := map[string]any{
-		"instance_url": srv.URL,
-		"username":     "snow-user",
-		"password":     "snow-pass",
-		"table":        "cmdb_ci_server",
+		"enabled":  true,
+		"username": "snow-user",
+		"password": "snow-pass",
+		"table":    "cmdb_ci_server",
 	}
 
 	assets, err := s.Discover(context.Background(), cfg)
@@ -125,20 +125,36 @@ func TestServiceNow_Discover_Success(t *testing.T) {
 	assert.Equal(t, model.ManagedUnknown, db.IsManaged)
 	assert.NotEmpty(t, db.NaturalKey)
 
+	// F6 (Phase-2 acceptance) regression: sys_id, asset_tag and ip_address were
+	// previously requested from the API but silently dropped by the parser.
+	// They must now be surfaced (sys_id → CMDBSysID, asset_tag → AssetTag,
+	// ip_address → Tags), and operational_status must land in
+	// OperationalStatus rather than being overloaded into Owner (R6).
+	assert.Equal(t, "abc123", db.CMDBSysID)
+	assert.Equal(t, "ASSET-1001", db.AssetTag)
+	assert.Equal(t, "1", db.OperationalStatus)
+	assert.Empty(t, db.Owner)
+
+	var dbTags map[string]any
+	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
+	assert.Equal(t, "10.0.1.50", dbTags["ip_address"])
+
 	web := findAssetByHostname(assets, "prod-web-01")
 	require.NotNil(t, web)
 	assert.Equal(t, "windows", web.OSFamily)
+	assert.Equal(t, "def456", web.CMDBSysID)
+	assert.Equal(t, "ASSET-1002", web.AssetTag)
 }
 
 func TestServiceNow_Discover_DefaultTable(t *testing.T) {
 	srv := newMockServiceNowAPI(t)
 	defer srv.Close()
 
-	s := NewServiceNow()
+	s := &ServiceNow{baseURL: srv.URL}
 	cfg := map[string]any{
-		"instance_url": srv.URL,
-		"username":     "snow-user",
-		"password":     "snow-pass",
+		"enabled":  true,
+		"username": "snow-user",
+		"password": "snow-pass",
 		// table omitted — should default to cmdb_ci_server.
 	}
 
@@ -147,10 +163,26 @@ func TestServiceNow_Discover_DefaultTable(t *testing.T) {
 	assert.Len(t, assets, 2)
 }
 
+func TestServiceNow_Discover_Disabled(t *testing.T) {
+	srv := newMockServiceNowAPI(t)
+	defer srv.Close()
+
+	// F3: creds present but enabled is false → discovery must be skipped.
+	s := &ServiceNow{baseURL: srv.URL}
+	assets, err := s.Discover(context.Background(), map[string]any{
+		"enabled":  false,
+		"username": "snow-user",
+		"password": "snow-pass",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, assets)
+}
+
 func TestServiceNow_Discover_MissingCredentials(t *testing.T) {
 	s := NewServiceNow()
 
-	assets, err := s.Discover(context.Background(), map[string]any{})
+	// Enabled but no username/password → graceful skip.
+	assets, err := s.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
 	assert.Nil(t, assets)
 }
@@ -159,28 +191,28 @@ func TestServiceNow_Discover_AuthFailure(t *testing.T) {
 	srv := newMockServiceNowAPI(t)
 	defer srv.Close()
 
-	s := NewServiceNow()
+	s := &ServiceNow{baseURL: srv.URL}
 	cfg := map[string]any{
-		"instance_url": srv.URL,
-		"username":     "snow-user",
-		"password":     "wrong",
+		"enabled":  true,
+		"username": "snow-user",
+		"password": "wrong",
 	}
 
-	// Auth failure → returns nil (graceful).
+	// Auth failure → returns empty (graceful).
 	assets, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Empty(t, assets)
 }
 
 func TestServiceNow_Discover_Pagination(t *testing.T) {
 	srv := newMockServiceNowPaginatedAPI(t)
 	defer srv.Close()
 
-	s := NewServiceNow()
+	s := &ServiceNow{baseURL: srv.URL}
 	cfg := map[string]any{
-		"instance_url": srv.URL,
-		"username":     "u",
-		"password":     "p",
+		"enabled":  true,
+		"username": "u",
+		"password": "p",
 	}
 
 	assets, err := s.Discover(context.Background(), cfg)
@@ -195,11 +227,11 @@ func TestServiceNow_Discover_MalformedResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s := NewServiceNow()
+	s := &ServiceNow{baseURL: srv.URL}
 	cfg := map[string]any{
-		"instance_url": srv.URL,
-		"username":     "u",
-		"password":     "p",
+		"enabled":  true,
+		"username": "u",
+		"password": "p",
 	}
 
 	// Malformed entries parse with empty fields.
