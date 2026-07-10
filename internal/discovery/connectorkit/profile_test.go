@@ -66,4 +66,31 @@ func TestAssessConnector(t *testing.T) {
 	// A connector wired without a circuit breaker scores below 1.0.
 	p = AssessConnector("kandji", true, true, false, TLSModeSystemCA)
 	assert.InDelta(t, 5.0/6.0, p.HardeningScore, 0.0001)
+
+	// The five-argument AssessConnector defaults the tier to unknown, keeping
+	// the ten existing MDM/CMDB call sites unchanged (RFC-0137 R1).
+	assert.Equal(t, PrivilegeTierUnknown, p.CredentialPrivilegeTier)
+}
+
+func TestAssessConnectorWithTier(t *testing.T) {
+	// RFC-0137 4.1.1: Entra's credential is tenant-wide identity-directory scope.
+	p := AssessConnectorWithTier("entra", true, true, true, TLSModeSystemCA,
+		PrivilegeTierIdentityDirectoryAdmin)
+	assert.Equal(t, "entra", p.SourceName)
+	assert.Equal(t, PrivilegeTierIdentityDirectoryAdmin, p.CredentialPrivilegeTier)
+
+	// The tier is descriptive metadata: it does not change the score, which
+	// stays 1.0 for a fully-hardened connector.
+	assert.Equal(t, float32(1), p.HardeningScore)
+
+	// The four Cloud DNS connectors share the dns_zone_admin tier.
+	p = AssessConnectorWithTier("route53", true, true, true, TLSModeSystemCA,
+		PrivilegeTierDNSZoneAdmin)
+	assert.Equal(t, PrivilegeTierDNSZoneAdmin, p.CredentialPrivilegeTier)
+	assert.Equal(t, float32(1), p.HardeningScore)
+}
+
+func TestAssessConnectorWithTier_EmptyDefaultsToUnknown(t *testing.T) {
+	p := AssessConnectorWithTier("x", true, true, true, TLSModeSystemCA, "")
+	assert.Equal(t, PrivilegeTierUnknown, p.CredentialPrivilegeTier)
 }
