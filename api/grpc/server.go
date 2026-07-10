@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -175,7 +176,7 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 
 	for {
 		snapshot, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			if closeErr := stream.SendAndClose(&kitev1.ReportResponse{
 				Accepted: accepted,
 				Rejected: rejected,
@@ -228,7 +229,7 @@ func (s *Server) ReportFindings(stream kitev1.CollectorService_ReportFindingsSer
 	var accepted, rejected int32
 	for {
 		_, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			if closeErr := stream.SendAndClose(&kitev1.ReportResponse{
 				Accepted: accepted,
 				Rejected: rejected,
