@@ -45,6 +45,8 @@ type Options struct {
 	// read-only text and the connection-check probes dial this host. The
 	// value is NOT persisted in enrolled_identity — see RFC-0112.
 	PlatformEndpoint string
+	// OAuth configures the first-party Supabase OAuth flow used by /kite-login.
+	OAuth OAuthOptions
 }
 
 // Serve creates and returns an HTTP server for the dashboard.
@@ -69,8 +71,14 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 	}
 
-	mux.HandleFunc("GET /kite-login", serveKiteLoginPage)
+	mux.HandleFunc("GET /kite-login", func(w http.ResponseWriter, r *http.Request) {
+		serveKiteLoginPage(w, r, opts.OAuth)
+	})
 	mux.HandleFunc("GET /kite-success", serveKiteSuccessPage)
+	kiteOAuthEnrollment := kiteOAuthEnrollmentOptions{Logger: logger, PlatformEndpoint: opts.PlatformEndpoint}
+	mux.HandleFunc("GET /oauth/callback", func(w http.ResponseWriter, r *http.Request) {
+		serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment)
+	})
 
 	// Dashboard root — context-aware redirect. Fresh hosts (no enrolled
 	// identity) land on /onboarding so the operator sees the install/enroll
@@ -80,7 +88,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	// hits "/".
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Has("code") || r.URL.Query().Has("state") {
-			serveKiteSuccessPage(w, r)
+			serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment)
 			return
 		}
 
@@ -356,6 +364,8 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				ScanEnabled:      opts.Coordinator != nil && opts.BaseConfig != nil,
 				TLSConfig:        tlsCfg,
 			})
+			kiteOAuthEnrollment.Store = sqliteStore
+			kiteOAuthEnrollment.WrapKey = wrapKey
 		}
 	} else {
 		logger.Warn("dashboard: onboarding disabled — store is not sqlite-backed")
