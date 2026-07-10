@@ -22,21 +22,33 @@ func Enabled(cfg map[string]any) bool {
 	return ok && v
 }
 
-// Credentials holds every credential-bearing field the nine MDM/CMDB connectors
-// need. Secret fields (Password, Token, APIKey, ClientSecret) are heap-cloned by
+// Credentials holds every credential-bearing field the MDM/CMDB, Entra, and
+// Cloud DNS connectors need. Secret fields (Password, Token, APIKey,
+// ClientSecret, SecretAccessKey, SessionToken) are heap-cloned by
 // LoadCredentials so Zero can safely overwrite their backing memory.
+//
+// The AWS-shaped fields (AccessKeyID, SecretAccessKey, SessionToken) are
+// additive (RFC-0137 R2): they default to the zero value, so the ten existing
+// MDM/CMDB consumers that never populate them are unaffected. Route53 loads its
+// IAM credentials through these so it gains the same single Zero() call site the
+// other connectors already have. AccessKeyID is a public identifier (like
+// Username/ClientID) and is intentionally not zeroed; the secret and session
+// keys are.
 type Credentials struct {
-	APIURL       string
-	InstanceURL  string
-	Username     string
-	Password     string
-	Token        string
-	APIKey       string
-	TenantID     string
-	ClientID     string
-	ClientSecret string
-	Table        string
-	SiteID       string
+	APIURL          string
+	InstanceURL     string
+	Username        string
+	Password        string
+	Token           string
+	APIKey          string
+	TenantID        string
+	ClientID        string
+	ClientSecret    string
+	Table           string
+	SiteID          string
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
 }
 
 // LoadCredentials extracts the known credential fields from cfg, which is
@@ -45,17 +57,20 @@ type Credentials struct {
 // onto the heap so a later Zero cannot fault on read-only literal memory.
 func LoadCredentials(cfg map[string]any) Credentials {
 	return Credentials{
-		APIURL:       cfgString(cfg, "api_url"),
-		InstanceURL:  cfgString(cfg, "instance_url"),
-		Username:     cfgString(cfg, "username"),
-		Password:     cfgSecret(cfg, "password"),
-		Token:        cfgSecret(cfg, "token"),
-		APIKey:       cfgSecret(cfg, "api_key"),
-		TenantID:     cfgString(cfg, "tenant_id"),
-		ClientID:     cfgString(cfg, "client_id"),
-		ClientSecret: cfgSecret(cfg, "client_secret"),
-		Table:        cfgString(cfg, "table"),
-		SiteID:       cfgString(cfg, "site_id"),
+		APIURL:          cfgString(cfg, "api_url"),
+		InstanceURL:     cfgString(cfg, "instance_url"),
+		Username:        cfgString(cfg, "username"),
+		Password:        cfgSecret(cfg, "password"),
+		Token:           cfgSecret(cfg, "token"),
+		APIKey:          cfgSecret(cfg, "api_key"),
+		TenantID:        cfgString(cfg, "tenant_id"),
+		ClientID:        cfgString(cfg, "client_id"),
+		ClientSecret:    cfgSecret(cfg, "client_secret"),
+		Table:           cfgString(cfg, "table"),
+		SiteID:          cfgString(cfg, "site_id"),
+		AccessKeyID:     cfgString(cfg, "access_key_id"),
+		SecretAccessKey: cfgSecret(cfg, "secret_access_key"),
+		SessionToken:    cfgSecret(cfg, "session_token"),
 	}
 }
 
@@ -67,6 +82,8 @@ func (c *Credentials) Zero() {
 	safenet.ZeroString(&c.Token)
 	safenet.ZeroString(&c.APIKey)
 	safenet.ZeroString(&c.ClientSecret)
+	safenet.ZeroString(&c.SecretAccessKey)
+	safenet.ZeroString(&c.SessionToken)
 }
 
 // cfgString reads a plain (non-secret) string value from cfg, empty if absent.
