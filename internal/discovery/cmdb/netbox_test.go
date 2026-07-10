@@ -35,6 +35,7 @@ func newMockNetBoxAPI(t *testing.T) *httptest.Server {
 				"next":  next,
 				"results": []map[string]any{
 					{
+						"id":          101,
 						"name":        "core-sw-01",
 						"device_role": map[string]any{"name": "Switch", "slug": "switch"},
 						"platform":    map[string]any{"name": "Juniper JunOS", "slug": "junos"},
@@ -43,6 +44,7 @@ func newMockNetBoxAPI(t *testing.T) *httptest.Server {
 						"status":      map[string]any{"value": "active", "label": "Active"},
 					},
 					{
+						"id":          102,
 						"name":        "web-srv-01",
 						"device_role": map[string]any{"name": "Server", "slug": "server"},
 						"platform":    map[string]any{"name": "Ubuntu Linux", "slug": "ubuntu"},
@@ -58,6 +60,7 @@ func newMockNetBoxAPI(t *testing.T) *httptest.Server {
 				"next":  nil,
 				"results": []map[string]any{
 					{
+						"id":          103,
 						"name":        "fw-01",
 						"device_role": map[string]any{"name": "Firewall", "slug": "firewall"},
 						"site":        map[string]any{"name": "DC-West", "slug": "dc-west"},
@@ -80,9 +83,9 @@ func TestNetBox_Discover_Success(t *testing.T) {
 	srv := newMockNetBoxAPI(t)
 	defer srv.Close()
 
-	n := NewNetBox()
+	n := &NetBox{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url": srv.URL,
+		"enabled": true,
 		"token":   "nb-test-token",
 	}
 
@@ -95,31 +98,59 @@ func TestNetBox_Discover_Success(t *testing.T) {
 	require.NotNil(t, sw)
 	assert.Equal(t, model.AssetTypeNetworkDevice, sw.AssetType)
 	assert.Equal(t, "junos", sw.OSFamily)
-	assert.Equal(t, "DC-East", sw.Environment) // site → Environment
-	assert.Equal(t, "Engineering", sw.Owner)   // tenant → Owner
+	// R6: site → Site, tenant → Tenant (no longer overloaded onto
+	// Environment/Owner), and NetBox device id → CMDBSysID.
+	assert.Equal(t, "DC-East", sw.Site)
+	assert.Equal(t, "Engineering", sw.Tenant)
+	assert.Equal(t, "101", sw.CMDBSysID)
+	assert.Empty(t, sw.Environment)
+	assert.Empty(t, sw.Owner)
 	assert.Equal(t, "netbox", sw.DiscoverySource)
 	assert.Equal(t, model.AuthorizationAuthorized, sw.IsAuthorized)
 	assert.Equal(t, model.ManagedUnknown, sw.IsManaged)
 	assert.NotEmpty(t, sw.NaturalKey)
+
+	// device_role/platform → Tags.
+	var swTags map[string]any
+	require.NoError(t, json.Unmarshal([]byte(sw.Tags), &swTags))
+	assert.Equal(t, "switch", swTags["device_role"])
+	assert.Equal(t, "Juniper JunOS", swTags["platform"])
 
 	// Server device.
 	webSrv := findAssetByHostname(assets, "web-srv-01")
 	require.NotNil(t, webSrv)
 	assert.Equal(t, model.AssetTypeServer, webSrv.AssetType)
 	assert.Equal(t, "linux", webSrv.OSFamily)
-	assert.Empty(t, webSrv.Owner) // no tenant
+	assert.Empty(t, webSrv.Tenant) // no tenant
+	assert.Equal(t, "102", webSrv.CMDBSysID)
 
 	// Firewall from page 2.
 	fw := findAssetByHostname(assets, "fw-01")
 	require.NotNil(t, fw)
 	assert.Equal(t, model.AssetTypeNetworkDevice, fw.AssetType)
-	assert.Equal(t, "DC-West", fw.Environment)
+	assert.Equal(t, "DC-West", fw.Site)
+	assert.Equal(t, "103", fw.CMDBSysID)
+}
+
+func TestNetBox_Discover_Disabled(t *testing.T) {
+	srv := newMockNetBoxAPI(t)
+	defer srv.Close()
+
+	// F3: creds are present but enabled is false → discovery must be skipped.
+	n := &NetBox{baseURL: srv.URL}
+	assets, err := n.Discover(context.Background(), map[string]any{
+		"enabled": false,
+		"token":   "nb-test-token",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, assets)
 }
 
 func TestNetBox_Discover_MissingCredentials(t *testing.T) {
 	n := NewNetBox()
 
-	assets, err := n.Discover(context.Background(), map[string]any{})
+	// Enabled but no token → graceful skip.
+	assets, err := n.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
 	assert.Nil(t, assets)
 }
@@ -128,9 +159,9 @@ func TestNetBox_Discover_AuthFailure(t *testing.T) {
 	srv := newMockNetBoxAPI(t)
 	defer srv.Close()
 
-	n := NewNetBox()
+	n := &NetBox{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url": srv.URL,
+		"enabled": true,
 		"token":   "wrong-token",
 	}
 
@@ -151,9 +182,9 @@ func TestNetBox_Discover_MalformedResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	n := NewNetBox()
+	n := &NetBox{baseURL: srv.URL}
 	cfg := map[string]any{
-		"api_url": srv.URL,
+		"enabled": true,
 		"token":   "tok",
 	}
 

@@ -28,7 +28,24 @@ type Asset struct {
 	TenantID        string             `json:"tenant_id,omitempty"` // tenant scope for multi-tenancy (RFC-0063)
 	Tags            string             `json:"tags"`                // JSON
 	NaturalKey      string             `json:"natural_key"`         // computed dedup key
-	ID              uuid.UUID          `json:"id"`
+	// MDM/CMDB enrichment fields. Activated in RFC-0135 Phase 2: the first
+	// six were migrated by RFC-0064 (20260410000000_mdm_cmdb_columns.sql) but
+	// never wired into the Go layer; the last three are new. All are optional,
+	// populated only by the MDM/CMDB connectors, and read directly by the
+	// ontology bridge (ManagedDevice / ConfigurationItem). They deliberately
+	// do NOT feed MaterialFingerprint — keeping change-detection stable across
+	// the upgrade — and replace NetBox/ServiceNow's former overloading of
+	// Environment/Owner.
+	MDMEnrollmentID   string    `json:"mdm_enrollment_id,omitempty"`  // MDM device id (Intune/Jamf/SCCM/Workspace ONE/Kandji)
+	CMDBSysID         string    `json:"cmdb_sys_id,omitempty"`        // CMDB native id (ServiceNow sys_id, NetBox/Device42/Lansweeper id)
+	Site              string    `json:"site,omitempty"`               // CMDB physical/logical site
+	Tenant            string    `json:"tenant,omitempty"`             // CMDB owning tenant/org (distinct from TenantID multi-tenancy scope)
+	AssetTag          string    `json:"asset_tag,omitempty"`          // physical asset tag
+	OperationalStatus string    `json:"operational_status,omitempty"` // CMDB lifecycle state (operational|retired|...)
+	OwnershipType     string    `json:"ownership_type,omitempty"`     // corporate_dedicated|corporate_shared|employee_owned|unknown
+	EnrolledUserUPN   string    `json:"enrolled_user_upn,omitempty"`  // MDM-reported primary user UPN/email (PII, Section 6.3)
+	ComplianceState   string    `json:"compliance_state,omitempty"`   // compliant|non_compliant|unknown|not_evaluated
+	ID                uuid.UUID `json:"id"`
 	// FPVersion records which generation of the fingerprint algorithm
 	// produced NaturalKey. Zero means "legacy hostname|asset_type form";
 	// 1 and above are written by the Fingerprinter registry. Populated by

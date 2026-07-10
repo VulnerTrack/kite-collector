@@ -47,8 +47,8 @@ func newMockIntuneAPI(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"value": []map[string]string{
-				{"deviceName": "LAPTOP-001", "operatingSystem": "Windows", "osVersion": "10.0.19044"},
-				{"deviceName": "MAC-002", "operatingSystem": "macOS", "osVersion": "13.4"},
+				{"id": "dev-guid-001", "deviceName": "LAPTOP-001", "operatingSystem": "Windows", "osVersion": "10.0.19044"},
+				{"id": "dev-guid-002", "deviceName": "MAC-002", "operatingSystem": "macOS", "osVersion": "13.4"},
 			},
 			// No @odata.nextLink — single page.
 		})
@@ -79,14 +79,14 @@ func newMockIntunePaginatedAPI(t *testing.T) *httptest.Server {
 		if callCount == 1 {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"value": []map[string]string{
-					{"deviceName": "DEV-A", "operatingSystem": "Windows", "osVersion": "11.0"},
+					{"id": "dev-a", "deviceName": "DEV-A", "operatingSystem": "Windows", "osVersion": "11.0"},
 				},
 				"@odata.nextLink": srv.URL + "/v1.0/deviceManagement/managedDevices?page=2",
 			})
 		} else {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"value": []map[string]string{
-					{"deviceName": "DEV-B", "operatingSystem": "Linux", "osVersion": "22.04"},
+					{"id": "dev-b", "deviceName": "DEV-B", "operatingSystem": "Linux", "osVersion": "22.04"},
 				},
 			})
 		}
@@ -109,6 +109,7 @@ func TestIntune_Discover_Success(t *testing.T) {
 	i.graphBaseURL = srv.URL
 
 	cfg := map[string]any{
+		"enabled":       true,
 		"tenant_id":     "test-tenant",
 		"client_id":     "test-client",
 		"client_secret": "test-secret",
@@ -127,18 +128,42 @@ func TestIntune_Discover_Success(t *testing.T) {
 	assert.Equal(t, "intune", laptop.DiscoverySource)
 	assert.Equal(t, model.AuthorizationUnknown, laptop.IsAuthorized)
 	assert.Equal(t, model.ManagedManaged, laptop.IsManaged)
+	assert.Equal(t, "dev-guid-001", laptop.MDMEnrollmentID)
 	assert.NotEmpty(t, laptop.NaturalKey)
 
 	// macOS device.
 	mac := findAsset(assets, "MAC-002")
 	require.NotNil(t, mac)
 	assert.Equal(t, "darwin", mac.OSFamily)
+	assert.Equal(t, "dev-guid-002", mac.MDMEnrollmentID)
 }
 
 func TestIntune_Discover_MissingCredentials(t *testing.T) {
 	i := NewIntune()
 
-	assets, err := i.Discover(context.Background(), map[string]any{})
+	// Enabled, but no credentials configured → skip (nil, nil).
+	assets, err := i.Discover(context.Background(), map[string]any{"enabled": true})
+	require.NoError(t, err)
+	assert.Nil(t, assets)
+}
+
+func TestIntune_Discover_DisabledWithCredentials(t *testing.T) {
+	srv := newMockIntuneAPI(t)
+	defer srv.Close()
+
+	i := NewIntune()
+	i.tokenBaseURL = srv.URL
+	i.graphBaseURL = srv.URL
+
+	// Valid credentials but enabled is false → discovery must not run.
+	cfg := map[string]any{
+		"enabled":       false,
+		"tenant_id":     "test-tenant",
+		"client_id":     "test-client",
+		"client_secret": "test-secret",
+	}
+
+	assets, err := i.Discover(context.Background(), cfg)
 	require.NoError(t, err)
 	assert.Nil(t, assets)
 }
@@ -152,6 +177,7 @@ func TestIntune_Discover_TokenFailure(t *testing.T) {
 	i.graphBaseURL = srv.URL
 
 	cfg := map[string]any{
+		"enabled":       true,
 		"tenant_id":     "test-tenant",
 		"client_id":     "test-client",
 		"client_secret": "wrong-secret",
@@ -172,6 +198,7 @@ func TestIntune_Discover_Pagination(t *testing.T) {
 	i.graphBaseURL = srv.URL
 
 	cfg := map[string]any{
+		"enabled":       true,
 		"tenant_id":     "test-tenant",
 		"client_id":     "test-client",
 		"client_secret": "test-secret",
@@ -205,6 +232,7 @@ func TestIntune_Discover_MalformedResponse(t *testing.T) {
 	i.graphBaseURL = srv.URL
 
 	cfg := map[string]any{
+		"enabled":       true,
 		"tenant_id":     "t",
 		"client_id":     "c",
 		"client_secret": "s",

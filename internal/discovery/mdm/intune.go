@@ -12,12 +12,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
 // Intune implements discovery.Source by listing managed devices from
 // Microsoft Intune via the Microsoft Graph API. All devices present in
 // Intune are considered managed.
+//
+// Intune talks only to fixed Microsoft endpoints (login.microsoftonline.com
+// and graph.microsoft.com); there is no operator-supplied base URL, so it does
+// NOT call connectorkit.SafeClient. The tokenBaseURL/graphBaseURL fields exist
+// solely so tests can point it at an httptest server.
 type Intune struct {
 	tokenBaseURL string // override for testing; empty = production
 	graphBaseURL string // override for testing; empty = production
@@ -35,9 +42,10 @@ func NewIntune() *Intune {
 func (i *Intune) Name() string { return "intune" }
 
 // Discover lists managed devices from Microsoft Intune and returns them as
-// assets. Authentication uses OAuth2 client credentials (service principal).
-// If credentials are not available the method logs a warning and returns nil
-// (graceful degradation).
+// assets. It honours cfg["enabled"] first (F3), loads credentials via
+// connectorkit and zeroes them on return (R1). Authentication uses OAuth2
+// client credentials (service principal). If credentials are absent the method
+// logs a warning and returns nil (graceful degradation).
 //
 // Supported config keys:
 //
@@ -45,11 +53,19 @@ func (i *Intune) Name() string { return "intune" }
 //	client_id     – string Application (client) ID
 //	client_secret – string Client secret value
 func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
-	tenantID := toString(cfg["tenant_id"])
-	clientID := toString(cfg["client_id"])
-	clientSecret := toString(cfg["client_secret"])
+	if !connectorkit.Enabled(cfg) {
+		return nil, nil // R2: honour enabled:false even with creds present (F3)
+	}
 
-	slog.Info("Starting Intune managed device discovery",
+	creds := connectorkit.LoadCredentials(cfg)
+	defer creds.Zero() // R1
+
+	tenantID := creds.TenantID
+	clientID := creds.ClientID
+	clientSecret := creds.ClientSecret
+
+	slog.Info(
+		"Starting Intune managed device discovery",
 		"code", string(LogCodeIntuneStarting),
 		"tenant_id_set", tenantID != "",
 		"client_id_set", clientID != "",
@@ -57,7 +73,8 @@ func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	)
 
 	if tenantID == "" || clientID == "" || clientSecret == "" {
-		slog.Warn("Skipping Intune discovery: tenant_id, client_id, or client_secret not configured",
+		slog.Warn(
+			"Skipping Intune discovery: tenant_id, client_id, or client_secret not configured",
 			"code", string(LogCodeIntuneCredsMissing),
 			"tenant_id_set", tenantID != "",
 			"client_id_set", clientID != "",
@@ -66,45 +83,48 @@ func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		return nil, nil
 	}
 
-	token, err := i.acquireToken(ctx, tenantID, clientID, clientSecret)
+	client := &http.Client{Timeout: clientTimeout}
+
+	token, err := i.acquireToken(ctx, client, tenantID, clientID, clientSecret)
 	if err != nil {
-		slog.Warn("Failed to acquire OAuth2 token from Microsoft identity platform, skipping Intune discovery",
+		slog.Warn(
+			"Failed to acquire OAuth2 token from Microsoft identity platform, skipping Intune discovery",
 			"code", string(LogCodeIntuneTokenAcquireFailed),
 			"token_base_url", i.tokenBaseURL,
 			"tenant_id_set", tenantID != "",
 			"error", err,
 		)
-		return nil, nil
+		return nil, nil //nolint:nilerr // graceful degradation: a token failure skips this source, not the whole run
 	}
 
-	devices, err := i.listManagedDevices(ctx, token)
+	devices, err := i.listManagedDevices(ctx, client, token)
 	if err != nil {
 		return nil, fmt.Errorf("intune: listing managed devices: %w", err)
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	assets := make([]model.Asset, 0, len(devices))
 
 	for _, dev := range devices {
-		osFamily := deriveIntuneOSFamily(dev.operatingSystem)
-
 		asset := model.Asset{
 			ID:              uuid.Must(uuid.NewV7()),
 			AssetType:       classifyIntuneDevice(dev.operatingSystem),
 			Hostname:        dev.deviceName,
-			OSFamily:        osFamily,
+			OSFamily:        deriveIntuneOSFamily(dev.operatingSystem),
 			OSVersion:       dev.osVersion,
 			DiscoverySource: "intune",
 			FirstSeenAt:     now,
 			LastSeenAt:      now,
 			IsAuthorized:    model.AuthorizationUnknown,
 			IsManaged:       model.ManagedManaged,
+			MDMEnrollmentID: dev.id,
 		}
 		asset.ComputeNaturalKey()
 		assets = append(assets, asset)
 	}
 
-	slog.Info("Completed Intune managed device discovery",
+	slog.Info(
+		"Completed Intune managed device discovery",
 		"code", string(LogCodeIntuneComplete),
 		"total_assets", len(assets),
 		"total_devices", len(devices),
@@ -119,7 +139,7 @@ func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 // acquireToken exchanges client credentials for an OAuth2 bearer token from
 // the Microsoft identity platform for the Graph API scope.
-func (i *Intune) acquireToken(ctx context.Context, tenantID, clientID, clientSecret string) (string, error) {
+func (i *Intune) acquireToken(ctx context.Context, client *http.Client, tenantID, clientID, clientSecret string) (string, error) {
 	tokenURL := fmt.Sprintf(
 		"%s/%s/oauth2/v2.0/token",
 		i.tokenBaseURL, url.PathEscape(tenantID),
@@ -132,27 +152,27 @@ func (i *Intune) acquireToken(ctx context.Context, tenantID, clientID, clientSec
 		"scope":         {"https://graph.microsoft.com/.default"},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, //#nosec G107 -- URL from operator-configured Intune tenant
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodPost, tokenURL,
 		strings.NewReader(form.Encode()),
 	)
 	if err != nil {
-		return "", fmt.Errorf("creating token request: %w", err)
+		return "", fmt.Errorf("intune: creating token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req) //#nosec G107
+	resp, err := client.Do(req) //#nosec G107 -- fixed Microsoft identity platform endpoint
 	if err != nil {
-		return "", fmt.Errorf("executing token request: %w", err)
+		return "", fmt.Errorf("intune: executing token request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading token response: %w", err)
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return "", fmt.Errorf("intune: reading token response: %w", readErr)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token endpoint returned %d: %s",
+		return "", fmt.Errorf("intune: token endpoint returned %d: %s",
 			resp.StatusCode, truncateBytes(body, 300))
 	}
 
@@ -162,11 +182,11 @@ func (i *Intune) acquireToken(ctx context.Context, tenantID, clientID, clientSec
 		ExpiresIn   int    `json:"expires_in"`
 	}
 	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return "", fmt.Errorf("decoding token response: %w", err)
+		return "", fmt.Errorf("intune: decoding token response: %w", err)
 	}
 
 	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("empty access_token in response")
+		return "", fmt.Errorf("intune: empty access_token in response")
 	}
 
 	return tokenResp.AccessToken, nil
@@ -179,26 +199,32 @@ func (i *Intune) acquireToken(ctx context.Context, tenantID, clientID, clientSec
 // intuneDevice holds the fields extracted from the Graph managedDevices
 // response.
 type intuneDevice struct {
+	id              string
 	deviceName      string
 	operatingSystem string
 	osVersion       string
 }
 
 // listManagedDevices calls the Microsoft Graph API to enumerate all Intune
-// managed devices, handling pagination via @odata.nextLink.
-func (i *Intune) listManagedDevices(ctx context.Context, token string) ([]intuneDevice, error) {
+// managed devices, handling pagination via @odata.nextLink under a labelled
+// guard.
+func (i *Intune) listManagedDevices(ctx context.Context, client *http.Client, token string) ([]intuneDevice, error) {
 	apiURL := i.graphBaseURL + "/v1.0/deviceManagement/managedDevices"
 
 	var allDevices []intuneDevice
+	guard := connectorkit.NewGuard("intune")
 
 	for apiURL != "" {
 		if err := ctx.Err(); err != nil {
 			return allDevices, fmt.Errorf("intune list cancelled: %w", err)
 		}
 
-		devices, nextLink, err := i.fetchDevicePage(ctx, apiURL, token)
+		devices, nextLink, bodyLen, err := i.fetchDevicePage(ctx, client, apiURL, token)
 		if err != nil {
 			return allDevices, err
+		}
+		if err := guard.NextPage(int64(bodyLen)); err != nil {
+			return allDevices, fmt.Errorf("intune pagination guard: %w", err)
 		}
 		allDevices = append(allDevices, devices...)
 		apiURL = nextLink
@@ -208,28 +234,28 @@ func (i *Intune) listManagedDevices(ctx context.Context, token string) ([]intune
 }
 
 // fetchDevicePage fetches a single page of the managed devices response and
-// returns parsed devices plus the next page URL (empty if no more pages).
-func (i *Intune) fetchDevicePage(ctx context.Context, apiURL, token string) ([]intuneDevice, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil) //#nosec G107 -- URL from operator-configured Intune/Graph API
+// returns parsed devices, the next page URL (empty if no more pages), and the
+// raw body length (for the pagination guard).
+func (i *Intune) fetchDevicePage(ctx context.Context, client *http.Client, apiURL, token string) ([]intuneDevice, string, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("creating request: %w", err)
+		return nil, "", 0, fmt.Errorf("intune: creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req) //#nosec G107
+	resp, err := client.Do(req) //#nosec G107 -- fixed Microsoft Graph endpoint (and @odata.nextLink returned by it)
 	if err != nil {
-		return nil, "", fmt.Errorf("executing request: %w", err)
+		return nil, "", 0, fmt.Errorf("intune: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", fmt.Errorf("reading response: %w", err)
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return nil, "", 0, fmt.Errorf("intune: reading response: %w", readErr)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("graph API returned %d: %s",
+		return nil, "", 0, fmt.Errorf("intune: graph API returned %d: %s",
 			resp.StatusCode, truncateBytes(body, 500))
 	}
 
@@ -238,35 +264,37 @@ func (i *Intune) fetchDevicePage(ctx context.Context, apiURL, token string) ([]i
 		Value    []json.RawMessage `json:"value"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, "", fmt.Errorf("parsing response: %w", err)
+		return nil, "", 0, fmt.Errorf("intune: parsing response: %w", err)
 	}
 
-	var devices []intuneDevice
+	devices := make([]intuneDevice, 0, len(result.Value))
 	for _, raw := range result.Value {
 		dev, err := parseIntuneDevice(raw)
 		if err != nil {
-			slog.Debug("intune: skipping unparseable device entry", "error", err)
+			slog.Debug("intune: skipping unparseable device entry", "code", string(LogCodeIntuneSkipUnparseable), "error", err)
 			continue
 		}
 		devices = append(devices, dev)
 	}
 
-	return devices, result.NextLink, nil
+	return devices, result.NextLink, len(body), nil
 }
 
 // parseIntuneDevice extracts the fields we need from a single managed device
 // JSON object.
 func parseIntuneDevice(data json.RawMessage) (intuneDevice, error) {
 	var raw struct {
+		ID              string `json:"id"`
 		DeviceName      string `json:"deviceName"`
 		OperatingSystem string `json:"operatingSystem"`
 		OSVersion       string `json:"osVersion"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return intuneDevice{}, fmt.Errorf("unmarshal intune device: %w", err)
+		return intuneDevice{}, fmt.Errorf("intune: unmarshal device: %w", err)
 	}
 
 	return intuneDevice{
+		id:              raw.ID,
 		deviceName:      raw.DeviceName,
 		operatingSystem: raw.OperatingSystem,
 		osVersion:       raw.OSVersion,
@@ -301,11 +329,11 @@ func deriveIntuneOSFamily(os string) string {
 func classifyIntuneDevice(os string) model.AssetType {
 	lower := strings.ToLower(os)
 	switch {
+	case strings.Contains(lower, "windows server"):
+		return model.AssetTypeServer
 	case strings.Contains(lower, "windows"),
 		strings.Contains(lower, "macos"):
 		return model.AssetTypeWorkstation
-	case strings.Contains(lower, "windows server"):
-		return model.AssetTypeServer
 	default:
 		return model.AssetTypeWorkstation
 	}

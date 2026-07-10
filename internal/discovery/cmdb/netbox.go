@@ -7,10 +7,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -18,7 +22,12 @@ import (
 // instance via its REST API. All devices present in NetBox are considered
 // authorised since their presence in the DCIM/CMDB implies organisational
 // awareness.
-type NetBox struct{}
+type NetBox struct {
+	// baseURL is a test override. When set, endpoint validation
+	// (connectorkit.SafeClient) is skipped and a plain client is built so an
+	// httptest server on 127.0.0.1 is reachable.
+	baseURL string
+}
 
 // NewNetBox returns a new NetBox discovery source.
 func NewNetBox() *NetBox {
@@ -28,26 +37,39 @@ func NewNetBox() *NetBox {
 // Name returns the stable identifier for this source.
 func (n *NetBox) Name() string { return "netbox" }
 
-// Discover lists devices from NetBox and returns them as assets. If
-// credentials are not available the method logs a warning and returns nil
+// Discover lists devices from NetBox and returns them as assets. If discovery
+// is not enabled, or credentials are not available, the method returns nil
 // (graceful degradation).
 //
 // Supported config keys:
 //
-//	api_url – string base URL of the NetBox instance (e.g. "https://netbox.corp.local")
-//	token   – string API authentication token
+//	enabled  – bool; discovery is skipped unless explicitly true (F3)
+//	api_url  – string base URL of the NetBox instance (e.g. "https://netbox.corp.local")
+//	token    – string API authentication token
 func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
-	apiURL := strings.TrimRight(toString(cfg["api_url"]), "/")
-	token := toString(cfg["token"])
+	if !connectorkit.Enabled(cfg) {
+		return nil, nil // R2/F3: honour enabled:false even when creds are present.
+	}
 
-	slog.Info("NetBox discovery starting",
+	creds := connectorkit.LoadCredentials(cfg)
+	defer creds.Zero() // R1: never let plaintext secrets linger past discovery.
+
+	apiURL := strings.TrimRight(creds.APIURL, "/")
+	if n.baseURL != "" {
+		apiURL = strings.TrimRight(n.baseURL, "/")
+	}
+	token := creds.Token
+
+	slog.Info(
+		"NetBox discovery starting",
 		"code", string(LogCodeNetBoxStarting),
 		"api_url_set", apiURL != "",
 		"token_set", token != "",
 	)
 
 	if apiURL == "" || token == "" {
-		slog.Warn("NetBox api_url or token not configured, skipping discovery",
+		slog.Warn(
+			"NetBox api_url or token not configured, skipping discovery",
 			"code", string(LogCodeNetBoxNotConfigured),
 			"api_url_set", apiURL != "",
 			"token_set", token != "",
@@ -55,13 +77,19 @@ func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		return nil, nil
 	}
 
-	devices, err := n.listDevices(ctx, apiURL, token)
+	client, base, err := n.httpClient(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	baseStr := strings.TrimRight(base.String(), "/")
+
+	devices, err := n.listDevices(ctx, client, baseStr, token)
 	if err != nil {
 		return nil, fmt.Errorf("netbox: listing devices: %w", err)
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	assets := make([]model.Asset, 0, len(devices))
 
 	for _, dev := range devices {
 		assetType := classifyNetBoxDevice(dev.deviceRole)
@@ -70,30 +98,67 @@ func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			osFamily = deriveNetBoxOSFamily(dev.platform)
 		}
 
+		// R6: device_role/platform are supplementary context, not identity —
+		// they belong in Tags, not in a dedicated column.
+		tags := map[string]any{}
+		if dev.deviceRole != "" {
+			tags["device_role"] = dev.deviceRole
+		}
+		if dev.platform != "" {
+			tags["platform"] = dev.platform
+		}
+
+		// R6: stop overloading Environment/Owner — NetBox site and tenant have
+		// dedicated columns now, and the device id is the CMDB sys id.
 		asset := model.Asset{
 			ID:              uuid.Must(uuid.NewV7()),
 			AssetType:       assetType,
 			Hostname:        dev.name,
 			OSFamily:        osFamily,
-			Environment:     dev.site,
-			Owner:           dev.tenant,
+			Site:            dev.site,
+			Tenant:          dev.tenant,
+			CMDBSysID:       dev.id,
 			DiscoverySource: "netbox",
 			FirstSeenAt:     now,
 			LastSeenAt:      now,
 			IsAuthorized:    model.AuthorizationAuthorized,
 			IsManaged:       model.ManagedUnknown,
 		}
+		if len(tags) > 0 {
+			b, _ := json.Marshal(tags)
+			asset.Tags = string(b)
+		}
 		asset.ComputeNaturalKey()
 		assets = append(assets, asset)
 	}
 
-	slog.Info("NetBox discovery completed",
+	slog.Info(
+		"NetBox discovery completed",
 		"code", string(LogCodeNetBoxComplete),
 		"api_url_set", apiURL != "",
 		"total_assets", len(assets),
 		"raw_devices", len(devices),
 	)
 	return assets, nil
+}
+
+// httpClient returns the outbound client and validated base URL. When baseURL
+// is set (tests) SafeClient is skipped so an httptest server is reachable;
+// otherwise connectorkit.SafeClient enforces HTTPS + SSRF validation. NetBox
+// is commonly self-hosted, so private addresses are allowed (allowPrivate).
+func (n *NetBox) httpClient(apiURL string) (*http.Client, *url.URL, error) {
+	if n.baseURL != "" {
+		u, err := url.Parse(n.baseURL)
+		if err != nil {
+			return nil, nil, fmt.Errorf("netbox: %w", err)
+		}
+		return &http.Client{Timeout: cmdbClientTimeout}, u, nil
+	}
+	client, u, err := connectorkit.SafeClient("netbox", apiURL, true)
+	if err != nil {
+		return nil, nil, fmt.Errorf("netbox: %w", err)
+	}
+	return client, u, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +168,7 @@ func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 // netboxDevice holds the fields extracted from the NetBox devices API
 // response.
 type netboxDevice struct {
+	id         string
 	name       string
 	deviceRole string
 	platform   string
@@ -117,20 +183,25 @@ type netboxDevice struct {
 const netboxPageSize = 1000
 
 // listDevices calls the NetBox REST API to enumerate all DCIM devices,
-// handling pagination via the "next" URL field.
-func (n *NetBox) listDevices(ctx context.Context, apiURL, token string) ([]netboxDevice, error) {
-	nextURL := fmt.Sprintf("%s/api/dcim/devices/?limit=%d", apiURL, netboxPageSize)
+// handling pagination via the "next" URL field and bounding the loop with a
+// pagination guard.
+func (n *NetBox) listDevices(ctx context.Context, client *http.Client, baseURL, token string) ([]netboxDevice, error) {
+	nextURL := fmt.Sprintf("%s/api/dcim/devices/?limit=%d", baseURL, netboxPageSize)
 
 	var allDevices []netboxDevice
+	guard := connectorkit.NewGuard("netbox")
 
 	for nextURL != "" {
 		if ctx.Err() != nil {
 			return allDevices, fmt.Errorf("netbox: context cancelled: %w", ctx.Err())
 		}
 
-		devices, next, err := n.fetchDevicePage(ctx, nextURL, token)
+		devices, next, nBytes, err := n.fetchDevicePage(ctx, client, nextURL, token)
 		if err != nil {
 			return allDevices, err
+		}
+		if err := guard.NextPage(nBytes); err != nil {
+			return allDevices, fmt.Errorf("netbox: %w", err)
 		}
 		allDevices = append(allDevices, devices...)
 		nextURL = next
@@ -140,33 +211,33 @@ func (n *NetBox) listDevices(ctx context.Context, apiURL, token string) ([]netbo
 }
 
 // fetchDevicePage fetches a single page of the devices response and returns
-// parsed devices plus the next page URL (empty if no more pages).
-func (n *NetBox) fetchDevicePage(ctx context.Context, apiURL, token string) ([]netboxDevice, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil) //#nosec G107 -- URL from operator-configured NetBox instance
+// parsed devices, the next page URL (empty if no more pages), and the raw
+// page byte count for the pagination guard.
+func (n *NetBox) fetchDevicePage(ctx context.Context, client *http.Client, pageURL, token string) ([]netboxDevice, string, int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil) //#nosec G107 -- URL from operator-configured, safenet-validated NetBox instance
 	if err != nil {
-		return nil, "", fmt.Errorf("creating request: %w", err)
+		return nil, "", 0, fmt.Errorf("netbox: creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Token "+token)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := http.DefaultClient.Do(req) //#nosec G107
+	resp, err := client.Do(req) //#nosec G107 -- URL from user-configured, safenet-validated endpoint
 	if err != nil {
-		return nil, "", fmt.Errorf("executing request: %w", err)
+		return nil, "", 0, fmt.Errorf("netbox: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", fmt.Errorf("reading response: %w", err)
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
+	_ = resp.Body.Close()
+	if readErr != nil {
+		return nil, "", 0, fmt.Errorf("netbox: reading response: %w", readErr)
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		slog.Warn("netbox: authentication failed", "status", resp.StatusCode)
-		return nil, "", nil
+		slog.Warn("netbox: authentication failed", "code", string(LogCodeNetBoxAuthFailed), "status", resp.StatusCode)
+		return nil, "", int64(len(body)), nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("NetBox API returned %d: %s",
+		return nil, "", 0, fmt.Errorf("netbox: API returned %d: %s",
 			resp.StatusCode, truncateBytes(body, 500))
 	}
 
@@ -175,14 +246,15 @@ func (n *NetBox) fetchDevicePage(ctx context.Context, apiURL, token string) ([]n
 		Results []json.RawMessage `json:"results"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, "", fmt.Errorf("parsing response: %w", err)
+		return nil, "", 0, fmt.Errorf("netbox: parsing response: %w", err)
 	}
 
-	var devices []netboxDevice
+	devices := make([]netboxDevice, 0, len(result.Results))
 	for _, raw := range result.Results {
 		dev, err := parseNetBoxDevice(raw)
 		if err != nil {
-			slog.Debug("netbox: skipping unparseable device entry", "error", err)
+			slog.Debug("netbox: skipping unparseable device entry",
+				"code", string(LogCodeNetBoxSkipUnparseable), "error", err)
 			continue
 		}
 		devices = append(devices, dev)
@@ -193,7 +265,7 @@ func (n *NetBox) fetchDevicePage(ctx context.Context, apiURL, token string) ([]n
 		nextLink = *result.Next
 	}
 
-	return devices, nextLink, nil
+	return devices, nextLink, int64(len(body)), nil
 }
 
 // parseNetBoxDevice extracts the fields we need from a single device JSON
@@ -218,6 +290,7 @@ func parseNetBoxDevice(data json.RawMessage) (netboxDevice, error) {
 			Slug string `json:"slug"`
 		} `json:"tenant"`
 		Name string `json:"name"`
+		ID   int    `json:"id"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return netboxDevice{}, fmt.Errorf("unmarshal netbox device: %w", err)
@@ -225,6 +298,9 @@ func parseNetBoxDevice(data json.RawMessage) (netboxDevice, error) {
 
 	dev := netboxDevice{
 		name: raw.Name,
+	}
+	if raw.ID != 0 {
+		dev.id = strconv.Itoa(raw.ID)
 	}
 	if raw.DeviceRole != nil {
 		dev.deviceRole = raw.DeviceRole.Slug

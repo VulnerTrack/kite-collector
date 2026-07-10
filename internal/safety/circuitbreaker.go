@@ -53,6 +53,7 @@ type sourceState struct {
 type CircuitBreaker struct {
 	tripsCounter *prometheus.CounterVec
 	healthGauge  *prometheus.GaugeVec
+	persister    HealthPersister
 	sources      sync.Map // map[string]*sourceState
 	defaultCfg   CircuitBreakerConfig
 }
@@ -78,6 +79,58 @@ func NewCircuitBreaker(cfg CircuitBreakerConfig) *CircuitBreaker {
 func (cb *CircuitBreaker) SetMetrics(trips *prometheus.CounterVec, health *prometheus.GaugeVec) {
 	cb.tripsCounter = trips
 	cb.healthGauge = health
+}
+
+// HealthPersister persists a circuit-breaker source-health snapshot so state is
+// durable across process restarts. It is implemented by the SQLite store (the
+// source_health table created by RFC-0062, which until RFC-0135 had no writer).
+// Persistence is best-effort: a write error is logged, never fatal to discovery.
+type HealthPersister interface {
+	PersistSourceHealth(h SourceHealth) error
+}
+
+// SetPersister attaches a best-effort persister that is invoked after every
+// RecordSuccess/RecordFailure, giving the source_health table its first writer
+// (RFC-0135 R5). Optional; a nil persister disables persistence.
+func (cb *CircuitBreaker) SetPersister(p HealthPersister) {
+	cb.persister = p
+}
+
+// persist writes the snapshot via the attached persister, if any. It is called
+// only after s.mu has been released, so a slow store write never blocks the
+// discovery hot path while holding the per-source lock.
+func (cb *CircuitBreaker) persist(h SourceHealth) {
+	if cb.persister == nil {
+		return
+	}
+	if err := cb.persister.PersistSourceHealth(h); err != nil {
+		slog.Warn("circuit breaker: failed to persist source health",
+			"source", h.SourceName, "error", err)
+	}
+}
+
+// snapshot builds a SourceHealth from the source state. The caller MUST hold
+// s.mu.
+func (s *sourceState) snapshot(name string) SourceHealth {
+	h := SourceHealth{
+		SourceName:           name,
+		State:                s.state,
+		ConsecutiveFailures:  s.consecutiveFailures,
+		ConsecutiveSuccesses: s.consecutiveSuccesses,
+		FailureThreshold:     s.failureThreshold,
+		CooldownSeconds:      int(s.cooldownDuration.Seconds()),
+		LastFailureReason:    s.lastFailureReason,
+		TotalTrips:           s.totalTrips,
+	}
+	if !s.lastSuccessAt.IsZero() {
+		t := s.lastSuccessAt
+		h.LastSuccessAt = &t
+	}
+	if !s.lastFailureAt.IsZero() {
+		t := s.lastFailureAt
+		h.LastFailureAt = &t
+	}
+	return h
 }
 
 // getOrCreate returns the state for a source, creating it if absent.
@@ -127,14 +180,14 @@ func (cb *CircuitBreaker) ShouldSkip(sourceName string) bool {
 func (cb *CircuitBreaker) RecordSuccess(sourceName string) {
 	s := cb.getOrCreate(sourceName)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	s.consecutiveSuccesses++
 	s.consecutiveFailures = 0
 	s.lastSuccessAt = time.Now()
 
 	if s.state != CircuitHealthy && s.consecutiveSuccesses >= s.successThreshold {
-		slog.Info("circuit breaker closed; source healthy again",
+		slog.Info(
+			"circuit breaker closed; source healthy again",
 			"code", string(LogCodeSafetyCircuitClosed),
 			"source", sourceName,
 			"previous_state", string(s.state),
@@ -145,6 +198,10 @@ func (cb *CircuitBreaker) RecordSuccess(sourceName string) {
 	}
 
 	cb.updateHealthGauge(sourceName, s.state)
+	snap := s.snapshot(sourceName)
+	s.mu.Unlock()
+
+	cb.persist(snap)
 }
 
 // RecordFailure records a failed invocation for the named source.
@@ -152,7 +209,6 @@ func (cb *CircuitBreaker) RecordSuccess(sourceName string) {
 func (cb *CircuitBreaker) RecordFailure(sourceName string, reason string) {
 	s := cb.getOrCreate(sourceName)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	s.consecutiveFailures++
 	s.consecutiveSuccesses = 0
@@ -167,7 +223,8 @@ func (cb *CircuitBreaker) RecordFailure(sourceName string, reason string) {
 		if s.state != CircuitOpen {
 			s.state = CircuitOpen
 			s.totalTrips++
-			slog.Warn("circuit breaker tripped; source quarantined for cooldown window",
+			slog.Warn(
+				"circuit breaker tripped; source quarantined for cooldown window",
 				"code", string(LogCodeSafetyCircuitTripped),
 				"source", sourceName,
 				"consecutive_failures", s.consecutiveFailures,
@@ -183,6 +240,10 @@ func (cb *CircuitBreaker) RecordFailure(sourceName string, reason string) {
 	}
 
 	cb.updateHealthGauge(sourceName, s.state)
+	snap := s.snapshot(sourceName)
+	s.mu.Unlock()
+
+	cb.persist(snap)
 }
 
 // State returns the current circuit state for a source.
