@@ -25,7 +25,8 @@ func stubServer(t *testing.T, headerName, headerVal, body string) *httptest.Serv
 }
 
 func TestAnalyzer_HitsAPIAndFileSignals(t *testing.T) {
-	srv := stubServer(t,
+	srv := stubServer(
+		t,
 		"X-Amz-Request-Id", "test-abc",
 		`(function(){ import { S3Client } from "@aws-sdk/client-s3"; })();`,
 	)

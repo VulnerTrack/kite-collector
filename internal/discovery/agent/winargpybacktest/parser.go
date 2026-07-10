@@ -25,40 +25,49 @@ type PyBTFields struct {
 
 // sharpeRE matches `sharpe: NN.NN` / `Sharpe Ratio: NN`.
 var sharpeRE = regexp.MustCompile(
-	`(?i)(?:sharpe(?:[_\- ]?ratio)?|sharpe[_\- ]?ratio)"?\s*[:=>]\s*"?(-?[0-9]+(?:[.,][0-9]+)?)`)
+	`(?i)(?:sharpe(?:[_\- ]?ratio)?|sharpe[_\- ]?ratio)"?\s*[:=>]\s*"?(-?[0-9]+(?:[.,][0-9]+)?)`,
+)
 
 // annualReturnRE matches `annual_return: NN%` / `Annualized Return: NN.NN`.
 var annualReturnRE = regexp.MustCompile(
-	`(?i)(?:annual(?:ized)?[_\- ]?return|cagr|return[_\- ]?annual)"?\s*[:=>]\s*"?(-?[0-9]+(?:[.,][0-9]+)?)\s*%?`)
+	`(?i)(?:annual(?:ized)?[_\- ]?return|cagr|return[_\- ]?annual)"?\s*[:=>]\s*"?(-?[0-9]+(?:[.,][0-9]+)?)\s*%?`,
+)
 
 // maxDrawdownRE matches `max_drawdown: NN%`.
 var maxDrawdownRE = regexp.MustCompile(
-	`(?i)(?:max[_\- ]?drawdown|maxdrawdown|max[_\- ]?dd|drawdown[_\- ]?max)"?\s*[:=>]\s*"?(-?[0-9]+(?:[.,][0-9]+)?)\s*%?`)
+	`(?i)(?:max[_\- ]?drawdown|maxdrawdown|max[_\- ]?dd|drawdown[_\- ]?max)"?\s*[:=>]\s*"?(-?[0-9]+(?:[.,][0-9]+)?)\s*%?`,
+)
 
 // tradeCountRE matches `total_trades: NN` / `n_trades: NN`.
 var tradeCountRE = regexp.MustCompile(
-	`(?i)(?:total[_\- ]?trades|n[_\- ]?trades|trade[_\- ]?count|num[_\- ]?trades|trades[_\- ]?total)"?\s*[:=>]\s*"?([0-9]+)`)
+	`(?i)(?:total[_\- ]?trades|n[_\- ]?trades|trade[_\- ]?count|num[_\- ]?trades|trades[_\- ]?total)"?\s*[:=>]\s*"?([0-9]+)`,
+)
 
 // strategyNameRE matches `strategy_name: <name>` / `name: <name>`.
 var strategyNameRE = regexp.MustCompile(
-	`(?i)(?:strategy[_\- ]?name|strategy[_\- ]?id|name)"?\s*[:=>]\s*"?([A-Za-z0-9_\-]{2,80})"?`)
+	`(?i)(?:strategy[_\- ]?name|strategy[_\- ]?id|name)"?\s*[:=>]\s*"?([A-Za-z0-9_\-]{2,80})"?`,
+)
 
 // tickerRE matches a ticker token (3-6 upper-alphanumeric).
 var tickerRE = regexp.MustCompile(
-	`(?:^|[\s\|;,>"'<])([A-Z][A-Z0-9]{1,5})(?:[\s\|;,<"'/]|$)`)
+	`(?:^|[\s\|;,>"'<])([A-Z][A-Z0-9]{1,5})(?:[\s\|;,<"'/]|$)`,
+)
 
 // lookaheadRE detects lookahead-bias markers.
 var lookaheadRE = regexp.MustCompile(
-	`(?i)(?:shift\(\s*-1\s*\)|shift\(\s*-2\s*\)|future_data|peek_ahead|next_day_open|forward[_\- ]?fill|look[_\- ]?ahead)`)
+	`(?i)(?:shift\(\s*-1\s*\)|shift\(\s*-2\s*\)|future_data|peek_ahead|next_day_open|forward[_\- ]?fill|look[_\- ]?ahead)`,
+)
 
 // apiKeyRE detects an API-key declaration in Python source.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(api[_-]?key|bearer|access[_-]?token|secret|password)("|')?\s*[:=]\s*("|')([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(api[_-]?key|bearer|access[_-]?token|secret|password)("|')?\s*[:=]\s*("|')([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // secretInIpynbRE detects an embedded secret in a notebook
 // cell (JSON-formatted .ipynb).
 var secretInIpynbRE = regexp.MustCompile(
-	`(?i)\\"(?:api[_-]?key|bearer|access[_-]?token|secret|password)\\"\s*:\s*\\"([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)\\"(?:api[_-]?key|bearer|access[_-]?token|secret|password)\\"\s*:\s*\\"([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // ParsePyBacktestArtifact parses a pybacktest result body and
 // extracts scalar fields.

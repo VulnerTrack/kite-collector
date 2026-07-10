@@ -66,7 +66,8 @@ func (r *Recorder) Record(
 	hb.Signature = r.identity.Sign(hb.CanonicalPayload())
 
 	if err := r.sink.RecordHeartbeat(ctx, hb); err != nil {
-		r.logger.Warn("heartbeat persist failed",
+		r.logger.Warn(
+			"heartbeat persist failed",
 			"code", string(LogCodeHeartbeatPersistErr),
 			"scan_id", r.scanID,
 			"source", source,
@@ -76,7 +77,8 @@ func (r *Recorder) Record(
 		return fmt.Errorf("record heartbeat: %w", err)
 	}
 
-	r.logger.Debug("heartbeat emitted",
+	r.logger.Debug(
+		"heartbeat emitted",
 		"code", string(LogCodeHeartbeatEmitted),
 		"scan_id", r.scanID,
 		"source", source,

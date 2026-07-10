@@ -123,13 +123,16 @@ func fingerprintOpenPorts(ctx context.Context, open []openPort, services []Servi
 				}
 
 				if !sig.TLS {
-					slog.Warn("autodiscovery: service discovered via insecure (non-TLS) probe — consider enabling TLS",
+					slog.Warn(
+						"autodiscovery: service discovered via insecure (non-TLS) probe — consider enabling TLS",
+						"code", string(LogCodePortInsecureProbe),
 						"service", sig.Name,
 						"endpoint", endpoint,
 					)
 				}
 
-				slog.Info("autodiscovery: service confirmed by fingerprint",
+				slog.Info(
+					"autodiscovery: service confirmed by fingerprint",
 					"service", sig.Name,
 					"endpoint", endpoint,
 					"version", version,

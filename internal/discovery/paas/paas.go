@@ -212,7 +212,8 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 
 		if attempt > 0 {
 			delay := retryBackoff(attempt)
-			slog.Debug("PaaS HTTP retry after backoff delay", //#nosec G706 -- c.name is a hardcoded provider literal
+			slog.Debug(
+				"PaaS HTTP retry after backoff delay", //#nosec G706 -- c.name is a hardcoded provider literal
 				"code", string(LogCodePaaSRetryBackoff),
 				"caller", c.name,
 				"attempt", attempt+1,
@@ -228,7 +229,8 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 		resp, err := fn()
 		if err != nil {
 			lastErr = fmt.Errorf("%s: request failed: %w", c.name, err)
-			slog.Warn("PaaS HTTP network error; will retry", //#nosec G706 -- c.name is a hardcoded provider literal
+			slog.Warn(
+				"PaaS HTTP network error; will retry", //#nosec G706 -- c.name is a hardcoded provider literal
 				"code", string(LogCodePaaSRetryNetworkError),
 				"caller", c.name,
 				"attempt", attempt+1,
@@ -249,7 +251,8 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 			body := drainBody(resp, 200)
 			lastErr = fmt.Errorf("%s: rate limited (429): %s", c.name, body)
-			slog.Warn("PaaS HTTP rate-limited (429); will retry after server-suggested delay", //#nosec G706 -- c.name is a hardcoded provider literal
+			slog.Warn(
+				"PaaS HTTP rate-limited (429); will retry after server-suggested delay", //#nosec G706 -- c.name is a hardcoded provider literal
 				"code", string(LogCodePaaSRetryRateLimited),
 				"caller", c.name,
 				"attempt", attempt+1,
@@ -267,7 +270,8 @@ func (c *apiClient) doWithRetry(ctx context.Context, fn func() (*http.Response, 
 		case resp.StatusCode >= 500:
 			body := drainBody(resp, 500)
 			lastErr = fmt.Errorf("%s: server error (%d): %s", c.name, resp.StatusCode, body)
-			slog.Warn("PaaS HTTP server error (5xx); will retry", //#nosec G706 -- c.name is a hardcoded provider literal
+			slog.Warn(
+				"PaaS HTTP server error (5xx); will retry", //#nosec G706 -- c.name is a hardcoded provider literal
 				"code", string(LogCodePaaSRetryServerError),
 				"caller", c.name,
 				"attempt", attempt+1,

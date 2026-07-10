@@ -137,7 +137,8 @@ func TestHandleEnroll_RoundTrip(t *testing.T) {
 	form := url.Values{
 		"api_key": {"sk-platform-live-ABC-0123456789XYZ"},
 	}
-	rec := h.do(t, "POST", "/api/v1/identity/enroll",
+	rec := h.do(
+		t, "POST", "/api/v1/identity/enroll",
 		strings.NewReader(form.Encode()),
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	)
@@ -162,7 +163,8 @@ func TestHandleEnroll_RejectsMissingAPIKey(t *testing.T) {
 	form := url.Values{
 		"api_key": {""},
 	}
-	rec := h.do(t, "POST", "/api/v1/identity/enroll",
+	rec := h.do(
+		t, "POST", "/api/v1/identity/enroll",
 		strings.NewReader(form.Encode()),
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	)
@@ -177,7 +179,8 @@ func TestHandleEnroll_NoPlaintextLeaksInResponses(t *testing.T) {
 	form := url.Values{
 		"api_key": {"sk-super-secret-key-0123456789ABCDEF"},
 	}
-	_ = h.do(t, "POST", "/api/v1/identity/enroll",
+	_ = h.do(
+		t, "POST", "/api/v1/identity/enroll",
 		strings.NewReader(form.Encode()),
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	)
@@ -240,7 +243,8 @@ func TestHandleConnectionCheck_ProbesHitInjectedEndpoint(t *testing.T) {
 	// against example.test, but the failure diagnostics should mention
 	// the injected host.
 	form := url.Values{"api_key": {"sk-test-0123456789ABCDEF"}}
-	_ = h.do(t, "POST", "/api/v1/identity/enroll",
+	_ = h.do(
+		t, "POST", "/api/v1/identity/enroll",
 		strings.NewReader(form.Encode()),
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	)

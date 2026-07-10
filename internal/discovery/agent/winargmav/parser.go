@@ -33,49 +33,60 @@ type MAVFields struct {
 // follow a naming pattern: "SGR <X>", "<X> SGR", "<X> Garantía
 // Mutual", "Garantizar S.G.R.", etc.
 var sgrNameRE = regexp.MustCompile(
-	`(?i)\b((?:[A-Za-záéíóúñÁÉÍÓÚÑ][A-Za-z0-9.&\-_ áéíóúñÁÉÍÓÚÑ]{1,40}\s+)?(?:S\.?G\.?R\.?|sgr)|garantizar|garantia mutual|aval\s+rural)\b`)
+	`(?i)\b((?:[A-Za-záéíóúñÁÉÍÓÚÑ][A-Za-z0-9.&\-_ áéíóúñÁÉÍÓÚÑ]{1,40}\s+)?(?:S\.?G\.?R\.?|sgr)|garantizar|garantia mutual|aval\s+rural)\b`,
+)
 
 // sgrKeyRE matches an explicit `sgr_name: <X>` key.
 var sgrKeyRE = regexp.MustCompile(
-	`(?i)("|')?(sgr[_\- ]?name|sgr|avalista)("|')?\s*[:=>]\s*"?([A-Za-z0-9.&\-_ áéíóúñÁÉÍÓÚÑ]{3,80})"?`)
+	`(?i)("|')?(sgr[_\- ]?name|sgr|avalista)("|')?\s*[:=>]\s*"?([A-Za-z0-9.&\-_ áéíóúñÁÉÍÓÚÑ]{3,80})"?`,
+)
 
 // provinciaKeyRE matches a `provincia: <name>` row.
 var provinciaKeyRE = regexp.MustCompile(
-	`(?i)("|')?(provincia|jurisdiccion[_\- ]?provincial)("|')?\s*[:=>]\s*"?([A-Za-z áéíóúñÁÉÍÓÚÑ]{2,40})"?`)
+	`(?i)("|')?(provincia|jurisdiccion[_\- ]?provincial)("|')?\s*[:=>]\s*"?([A-Za-z áéíóúñÁÉÍÓÚÑ]{2,40})"?`,
+)
 
 // monedaKeyRE matches `moneda: <code>` rows.
 var monedaKeyRE = regexp.MustCompile(
-	`(?i)("|')?(moneda|currency|moneda[_\- ]?nominal)("|')?\s*[:=>]\s*"?([A-Z€$£¥]{1,8})"?`)
+	`(?i)("|')?(moneda|currency|moneda[_\- ]?nominal)("|')?\s*[:=>]\s*"?([A-Z€$£¥]{1,8})"?`,
+)
 
 // montoRE matches `monto: <decimal>` / `importe: <decimal>` rows.
 var montoRE = regexp.MustCompile(
-	`(?i)("|')?(monto|importe|valor[_\- ]?nominal|nominal|notional|capital)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(monto|importe|valor[_\- ]?nominal|nominal|notional|capital)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // totalPortfolioRE matches a `total_portfolio: <decimal>` row.
 var totalPortfolioRE = regexp.MustCompile(
-	`(?i)("|')?(total[_\- ]?portfolio|valor[_\- ]?cartera|total[_\- ]?cartera)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(total[_\- ]?portfolio|valor[_\- ]?cartera|total[_\- ]?cartera)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // concentrationRE matches a `concentration_pct: NN` row.
 var concentrationRE = regexp.MustCompile(
-	`(?i)("|')?(concentration[_\- ]?pct|max[_\- ]?concentration|concentracion[_\- ]?max)("|')?\s*[:=>]\s*"?([0-9]+(?:[.,][0-9]+)?)\s*%?`)
+	`(?i)("|')?(concentration[_\- ]?pct|max[_\- ]?concentration|concentracion[_\- ]?max)("|')?\s*[:=>]\s*"?([0-9]+(?:[.,][0-9]+)?)\s*%?`,
+)
 
 // fechaVencimientoRE matches `fecha_vencimiento: YYYY-MM-DD`.
 var fechaVencimientoRE = regexp.MustCompile(
-	`(?i)("|')?(fecha[_\- ]?vencimiento|vencimiento[_\- ]?fecha|expiry[_\- ]?date|maturity[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(fecha[_\- ]?vencimiento|vencimiento[_\- ]?fecha|expiry[_\- ]?date|maturity[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // fechaLibramientoRE matches `fecha_libramiento: YYYY-MM-DD`.
 var fechaLibramientoRE = regexp.MustCompile(
-	`(?i)("|')?(fecha[_\- ]?libramiento|libramiento[_\- ]?fecha|issue[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(fecha[_\- ]?libramiento|libramiento[_\- ]?fecha|issue[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // matriculaIniRE matches a `Matricula` / `MemberMatricula` key
 // in INI / JSON / YAML bodies.
 var matriculaIniRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:Matricula|MemberMatricula|MAVMatricula|MavMatricula)"?\s*[:=>]\s*"?(\d{1,5})"?`)
+	`(?im)^\s*"?(?:Matricula|MemberMatricula|MAVMatricula|MavMatricula)"?\s*[:=>]\s*"?(\d{1,5})"?`,
+)
 
 // matriculaXMLRE matches `<matricula>NNN</matricula>` so XML
 // bodies don't need a separate parser.
 var matriculaXMLRE = regexp.MustCompile(
-	`(?i)<(?:matricula|member_matricula|mav_matricula)>(\d{1,5})</`)
+	`(?i)<(?:matricula|member_matricula|mav_matricula)>(\d{1,5})</`,
+)
 
 // xmlPairRE generates a tag-form matcher for a labeled value.
 // Used inline for sgr_name / librador_cuit / receptor_cuit /
@@ -83,51 +94,65 @@ var matriculaXMLRE = regexp.MustCompile(
 //
 // We pre-compile the most-used ones below.
 var sgrNameXMLRE = regexp.MustCompile(
-	`(?is)<(?:sgr_name|sgr|avalista)>([^<]{3,80})</`)
+	`(?is)<(?:sgr_name|sgr|avalista)>([^<]{3,80})</`,
+)
 
 var libradorXMLRE = regexp.MustCompile(
-	`(?is)<(?:librador_cuit|cuit_librador)>(\d{2}-?\d{8}-?\d)</`)
+	`(?is)<(?:librador_cuit|cuit_librador)>(\d{2}-?\d{8}-?\d)</`,
+)
 
 var receptorXMLRE = regexp.MustCompile(
-	`(?is)<(?:receptor_cuit|cuit_receptor|beneficiario_cuit)>(\d{2}-?\d{8}-?\d)</`)
+	`(?is)<(?:receptor_cuit|cuit_receptor|beneficiario_cuit)>(\d{2}-?\d{8}-?\d)</`,
+)
 
 var clienteXMLRE = regexp.MustCompile(
-	`(?is)<(?:cliente_cuit|cuit_cliente|titular_cuit)>(\d{2}-?\d{8}-?\d)</`)
+	`(?is)<(?:cliente_cuit|cuit_cliente|titular_cuit)>(\d{2}-?\d{8}-?\d)</`,
+)
 
 var monedaXMLRE = regexp.MustCompile(
-	`(?is)<(?:moneda|currency)>([A-Z€$£¥]{1,8})</`)
+	`(?is)<(?:moneda|currency)>([A-Z€$£¥]{1,8})</`,
+)
 
 var montoXMLRE = regexp.MustCompile(
-	`(?is)<(?:monto|importe|valor_nominal|nominal|capital)>([0-9.,]+)</`)
+	`(?is)<(?:monto|importe|valor_nominal|nominal|capital)>([0-9.,]+)</`,
+)
 
 var fechaVencimientoXMLRE = regexp.MustCompile(
-	`(?is)<(?:fecha_vencimiento|vencimiento|expiry_date|maturity_date)>(20\d{2}-\d{2}-\d{2})</`)
+	`(?is)<(?:fecha_vencimiento|vencimiento|expiry_date|maturity_date)>(20\d{2}-\d{2}-\d{2})</`,
+)
 
 var fechaLibramientoXMLRE = regexp.MustCompile(
-	`(?is)<(?:fecha_libramiento|libramiento|issue_date)>(20\d{2}-\d{2}-\d{2})</`)
+	`(?is)<(?:fecha_libramiento|libramiento|issue_date)>(20\d{2}-\d{2}-\d{2})</`,
+)
 
 var provinciaXMLRE = regexp.MustCompile(
-	`(?is)<(?:provincia|jurisdiccion_provincial)>([A-Za-zÁÉÍÓÚáéíóúñÑ ]{2,40})</`)
+	`(?is)<(?:provincia|jurisdiccion_provincial)>([A-Za-zÁÉÍÓÚáéíóúñÑ ]{2,40})</`,
+)
 
 // libradorCuitKeyRE matches `librador_cuit: NN-NNNNNNNN-N`.
 var libradorCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:librador[_\- ]?cuit|cuit[_\- ]?librador)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:librador[_\- ]?cuit|cuit[_\- ]?librador)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // receptorCuitKeyRE matches `receptor_cuit: NN-NNNNNNNN-N`.
 var receptorCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:receptor[_\- ]?cuit|cuit[_\- ]?receptor|beneficiario[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:receptor[_\- ]?cuit|cuit[_\- ]?receptor|beneficiario[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // defaultMarkerRE detects a default marker.
 var defaultMarkerRE = regexp.MustCompile(
-	`(?i)(?:\bdefault\b|moroso|incumplimiento|default[_\- ]?risk|rechazo[_\- ]?pago|cheque[_\- ]?rechazado)`)
+	`(?i)(?:\bdefault\b|moroso|incumplimiento|default[_\- ]?risk|rechazo[_\- ]?pago|cheque[_\- ]?rechazado)`,
+)
 
 // provincialDefaultMarkerRE detects a provincial-default marker.
 var provincialDefaultMarkerRE = regexp.MustCompile(
-	`(?i)(?:provincia[_\- ]?en[_\- ]?default|default[_\- ]?provincial|sub[_\- ]?sovereign[_\- ]?default|rating[_\- ]?downgrade)`)
+	`(?i)(?:provincia[_\- ]?en[_\- ]?default|default[_\- ]?provincial|sub[_\- ]?sovereign[_\- ]?default|rating[_\- ]?downgrade)`,
+)
 
 // ParseMAVArtifact parses a MAV body (XML / CSV / JSON / INI)
 // and extracts scalar fields.

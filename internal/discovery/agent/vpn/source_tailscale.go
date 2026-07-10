@@ -143,7 +143,8 @@ func (c *tailscaleCollector) Collect(ctx context.Context) ([]Profile, error) {
 		// End-user devices are not expected to carry cross-account
 		// routes — surface the risk so downstream alerting can pivot
 		// on the log code without re-parsing the profile JSON.
-		slog.Warn("vpn: shared peers detected on tailnet member",
+		slog.Warn(
+			"vpn: shared peers detected on tailnet member",
 			"code", string(LogCodeTailscaleSharedPeersDetected),
 			"profile", p.Name,
 			"shared_peer_count", n,

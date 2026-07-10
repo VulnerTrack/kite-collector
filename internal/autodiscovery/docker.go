@@ -22,7 +22,7 @@ func probeDockerContainers(ctx context.Context, socketPath string, services []Se
 
 	containers, err := client.listContainers(ctx)
 	if err != nil {
-		slog.Warn("autodiscovery: docker probe failed", "error", err)
+		slog.Warn("autodiscovery: docker probe failed", "code", string(LogCodeDockerProbeFailed), "error", err)
 		return nil
 	}
 

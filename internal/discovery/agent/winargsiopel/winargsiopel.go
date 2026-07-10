@@ -325,7 +325,8 @@ func VenueFromPath(path string) Venue {
 		return VenueUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "bcra_subasta") ||
 		strings.Contains(lower, "bcra-subasta") ||

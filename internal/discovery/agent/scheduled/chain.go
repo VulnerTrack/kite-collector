@@ -38,13 +38,13 @@ func (c *chainCollector) Collect(ctx context.Context) ([]Job, error) {
 		got, err := sub.Collect(ctx)
 		if err != nil {
 			slog.Warn("scheduled: source collector failed",
-				"source", sub.Name(), "error", err)
+				"code", string(LogCodeChainSourceCollectorFailed), "source", sub.Name(), "error", err)
 			continue
 		}
 		for _, j := range got {
 			if len(out) >= MaxJobs {
 				slog.Warn("scheduled: cap reached, dropping later sources",
-					"cap", MaxJobs)
+					"code", string(LogCodeChainCapReached), "cap", MaxJobs)
 				SortJobs(out)
 				return out, nil
 			}

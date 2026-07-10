@@ -26,63 +26,78 @@ type SubCustFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|subcust[_\-]?password|swift[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|subcust[_\-]?password|swift[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|subcust[_\-]?password|swift[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|subcust[_\-]?password|swift[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|subcust[_\-]?password|swift[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|subcust[_\-]?password|swift[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // subCustBankRE matches a sub-cust bank marker in body.
 var subCustBankRE = regexp.MustCompile(
-	`(?i)\b(bny[_\- ]?galicia|citibank[_\- ]?ar|hsbc[_\- ]?ar|standard[_\- ]?bank|icbc[_\- ]?ar|santander[_\- ]?ar|bbva[_\- ]?ar|itau[_\- ]?ar|credit[_\- ]?agricole[_\- ]?ar|jpmorgan[_\- ]?ar)\b`)
+	`(?i)\b(bny[_\- ]?galicia|citibank[_\- ]?ar|hsbc[_\- ]?ar|standard[_\- ]?bank|icbc[_\- ]?ar|santander[_\- ]?ar|bbva[_\- ]?ar|itau[_\- ]?ar|credit[_\- ]?agricole[_\- ]?ar|jpmorgan[_\- ]?ar)\b`,
+)
 
 // globalCustodianRE matches a global-custodian marker in body.
 var globalCustodianRE = regexp.MustCompile(
-	`(?i)\b(bny[_\- ]?mellon|citi[_\- ]?gca|hsbc[_\- ]?ss|jpmorgan[_\- ]?ss|state[_\- ]?street|northern[_\- ]?trust|brown[_\- ]?brothers[_\- ]?harriman|bbh|ssga|caja[_\- ]?de[_\- ]?valores|cvsa)\b`)
+	`(?i)\b(bny[_\- ]?mellon|citi[_\- ]?gca|hsbc[_\- ]?ss|jpmorgan[_\- ]?ss|state[_\- ]?street|northern[_\- ]?trust|brown[_\- ]?brothers[_\- ]?harriman|bbh|ssga|caja[_\- ]?de[_\- ]?valores|cvsa)\b`,
+)
 
 // dgtTreatyRE matches a DGT-treaty-country field.
 var dgtTreatyRE = regexp.MustCompile(
-	`(?i)"?(?:dgt[_\- ]?treaty[_\- ]?country|treaty[_\- ]?country|dgt[_\- ]?country|country[_\- ]?dgt)"?\s*[:=>]\s*"?(usa|united[_\- ]?states|spain|espana|chile|brazil|brasil|germany|alemania|uk|united[_\- ]?kingdom|reino[_\- ]?unido|canada|italy|italia|france|francia|netherlands|holanda|paises[_\- ]?bajos|switzerland|suiza)"?`)
+	`(?i)"?(?:dgt[_\- ]?treaty[_\- ]?country|treaty[_\- ]?country|dgt[_\- ]?country|country[_\- ]?dgt)"?\s*[:=>]\s*"?(usa|united[_\- ]?states|spain|espana|chile|brazil|brasil|germany|alemania|uk|united[_\- ]?kingdom|reino[_\- ]?unido|canada|italy|italia|france|francia|netherlands|holanda|paises[_\- ]?bajos|switzerland|suiza)"?`,
+)
 
 // subCustCuitKeyRE matches sub-cust bank CUIT field.
 var subCustCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:subcust[_\- ]?cuit|bank[_\- ]?cuit|entidad[_\- ]?cuit|cuit[_\- ]?banco|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:subcust[_\- ]?cuit|bank[_\- ]?cuit|entidad[_\- ]?cuit|cuit[_\- ]?banco|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // foreignTINRE matches foreign TIN field with country code.
 var foreignTINRE = regexp.MustCompile(
-	`(?i)"?(?:foreign[_\- ]?tin|fii[_\- ]?tin|nominee[_\- ]?tin|tin[_\- ]?foreign|tin)"?\s*[:=>]\s*"?([A-Z]{2,3})[\-_:\s]+([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:foreign[_\- ]?tin|fii[_\- ]?tin|nominee[_\- ]?tin|tin[_\- ]?foreign|tin)"?\s*[:=>]\s*"?([A-Z]{2,3})[\-_:\s]+([A-Z0-9\-]{4,32})"?`,
+)
 
 // swiftBICRE matches SWIFT BIC (8 or 11 alphanumeric chars).
 var swiftBICRE = regexp.MustCompile(
-	`(?i)"?(?:swift[_\- ]?bic|bic|swift[_\- ]?code|swift)"?\s*[:=>]\s*"?([A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)"?`)
+	`(?i)"?(?:swift[_\- ]?bic|bic|swift[_\- ]?code|swift)"?\s*[:=>]\s*"?([A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)"?`,
+)
 
 // omnibusAccountRE matches omnibus account identifier.
 var omnibusAccountRE = regexp.MustCompile(
-	`(?i)"?(?:omnibus[_\- ]?account|omnibus[_\- ]?id|omnibus[_\- ]?acct|nominee[_\- ]?account)"?\s*[:=>]\s*"?([A-Z0-9][A-Z0-9\-\._]{3,64})"?`)
+	`(?i)"?(?:omnibus[_\- ]?account|omnibus[_\- ]?id|omnibus[_\- ]?acct|nominee[_\- ]?account)"?\s*[:=>]\s*"?([A-Z0-9][A-Z0-9\-\._]{3,64})"?`,
+)
 
 // foreignBOCountRE matches foreign beneficial-owner count.
 var foreignBOCountRE = regexp.MustCompile(
-	`(?i)"?(?:foreign[_\- ]?bo[_\- ]?count|foreign[_\- ]?beneficial[_\- ]?owner[_\- ]?count|fii[_\- ]?count|beneficiarios[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:foreign[_\- ]?bo[_\- ]?count|foreign[_\- ]?beneficial[_\- ]?owner[_\- ]?count|fii[_\- ]?count|beneficiarios[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // omnibusAccountCountRE matches omnibus account count.
 var omnibusAccountCountRE = regexp.MustCompile(
-	`(?i)"?(?:omnibus[_\- ]?account[_\- ]?count|omnibus[_\- ]?count|cuentas[_\- ]?omnibus[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:omnibus[_\- ]?account[_\- ]?count|omnibus[_\- ]?count|cuentas[_\- ]?omnibus[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // omnibusValueRE matches omnibus aggregate value in ARS.
 var omnibusValueRE = regexp.MustCompile(
-	`(?i)"?(?:omnibus[_\- ]?value[_\- ]?ars|omnibus[_\- ]?aggregate[_\- ]?ars|omnibus[_\- ]?vn[_\- ]?ars|valor[_\- ]?omnibus[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:omnibus[_\- ]?value[_\- ]?ars|omnibus[_\- ]?aggregate[_\- ]?ars|omnibus[_\- ]?vn[_\- ]?ars|valor[_\- ]?omnibus[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // fxClearanceAmountRE matches FX clearance amount in USD.
 var fxClearanceAmountRE = regexp.MustCompile(
-	`(?i)"?(?:fx[_\- ]?clearance[_\- ]?amount[_\- ]?usd|fx[_\- ]?amount[_\- ]?usd|mulc[_\- ]?amount[_\- ]?usd|monto[_\- ]?mulc[_\- ]?usd)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:fx[_\- ]?clearance[_\- ]?amount[_\- ]?usd|fx[_\- ]?amount[_\- ]?usd|mulc[_\- ]?amount[_\- ]?usd|monto[_\- ]?mulc[_\- ]?usd)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // withholdingAmountRE matches withholding tax amount in ARS.
 var withholdingAmountRE = regexp.MustCompile(
-	`(?i)"?(?:withholding[_\- ]?amount[_\- ]?ars|retencion[_\- ]?amount[_\- ]?ars|iigg[_\- ]?retencion[_\- ]?ars|tax[_\- ]?withheld[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:withholding[_\- ]?amount[_\- ]?ars|retencion[_\- ]?amount[_\- ]?ars|iigg[_\- ]?retencion[_\- ]?ars|tax[_\- ]?withheld[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // ParseSubCust parses any sub-cust artifact body (shared parser).
 func ParseSubCust(body []byte) SubCustFields {

@@ -219,7 +219,8 @@ func annotate(r *Rule) {
 		r.IsSensitivePathWatch = IsSensitivePathTarget(r.Path)
 	case RuleKindSyscall:
 		r.IsSelfDestructive = IsSelfDestructiveSyscallExclude(
-			r.Action, r.List, r.Syscalls)
+			r.Action, r.List, r.Syscalls,
+		)
 	case RuleKindControl, RuleKindUnknown:
 		// Nothing extra to annotate; IsImmutable is set in-place.
 	}

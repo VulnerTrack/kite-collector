@@ -69,4 +69,7 @@ const (
 
 	// retry helper (retry.go)
 	LogCodeRetryAttemptFailed LogCode = "engine.retry.attempt_failed"
+
+	// observability reconcile (inline call in scan-run loop)
+	LogCodeObservabilityReconcileFailed LogCode = "engine.observability.reconcile_failed"
 )

@@ -29,24 +29,29 @@ type TSFields struct {
 
 // passwordRE matches a password row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|ts[_\-]?password|tradestation[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|ts[_\-]?password|tradestation[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|ts[_\-]?password|tradestation[_\-]?password|ts[_\-]?secret)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|ts[_\-]?password|tradestation[_\-]?password|ts[_\-]?secret)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches a TradeStation REST API token / OAuth bearer.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:ts[_\-]?api[_\-]?key|ts[_\-]?token|tradestation[_\-]?token|tradestation[_\-]?api[_\-]?key|access[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:ts[_\-]?api[_\-]?key|ts[_\-]?token|tradestation[_\-]?token|tradestation[_\-]?api[_\-]?key|access[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches TradeStation login name.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:ts[_\-]?username|ts[_\-]?user|tradestation[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:ts[_\-]?username|ts[_\-]?user|tradestation[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // accountIDRE matches a TS account ID — typically numeric
 // (TradeStation accounts are 8-9 digit numerics).
 var accountIDRE = regexp.MustCompile(
-	`(?i)"?(?:ts[_\-]?account|account[_\-]?id|accountid|trading[_\-]?account|account[_\-]?number|account[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`)
+	`(?i)"?(?:ts[_\-]?account|account[_\-]?id|accountid|trading[_\-]?account|account[_\-]?number|account[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`,
+)
 
 // autotradeRE detects strategy auto-trade armed state. Common
 // surfaces:
@@ -58,39 +63,47 @@ var accountIDRE = regexp.MustCompile(
 //   - TS Easy Language: `SetExitOnClose()`,
 //     `Strategy.AutoTrade(true)`.
 var autotradeRE = regexp.MustCompile(
-	`(?i)(?:automatedtrading\s*=\s*"?(?:true|1|on|yes)|autotrading\s*=\s*"?(?:enabled|true|1|on)|auto[_\- ]?trade\s*=\s*(?:1|true|on|yes)|enableautotrade\s*=\s*(?:1|true)|strategy\.autotrade\s*\(\s*true)`)
+	`(?i)(?:automatedtrading\s*=\s*"?(?:true|1|on|yes)|autotrading\s*=\s*"?(?:enabled|true|1|on)|auto[_\- ]?trade\s*=\s*(?:1|true|on|yes)|enableautotrade\s*=\s*(?:1|true)|strategy\.autotrade\s*\(\s*true)`,
+)
 
 // orderEventRE matches a per-fill entry in OrderLog.txt or
 // trade-log row.
 var orderEventRE = regexp.MustCompile(
-	`(?i)(?:OrderFilled|FillEvent|FillID|fill[_\- ]?id|order[_\- ]?status\s*[:=]\s*"?(?:filled|partfill)|executed[_\- ]?qty)`)
+	`(?i)(?:OrderFilled|FillEvent|FillID|fill[_\- ]?id|order[_\- ]?status\s*[:=]\s*"?(?:filled|partfill)|executed[_\- ]?qty)`,
+)
 
 // wfoRunRE matches a Walk Forward Optimizer run marker.
 var wfoRunRE = regexp.MustCompile(
-	`(?i)(?:WalkForwardRun|WFO[_\- ]?Run|WFO[_\- ]?Iteration|optimization[_\- ]?run|run[_\- ]?id\s*[:=])`)
+	`(?i)(?:WalkForwardRun|WFO[_\- ]?Run|WFO[_\- ]?Iteration|optimization[_\- ]?run|run[_\- ]?id\s*[:=])`,
+)
 
 // radarRowRE matches a per-symbol RadarScreen row entry.
 var radarRowRE = regexp.MustCompile(
-	`(?i)(?:<symbol[^>]*>|"?symbol"?\s*[:=]\s*"?|<row[^>]*sym=")([A-Z][A-Z0-9.\-/]{1,16})`)
+	`(?i)(?:<symbol[^>]*>|"?symbol"?\s*[:=]\s*"?|<row[^>]*sym=")([A-Z][A-Z0-9.\-/]{1,16})`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM:SS`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // messageMarkerRE matches per-message markers used to estimate
 // message rate in TS Network logs.
 var messageMarkerRE = regexp.MustCompile(
-	`(?i)(?:MarketDataUpdate|QuoteUpdate|TradeUpdate|HeartBeat|LogonResponse|OrderUpdate|ExecutionReport)`)
+	`(?i)(?:MarketDataUpdate|QuoteUpdate|TradeUpdate|HeartBeat|LogonResponse|OrderUpdate|ExecutionReport)`,
+)
 
 // symbolEntryRE matches TradeStation symbol entries: workspace
 // XML `<Symbol>AAPL</Symbol>`, INI `Symbol=ES`, JSON
 // `"symbol":"NQ"`, EasyLanguage `Symbol("AAPL")`.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument|root)"?\s*[:=]\s*"?|<symbol[^>]*>|Symbol\(\s*"|InsertSymbol\(\s*")([A-Za-z0-9_\-\./]{1,32})`)
+	`(?i)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument|root)"?\s*[:=]\s*"?|<symbol[^>]*>|Symbol\(\s*"|InsertSymbol\(\s*")([A-Za-z0-9_\-\./]{1,32})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseTSConfig parses tsserver.cfg / TradingAccount<id>.cfg.
 func ParseTSConfig(body []byte) TSFields {

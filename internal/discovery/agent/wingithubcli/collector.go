@@ -84,10 +84,12 @@ func (c *fileCollector) Collect(_ context.Context) ([]Row, error) {
 			}
 			c.harvest(
 				filepath.Join(append([]string{base, name}, HostsRelComponentsPosix()...)...),
-				name, &out)
+				name, &out,
+			)
 			c.harvest(
 				filepath.Join(append([]string{base, name}, HostsRelComponentsWindows()...)...),
-				name, &out)
+				name, &out,
+			)
 			if len(out) >= MaxRows {
 				break
 			}

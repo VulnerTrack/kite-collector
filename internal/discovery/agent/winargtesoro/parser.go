@@ -23,55 +23,68 @@ type TesoroFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|tesoro[_\-]?password|mecon[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|tesoro[_\-]?password|mecon[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|tesoro[_\-]?password|mecon[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|tesoro[_\-]?password|mecon[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|tesoro[_\-]?password|mecon[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|tesoro[_\-]?password|mecon[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // instrumentRE matches an instrument-class marker in body.
 var instrumentRE = regexp.MustCompile(
-	`(?i)"?(?:instrument[_\- ]?class|instrument|instrumento|titulo|especie)"?\s*[:=>]\s*"?(lecap|lecer|lede|lemin|bonte|boncer|bonad|al30|al35|al38|al41|gd29|gd30|gd35|gd38|gd41|gd46|parp|dica|dicy|tx26|tx28|ty27|bopreal)"?`)
+	`(?i)"?(?:instrument[_\- ]?class|instrument|instrumento|titulo|especie)"?\s*[:=>]\s*"?(lecap|lecer|lede|lemin|bonte|boncer|bonad|al30|al35|al38|al41|gd29|gd30|gd35|gd38|gd41|gd46|parp|dica|dicy|tx26|tx28|ty27|bopreal)"?`,
+)
 
 // placementMethodRE matches a placement-method field.
 var placementMethodRE = regexp.MustCompile(
-	`(?i)"?(?:placement[_\- ]?method|metodo[_\- ]?colocacion|colocacion[_\- ]?tipo)"?\s*[:=>]\s*"?(competitive[_\- ]?auction|competitiva|non[_\- ]?competitive|no[_\- ]?competitiva|syndicated|sindicada|private[_\- ]?placement|privada|swap|canje|buyback|recompra)"?`)
+	`(?i)"?(?:placement[_\- ]?method|metodo[_\- ]?colocacion|colocacion[_\- ]?tipo)"?\s*[:=>]\s*"?(competitive[_\- ]?auction|competitiva|non[_\- ]?competitive|no[_\- ]?competitiva|syndicated|sindicada|private[_\- ]?placement|privada|swap|canje|buyback|recompra)"?`,
+)
 
 // dealerCuitKeyRE matches `dealer_cuit: NN-NNNNNNNN-N`.
 var dealerCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:dealer[_\- ]?cuit|primary[_\- ]?dealer[_\- ]?cuit|creador[_\- ]?mercado[_\- ]?cuit|alyc[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:dealer[_\- ]?cuit|primary[_\- ]?dealer[_\- ]?cuit|creador[_\- ]?mercado[_\- ]?cuit|alyc[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // auctionIDRE matches an auction-ID field.
 var auctionIDRE = regexp.MustCompile(
-	`(?i)"?(?:auction[_\- ]?id|licitacion[_\- ]?id|subasta[_\- ]?id|auction[_\- ]?number)"?\s*[:=>]\s*"?([A-Z0-9\-]{3,32})"?`)
+	`(?i)"?(?:auction[_\- ]?id|licitacion[_\- ]?id|subasta[_\- ]?id|auction[_\- ]?number)"?\s*[:=>]\s*"?([A-Z0-9\-]{3,32})"?`,
+)
 
 // bidCountRE matches a total bid count.
 var bidCountRE = regexp.MustCompile(
-	`(?i)"?(?:bid[_\- ]?count|ofertas[_\- ]?count|total[_\- ]?bids)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:bid[_\- ]?count|ofertas[_\- ]?count|total[_\- ]?bids)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // allocationCountRE matches a total allocation count.
 var allocationCountRE = regexp.MustCompile(
-	`(?i)"?(?:allocation[_\- ]?count|asignaciones[_\- ]?count|allocations[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:allocation[_\- ]?count|asignaciones[_\- ]?count|allocations[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // dealerCountRE matches a dealer count.
 var dealerCountRE = regexp.MustCompile(
-	`(?i)"?(?:dealer[_\- ]?count|creadores[_\- ]?count|dealers[_\- ]?total|primary[_\- ]?dealer[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:dealer[_\- ]?count|creadores[_\- ]?count|dealers[_\- ]?total|primary[_\- ]?dealer[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // largestBidNotionalRE matches the largest bid notional in ARS.
 var largestBidNotionalRE = regexp.MustCompile(
-	`(?i)"?(?:largest[_\- ]?bid[_\- ]?notional[_\- ]?ars|max[_\- ]?bid[_\- ]?ars|biggest[_\- ]?bid[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:largest[_\- ]?bid[_\- ]?notional[_\- ]?ars|max[_\- ]?bid[_\- ]?ars|biggest[_\- ]?bid[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // totalOfferedRE matches the total offered amount in ARS.
 var totalOfferedRE = regexp.MustCompile(
-	`(?i)"?(?:total[_\- ]?offered[_\- ]?ars|ofertado[_\- ]?total[_\- ]?ars|monto[_\- ]?ofertado[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:total[_\- ]?offered[_\- ]?ars|ofertado[_\- ]?total[_\- ]?ars|monto[_\- ]?ofertado[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // totalAllocatedRE matches the total allocated amount in ARS.
 var totalAllocatedRE = regexp.MustCompile(
-	`(?i)"?(?:total[_\- ]?allocated[_\- ]?ars|adjudicado[_\- ]?total[_\- ]?ars|monto[_\- ]?adjudicado[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:total[_\- ]?allocated[_\- ]?ars|adjudicado[_\- ]?total[_\- ]?ars|monto[_\- ]?adjudicado[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // ParseTesoro parses any Tesoro artifact body (shared parser).
 func ParseTesoro(body []byte) TesoroFields {

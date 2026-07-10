@@ -315,7 +315,8 @@ func CCPEntityFromPath(path string) CCPEntity {
 		return CCPUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "argentinaclearing") ||
 		strings.Contains(lower, "argentina-clearing") ||
@@ -419,7 +420,8 @@ func CuitFingerprint(text string) (prefix, suffix4 string) {
 
 // MatriculaRE matches clearing-member matrícula.
 var matriculaRE = regexp.MustCompile(
-	`(?i)(?:matr[íi]cula|clearing[_\- ]?member|compensador)[\s:#=\w\.\-]{0,30}?(\d{1,5})`)
+	`(?i)(?:matr[íi]cula|clearing[_\- ]?member|compensador)[\s:#=\w\.\-]{0,30}?(\d{1,5})`,
+)
 
 // MatriculaFromText extracts clearing-member matrícula.
 func MatriculaFromText(text string) string {

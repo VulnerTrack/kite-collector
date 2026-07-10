@@ -50,7 +50,8 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 	regions := toStringSlice(cfg["regions"])
 	role := toString(cfg["assume_role"])
 
-	slog.Info("AWS EC2 discovery starting",
+	slog.Info(
+		"AWS EC2 discovery starting",
 		"code", string(LogCodeAWSEC2Starting),
 		"regions", regions,
 		"assume_role_set", role != "",
@@ -79,7 +80,8 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 		}
 		assumed, err := a.assumeRole(ctx, creds, stsRegion, role)
 		if err != nil {
-			slog.Error("AWS AssumeRole failed; falling back to source credentials",
+			slog.Error(
+				"AWS AssumeRole failed; falling back to source credentials",
 				"code", string(LogCodeAWSEC2AssumeRoleFailed),
 				"error", err,
 				"role_arn", role,
@@ -118,7 +120,8 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 
 		instances, err := a.describeInstances(ctx, creds, region)
 		if err != nil {
-			slog.Error("AWS EC2 DescribeInstances failed; returning partial results",
+			slog.Error(
+				"AWS EC2 DescribeInstances failed; returning partial results",
 				"code", string(LogCodeAWSEC2DescribeFailed),
 				"error", err,
 				"region", region,
@@ -154,7 +157,8 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 			assets = append(assets, asset)
 		}
 
-		slog.Info("AWS EC2 region complete",
+		slog.Info(
+			"AWS EC2 region complete",
 			"code", string(LogCodeAWSEC2RegionComplete),
 			"region", region,
 			"instances_found", len(instances),

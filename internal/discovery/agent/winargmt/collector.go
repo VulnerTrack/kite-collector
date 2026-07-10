@@ -183,7 +183,8 @@ func refineKindFromPath(path string) ArtifactKind {
 		return k
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "/indicators/"):
 		return KindIndicatorMQ
@@ -210,7 +211,8 @@ func (c *fileCollector) mergeFields(row *Row, body []byte) {
 		row.EAName = fields.EAName
 		row.OptimizerOOSDropoffPct = OOSDropoffPct(
 			fields.OptimizerInSampleProfit,
-			fields.OptimizerOutSampleProfit)
+			fields.OptimizerOutSampleProfit,
+		)
 	case KindMQ4Source, KindMQ5Source, KindIndicatorMQ, KindScriptMQ:
 		// MQL source — check for DLL #import directives.
 		if IsMQLSourceImportingDLL(body) {

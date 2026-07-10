@@ -103,7 +103,8 @@ func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]mod
 
 		records, rErr := c.listRecords(ctx, token, z.ID)
 		if rErr != nil {
-			slog.Error("Cloudflare list-records failed; emitting partial zone data",
+			slog.Error(
+				"Cloudflare list-records failed; emitting partial zone data",
 				"code", string(LogCodeCloudflareListRecordsFailed),
 				"error", rErr,
 				"zone", z.ID,
@@ -143,7 +144,8 @@ func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]mod
 		for _, rec := range records {
 			recType := strings.ToUpper(rec.Type)
 			if !IsValidDNSRecordType(recType) {
-				slog.Debug("Cloudflare skipping unsupported record type",
+				slog.Debug(
+					"Cloudflare skipping unsupported record type",
 					"code", string(LogCodeCloudflareSkipUnsupportedType),
 					"zone", z.ID,
 					"type", rec.Type,
@@ -169,7 +171,8 @@ func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]mod
 				LastSyncedAt: now,
 			})
 
-			slog.Info("cloud DNS record discovered",
+			slog.Info(
+				"cloud DNS record discovered",
 				"code", string(LogCodeDNSRecordDiscovered),
 				"cloud_dns.provider", DNSProviderCloudflare,
 				"cloud_dns.zone_id", z.ID,
@@ -181,7 +184,8 @@ func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]mod
 			)
 		}
 
-		slog.Info("cloud DNS zone discovered",
+		slog.Info(
+			"cloud DNS zone discovered",
 			"code", string(LogCodeDNSZoneDiscovered),
 			"cloud_dns.provider", DNSProviderCloudflare,
 			"cloud_dns.zone_id", z.ID,
@@ -197,7 +201,8 @@ func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]mod
 	c.lastSnapshot = snap
 	c.mu.Unlock()
 
-	slog.Info("Cloudflare DNS discovery complete",
+	slog.Info(
+		"Cloudflare DNS discovery complete",
 		"code", string(LogCodeCloudflareComplete),
 		"zones", len(snap.Zones),
 		"records", len(snap.Records),

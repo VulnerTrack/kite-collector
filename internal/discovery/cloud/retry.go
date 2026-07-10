@@ -48,7 +48,8 @@ func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, er
 
 		if attempt > 0 {
 			delay := retryBackoff(attempt)
-			slog.Debug("cloud HTTP retry after backoff delay",
+			slog.Debug(
+				"cloud HTTP retry after backoff delay",
 				"code", string(LogCodeRetryBackoff),
 				"caller", name,
 				"attempt", attempt+1,
@@ -64,7 +65,8 @@ func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, er
 		resp, err := fn()
 		if err != nil {
 			lastErr = fmt.Errorf("%s: request failed: %w", name, err)
-			slog.Warn("cloud HTTP network error; will retry",
+			slog.Warn(
+				"cloud HTTP network error; will retry",
 				"code", string(LogCodeRetryNetworkError),
 				"caller", name,
 				"attempt", attempt+1,
@@ -79,7 +81,8 @@ func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, er
 
 		case resp.StatusCode == 401 || resp.StatusCode == 403:
 			body := drainBody(resp, 500)
-			slog.Error("cloud HTTP access denied; check IAM permissions",
+			slog.Error(
+				"cloud HTTP access denied; check IAM permissions",
 				"code", string(LogCodeRetryAccessDenied),
 				"caller", name,
 				"status", resp.StatusCode,
@@ -91,7 +94,8 @@ func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, er
 			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 			body := drainBody(resp, 200)
 			lastErr = fmt.Errorf("%s: rate limited (429): %s", name, body)
-			slog.Warn("cloud HTTP rate-limited (429); will retry after server-suggested delay",
+			slog.Warn(
+				"cloud HTTP rate-limited (429); will retry after server-suggested delay",
 				"code", string(LogCodeRetryRateLimited),
 				"caller", name,
 				"attempt", attempt+1,
@@ -109,7 +113,8 @@ func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, er
 		case resp.StatusCode >= 500:
 			body := drainBody(resp, 500)
 			lastErr = fmt.Errorf("%s: server error (%d): %s", name, resp.StatusCode, body)
-			slog.Warn("cloud HTTP server error (5xx); will retry",
+			slog.Warn(
+				"cloud HTTP server error (5xx); will retry",
 				"code", string(LogCodeRetryServerError),
 				"caller", name,
 				"attempt", attempt+1,

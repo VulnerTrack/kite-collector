@@ -30,11 +30,13 @@ type AllariaFields struct {
 
 // bearerRE matches an access-token / bearer in INI / JSON form.
 var bearerRE = regexp.MustCompile(
-	`(?i)("|')?(?:access[_-]?token|bearer|api[_-]?token|jwt|allaria[_-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?(?:access[_-]?token|bearer|api[_-]?token|jwt|allaria[_-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // bearerXMLRE matches XML-tag form `<access_token>val</...>`.
 var bearerXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:access[_\-]?token|bearer|api[_\-]?token|jwt|allaria[_\-]?token)\s*>([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)<\s*(?:access[_\-]?token|bearer|api[_\-]?token|jwt|allaria[_\-]?token)\s*>([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // bearerFromBody extracts a bearer token from either form.
 func bearerFromBody(body []byte) string {
@@ -49,11 +51,13 @@ func bearerFromBody(body []byte) string {
 
 // usernameRE matches `username` / `user` / `email` in INI/JSON.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:username|user|email|usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:username|user|email|usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // usernameXMLRE matches `<username>val</username>` form.
 var usernameXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:username|user|email|usuario)\s*>([A-Za-z0-9_.@\-]{3,80})<`)
+	`(?i)<\s*(?:username|user|email|usuario)\s*>([A-Za-z0-9_.@\-]{3,80})<`,
+)
 
 // usernameFromBody extracts a username from either form.
 func usernameFromBody(body []byte) string {
@@ -68,55 +72,68 @@ func usernameFromBody(body []byte) string {
 
 // passwordRE matches a password row (line-anchored INI/JSON).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|clave|pass|passwd)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|clave|pass|passwd)"?\s*[:=]\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>`.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`)
+	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`,
+)
 
 // blockTradeMarkerRE detects block-trade markers.
 var blockTradeMarkerRE = regexp.MustCompile(
-	`(?i)(?:block[_\- ]?trade|bloque[_\- ]?cruzado|cross[_\- ]?bloque|off[_\- ]?book|pre[_\- ]?arranged|agreed[_\- ]?cross|negociacion[_\- ]?previa)`)
+	`(?i)(?:block[_\- ]?trade|bloque[_\- ]?cruzado|cross[_\- ]?bloque|off[_\- ]?book|pre[_\- ]?arranged|agreed[_\- ]?cross|negociacion[_\- ]?previa)`,
+)
 
 // custodyReconMarkerRE detects FCI custody-reconciliation markers.
 var custodyReconMarkerRE = regexp.MustCompile(
-	`(?i)(?:custody[_\- ]?recon|custody[_\- ]?reconciliation|custodia[_\- ]?conciliacion|sociedad[_\- ]?depositaria|depositary[_\- ]?bank|recon[_\- ]?cuotapartes)`)
+	`(?i)(?:custody[_\- ]?recon|custody[_\- ]?reconciliation|custodia[_\- ]?conciliacion|sociedad[_\- ]?depositaria|depositary[_\- ]?bank|recon[_\- ]?cuotapartes)`,
+)
 
 // pensionMarkerRE detects ANSeS / FCAA pension-fund markers.
 var pensionMarkerRE = regexp.MustCompile(
-	`(?i)(?:anses|fcaa|fondo[_\- ]?garantia[_\- ]?sustentabilidad|fgs|pension[_\- ]?fund|fondo[_\- ]?previsional)`)
+	`(?i)(?:anses|fcaa|fondo[_\- ]?garantia[_\- ]?sustentabilidad|fgs|pension[_\- ]?fund|fondo[_\- ]?previsional)`,
+)
 
 // insuranceMarkerRE detects SSN / insurance markers.
 var insuranceMarkerRE = regexp.MustCompile(
-	`(?i)(?:ssn|superintendencia[_\- ]?seguros|aseguradora|insurance[_\- ]?company|cobertura[_\- ]?seguro|resol[_\- ]?38708)`)
+	`(?i)(?:ssn|superintendencia[_\- ]?seguros|aseguradora|insurance[_\- ]?company|cobertura[_\- ]?seguro|resol[_\- ]?38708)`,
+)
 
 // symbolEntryRE matches a JSON/INI symbol entry.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // symbolXMLRE matches `<symbol>val</symbol>` form.
 var symbolXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:symbol|simbolo|ticker|especie|instrumento)\s*>([A-Za-z0-9_\-\./]{2,32})<\s*/\s*(?:symbol|simbolo|ticker|especie|instrumento)\s*>`)
+	`(?i)<\s*(?:symbol|simbolo|ticker|especie|instrumento)\s*>([A-Za-z0-9_\-\./]{2,32})<\s*/\s*(?:symbol|simbolo|ticker|especie|instrumento)\s*>`,
+)
 
 // notionalUSDRE matches USD-denominated amounts.
 var notionalUSDRE = regexp.MustCompile(
-	`(?i)(?:notional[_\- ]?usd|usd[_\- ]?amount|importe[_\- ]?usd|monto[_\- ]?usd|valor[_\- ]?usd|valor_mercado_usd|market_value_usd|aum_usd|block[_\- ]?usd)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:notional[_\- ]?usd|usd[_\- ]?amount|importe[_\- ]?usd|monto[_\- ]?usd|valor[_\- ]?usd|valor_mercado_usd|market_value_usd|aum_usd|block[_\- ]?usd)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // blockTradeEntryRE matches a per-row block-trade entry.
 var blockTradeEntryRE = regexp.MustCompile(
-	`(?i)(?:block_id|trade_id|bloque_id|operacion_id)`)
+	`(?i)(?:block_id|trade_id|bloque_id|operacion_id)`,
+)
 
 // reconEntryRE matches a per-row custody-recon entry.
 var reconEntryRE = regexp.MustCompile(
-	`(?i)(?:recon_id|conciliacion_id|custodia_id|cuota_parte_id|fci_id)`)
+	`(?i)(?:recon_id|conciliacion_id|custodia_id|cuota_parte_id|fci_id)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>…</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // ParseAllariaCredentials parses a credentials / config body.
 func ParseAllariaCredentials(body []byte) AllariaFields {

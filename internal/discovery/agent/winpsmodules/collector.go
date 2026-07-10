@@ -24,7 +24,8 @@ func DefaultModulePathRoots() []string {
 	}
 	// Per-user paths under %USERPROFILE%.
 	if up := os.Getenv("USERPROFILE"); up != "" {
-		roots = append(roots,
+		roots = append(
+			roots,
 			filepath.Join(up, "Documents", "PowerShell", "Modules"),
 			filepath.Join(up, "Documents", "WindowsPowerShell", "Modules"),
 		)

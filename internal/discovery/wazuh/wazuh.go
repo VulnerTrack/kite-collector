@@ -85,7 +85,7 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 
 	// Warn about default credentials (CWE-1393). Password is never logged.
 	if auth.isDefaultCredentials() {
-		slog.Warn("wazuh: API uses default credentials — change them immediately (CWE-1393)")
+		slog.Warn("wazuh: API uses default credentials — change them immediately (CWE-1393)", "code", string(LogCodeAuthDefaultCredentials))
 	}
 
 	// Read collection flags from config.
@@ -148,7 +148,7 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			if collectPkgs {
 				pkgs, pkgErr := client.listAllPackages(rctx, ag.ID)
 				if pkgErr != nil {
-					slog.Warn("wazuh: packages failed", "agent", ag.ID, "error", pkgErr)
+					slog.Warn("wazuh: packages failed", "code", string(LogCodeEnrichPackagesFailed), "agent", ag.ID, "error", pkgErr)
 				} else {
 					results[i].pkgs = pkgs
 				}
@@ -157,7 +157,7 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			if collectVulns {
 				vulns, vulnErr := client.listAllVulnerabilities(rctx, ag.ID)
 				if vulnErr != nil {
-					slog.Warn("wazuh: vulnerabilities failed", "agent", ag.ID, "error", vulnErr)
+					slog.Warn("wazuh: vulnerabilities failed", "code", string(LogCodeEnrichVulnerabilitiesFailed), "agent", ag.ID, "error", vulnErr)
 				} else {
 					results[i].vulns = vulns
 				}
@@ -166,7 +166,7 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			if collectSCA {
 				policies, scaErr := client.listSCAPolicies(rctx, ag.ID)
 				if scaErr != nil {
-					slog.Warn("wazuh: SCA policies failed", "agent", ag.ID, "error", scaErr)
+					slog.Warn("wazuh: SCA policies failed", "code", string(LogCodeEnrichSCAPoliciesFailed), "agent", ag.ID, "error", scaErr)
 				} else {
 					results[i].sca = policies
 					results[i].checks = make(map[string][]wazuhSCACheck)
@@ -174,6 +174,7 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 						checks, chkErr := client.listSCAChecks(rctx, ag.ID, p.PolicyID)
 						if chkErr != nil {
 							slog.Warn("wazuh: SCA checks failed",
+								"code", string(LogCodeEnrichSCAChecksFailed),
 								"agent", ag.ID, "policy", p.PolicyID, "error", chkErr)
 						} else {
 							results[i].checks[p.PolicyID] = checks
@@ -185,7 +186,7 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			if collectPorts {
 				ports, portErr := client.listPorts(rctx, ag.ID)
 				if portErr != nil {
-					slog.Warn("wazuh: ports failed", "agent", ag.ID, "error", portErr)
+					slog.Warn("wazuh: ports failed", "code", string(LogCodeEnrichPortsFailed), "agent", ag.ID, "error", portErr)
 				} else {
 					results[i].ports = ports
 				}
@@ -194,13 +195,13 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			if collectIfaces {
 				nifaces, ifErr := client.listNetInterfaces(rctx, ag.ID)
 				if ifErr != nil {
-					slog.Warn("wazuh: interfaces failed", "agent", ag.ID, "error", ifErr)
+					slog.Warn("wazuh: interfaces failed", "code", string(LogCodeEnrichInterfacesFailed), "agent", ag.ID, "error", ifErr)
 				} else {
 					results[i].ifaces = nifaces
 				}
 				naddrs, addrErr := client.listNetAddresses(rctx, ag.ID)
 				if addrErr != nil {
-					slog.Warn("wazuh: addresses failed", "agent", ag.ID, "error", addrErr)
+					slog.Warn("wazuh: addresses failed", "code", string(LogCodeEnrichAddressesFailed), "agent", ag.ID, "error", addrErr)
 				} else {
 					results[i].addrs = naddrs
 				}
@@ -370,7 +371,7 @@ func (c *wazuhClient) listAllAgents(ctx context.Context) ([]wazuhAgent, error) {
 	for _, item := range items {
 		var ag wazuhAgent
 		if err := json.Unmarshal(item, &ag); err != nil {
-			slog.Warn("wazuh: skip agent with invalid JSON", "error", err)
+			slog.Warn("wazuh: skip agent with invalid JSON", "code", string(LogCodeAgentsSkipInvalidJSON), "error", err)
 			continue
 		}
 		agents = append(agents, ag)

@@ -25,60 +25,74 @@ type ModelFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|quant[_\-]?password|model[_\-]?password|registry[_\-]?password|huggingface[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|quant[_\-]?password|model[_\-]?password|registry[_\-]?password|huggingface[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|quant[_\-]?password|model[_\-]?password|hf[_\-]?token|huggingface[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|quant[_\-]?password|model[_\-]?password|hf[_\-]?token|huggingface[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|quant[_\-]?password|model[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|quant[_\-]?password|model[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // strategyIDRE matches a strategy identifier.
 var strategyIDRE = regexp.MustCompile(
-	`(?i)"?(?:strategy[_\- ]?id|strat[_\- ]?id|model[_\- ]?id|strategy[_\- ]?name)"?\s*[:=>]\s*"?([A-Za-z0-9\-_.]{3,40})"?`)
+	`(?i)"?(?:strategy[_\- ]?id|strat[_\- ]?id|model[_\- ]?id|strategy[_\- ]?name)"?\s*[:=>]\s*"?([A-Za-z0-9\-_.]{3,40})"?`,
+)
 
 // modelVersionRE matches a model-version field.
 var modelVersionRE = regexp.MustCompile(
-	`(?i)"?(?:model[_\- ]?version|version|v|tag)"?\s*[:=>]\s*"?(v?\d+\.\d+(?:\.\d+)?)"?`)
+	`(?i)"?(?:model[_\- ]?version|version|v|tag)"?\s*[:=>]\s*"?(v?\d+\.\d+(?:\.\d+)?)"?`,
+)
 
 // strategyClassRE matches a strategy-class field.
 var strategyClassRE = regexp.MustCompile(
-	`(?i)"?(?:strategy[_\- ]?class|strategy[_\- ]?type|estrategia)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{3,40})`)
+	`(?i)"?(?:strategy[_\- ]?class|strategy[_\- ]?type|estrategia)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{3,40})`,
+)
 
 // dataSourceRE matches a data-source field.
 var dataSourceRE = regexp.MustCompile(
-	`(?i)"?(?:data[_\- ]?source|source|datasource)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{3,40})`)
+	`(?i)"?(?:data[_\- ]?source|source|datasource)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{3,40})`,
+)
 
 // trainingRecordCountRE matches a training-record count field.
 var trainingRecordCountRE = regexp.MustCompile(
-	`(?i)"?(?:training[_\- ]?record[_\- ]?count|n[_\- ]?samples|sample[_\- ]?count|record[_\- ]?count|rows)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:training[_\- ]?record[_\- ]?count|n[_\- ]?samples|sample[_\- ]?count|record[_\- ]?count|rows)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // featureCountRE matches a feature-count field.
 var featureCountRE = regexp.MustCompile(
-	`(?i)"?(?:feature[_\- ]?count|n[_\- ]?features|num[_\- ]?features|columns|features)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:feature[_\- ]?count|n[_\- ]?features|num[_\- ]?features|columns|features)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // hyperparamTrialsRE matches an Optuna / Hyperopt trial count.
 var hyperparamTrialsRE = regexp.MustCompile(
-	`(?i)"?(?:hyperparam[_\- ]?trials|n[_\- ]?trials|trials|optuna[_\- ]?trials|hyperopt[_\- ]?trials)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:hyperparam[_\- ]?trials|n[_\- ]?trials|trials|optuna[_\- ]?trials|hyperopt[_\- ]?trials)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // drawdownPctRE matches a drawdown-percent field.
 var drawdownPctRE = regexp.MustCompile(
-	`(?i)"?(?:max[_\- ]?drawdown[_\- ]?pct|max[_\- ]?dd|drawdown[_\- ]?pct|mdd[_\- ]?pct)"?\s*[:=>]\s*"?(\d{1,3}(?:\.\d+)?)`)
+	`(?i)"?(?:max[_\- ]?drawdown[_\- ]?pct|max[_\- ]?dd|drawdown[_\- ]?pct|mdd[_\- ]?pct)"?\s*[:=>]\s*"?(\d{1,3}(?:\.\d+)?)`,
+)
 
 // sharpeRE matches a Sharpe-ratio field.
 var sharpeRE = regexp.MustCompile(
-	`(?i)"?(?:sharpe|sharpe[_\- ]?ratio|sr)"?\s*[:=>]\s*"?(\-?\d+(?:\.\d+)?)`)
+	`(?i)"?(?:sharpe|sharpe[_\- ]?ratio|sr)"?\s*[:=>]\s*"?(\-?\d+(?:\.\d+)?)`,
+)
 
 // piiFeatureMarkerRE matches markers indicating PII features
 // in the training set.
 var piiFeatureMarkerRE = regexp.MustCompile(
-	`(?i)\b(?:dni[_\- ]?feature|cuit[_\- ]?feature|email[_\- ]?feature|phone[_\- ]?feature|address[_\- ]?feature|date[_\- ]?of[_\- ]?birth|dob[_\- ]?feature|kyc[_\- ]?feature|cliente[_\- ]?feature|customer[_\- ]?id|client[_\- ]?cuit|client[_\- ]?dni|pii[_\- ]?columns)\b`)
+	`(?i)\b(?:dni[_\- ]?feature|cuit[_\- ]?feature|email[_\- ]?feature|phone[_\- ]?feature|address[_\- ]?feature|date[_\- ]?of[_\- ]?birth|dob[_\- ]?feature|kyc[_\- ]?feature|cliente[_\- ]?feature|customer[_\- ]?id|client[_\- ]?cuit|client[_\- ]?dni|pii[_\- ]?columns)\b`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|titular[_\- ]?cuit|cuit[_\- ]?cliente|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|titular[_\- ]?cuit|cuit[_\- ]?cliente|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseModelWeights parses a model-weights body (text portion).
 //

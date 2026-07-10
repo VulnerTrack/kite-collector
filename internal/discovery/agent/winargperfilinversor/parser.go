@@ -28,54 +28,66 @@ type PerfilFields struct {
 // riskCategoryRE matches `risk_category: <name>` /
 // `categoria_inversor: <name>` rows.
 var riskCategoryRE = regexp.MustCompile(
-	`(?i)("|')?(risk[_\- ]?category|categoria[_\- ]?inversor|categoria[_\- ]?riesgo|categoria|risk[_\- ]?profile)("|')?\s*[:=>]\s*"?([A-Za-zÁÉÍÓÚáéíóúñÑ ]{4,40})"?`)
+	`(?i)("|')?(risk[_\- ]?category|categoria[_\- ]?inversor|categoria[_\- ]?riesgo|categoria|risk[_\- ]?profile)("|')?\s*[:=>]\s*"?([A-Za-zÁÉÍÓÚáéíóúñÑ ]{4,40})"?`,
+)
 
 // lastReviewDateRE matches `last_review_date: YYYY-MM-DD`.
 var lastReviewDateRE = regexp.MustCompile(
-	`(?i)("|')?(last[_\- ]?review[_\- ]?date|fecha[_\- ]?revision|ultima[_\- ]?revision|fecha[_\- ]?perfil)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(last[_\- ]?review[_\- ]?date|fecha[_\- ]?revision|ultima[_\- ]?revision|fecha[_\- ]?perfil)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // nextReviewDateRE matches `next_review_date: YYYY-MM-DD`.
 var nextReviewDateRE = regexp.MustCompile(
-	`(?i)("|')?(next[_\- ]?review[_\- ]?date|proxima[_\- ]?revision|fecha[_\- ]?proxima)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(next[_\- ]?review[_\- ]?date|proxima[_\- ]?revision|fecha[_\- ]?proxima)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // annualIncomeRE matches `annual_income: NN` / `ingreso_anual: NN`.
 var annualIncomeRE = regexp.MustCompile(
-	`(?i)("|')?(annual[_\- ]?income|ingreso[_\- ]?anual|ingresos[_\- ]?declarados|salario[_\- ]?anual)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(annual[_\- ]?income|ingreso[_\- ]?anual|ingresos[_\- ]?declarados|salario[_\- ]?anual)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // netWorthRE matches `net_worth: NN` / `patrimonio_neto: NN`.
 var netWorthRE = regexp.MustCompile(
-	`(?i)("|')?(net[_\- ]?worth|patrimonio[_\- ]?neto|patrimonio[_\- ]?declarado)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)("|')?(net[_\- ]?worth|patrimonio[_\- ]?neto|patrimonio[_\- ]?declarado)("|')?\s*[:=>]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // instrumentClassListRE matches `instrument_classes: [list]` /
 // `instrumentos: lista` rows.
 var instrumentClassListRE = regexp.MustCompile(
-	`(?i)("|')?(instrument[_\- ]?classes|instrumentos[_\- ]?habilitados|operatoria[_\- ]?autorizada)("|')?\s*[:=>]\s*("|'|\[)?([A-Za-z0-9_,\- ]{2,200})`)
+	`(?i)("|')?(instrument[_\- ]?classes|instrumentos[_\- ]?habilitados|operatoria[_\- ]?autorizada)("|')?\s*[:=>]\s*("|'|\[)?([A-Za-z0-9_,\- ]{2,200})`,
+)
 
 // missingSignatureRE detects a missing-signature marker.
 var missingSignatureRE = regexp.MustCompile(
-	`(?i)(?:firma[_\- ]?falta|missing[_\- ]?signature|sin[_\- ]?firma|signature[_\- ]?missing|no[_\- ]?firmado|unsigned)`)
+	`(?i)(?:firma[_\- ]?falta|missing[_\- ]?signature|sin[_\- ]?firma|signature[_\- ]?missing|no[_\- ]?firmado|unsigned)`,
+)
 
 // noKYCLinkRE detects an explicit no-KYC-link marker.
 var noKYCLinkRE = regexp.MustCompile(
-	`(?i)(?:kyc[_\- ]?missing|sin[_\- ]?kyc|no[_\- ]?kyc[_\- ]?link|kyc[_\- ]?ref[_\- ]?missing)`)
+	`(?i)(?:kyc[_\- ]?missing|sin[_\- ]?kyc|no[_\- ]?kyc[_\- ]?link|kyc[_\- ]?ref[_\- ]?missing)`,
+)
 
 // aggressiveNoTestRE detects an aggressive-without-test
 // marker.
 var aggressiveNoTestRE = regexp.MustCompile(
-	`(?i)(?:agresiva[_\- ]?sin[_\- ]?test|aggressive[_\- ]?no[_\- ]?test|test[_\- ]?riesgo[_\- ]?falta)`)
+	`(?i)(?:agresiva[_\- ]?sin[_\- ]?test|aggressive[_\- ]?no[_\- ]?test|test[_\- ]?riesgo[_\- ]?falta)`,
+)
 
 // matriculaIniRE matches `BrokerMatricula=NNN` / `Matricula=NNN`.
 var matriculaIniRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:Matricula|BrokerMatricula|AAGMatricula|AgenteMatricula)"?\s*[:=>]\s*"?(\d{1,5})"?`)
+	`(?im)^\s*"?(?:Matricula|BrokerMatricula|AAGMatricula|AgenteMatricula)"?\s*[:=>]\s*"?(\d{1,5})"?`,
+)
 
 // matriculaXMLRE matches `<matricula>NNN</matricula>` so XML
 // bodies don't need a separate parser.
 var matriculaXMLRE = regexp.MustCompile(
-	`(?i)<(?:matricula|broker_matricula|agente_matricula)>(\d{1,5})</`)
+	`(?i)<(?:matricula|broker_matricula|agente_matricula)>(\d{1,5})</`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParsePerfilArtifact parses a Perfil del Inversor body and
 // extracts scalar fields.

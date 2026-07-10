@@ -35,40 +35,47 @@ type BYMAFields struct {
 // apiKeyRE detects an api_key / bearer / secret / token in a
 // JSON/YAML/INI body. Captures the value so we can hash it.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(api[_-]?key|bearer|access[_-]?token|secret|client[_-]?secret|password)("|')?\s*[:=]\s*("|')?([a-z0-9_\-\.\+/=]{12,})`)
+	`(?i)("|')?(api[_-]?key|bearer|access[_-]?token|secret|client[_-]?secret|password)("|')?\s*[:=]\s*("|')?([a-z0-9_\-\.\+/=]{12,})`,
+)
 
 // matriculaIniRE matches `Matricula=NNNN` / `BrokerMatricula=NNNN`
 // or `matricula_byma = NNNN` (with optional snake/dash suffix).
 var matriculaIniRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:Matricula|BrokerMatricula|Matricula[_\- ]?BYMA|matricula[_\- ]?byma|broker[_\- ]?matricula|Matricula[_\- ]?Broker)"?\s*[:=]\s*"?(\d{1,5})"?`)
+	`(?im)^\s*"?(?:Matricula|BrokerMatricula|Matricula[_\- ]?BYMA|matricula[_\- ]?byma|broker[_\- ]?matricula|Matricula[_\- ]?Broker)"?\s*[:=]\s*"?(\d{1,5})"?`,
+)
 
 // timestampRE matches a `YYYY-MM-DD HH:MM[:SS]` or
 // `YYYY/MM/DD HH:MM[:SS]` token at line start (BYMA logs).
 var timestampRE = regexp.MustCompile(
-	`(?m)^\s*(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(?m)^\s*(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // caucionTenorRE matches a caución tenor row.
 // `Plazo=NN` / `Tenor=NN` / `<plazo>NN</plazo>`.
 var caucionTenorRE = regexp.MustCompile(
-	`(?i)(?:plazo|tenor|dias?_caucion|caucion_dias)\s*[:=>]\s*(\d{1,3})`)
+	`(?i)(?:plazo|tenor|dias?_caucion|caucion_dias)\s*[:=>]\s*(\d{1,3})`,
+)
 
 // tickerRE matches a ticker token: 2-6 upper-alphanumeric.
 // Argentine sovereign tickers (AL30/GD30D) carry digits, so
 // alpha-only matching misses them.
 var tickerRE = regexp.MustCompile(
-	`(?:^|[\s\|;,>"'<])([A-Z][A-Z0-9]{1,5})(?:[\s\|;,<"'/]|$)`)
+	`(?:^|[\s\|;,>"'<])([A-Z][A-Z0-9]{1,5})(?:[\s\|;,<"'/]|$)`,
+)
 
 // clienteCuitKeyRE matches a key labeled `cliente_cuit` /
 // `cuit_cliente` / `client_cuit` followed by a CUIT-like
 // value. Used to route the CUIT to ClienteCuitRaw even when
 // its prefix would normally classify as a human-operator.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|client[_\- ]?cuit|titular[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|client[_\- ]?cuit|titular[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // operatorCuitKeyRE matches a key labeled `operador_cuit` /
 // `cuit_operador` followed by a CUIT-like value.
 var operatorCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:operador[_\- ]?cuit|cuit[_\- ]?operador|operator[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:operador[_\- ]?cuit|cuit[_\- ]?operador|operator[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseBYMAConfig parses an Edge / Aries / SX / Connect API
 // config body. Captures matrícula + api-key presence + key
@@ -249,7 +256,8 @@ func parseBlotterText(body []byte, out *BYMAFields) {
 		out.TradeCount++
 		// inline notional
 		if m := regexp.MustCompile(
-			`(?i)(?:Importe|Monto|Valor|Nominal|Notional)\s*[:=]\s*([0-9][0-9\.,]*)`).
+			`(?i)(?:Importe|Monto|Valor|Nominal|Notional)\s*[:=]\s*([0-9][0-9\.,]*)`,
+		).
 			FindSubmatch(line); m != nil {
 			if cents := decimalToCents(string(m[1])); cents > 0 {
 				out.TotalCents += cents

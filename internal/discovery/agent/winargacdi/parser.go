@@ -22,51 +22,63 @@ type ACDIFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|acdi[_\-]?password|distributor[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|acdi[_\-]?password|distributor[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|acdi[_\-]?password|distributor[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|acdi[_\-]?password|distributor[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|acdi[_\-]?password|distributor[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|acdi[_\-]?password|distributor[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // acdiLicenseIDRE matches CNV ACDI license identifier.
 var acdiLicenseIDRE = regexp.MustCompile(
-	`(?i)"?(?:acdi[_\- ]?license[_\- ]?id|cnv[_\- ]?acdi|nro[_\- ]?acdi|acdi[_\- ]?nro|license[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{3,32})"?`)
+	`(?i)"?(?:acdi[_\- ]?license[_\- ]?id|cnv[_\- ]?acdi|nro[_\- ]?acdi|acdi[_\- ]?nro|license[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{3,32})"?`,
+)
 
 // fciManagerRE matches an FCI manager name field.
 var fciManagerRE = regexp.MustCompile(
-	`(?i)"?(?:fci[_\- ]?manager|administradora|sociedad[_\- ]?gerente|asset[_\- ]?manager|administrador[_\- ]?fci)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_&]{3,60})`)
+	`(?i)"?(?:fci[_\- ]?manager|administradora|sociedad[_\- ]?gerente|asset[_\- ]?manager|administrador[_\- ]?fci)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_&]{3,60})`,
+)
 
 // classificationRE matches a client-classification field.
 var classificationRE = regexp.MustCompile(
-	`(?i)"?(?:client[_\- ]?classification|tipo[_\- ]?cliente|investor[_\- ]?type|categoria[_\- ]?cliente)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`)
+	`(?i)"?(?:client[_\- ]?classification|tipo[_\- ]?cliente|investor[_\- ]?type|categoria[_\- ]?cliente)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`,
+)
 
 // plaftRiskRE matches a PLA/FT risk-class field.
 var plaftRiskRE = regexp.MustCompile(
-	`(?i)"?(?:plaft[_\- ]?risk|uif[_\- ]?risk|riesgo[_\- ]?plaft|riesgo[_\- ]?uif|aml[_\- ]?risk)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{3,30})`)
+	`(?i)"?(?:plaft[_\- ]?risk|uif[_\- ]?risk|riesgo[_\- ]?plaft|riesgo[_\- ]?uif|aml[_\- ]?risk)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{3,30})`,
+)
 
 // subscriptionAmountRE matches subscription amount in ARS.
 var subscriptionAmountRE = regexp.MustCompile(
-	`(?i)"?(?:subscription[_\- ]?amount|monto[_\- ]?suscripcion|monto[_\- ]?suscripción|importe[_\- ]?suscripcion)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:subscription[_\- ]?amount|monto[_\- ]?suscripcion|monto[_\- ]?suscripción|importe[_\- ]?suscripcion)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // retrocessionBPSRE matches retrocession-fee basis points.
 var retrocessionBPSRE = regexp.MustCompile(
-	`(?i)"?(?:retrocession[_\- ]?bps|retrocesion[_\- ]?bps|retrocession[_\- ]?fee[_\- ]?bps|retro[_\- ]?bps)"?\s*[:=>]\s*"?(\d{1,5})(?:\s*bps)?`)
+	`(?i)"?(?:retrocession[_\- ]?bps|retrocesion[_\- ]?bps|retrocession[_\- ]?fee[_\- ]?bps|retro[_\- ]?bps)"?\s*[:=>]\s*"?(\d{1,5})(?:\s*bps)?`,
+)
 
 // commissionTotalRE matches a total-commission amount field.
 var commissionTotalRE = regexp.MustCompile(
-	`(?i)"?(?:commission[_\- ]?total|comision[_\- ]?total|honorarios[_\- ]?total|total[_\- ]?comisiones)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:commission[_\- ]?total|comision[_\- ]?total|honorarios[_\- ]?total|total[_\- ]?comisiones)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|titular[_\- ]?cuit|cuit[_\- ]?cliente|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|titular[_\- ]?cuit|cuit[_\- ]?cliente|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteDNIKeyRE matches `cliente_dni: NNNNNNNN`.
 var clienteDNIKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?dni|titular[_\- ]?dni|dni[_\- ]?cliente|dni|documento)"?\s*[:=>]\s*"?(\d{7,8})"?`)
+	`(?i)"?(?:cliente[_\- ]?dni|titular[_\- ]?dni|dni[_\- ]?cliente|dni|documento)"?\s*[:=>]\s*"?(\d{7,8})"?`,
+)
 
 // ParseClientKYC parses a client KYC body.
 func ParseClientKYC(body []byte) ACDIFields {

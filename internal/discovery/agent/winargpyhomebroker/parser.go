@@ -33,62 +33,75 @@ type PHBFields struct {
 
 // usernameRE detects a `username`/`user`/`broker_user` row.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:username|user|broker[_-]?user|usuario|cuenta_usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,64})"?`)
+	`(?im)^\s*"?(?:username|user|broker[_-]?user|usuario|cuenta_usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,64})"?`,
+)
 
 // passwordRE detects a `password`/`clave`/`broker_password` row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|clave|broker[_-]?password|pass|passwd)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|clave|broker[_-]?password|pass|passwd)"?\s*[:=]\s*\S+`,
+)
 
 // twofaRE detects a TOTP / 2FA secret row. Accepts optional
 // `_secret` / `_key` / `_seed` suffix on the key token.
 var twofaRE = regexp.MustCompile(
-	`(?i)("|')?(?:totp|twofa|2fa|tfa)(?:[_-]?(?:secret|key|seed))?("|')?\s*[:=]\s*("|')?([A-Z2-7]{16,})`)
+	`(?i)("|')?(?:totp|twofa|2fa|tfa)(?:[_-]?(?:secret|key|seed))?("|')?\s*[:=]\s*("|')?([A-Z2-7]{16,})`,
+)
 
 // cookieKeyRE matches a cookie key in a session jar (JSON
 // list of cookie objects).
 var cookieKeyRE = regexp.MustCompile(
-	`(?i)("|')?(name|cookie[_-]?name|key)("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-.]{1,80})`)
+	`(?i)("|')?(name|cookie[_-]?name|key)("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-.]{1,80})`,
+)
 
 // cookieValueRE matches a cookie value entry. Go regexp caps
 // repeats at 1000; cookies longer than that are uncommon and
 // the captured fragment still fingerprints the jar.
 var cookieValueRE = regexp.MustCompile(
-	`(?i)("|')?(value|cookie[_-]?value)("|')?\s*[:=]\s*("|')?([A-Za-z0-9+/=._\-]{8,1000})`)
+	`(?i)("|')?(value|cookie[_-]?value)("|')?\s*[:=]\s*("|')?([A-Za-z0-9+/=._\-]{8,1000})`,
+)
 
 // strategyImportRE detects an `import pyhomebroker` line.
 var strategyImportRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+pyhomebroker|import\s+pyhomebroker|from\s+homebroker|import\s+homebroker)`)
+	`(?im)^\s*(?:from\s+pyhomebroker|import\s+pyhomebroker|from\s+homebroker|import\s+homebroker)`,
+)
 
 // timestampMinRE matches `YYYY-MM-DD HH:MM[:SS]` at line start.
 var timestampMinRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // pollRE matches a poll / fetch / GET marker.
 var pollRE = regexp.MustCompile(
-	`(?i)(?:\bpoll\b|\bfetch\b|GET\s+/|HTTP\s+200|response_status|polled)`)
+	`(?i)(?:\bpoll\b|\bfetch\b|GET\s+/|HTTP\s+200|response_status|polled)`,
+)
 
 // orderEntryRE matches an order entry in cache JSON / log.
 var orderEntryRE = regexp.MustCompile(
-	`(?i)("|')?(order_id|order[_-]?number|orden_id|symbol|ticker)("|')?\s*[:=]\s*"`)
+	`(?i)("|')?(order_id|order[_-]?number|orden_id|symbol|ticker)("|')?\s*[:=]\s*"`,
+)
 
 // positionRE matches a portfolio position entry. Accepts
 // optional plural `s` suffix so `"positions":[]` matches.
 var positionRE = regexp.MustCompile(
-	`(?i)("|')?(positions?|posici[oó]nes?|holdings?|tenencias?)("|')?\s*[:=]\s*`)
+	`(?i)("|')?(positions?|posici[oó]nes?|holdings?|tenencias?)("|')?\s*[:=]\s*`,
+)
 
 // notionalRE matches a notional row with bounded numeric
 // capture. Accepts optional surrounding quotes for JSON-quoted
 // string values (`"valor_mercado":"5000000.00"`).
 var notionalRE = regexp.MustCompile(
-	`(?i)(?:valor_mercado|importe|monto|valor|notional|amount|total)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:valor_mercado|importe|monto|valor|notional|amount|total)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // instrumentRE matches a symbol/ticker key in cache JSON.
 var instrumentRE = regexp.MustCompile(
-	`(?i)("|')?(symbol|ticker|especie|instrumento)("|')?\s*[:=]\s*"`)
+	`(?i)("|')?(symbol|ticker|especie|instrumento)("|')?\s*[:=]\s*"`,
+)
 
 // clienteCuitKeyRE matches a labeled cliente CUIT.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParsePHBConfig parses a pyhomebroker config.ini / .toml /
 // .yaml body. Captures broker username/password/2fa presence.

@@ -56,7 +56,8 @@ func ParseFlatpakMetadata(body []byte) (MetadataFields, bool) {
 		if strings.HasPrefix(trimmed, "[") &&
 			strings.HasSuffix(trimmed, "]") {
 			section = strings.TrimSpace(
-				strings.TrimSuffix(strings.TrimPrefix(trimmed, "["), "]"))
+				strings.TrimSuffix(strings.TrimPrefix(trimmed, "["), "]"),
+			)
 			continue
 		}
 		eq := strings.IndexByte(trimmed, '=')

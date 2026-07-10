@@ -390,7 +390,8 @@ func CuitFingerprint(text string) (prefix, suffix4 string) {
 
 // matriculaRE matches a CNV ALYC matrícula.
 var matriculaRE = regexp.MustCompile(
-	`(?i)(?:matr[íi]cula|alyc[_\- ]?matricula|broker[_\- ]?matricula|ppi[_\- ]?matricula)["'\s:#=\w\.\-]{0,30}?(\d{1,5})`)
+	`(?i)(?:matr[íi]cula|alyc[_\- ]?matricula|broker[_\- ]?matricula|ppi[_\- ]?matricula)["'\s:#=\w\.\-]{0,30}?(\d{1,5})`,
+)
 
 // MatriculaFromText extracts the matrícula.
 func MatriculaFromText(text string) string {

@@ -107,7 +107,8 @@ func (s *SQLiteStore) WriteLoadedDrivers(
 			collectedAt = time.Now().UTC()
 		}
 
-		if _, execErr := stmt.ExecContext(ctx,
+		if _, execErr := stmt.ExecContext(
+			ctx,
 			id.String(), assetID.String(), d.Name,
 			nullStr(d.DisplayName), nullStr(d.Path),
 			nullStr(d.Version), nullStr(d.Vendor),
@@ -183,7 +184,8 @@ func (s *SQLiteStore) WriteDeviceBindings(
 		if b.DriverID != uuid.Nil {
 			driverID = sql.NullString{String: b.DriverID.String(), Valid: true}
 		}
-		if _, execErr := stmt.ExecContext(ctx,
+		if _, execErr := stmt.ExecContext(
+			ctx,
 			id.String(), assetID.String(), driverID,
 			b.Bus, b.Address,
 			nullStr(b.VendorID), nullStr(b.DeviceID),

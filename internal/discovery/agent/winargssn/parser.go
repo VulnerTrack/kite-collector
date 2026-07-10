@@ -29,79 +29,96 @@ type SSNFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|ssn[_\-]?password|portal[_\-]?password|filing[_\-]?password|aseguradora[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|ssn[_\-]?password|portal[_\-]?password|filing[_\-]?password|aseguradora[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|ssn[_\-]?password|portal[_\-]?password|filing[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|ssn[_\-]?password|portal[_\-]?password|filing[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|ssn[_\-]?password|portal[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|ssn[_\-]?password|portal[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // ssnEntityCodeRE matches the SSN-assigned 4-5 digit aseguradora
 // code. SSN assigns each licensed insurer a numeric code.
 var ssnEntityCodeRE = regexp.MustCompile(
-	`(?i)"?(?:ssn[_\- ]?entity[_\- ]?code|ssn[_\- ]?code|entidad[_\- ]?ssn|nro[_\- ]?entidad|cod[_\- ]?entidad)"?\s*[:=>]\s*"?(\d{3,6})"?`)
+	`(?i)"?(?:ssn[_\- ]?entity[_\- ]?code|ssn[_\- ]?code|entidad[_\- ]?ssn|nro[_\- ]?entidad|cod[_\- ]?entidad)"?\s*[:=>]\s*"?(\d{3,6})"?`,
+)
 
 // ssnReceiptIDRE matches the SSN filing-receipt confirmation
 // number.
 var ssnReceiptIDRE = regexp.MustCompile(
-	`(?i)"?(?:ssn[_\- ]?receipt|presentacion[_\- ]?id|filing[_\- ]?id|nro[_\- ]?presentacion|confirmation[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{6,32})"?`)
+	`(?i)"?(?:ssn[_\- ]?receipt|presentacion[_\- ]?id|filing[_\- ]?id|nro[_\- ]?presentacion|confirmation[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{6,32})"?`,
+)
 
 // portfolioInstrumentRE matches `<Instrumento>` or `<Position>`
 // repetition in SSN investment XMLs.
 var portfolioInstrumentRE = regexp.MustCompile(
-	`(?i)<(?:ssn:|inversion:)?(?:Instrumento|Position|Inversion|Tenencia)\b`)
+	`(?i)<(?:ssn:|inversion:)?(?:Instrumento|Position|Inversion|Tenencia)\b`,
+)
 
 // portfolioInstrumentJSONRE matches `"position":[{...}]` JSON
 // array repetition.
 var portfolioInstrumentJSONRE = regexp.MustCompile(
-	`(?im)^\s*\{[^}]*"?(?:especie|symbol|ticker|instrumento|isin)"?\s*[:=]\s*"?[A-Z][A-Z0-9.\-]{1,12}`)
+	`(?im)^\s*\{[^}]*"?(?:especie|symbol|ticker|instrumento|isin)"?\s*[:=]\s*"?[A-Z][A-Z0-9.\-]{1,12}`,
+)
 
 // limitBreachRE matches `limite_excedido=true` / `<LimitBreach>
 // true</LimitBreach>` — Inversiones No Admitidas indicator.
 var limitBreachRE = regexp.MustCompile(
-	`(?i)(?:limite[_\- ]?excedido|limit[_\- ]?breach|inversion[_\- ]?no[_\- ]?admitida|limit[_\- ]?exceeded)\s*[:=>]\s*"?(?:true|1|si|sí|exceeded)"?`)
+	`(?i)(?:limite[_\- ]?excedido|limit[_\- ]?breach|inversion[_\- ]?no[_\- ]?admitida|limit[_\- ]?exceeded)\s*[:=>]\s*"?(?:true|1|si|sí|exceeded)"?`,
+)
 
 // limitBreachXMLRE matches XML-form limit breach.
 var limitBreachXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:LimitBreach|LimiteExcedido|InversionNoAdmitida)\s*>\s*(?:true|1|si|sí|exceeded)\s*<`)
+	`(?i)<\s*(?:LimitBreach|LimiteExcedido|InversionNoAdmitida)\s*>\s*(?:true|1|si|sí|exceeded)\s*<`,
+)
 
 // crossBorderReinsurerRE matches a non-AR reinsurer indicator
 // in reinsurance treaty bodies.
 var crossBorderReinsurerRE = regexp.MustCompile(
-	`(?i)(?:reinsurer[_\- ]?country|country[_\- ]?reinsurer|pais[_\- ]?reasegurador|reasegurador[_\- ]?pais)\s*[:=>]\s*"?([A-Z]{2,3})"?`)
+	`(?i)(?:reinsurer[_\- ]?country|country[_\- ]?reinsurer|pais[_\- ]?reasegurador|reasegurador[_\- ]?pais)\s*[:=>]\s*"?([A-Z]{2,3})"?`,
+)
 
 // premiumTotalRE matches a total premium amount field in ARS.
 var premiumTotalRE = regexp.MustCompile(
-	`(?i)"?(?:prima[_\- ]?total|premium[_\- ]?total|total[_\- ]?primas|prima[_\- ]?emitida[_\- ]?total)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:prima[_\- ]?total|premium[_\- ]?total|total[_\- ]?primas|prima[_\- ]?emitida[_\- ]?total)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // portfolioTotalRE matches a total portfolio amount field in ARS.
 var portfolioTotalRE = regexp.MustCompile(
-	`(?i)"?(?:portfolio[_\- ]?total|cartera[_\- ]?total|inversiones[_\- ]?total|total[_\- ]?inversiones)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:portfolio[_\- ]?total|cartera[_\- ]?total|inversiones[_\- ]?total|total[_\- ]?inversiones)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // claimRowRE matches a per-claim CSV row in claims/ART reports.
 // AR siniestro CSVs have header `Fecha,Trabajador,Importe,Estado,
 // ...`. Data rows start with a date.
 var claimRowRE = regexp.MustCompile(
-	`(?im)^\d{2}[/-]\d{2}[/-]\d{4},`)
+	`(?im)^\d{2}[/-]\d{2}[/-]\d{4},`,
+)
 
 // lineOfBusinessRE matches a line-of-business field.
 var lineOfBusinessRE = regexp.MustCompile(
-	`(?i)"?(?:rama|line[_\- ]?of[_\- ]?business|linea[_\- ]?negocio|ramo)"?\s*[:=>]\s*"?([A-Za-z\-]{3,40})`)
+	`(?i)"?(?:rama|line[_\- ]?of[_\- ]?business|linea[_\- ]?negocio|ramo)"?\s*[:=>]\s*"?([A-Za-z\-]{3,40})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // trabajadorCuilKeyRE matches `trabajador_cuil: NN-NNNNNNNN-N`.
 var trabajadorCuilKeyRE = regexp.MustCompile(
-	`(?i)"?(?:trabajador[_\- ]?cuil|cuil[_\- ]?trabajador|empleado[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:trabajador[_\- ]?cuil|cuil[_\- ]?trabajador|empleado[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // symbolEntryRE matches a per-symbol entry in investment XMLs.
 var symbolEntryRE = regexp.MustCompile(
-	`(?im)(?:"?(?:especie|symbol|sym|ticker|instrumento|isin)"?\s*[:=]\s*"?|<(?:especie|symbol|instrumento)[^>]*>)([A-Z][A-Z0-9_\-\./]{0,11})`)
+	`(?im)(?:"?(?:especie|symbol|sym|ticker|instrumento|isin)"?\s*[:=]\s*"?|<(?:especie|symbol|instrumento)[^>]*>)([A-Z][A-Z0-9_\-\./]{0,11})`,
+)
 
 // ParseInvestmentPortfolio parses an SSN investment XML / XLSX
 // body.

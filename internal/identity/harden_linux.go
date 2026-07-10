@@ -19,14 +19,18 @@ func HardenProcess(logger *slog.Logger) {
 
 	// Prevent core dumps and /proc/pid/mem reads.
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
-		logger.Warn("failed to set PR_SET_DUMPABLE=0", "error", err)
+		logger.Warn("failed to set PR_SET_DUMPABLE=0",
+			"code", string(LogCodeHardenDumpableFailed),
+			"error", err)
 	} else {
 		logger.Info("process hardening: core dumps disabled (PR_SET_DUMPABLE=0)")
 	}
 
 	// Lock all current and future memory pages (prevent swap).
 	if err := unix.Mlockall(unix.MCL_CURRENT | unix.MCL_FUTURE); err != nil {
-		logger.Warn("failed to mlockall — key material may be swapped to disk", "error", err)
+		logger.Warn("failed to mlockall — key material may be swapped to disk",
+			"code", string(LogCodeHardenMlockallFailed),
+			"error", err)
 	} else {
 		logger.Info("process hardening: memory locked (mlockall)")
 	}

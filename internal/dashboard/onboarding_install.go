@@ -574,7 +574,9 @@ func writeJSON(w http.ResponseWriter, logger *slog.Logger, status int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
 		if logger != nil {
-			logger.Error("dashboard: agent install json encode", "error", err)
+			logger.Error("dashboard: agent install json encode",
+				"code", string(LogCodeInstallJSONEncode),
+				"error", err)
 		}
 		http.Error(w, "internal encode error", http.StatusInternalServerError)
 		return

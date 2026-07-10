@@ -31,72 +31,88 @@ type RG1023Fields struct {
 // severityRE matches a `Severity: CRITICAL/HIGH/MEDIUM/LOW`
 // row.
 var severityRE = regexp.MustCompile(
-	`(?i)("|')?(severity|severidad|risk[_\- ]?level|nivel[_\- ]?riesgo)("|')?\s*[:=>]\s*"?(critical|cr[íi]tica|high|alta|medium|media|low|baja|info|informacional|n/a|not[_\- ]?applicable)`)
+	`(?i)("|')?(severity|severidad|risk[_\- ]?level|nivel[_\- ]?riesgo)("|')?\s*[:=>]\s*"?(critical|cr[íi]tica|high|alta|medium|media|low|baja|info|informacional|n/a|not[_\- ]?applicable)`,
+)
 
 // statusRE matches `compliance_status: compliant/...`.
 var statusRE = regexp.MustCompile(
-	`(?i)("|')?(compliance[_\- ]?status|estado[_\- ]?cumplimiento|status)("|')?\s*[:=>]\s*"?(compliant|cumplido|non[_\- ]?compliant|no[_\- ]?cumple|pending[_\- ]?review|pendiente|in[_\- ]?progress|en[_\- ]?proceso)`)
+	`(?i)("|')?(compliance[_\- ]?status|estado[_\- ]?cumplimiento|status)("|')?\s*[:=>]\s*"?(compliant|cumplido|non[_\- ]?compliant|no[_\- ]?cumple|pending[_\- ]?review|pendiente|in[_\- ]?progress|en[_\- ]?proceso)`,
+)
 
 // lastReviewRE matches `last_review_date: YYYY-MM-DD`.
 var lastReviewRE = regexp.MustCompile(
-	`(?i)("|')?(last[_\- ]?review[_\- ]?date|fecha[_\- ]?revision|ultima[_\- ]?revision|last[_\- ]?audit[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(last[_\- ]?review[_\- ]?date|fecha[_\- ]?revision|ultima[_\- ]?revision|last[_\- ]?audit[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // nextReviewRE matches `next_review_date: YYYY-MM-DD`.
 var nextReviewRE = regexp.MustCompile(
-	`(?i)("|')?(next[_\- ]?review[_\- ]?date|proxima[_\- ]?revision|next[_\- ]?audit[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(next[_\- ]?review[_\- ]?date|proxima[_\- ]?revision|next[_\- ]?audit[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // findingMarkerRE detects a finding/hallazgo entry.
 var findingMarkerRE = regexp.MustCompile(
-	`(?i)("|')?(finding|hallazgo|finding_id|hallazgo_id)("|')?\s*[:=>]\s*`)
+	`(?i)("|')?(finding|hallazgo|finding_id|hallazgo_id)("|')?\s*[:=>]\s*`,
+)
 
 // criticalMarkerRE counts critical-severity finding tokens.
 var criticalMarkerRE = regexp.MustCompile(
-	`(?i)\b(critical|cr[íi]tica|severidad[_\s-]*cr[íi]tica)\b`)
+	`(?i)\b(critical|cr[íi]tica|severidad[_\s-]*cr[íi]tica)\b`,
+)
 
 // highMarkerRE counts high-severity finding tokens.
 var highMarkerRE = regexp.MustCompile(
-	`(?i)\b(high|alta|severidad[_\s-]*alta)\b`)
+	`(?i)\b(high|alta|severidad[_\s-]*alta)\b`,
+)
 
 // mediumMarkerRE counts medium-severity finding tokens.
 var mediumMarkerRE = regexp.MustCompile(
-	`(?i)\b(medium|media|severidad[_\s-]*media)\b`)
+	`(?i)\b(medium|media|severidad[_\s-]*media)\b`,
+)
 
 // openStatusRE counts entries with status open / abierto /
 // not-remediated.
 var openStatusRE = regexp.MustCompile(
-	`(?i)("|')?(status|estado)("|')?\s*[:=>]\s*"?(open|abierto|not[_\- ]?remediated|no[_\- ]?remediado|pending|pendiente)`)
+	`(?i)("|')?(status|estado)("|')?\s*[:=>]\s*"?(open|abierto|not[_\- ]?remediated|no[_\- ]?remediado|pending|pendiente)`,
+)
 
 // thirdPartyEntryRE counts third-party register entries.
 var thirdPartyEntryRE = regexp.MustCompile(
-	`(?i)("|')?(third[_\- ]?party|proveedor|vendor|tercero)("|')?\s*[:=>]\s*"?`)
+	`(?i)("|')?(third[_\- ]?party|proveedor|vendor|tercero)("|')?\s*[:=>]\s*"?`,
+)
 
 // thirdPartyAssessedRE detects an `assessment_date` field on
 // a third-party entry — the absence (or empty) marks the
 // entry as unassessed.
 var thirdPartyAssessedRE = regexp.MustCompile(
-	`(?i)("|')?(assessment[_\- ]?date|fecha[_\- ]?evaluacion|evaluation[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`)
+	`(?i)("|')?(assessment[_\- ]?date|fecha[_\- ]?evaluacion|evaluation[_\- ]?date)("|')?\s*[:=>]\s*"?(20\d{2}-\d{2}-\d{2})`,
+)
 
 // mfaEntryRE counts MFA factor entries (totp / hardware /
 // sms).
 var mfaEntryRE = regexp.MustCompile(
-	`(?i)("|')?(mfa[_\- ]?type|second[_\- ]?factor|2fa[_\- ]?type|factor[_\- ]?autenticacion)("|')?\s*[:=>]\s*"?(totp|hardware|sms|push|fido|fido2|webauthn|yubikey)`)
+	`(?i)("|')?(mfa[_\- ]?type|second[_\- ]?factor|2fa[_\- ]?type|factor[_\- ]?autenticacion)("|')?\s*[:=>]\s*"?(totp|hardware|sms|push|fido|fido2|webauthn|yubikey)`,
+)
 
 // incidentRefRE detects an incident-id reference.
 var incidentRefRE = regexp.MustCompile(
-	`(?i)("|')?(incident[_\- ]?id|incidente[_\- ]?id|ticket)("|')?\s*[:=>]\s*"?[A-Za-z0-9_-]{3,}`)
+	`(?i)("|')?(incident[_\- ]?id|incidente[_\- ]?id|ticket)("|')?\s*[:=>]\s*"?[A-Za-z0-9_-]{3,}`,
+)
 
 // playbookRefRE detects a playbook-id reference inside an
 // incident-registry entry.
 var playbookRefRE = regexp.MustCompile(
-	`(?i)("|')?(playbook[_\- ]?id|playbook[_\- ]?ref|manual[_\- ]?ref)("|')?\s*[:=>]\s*"?[A-Za-z0-9_-]{3,}`)
+	`(?i)("|')?(playbook[_\- ]?id|playbook[_\- ]?ref|manual[_\- ]?ref)("|')?\s*[:=>]\s*"?[A-Za-z0-9_-]{3,}`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // officerCuitKeyRE matches `oficial_ciberseguridad_cuit:...`.
 var officerCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:oficial[_\- ]?ciberseguridad[_\- ]?cuit|cybersecurity[_\- ]?officer[_\- ]?cuit|cuit[_\- ]?oficial)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:oficial[_\- ]?ciberseguridad[_\- ]?cuit|cybersecurity[_\- ]?officer[_\- ]?cuit|cuit[_\- ]?oficial)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseRG1023Artifact parses a CNV RG 1023 compliance body
 // (PDF text / DOCX text / JSON / YAML / Markdown).

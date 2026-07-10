@@ -211,7 +211,8 @@ func TestFileCollectorAllUsersAndPerUser(t *testing.T) {
 	must(t, os.MkdirAll(filepath.Join(usersBase, "Public", DefaultPerUserSuffix), 0o755))
 	must(t, os.WriteFile(
 		filepath.Join(usersBase, "Public", DefaultPerUserSuffix, "skip.lnk"),
-		buildMinimalLnk(`C:\skip.exe`), 0o644))
+		buildMinimalLnk(`C:\skip.exe`), 0o644,
+	))
 	must(t, os.MkdirAll(filepath.Join(usersBase, "Default", DefaultPerUserSuffix), 0o755))
 
 	c := &fileCollector{

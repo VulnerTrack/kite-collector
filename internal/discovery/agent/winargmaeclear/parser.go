@@ -34,73 +34,90 @@ type MAEClearFields struct {
 
 // passwordRE matches a password row (line-anchored INI/JSON/XML).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`)
+	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>` on a single line.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`)
+	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`,
+)
 
 // fixDropCopyRE detects FIX 4.x drop-copy session markers.
 var fixDropCopyRE = regexp.MustCompile(
-	`(?i)(?:8=FIX\.4\.[24]|8=FIXT\.1\.1|drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP)`)
+	`(?i)(?:8=FIX\.4\.[24]|8=FIXT\.1\.1|drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP)`,
+)
 
 // fixSenderRE matches FIX SenderCompID.
 var fixSenderRE = regexp.MustCompile(
-	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // fixTargetRE matches FIX TargetCompID.
 var fixTargetRE = regexp.MustCompile(
-	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM[:SS]`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // settlementEventRE matches a settlement entry.
 var settlementEventRE = regexp.MustCompile(
-	`(?i)(?:settlement[_\- ]?id|liquidacion[_\- ]?id|settle[_\- ]?entry|trade[_\- ]?settle|venta[_\- ]?neta|compra[_\- ]?neta)`)
+	`(?i)(?:settlement[_\- ]?id|liquidacion[_\- ]?id|settle[_\- ]?entry|trade[_\- ]?settle|venta[_\- ]?neta|compra[_\- ]?neta)`,
+)
 
 // settlementFailRE matches a failed settlement event.
 var settlementFailRE = regexp.MustCompile(
-	`(?i)(?:settlement[_\- ]?fail|settle[_\- ]?fail|fail[_\- ]?to[_\- ]?deliver|fail[_\- ]?to[_\- ]?receive|liquidacion[_\- ]?fallida|FTR|FTD|failed[_\- ]?settle)`)
+	`(?i)(?:settlement[_\- ]?fail|settle[_\- ]?fail|fail[_\- ]?to[_\- ]?deliver|fail[_\- ]?to[_\- ]?receive|liquidacion[_\- ]?fallida|FTR|FTD|failed[_\- ]?settle)`,
+)
 
 // affirmationEventRE matches an affirmation entry.
 var affirmationEventRE = regexp.MustCompile(
-	`(?i)(?:afirmacion|afirmaci[oó]n|affirmation|bilateral[_\- ]?confirm|confirm[_\- ]?bilateral|confirmed[_\- ]?bilateral)`)
+	`(?i)(?:afirmacion|afirmaci[oó]n|affirmation|bilateral[_\- ]?confirm|confirm[_\- ]?bilateral|confirmed[_\- ]?bilateral)`,
+)
 
 // repoEntryRE matches a REPO row.
 var repoEntryRE = regexp.MustCompile(
-	`(?i)(?:repo[_\- ]?id|caucion[_\- ]?id|repo[_\- ]?entry|caucion[_\- ]?entry|repo_book|caucion_book)`)
+	`(?i)(?:repo[_\- ]?id|caucion[_\- ]?id|repo[_\- ]?entry|caucion[_\- ]?entry|repo_book|caucion_book)`,
+)
 
 // repoTenorRE captures a REPO tenor in days.
 var repoTenorRE = regexp.MustCompile(
-	`(?i)(?:tenor[_\- ]?days?|plazo[_\- ]?dias?|repo[_\- ]?tenor|days[_\- ]?to[_\- ]?maturity)"?\s*[:=]\s*"?(\d{1,4})`)
+	`(?i)(?:tenor[_\- ]?days?|plazo[_\- ]?dias?|repo[_\- ]?tenor|days[_\- ]?to[_\- ]?maturity)"?\s*[:=]\s*"?(\d{1,4})`,
+)
 
 // leliqEntryRE matches a BCRA Leliq settlement entry.
 var leliqEntryRE = regexp.MustCompile(
-	`(?i)(?:leliq[_\- ]?id|leliq[_\- ]?entry|leliq[_\- ]?settle|bcra[_\- ]?leliq|leliqusd)`)
+	`(?i)(?:leliq[_\- ]?id|leliq[_\- ]?entry|leliq[_\- ]?settle|bcra[_\- ]?leliq|leliqusd)`,
+)
 
 // fxForwardRE matches an FX-forward entry.
 var fxForwardRE = regexp.MustCompile(
-	`(?i)(?:fx[_\- ]?forward|forward[_\- ]?fx|usd_ars_fwd|fwd[_\- ]?usd[_\- ]?ars|forward[_\- ]?usd|forward[_\- ]?ars|moneda[_\- ]?dual)`)
+	`(?i)(?:fx[_\- ]?forward|forward[_\- ]?fx|usd_ars_fwd|fwd[_\- ]?usd[_\- ]?ars|forward[_\- ]?usd|forward[_\- ]?ars|moneda[_\- ]?dual)`,
+)
 
 // symbolEntryRE matches a JSON/XML/INI symbol entry or FIX
 // tag `55=AL30` (the `=` is part of the tag, so this form
 // has a separate alternative branch).
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:\b55=|"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)(?:\b55=|"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // notionalRE matches a notional / settlement amount.
 var notionalRE = regexp.MustCompile(
-	`(?i)(?:notional|importe|monto|valor|amount|settlement[_\- ]?amount|liquidacion[_\- ]?amount)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:notional|importe|monto|valor|amount|settlement[_\- ]?amount|liquidacion[_\- ]?amount)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|counterparty[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|counterparty[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>…</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit|counterparty[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit|counterparty[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // ParseMAEclearCredentials parses an api_key / config body.
 func ParseMAEclearCredentials(body []byte) MAEClearFields {

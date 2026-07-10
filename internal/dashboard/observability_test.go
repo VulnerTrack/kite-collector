@@ -1268,7 +1268,8 @@ func TestUptimeStripSVG_NewestOnTheRight(t *testing.T) {
 
 func TestUptimeStripSVG_TooltipIncludesCounts(t *testing.T) {
 	svg := string(uptimeStripSVG(
-		[]string{"pass", "pass", "fail", "skip", "pass"}, "dns"))
+		[]string{"pass", "pass", "fail", "skip", "pass"}, "dns",
+	))
 	assert.Contains(t, svg, "<title>",
 		"strip must include a <title> for native browser hover tooltip")
 	assert.Contains(t, svg, "3 pass",

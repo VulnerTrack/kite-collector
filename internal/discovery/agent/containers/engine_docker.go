@@ -36,7 +36,8 @@ func engineSocket() string {
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
 		candidates = append(candidates, xdg+"/podman/podman.sock")
 	}
-	candidates = append(candidates,
+	candidates = append(
+		candidates,
 		"/run/podman/podman.sock",
 		"/var/run/podman/podman.sock",
 	)

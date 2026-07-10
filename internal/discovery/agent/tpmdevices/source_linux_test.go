@@ -35,7 +35,8 @@ func writeTPM(t *testing.T, root, name string, attrs map[string]string, banks []
 
 func TestLinuxSourceReadsTPM(t *testing.T) {
 	root := t.TempDir()
-	writeTPM(t, root, "tpm0",
+	writeTPM(
+		t, root, "tpm0",
 		map[string]string{
 			"tpm_version_major":    "2\n",
 			"tpm_mfr_id":           "INTC\n",
@@ -86,7 +87,8 @@ func TestLinuxSourceMissingRootReturnsEmpty(t *testing.T) {
 
 func TestCollectorEndToEndOnLinuxSource(t *testing.T) {
 	root := t.TempDir()
-	writeTPM(t, root, "tpm0",
+	writeTPM(
+		t, root, "tpm0",
 		map[string]string{
 			"tpm_version_major": "1\n",
 			"tpm_mfr_id":        "IFX\n",

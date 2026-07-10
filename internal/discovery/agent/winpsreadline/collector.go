@@ -68,7 +68,8 @@ func (c *fileCollector) Collect(_ context.Context) ([]Entry, error) {
 			continue
 		}
 		history := filepath.Join(append(
-			[]string{c.usersBase, name}, HistoryRelComponents...)...)
+			[]string{c.usersBase, name}, HistoryRelComponents...,
+		)...)
 		body, err := c.readFile(history)
 		if err != nil {
 			continue
