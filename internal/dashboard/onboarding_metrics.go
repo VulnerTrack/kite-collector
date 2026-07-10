@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,7 +29,8 @@ func onboardingProbeDurationHistogram() *prometheus.HistogramVec {
 			// If Prometheus has already registered an identical collector
 			// (possible in tests that don't share the binary), fall back to
 			// that existing one so we do not panic.
-			if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
+			var are prometheus.AlreadyRegisteredError
+			if errors.As(err, &are) {
 				if existing, ok2 := are.ExistingCollector.(*prometheus.HistogramVec); ok2 {
 					probeHistogram = existing
 				}

@@ -479,22 +479,8 @@ func (e *transientError) Error() string { return e.err.Error() }
 func (e *transientError) Unwrap() error { return e.err }
 
 func isTransient(err error) bool {
-	te := (*transientError)(nil)
-	ok := false
-	for e := err; e != nil; {
-		if t, is := e.(*transientError); is {
-			te = t
-			ok = true
-			break
-		}
-		u, canUnwrap := e.(interface{ Unwrap() error })
-		if !canUnwrap {
-			break
-		}
-		e = u.Unwrap()
-	}
-	_ = te
-	return ok
+	var te *transientError
+	return errors.As(err, &te)
 }
 
 // backoffDelay computes an exponential backoff with a cap.

@@ -2,6 +2,7 @@ package certificates
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -95,7 +96,7 @@ func (c *pemCollector) Collect(ctx context.Context) ([]Certificate, error) {
 			}
 			return nil
 		})
-		if walkErr != nil && !isMissingErr(walkErr) && walkErr != filepath.SkipAll {
+		if walkErr != nil && !isMissingErr(walkErr) && !errors.Is(walkErr, filepath.SkipAll) {
 			slog.Debug("certificates: walk error", "root", root.path, "error", walkErr)
 		}
 	}
