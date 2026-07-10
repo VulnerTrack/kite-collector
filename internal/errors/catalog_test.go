@@ -64,7 +64,7 @@ func TestCodes_ReturnsAll(t *testing.T) {
 	codes := Codes()
 	assert.Len(t, codes, len(Catalog))
 	assert.Equal(t, "KITE-E001", codes[0])
-	assert.Equal(t, "KITE-E015", codes[len(codes)-1])
+	assert.Equal(t, "KITE-E016", codes[len(codes)-1])
 }
 
 func TestCodes_Sorted(t *testing.T) {

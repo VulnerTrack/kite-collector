@@ -166,8 +166,8 @@ func obtainGCPToken(ctx context.Context) (string, error) {
 			return token, nil
 		}
 		if err != nil {
-			slog.Debug(
-				"GCP Compute credentials file token exchange failed", //#nosec G706 -- error from internal file read, not user HTTP input
+			slog.Debug( //#nosec G706 -- error from internal file read, not user HTTP input
+				"GCP Compute credentials file token exchange failed",
 				"code", string(LogCodeGCPComputeTokenCredsFileFailed),
 				"error", err,
 				"file", credFile,

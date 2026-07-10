@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 444 codes across 57 packages.
+**Catalog size:** 452 codes across 57 packages.
 
 ---
 
@@ -668,7 +668,7 @@ Source: [`internal/discovery/cloud/storage/logcodes.go`](../internal/discovery/c
 
 ## `cmdb` (internal/discovery/cmdb)
 
-Source: [`internal/discovery/cmdb/logcodes.go`](../internal/discovery/cmdb/logcodes.go) · 10 codes
+Source: [`internal/discovery/cmdb/logcodes.go`](../internal/discovery/cmdb/logcodes.go) · 18 codes
 
 **--- NetBox ------------------------------------------------------**
 
@@ -689,6 +689,24 @@ Source: [`internal/discovery/cmdb/logcodes.go`](../internal/discovery/cmdb/logco
 | `cmdb.servicenow.completed` | `LogCodeServiceNowComplete` | — |
 | `cmdb.servicenow.auth_failed` | `LogCodeServiceNowAuthFailed` | — |
 | `cmdb.servicenow.skip_unparseable_ci` | `LogCodeServiceNowSkipUnparseable` | — |
+
+**--- Device42 ----------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `cmdb.device42.starting` | `LogCodeDevice42Starting` | — |
+| `cmdb.device42.not_configured` | `LogCodeDevice42NotConfigured` | — |
+| `cmdb.device42.completed` | `LogCodeDevice42Complete` | — |
+| `cmdb.device42.auth_failed` | `LogCodeDevice42AuthFailed` | — |
+
+**--- Lansweeper --------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `cmdb.lansweeper.starting` | `LogCodeLansweeperStarting` | — |
+| `cmdb.lansweeper.not_configured` | `LogCodeLansweeperNotConfigured` | — |
+| `cmdb.lansweeper.completed` | `LogCodeLansweeperComplete` | — |
+| `cmdb.lansweeper.auth_failed` | `LogCodeLansweeperAuthFailed` | — |
 
 ## `code` (internal/discovery/code)
 

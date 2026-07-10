@@ -196,4 +196,12 @@ var Catalog = map[string]KiteError{
 			"default": "Reduce the size of the request payload.\nIncrease the limit if needed: safety.max_request_bytes in kite-collector.yaml (default: 1 MB).\nFor bulk operations, split large payloads into multiple smaller requests.",
 		},
 	},
+	"KITE-E016": {
+		Code:    "KITE-E016",
+		Message: "Kite OAuth token exchange failed",
+		Cause:   "The Kite OAuth token endpoint rejected the authorization-code exchange. Common causes are an expired or already-used authorization code, a redirect URI that does not match the one registered for the client, or an incorrect client ID.",
+		Remediation: map[string]string{
+			"default": "Restart the sign-in flow from the beginning so a fresh authorization code is issued (codes are single-use and short-lived).\nVerify KITE_OAUTH_CLIENT_ID matches the client registered with the platform.\nEnsure the collector's redirect URI is registered exactly, including scheme and port.\nInspect the structured log's error_context (http_status, provider_detail) for the provider's specific reason.",
+		},
+	},
 }

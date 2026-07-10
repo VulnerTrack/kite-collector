@@ -197,9 +197,26 @@ func TestRoute_GET_KiteSuccess_ReturnsAccessGrantedPage(t *testing.T) {
 }
 
 func TestRoute_GET_RootWithOAuthParams_ReturnsAccessGrantedPage(t *testing.T) {
-	handler := newTestHandler(t)
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"test-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	t.Cleanup(tokenServer.Close)
+
+	st := testStore(t)
+	rc := testContext()
+	srv := Serve(":0", st, rc, nil, Options{
+		OAuth: OAuthOptions{
+			AuthorizeURL: tokenServer.URL + "/authorize",
+			ClientID:     "test-client",
+			RedirectPath: "/oauth/callback",
+		},
+	})
+	handler := srv.Handler
+
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?state=abc&code=xyz", nil)
 	req.AddCookie(&http.Cookie{Name: kiteOAuthStateCookie, Value: "abc"})
+	req.AddCookie(&http.Cookie{Name: kiteOAuthVerifierCookie, Value: "verifier"})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
