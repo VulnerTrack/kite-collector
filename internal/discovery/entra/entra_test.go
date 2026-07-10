@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -266,6 +267,96 @@ func TestEntraID_Discover_InvalidConfigReturnsError(t *testing.T) {
 	}
 	_, err := e.Discover(context.Background(), cfg)
 	require.Error(t, err)
+}
+
+// --- RFC-0137 hardening tests -------------------------------------------
+
+func TestEntraID_Discover_SSRFBlocked(t *testing.T) {
+	// R8/F2: an operator-supplied token_base_url resolving to a link-local
+	// cloud-metadata address is rejected by safenet.ValidateEndpoint before any
+	// request is made. Discover skips gracefully (nil, nil) — the same pattern
+	// as missing credentials or enabled:false — rather than leaking the client
+	// secret to the attacker-controlled endpoint.
+	e := New()
+	cfg := map[string]any{
+		"enabled":        true,
+		"tenant_id":      "tenant",
+		"client_id":      "client",
+		"client_secret":  "secret",
+		"token_base_url": "https://169.254.169.254", // link-local metadata endpoint
+	}
+	assets, err := e.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	assert.Nil(t, assets, "SSRF-blocked base URL must skip discovery, not proceed")
+}
+
+func TestEntraID_Discover_SSRFBlocked_PrivateGraphURL(t *testing.T) {
+	// R8/F2: the graph_base_url override is validated too — a private-range
+	// target is rejected.
+	e := New()
+	cfg := map[string]any{
+		"enabled":        true,
+		"tenant_id":      "tenant",
+		"client_id":      "client",
+		"client_secret":  "secret",
+		"graph_base_url": "https://10.0.0.5",
+	}
+	assets, err := e.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	assert.Nil(t, assets)
+}
+
+func TestEntraID_ListRoleMembers_RejectsPathTraversal(t *testing.T) {
+	// R8/F6: a provider-returned directory role id carrying a path-traversal
+	// sequence is rejected by safenet.SanitizePathSegment before it can be
+	// interpolated into the members request path — no request is issued.
+	e := New()
+	e.graphBaseURL = "https://graph.example.test"
+	_, err := e.listRoleMembers(context.Background(), "token", "../../../etc/passwd")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsafe directory role id")
+}
+
+func TestEntraID_Discover_PaginationGuardTrips(t *testing.T) {
+	// R8/F5: with a tiny cumulative byte cap, the first Graph page exceeds it
+	// and PaginationGuardV2 trips, surfacing an error instead of silently
+	// truncating or looping unbounded.
+	t.Setenv("KITE_PAGINATION_MAX_BYTES_TOTAL", "8")
+
+	srv := newMockEntraAPI(t)
+	defer srv.Close()
+
+	e := New()
+	e.tokenBaseURL = srv.URL
+	e.graphBaseURL = srv.URL
+
+	cfg := map[string]any{
+		"enabled":       true,
+		"tenant_id":     "tenant-guid",
+		"client_id":     "client-guid",
+		"client_secret": "test-secret",
+	}
+	_, err := e.Discover(context.Background(), cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pagination guard")
+}
+
+func TestEntraID_HardenedClient_HonoursRequestTimeout(t *testing.T) {
+	// R1/F4: the previously parsed-but-dead request_timeout_seconds finally
+	// reaches the outbound client on the fixed-endpoint (non-override) path.
+	e := New()
+	conf, err := parseConfig(map[string]any{
+		"tenant_id":               "t",
+		"client_id":               "c",
+		"request_timeout_seconds": 17,
+	})
+	require.NoError(t, err)
+
+	hc, err := e.hardenedClient(conf)
+	require.NoError(t, err)
+	client, ok := hc.(*http.Client)
+	require.True(t, ok)
+	assert.Equal(t, 17*time.Second, client.Timeout)
 }
 
 func TestParseConfig_Defaults(t *testing.T) {
