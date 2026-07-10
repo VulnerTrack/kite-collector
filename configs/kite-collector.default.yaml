@@ -24,6 +24,16 @@ identity:
                          # "auto" picks the strongest backend available on this host
 
 # ---------------------------------------------------------------------------
+# VulnerTrack OAuth linking (dashboard /kite-login)
+# ---------------------------------------------------------------------------
+oauth:
+  supabase_url: https://wjurmocfraqhdqarnytz.supabase.co
+  authorize_url: https://api.vulnertrack.com/auth/v1/oauth/authorize
+  client_id: d9be121a-a430-4c3a-9837-5cf67f9edfa3
+  scope: "openid email"
+  redirect_path: /oauth/callback
+
+# ---------------------------------------------------------------------------
 # Streaming (continuous agent mode — kite agent --stream)
 # ---------------------------------------------------------------------------
 streaming:
