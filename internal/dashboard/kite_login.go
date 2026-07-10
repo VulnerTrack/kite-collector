@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
@@ -402,6 +404,22 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	collectorURL := collectorBaseURL(r, r.URL.Query().Get("collector"))
 	authURL, verifier, state, authErr := buildKiteOAuthAuthorizationURL(oauth, collectorURL)
+
+	// Diagnostic: log the authorize-step redirect_uri so it can be compared
+	// with the callback-step redirect_uri in the token exchange logs.
+	if authErr == nil {
+		if redirectURI, err := buildKiteOAuthRedirectURI(collectorURL, oauth.RedirectPath); err == nil {
+			slog.Info("OAuth authorize step",
+				"collector_url", collectorURL,
+				"redirect_uri", redirectURI,
+				"r_host", r.Host,
+				"authorize_url_len", len(authURL),
+				"verifier_len", len(verifier),
+				"state_len", len(state),
+			)
+		}
+	}
+
 	if authErr == nil {
 		setKiteOAuthCookie(w, r, kiteOAuthVerifierCookie, verifier)
 		setKiteOAuthCookie(w, r, kiteOAuthStateCookie, state)
@@ -432,7 +450,34 @@ func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// kiteOAuthInflight deduplicates concurrent callback requests for the same
+// authorization code. The consent page may fire multiple rapid navigations
+// to /oauth/callback (e.g. replace + retry), each of which creates a new
+// HTTP request with the same single-use code. Without deduplication, the
+// first request's context gets canceled by the browser navigation, but the
+// token endpoint may have already consumed the code — causing later
+// requests to fail with "Invalid authorization code".
+var kiteOAuthInflight sync.Map // code → chan *kiteOAuthInflightResult
+
+type kiteOAuthInflightResult struct {
+	Token *kiteOAuthTokenResponse
+	Err   error
+}
+
 func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions, enrollment kiteOAuthEnrollmentOptions) {
+	logger := enrollment.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	logger.Info("OAuth callback hit",
+		"request_path", r.URL.Path,
+		"request_url", r.URL.String(),
+		"r_host", r.Host,
+		"code_len", len(r.URL.Query().Get("code")),
+		"has_state", r.URL.Query().Get("state") != "",
+	)
+
 	if oauthErr := r.URL.Query().Get("error"); oauthErr != "" {
 		description := r.URL.Query().Get("error_description")
 		if description == "" {
@@ -450,6 +495,12 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 
 	cookie, err := r.Cookie(kiteOAuthStateCookie)
 	if err != nil || cookie.Value == "" || state == "" || cookie.Value != state {
+		logger.Warn("OAuth state mismatch",
+			"cookie_err", err,
+			"cookie_empty", cookie == nil || cookie.Value == "",
+			"state_empty", state == "",
+			"match", cookie != nil && cookie.Value == state,
+		)
 		http.Error(w, "Kite OAuth state mismatch. Restart the authorization flow.", http.StatusBadRequest)
 		return
 	}
@@ -467,9 +518,65 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 		return
 	}
 
-	token, err := exchangeKiteOAuthCode(r, oauth, code, verifierCookie.Value, redirectURI)
-	if err != nil {
-		http.Error(w, "Kite OAuth token exchange failed: "+err.Error(), http.StatusBadGateway)
+	logger.Info("OAuth token exchange attempt",
+		"collector_url", collectorURL,
+		"redirect_uri", redirectURI,
+		"code_prefix", code[:min(len(code), 12)]+"...",
+		"verifier_len", len(verifierCookie.Value),
+		"oauth_redirect_path", oauth.RedirectPath,
+	)
+
+	// Deduplicate concurrent requests for the same authorization code.
+	// The consent page may trigger multiple rapid navigations; only the
+	// first one actually hits the token endpoint.
+	resultCh := make(chan *kiteOAuthInflightResult, 1)
+	if existing, loaded := kiteOAuthInflight.LoadOrStore(code, resultCh); loaded {
+		// Another goroutine is already exchanging this code — wait for it.
+		logger.Info("OAuth token exchange dedup — waiting for in-flight request",
+			"code_prefix", code[:min(len(code), 12)]+"...",
+		)
+		ch := existing.(chan *kiteOAuthInflightResult)
+		result := <-ch
+		ch <- result // put it back for other waiters
+		if result.Err != nil {
+			http.Error(w, "Kite OAuth token exchange failed: "+result.Err.Error(), http.StatusBadGateway)
+			return
+		}
+		if err := enrollKiteOAuthToken(r, enrollment, result.Token.AccessToken); err != nil {
+			http.Error(w, "Kite OAuth enrollment failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		clearKiteOAuthCookie(w, kiteOAuthStateCookie)
+		clearKiteOAuthCookie(w, kiteOAuthVerifierCookie)
+		serveKiteSuccessPage(w, r)
+		return
+	}
+
+	// We are the first request for this code. Use a detached context so
+	// browser-initiated cancellation (from rapid re-navigation) does not
+	// kill the HTTP round-trip to the Supabase token endpoint.
+	detachedCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	detachedReq := r.Clone(detachedCtx)
+
+	token, exchangeErr := exchangeKiteOAuthCode(detachedReq, oauth, code, verifierCookie.Value, redirectURI)
+
+	// Publish the result and clean up the in-flight map.
+	result := &kiteOAuthInflightResult{Token: token, Err: exchangeErr}
+	resultCh <- result
+	// Clean up after a short delay so late-arriving duplicates still find it.
+	go func() {
+		time.Sleep(5 * time.Second)
+		kiteOAuthInflight.Delete(code)
+	}()
+
+	if exchangeErr != nil {
+		logger.Error("OAuth token exchange FAILED",
+			"error", exchangeErr,
+			"redirect_uri", redirectURI,
+			"collector_url", collectorURL,
+		)
+		http.Error(w, "Kite OAuth token exchange failed: "+exchangeErr.Error(), http.StatusBadGateway)
 		return
 	}
 
