@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/store"
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver
@@ -90,7 +91,9 @@ func (s *SQLiteStore) Close() error {
 const assetColumns = `id, asset_type, hostname, os_family, os_version,
 	kernel_version, architecture,
 	is_authorized, is_managed, environment, owner, criticality,
-	discovery_source, first_seen_at, last_seen_at, tags, natural_key`
+	discovery_source, first_seen_at, last_seen_at, tags, natural_key,
+	mdm_enrollment_id, cmdb_sys_id, site, tenant, asset_tag,
+	operational_status, ownership_type, enrolled_user_upn, compliance_state`
 
 // scanAsset reads a single row from the result set into an Asset.
 func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
@@ -108,6 +111,16 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 		criticality   sql.NullString
 		tags          sql.NullString
 		naturalKey    sql.NullString
+
+		mdmEnrollmentID   sql.NullString
+		cmdbSysID         sql.NullString
+		site              sql.NullString
+		tenant            sql.NullString
+		assetTag          sql.NullString
+		operationalStatus sql.NullString
+		ownershipType     sql.NullString
+		enrolledUserUPN   sql.NullString
+		complianceState   sql.NullString
 	)
 	err := row.Scan(
 		&idStr,
@@ -127,6 +140,15 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 		&lastSeen,
 		&tags,
 		&naturalKey,
+		&mdmEnrollmentID,
+		&cmdbSysID,
+		&site,
+		&tenant,
+		&assetTag,
+		&operationalStatus,
+		&ownershipType,
+		&enrolledUserUPN,
+		&complianceState,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan asset: %w", err)
@@ -153,6 +175,15 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 	a.Criticality = criticality.String
 	a.Tags = tags.String
 	a.NaturalKey = naturalKey.String
+	a.MDMEnrollmentID = mdmEnrollmentID.String
+	a.CMDBSysID = cmdbSysID.String
+	a.Site = site.String
+	a.Tenant = tenant.String
+	a.AssetTag = assetTag.String
+	a.OperationalStatus = operationalStatus.String
+	a.OwnershipType = ownershipType.String
+	a.EnrolledUserUPN = enrolledUserUPN.String
+	a.ComplianceState = complianceState.String
 
 	return &a, nil
 }
@@ -163,9 +194,10 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error {
 	asset.ComputeNaturalKey()
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(
+		ctx, `
 		INSERT INTO assets (`+assetColumns+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(hostname, asset_type) DO UPDATE SET
 			os_family        = excluded.os_family,
 			os_version       = excluded.os_version,
@@ -179,7 +211,16 @@ func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error 
 			discovery_source = excluded.discovery_source,
 			last_seen_at     = excluded.last_seen_at,
 			tags             = excluded.tags,
-			natural_key      = excluded.natural_key
+			natural_key      = excluded.natural_key,
+				mdm_enrollment_id  = excluded.mdm_enrollment_id,
+				cmdb_sys_id        = excluded.cmdb_sys_id,
+				site               = excluded.site,
+				tenant             = excluded.tenant,
+				asset_tag          = excluded.asset_tag,
+				operational_status = excluded.operational_status,
+				ownership_type     = excluded.ownership_type,
+				enrolled_user_upn  = excluded.enrolled_user_upn,
+				compliance_state   = excluded.compliance_state
 	`,
 		asset.ID.String(),
 		string(asset.AssetType),
@@ -198,9 +239,72 @@ func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error 
 		asset.LastSeenAt.Format(time.RFC3339),
 		nullStr(asset.Tags),
 		asset.NaturalKey,
+		nullStr(asset.MDMEnrollmentID),
+		nullStr(asset.CMDBSysID),
+		nullStr(asset.Site),
+		nullStr(asset.Tenant),
+		nullStr(asset.AssetTag),
+		nullStr(asset.OperationalStatus),
+		nullStr(asset.OwnershipType),
+		nullStr(asset.EnrolledUserUPN),
+		nullStr(asset.ComplianceState),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert asset %s: %w", asset.ID, err)
+	}
+	return nil
+}
+
+// PersistSourceHealth upserts a circuit-breaker health snapshot into the
+// source_health table (created by RFC-0062 but, until RFC-0135, never written).
+// It gives the breaker durable, queryable state across process restarts —
+// though the live in-memory circuit still starts cold on restart. Implements
+// safety.HealthPersister; called best-effort after every RecordSuccess/
+// RecordFailure, so it uses its own short-lived background context.
+func (s *SQLiteStore) PersistSourceHealth(h safety.SourceHealth) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var lastSuccess, lastFailure any
+	if h.LastSuccessAt != nil {
+		lastSuccess = h.LastSuccessAt.UTC().Format(time.RFC3339Nano)
+	}
+	if h.LastFailureAt != nil {
+		lastFailure = h.LastFailureAt.UTC().Format(time.RFC3339Nano)
+	}
+
+	_, err := s.db.ExecContext(
+		ctx, `
+		INSERT INTO source_health (
+			source_name, state, consecutive_failures, consecutive_successes,
+			failure_threshold, cooldown_seconds, last_success_at, last_failure_at,
+			last_failure_reason, total_trips, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'))
+		ON CONFLICT(source_name) DO UPDATE SET
+			state                 = excluded.state,
+			consecutive_failures  = excluded.consecutive_failures,
+			consecutive_successes = excluded.consecutive_successes,
+			failure_threshold     = excluded.failure_threshold,
+			cooldown_seconds      = excluded.cooldown_seconds,
+			last_success_at       = excluded.last_success_at,
+			last_failure_at       = excluded.last_failure_at,
+			last_failure_reason   = excluded.last_failure_reason,
+			total_trips           = excluded.total_trips,
+			updated_at            = excluded.updated_at
+	`,
+		h.SourceName,
+		string(h.State),
+		h.ConsecutiveFailures,
+		h.ConsecutiveSuccesses,
+		h.FailureThreshold,
+		h.CooldownSeconds,
+		lastSuccess,
+		lastFailure,
+		nullStr(h.LastFailureReason),
+		h.TotalTrips,
+	)
+	if err != nil {
+		return fmt.Errorf("persist source health %s: %w", h.SourceName, err)
 	}
 	return nil
 }
@@ -267,9 +371,10 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 		}
 
 		for i := range assets {
-			_, execErr := tx.ExecContext(ctx, `
+			_, execErr := tx.ExecContext(
+				ctx, `
 				INSERT INTO assets (`+assetColumns+`)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT(hostname, asset_type) DO UPDATE SET
 					os_family        = excluded.os_family,
 					os_version       = excluded.os_version,
@@ -283,7 +388,16 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 					discovery_source = excluded.discovery_source,
 					last_seen_at     = excluded.last_seen_at,
 					tags             = excluded.tags,
-					natural_key      = excluded.natural_key
+					natural_key      = excluded.natural_key,
+				mdm_enrollment_id  = excluded.mdm_enrollment_id,
+				cmdb_sys_id        = excluded.cmdb_sys_id,
+				site               = excluded.site,
+				tenant             = excluded.tenant,
+				asset_tag          = excluded.asset_tag,
+				operational_status = excluded.operational_status,
+				ownership_type     = excluded.ownership_type,
+				enrolled_user_upn  = excluded.enrolled_user_upn,
+				compliance_state   = excluded.compliance_state
 			`,
 				assets[i].ID.String(),
 				string(assets[i].AssetType),
@@ -302,6 +416,15 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 				assets[i].LastSeenAt.Format(time.RFC3339),
 				nullStr(assets[i].Tags),
 				assets[i].NaturalKey,
+				nullStr(assets[i].MDMEnrollmentID),
+				nullStr(assets[i].CMDBSysID),
+				nullStr(assets[i].Site),
+				nullStr(assets[i].Tenant),
+				nullStr(assets[i].AssetTag),
+				nullStr(assets[i].OperationalStatus),
+				nullStr(assets[i].OwnershipType),
+				nullStr(assets[i].EnrolledUserUPN),
+				nullStr(assets[i].ComplianceState),
 			)
 			if execErr != nil {
 				return fmt.Errorf("upsert asset %s: %w", assets[i].ID, execErr)
@@ -463,7 +586,8 @@ func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) 
 // threshold measured from the current time.
 func (s *SQLiteStore) GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error) {
 	cutoff := time.Now().UTC().Add(-threshold).Format(time.RFC3339)
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.db.QueryContext(
+		ctx,
 		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < ? ORDER BY last_seen_at ASC, id ASC`,
 		cutoff,
 	)
@@ -538,7 +662,8 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (*model.AssetEvent, err
 
 // InsertEvent persists a single asset lifecycle event.
 func (s *SQLiteStore) InsertEvent(ctx context.Context, event model.AssetEvent) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.db.ExecContext(
+		ctx,
 		`INSERT INTO events (`+eventColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		event.ID.String(),
 		string(event.EventType),
@@ -575,7 +700,8 @@ func (s *SQLiteStore) InsertEvents(ctx context.Context, events []model.AssetEven
 		defer func() { _ = stmt.Close() }()
 
 		for i := range events {
-			_, err := stmt.ExecContext(ctx,
+			_, err := stmt.ExecContext(
+				ctx,
 				events[i].ID.String(),
 				string(events[i].EventType),
 				events[i].AssetID.String(),
@@ -732,7 +858,8 @@ func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) erro
 		triggerSource = "cli"
 	}
 	return withTransientRetry(3, func() error {
-		_, err := s.db.ExecContext(ctx,
+		_, err := s.db.ExecContext(
+			ctx,
 			`INSERT INTO scan_runs (`+scanRunColumns+`)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			run.ID.String(),
@@ -770,7 +897,8 @@ func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result 
 	var notFound bool
 	err := withTransientRetry(3, func() error {
 		notFound = false
-		res, execErr := s.db.ExecContext(ctx, `
+		res, execErr := s.db.ExecContext(
+			ctx, `
 		UPDATE scan_runs SET
 			completed_at     = ?,
 			status           = ?,
@@ -836,7 +964,8 @@ func (s *SQLiteStore) ListScanRuns(ctx context.Context, limit int) ([]model.Scan
 	if limit > 1000 {
 		limit = 1000
 	}
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.db.QueryContext(
+		ctx,
 		`SELECT `+scanRunColumns+` FROM scan_runs ORDER BY started_at DESC LIMIT ?`,
 		limit,
 	)
@@ -971,7 +1100,8 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 		defer func() { _ = stmt.Close() }()
 
 		for i := range software {
-			_, err = stmt.ExecContext(ctx,
+			_, err = stmt.ExecContext(
+				ctx,
 				software[i].ID.String(),
 				assetID.String(),
 				software[i].SoftwareName,
@@ -996,7 +1126,8 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 // ListSoftware returns all installed software records for the given asset,
 // ordered by software name.
 func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.db.QueryContext(
+		ctx,
 		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = ? ORDER BY software_name ASC, version ASC, id ASC`,
 		assetID.String(),
 	)
@@ -1123,7 +1254,8 @@ func (s *SQLiteStore) InsertFindings(ctx context.Context, findings []model.Confi
 			if firstSeen.IsZero() {
 				firstSeen = findings[i].Timestamp
 			}
-			_, err := stmt.ExecContext(ctx,
+			_, err := stmt.ExecContext(
+				ctx,
 				findings[i].ID.String(),
 				findings[i].AssetID.String(),
 				findings[i].ScanRunID.String(),
@@ -1224,7 +1356,8 @@ func (s *SQLiteStore) InsertRuntimeIncident(ctx context.Context, incident model.
 	if incident.ScanRunID != nil {
 		scanRunID = sql.NullString{String: incident.ScanRunID.String(), Valid: true}
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.db.ExecContext(
+		ctx,
 		`INSERT INTO runtime_incidents (`+incidentColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		incident.ID.String(),
 		string(incident.IncidentType),
