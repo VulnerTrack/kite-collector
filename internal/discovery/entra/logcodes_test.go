@@ -14,6 +14,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 	codes := []LogCode{
 		LogCodeDiscoverCredsMissing,
 		LogCodeDiscoverTokenAcquireFailed,
+		LogCodeDiscoverEndpointRejected,
 		LogCodeEnrichRoleAssignmentsFailed,
 		LogCodeEnrichMfaRegistrationFailed,
 		LogCodeEnrichRoleMembersFailed,
@@ -41,6 +42,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 	all := []LogCode{
 		LogCodeDiscoverCredsMissing,
 		LogCodeDiscoverTokenAcquireFailed,
+		LogCodeDiscoverEndpointRejected,
 		LogCodeEnrichRoleAssignmentsFailed,
 		LogCodeEnrichMfaRegistrationFailed,
 		LogCodeEnrichRoleMembersFailed,
