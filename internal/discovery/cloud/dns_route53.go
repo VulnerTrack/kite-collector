@@ -21,7 +21,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
 
 const (
@@ -122,6 +124,30 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 
 	accountRef := deriveAWSAccountRef(creds.accessKey)
 
+	// RFC-0137 R5/R10: adopt connectorkit.SafeClient for the shared 30s timeout
+	// and safenet TLS config on the hardcoded Route53 endpoint. There is no SSRF
+	// surface (the base URL is a package const), but routing through SafeClient
+	// keeps TLS handling consistent with every other connector; test overrides
+	// keep their injected client.
+	hc, err := dnsSafeClient(HardeningSourceRoute53, r.baseURL, defaultRoute53BaseURL, r.httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("cloud_dns_route53: %w", err)
+	}
+	r.httpClient = hc
+
+	// RFC-0137 R2/F3: bridge the (possibly assumed-role) IAM credentials onto
+	// connectorkit.Credentials so a single deferred Zero() overwrites the secret
+	// and session keys after the last signed request this cycle. Placed after the
+	// assume-role swap so it zeros the credentials actually used for signing, and
+	// registered as a defer so it runs outside every doWithRetry closure (Failure
+	// Mode 8.1 row 3).
+	ckCreds := connectorkit.Credentials{
+		AccessKeyID:     creds.accessKey,
+		SecretAccessKey: creds.secretKey,
+		SessionToken:    creds.sessionToken,
+	}
+	defer ckCreds.Zero()
+
 	zones, err := r.listHostedZones(ctx, creds)
 	if err != nil {
 		return nil, fmt.Errorf("cloud_dns_route53: %w", err)
@@ -138,6 +164,18 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 		zoneUUID := uuid.Must(uuid.NewV7()).String()
 		zoneNameNorm := normalizeZoneName(zr.Name)
 		providerZoneID := normalizeRoute53HostedZoneID(zr.ID)
+
+		// RFC-0137 R4/F6: providerZoneID is reflected into the dnssec and rrset
+		// request paths. Upgrade the bare prefix-strip to the
+		// safenet.SanitizePathSegment allowlist; skip any zone whose id is unsafe.
+		safeZoneID, sErr := safenet.SanitizePathSegment(providerZoneID)
+		if sErr != nil {
+			slog.Warn("Route53 skipping zone with unsafe hosted-zone id",
+				"code", string(LogCodeRoute53UnsafeZoneID),
+				"zone", providerZoneID, "error", sErr)
+			continue
+		}
+		providerZoneID = safeZoneID
 
 		dnssecEnabled, dErr := r.getDNSSECStatus(ctx, creds, providerZoneID)
 		if dErr != nil {
@@ -276,6 +314,7 @@ func (r *Route53DNS) listHostedZones(ctx context.Context, creds awsCredentials) 
 		all    []route53HostedZone
 		marker string
 	)
+	guard := connectorkit.NewGuard(HardeningSourceRoute53)
 	for {
 		path := fmt.Sprintf("/%s/hostedzone", route53APIVersion)
 		query := ""
@@ -285,6 +324,9 @@ func (r *Route53DNS) listHostedZones(ctx context.Context, creds awsCredentials) 
 		respBody, err := r.signedGet(ctx, creds, path, query)
 		if err != nil {
 			return nil, fmt.Errorf("ListHostedZones: %w", err)
+		}
+		if gErr := guard.NextPage(int64(len(respBody))); gErr != nil {
+			return all, fmt.Errorf("ListHostedZones pagination guard: %w", gErr)
 		}
 
 		var page route53ListHostedZonesResponse
@@ -309,6 +351,7 @@ func (r *Route53DNS) listResourceRecordSets(ctx context.Context, creds awsCreden
 		nextRecordType   string
 		nextIdentifierID string
 	)
+	guard := connectorkit.NewGuard(HardeningSourceRoute53)
 	for {
 		path := fmt.Sprintf("/%s/hostedzone/%s/rrset", route53APIVersion, hostedZoneID)
 		query := ""
@@ -324,6 +367,9 @@ func (r *Route53DNS) listResourceRecordSets(ctx context.Context, creds awsCreden
 		respBody, err := r.signedGet(ctx, creds, path, query)
 		if err != nil {
 			return nil, fmt.Errorf("ListResourceRecordSets %s: %w", hostedZoneID, err)
+		}
+		if gErr := guard.NextPage(int64(len(respBody))); gErr != nil {
+			return all, fmt.Errorf("ListResourceRecordSets %s pagination guard: %w", hostedZoneID, gErr)
 		}
 
 		var page route53ListResourceRecordSetsResponse
@@ -386,7 +432,7 @@ func (r *Route53DNS) signedGet(ctx context.Context, creds awsCredentials, path, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDNSResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}

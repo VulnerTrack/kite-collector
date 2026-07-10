@@ -62,6 +62,7 @@ const (
 	LogCodeRoute53GetDNSSECFailed     LogCode = "cloud.dns_route53.get_dnssec_failed"
 	LogCodeRoute53ListRecordsFailed   LogCode = "cloud.dns_route53.list_records_failed"
 	LogCodeRoute53SkipUnsupportedType LogCode = "cloud.dns_route53.skip_unsupported_record_type"
+	LogCodeRoute53UnsafeZoneID        LogCode = "cloud.dns_route53.unsafe_zone_id"
 	LogCodeRoute53Complete            LogCode = "cloud.dns_route53.completed"
 
 	// --- Cloudflare DNS discovery ------------------------------------
@@ -69,6 +70,7 @@ const (
 	LogCodeCloudflareTokenMissing        LogCode = "cloud.dns_cloudflare.token_missing" //#nosec G101 -- log code identifier emitted when the Cloudflare API token env var is absent, not a token value
 	LogCodeCloudflareListRecordsFailed   LogCode = "cloud.dns_cloudflare.list_records_failed"
 	LogCodeCloudflareSkipUnsupportedType LogCode = "cloud.dns_cloudflare.skip_unsupported_record_type"
+	LogCodeCloudflareUnsafeZoneID        LogCode = "cloud.dns_cloudflare.unsafe_zone_id"
 	LogCodeCloudflareComplete            LogCode = "cloud.dns_cloudflare.completed"
 
 	// --- Azure DNS discovery -----------------------------------------
@@ -77,6 +79,7 @@ const (
 	LogCodeAzureDNSListZonesFailed     LogCode = "cloud.dns_azure.list_zones_failed"
 	LogCodeAzureDNSListRecordsFailed   LogCode = "cloud.dns_azure.list_records_failed"
 	LogCodeAzureDNSSkipUnsupportedType LogCode = "cloud.dns_azure.skip_unsupported_record_type"
+	LogCodeAzureDNSUnsafeZoneID        LogCode = "cloud.dns_azure.unsafe_zone_id"
 	LogCodeAzureDNSComplete            LogCode = "cloud.dns_azure.completed"
 
 	// --- GCP DNS discovery -------------------------------------------
@@ -85,6 +88,7 @@ const (
 	LogCodeGCPDNSTokenAcquireFailed  LogCode = "cloud.dns_gcp.token_acquire_failed" //#nosec G101 -- log code identifier for GCP DNS OAuth token acquisition failure, not a token value
 	LogCodeGCPDNSListRecordsFailed   LogCode = "cloud.dns_gcp.list_records_failed"
 	LogCodeGCPDNSSkipUnsupportedType LogCode = "cloud.dns_gcp.skip_unsupported_record_type"
+	LogCodeGCPDNSUnsafeZoneID        LogCode = "cloud.dns_gcp.unsafe_zone_id"
 	LogCodeGCPDNSComplete            LogCode = "cloud.dns_gcp.completed"
 
 	// --- Cross-provider DNS-discovery shared events ------------------

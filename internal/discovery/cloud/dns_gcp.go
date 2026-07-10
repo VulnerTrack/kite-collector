@@ -20,7 +20,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
 
 const (
@@ -94,6 +96,21 @@ func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		)
 		return nil, nil
 	}
+
+	// RFC-0137 R2/F3: own the bearer token via connectorkit.Credentials and zero
+	// it after the last request this cycle. obtainGCPToken's metadata-server call
+	// in gcp.go remains exempt from endpoint validation per RFC §2.2.
+	ckCreds := connectorkit.Credentials{Token: token}
+	defer ckCreds.Zero()
+
+	// RFC-0137 R5/R10: adopt connectorkit.SafeClient (30s timeout, safenet TLS)
+	// on the hardcoded Cloud DNS endpoint; test overrides keep their injected
+	// client.
+	hc, err := dnsSafeClient(HardeningSourceGCP, g.baseURL, defaultGCPCloudDNSBaseURL, g.httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("cloud_dns_gcp: %w", err)
+	}
+	g.httpClient = hc
 
 	zones, err := g.listManagedZones(ctx, token, projectID)
 	if err != nil {
@@ -227,10 +244,14 @@ func (g *GCPDNS) listManagedZones(ctx context.Context, token, projectID string) 
 		g.baseURL, url.PathEscape(projectID))
 
 	var all []gcpManagedZone
+	guard := connectorkit.NewGuard(HardeningSourceGCP)
 	for apiURL != "" {
 		body, err := g.bearerGet(ctx, token, apiURL)
 		if err != nil {
 			return all, fmt.Errorf("managedZones list: %w", err)
+		}
+		if gErr := guard.NextPage(int64(len(body))); gErr != nil {
+			return all, fmt.Errorf("managedZones pagination guard: %w", gErr)
 		}
 		var resp gcpManagedZonesResponse
 		if uErr := json.Unmarshal(body, &resp); uErr != nil {
@@ -245,14 +266,28 @@ func (g *GCPDNS) listManagedZones(ctx context.Context, token, projectID string) 
 // listResourceRecordSets pages through GET
 // /projects/{p}/managedZones/{z}/rrsets.
 func (g *GCPDNS) listResourceRecordSets(ctx context.Context, token, projectID, zoneName string) ([]gcpResourceRecordSet, error) {
+	// RFC-0137 R4/F6: zoneName is a provider-returned managed-zone id reflected
+	// into the rrsets request path. Upgrade the bare url.PathEscape with the
+	// safenet.SanitizePathSegment allowlist so an injected traversal or control
+	// character cannot redirect the request.
+	safeZone, sErr := safenet.SanitizePathSegment(zoneName)
+	if sErr != nil {
+		slog.Warn("GCP DNS rejecting record-set fetch for unsafe managed-zone id",
+			"code", string(LogCodeGCPDNSUnsafeZoneID), "zone", zoneName, "error", sErr)
+		return nil, fmt.Errorf("cloud_dns_gcp: %w", sErr)
+	}
 	apiURL := fmt.Sprintf("%s/projects/%s/managedZones/%s/rrsets",
-		g.baseURL, url.PathEscape(projectID), url.PathEscape(zoneName))
+		g.baseURL, url.PathEscape(projectID), url.PathEscape(safeZone))
 
 	var all []gcpResourceRecordSet
+	guard := connectorkit.NewGuard(HardeningSourceGCP)
 	for apiURL != "" {
 		body, err := g.bearerGet(ctx, token, apiURL)
 		if err != nil {
 			return all, fmt.Errorf("rrsets list: %w", err)
+		}
+		if gErr := guard.NextPage(int64(len(body))); gErr != nil {
+			return all, fmt.Errorf("rrsets pagination guard: %w", gErr)
 		}
 		var resp gcpResourceRecordSetsResponse
 		if uErr := json.Unmarshal(body, &resp); uErr != nil {
@@ -279,7 +314,7 @@ func (g *GCPDNS) bearerGet(ctx context.Context, token, apiURL string) ([]byte, e
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDNSResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
