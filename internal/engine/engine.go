@@ -19,6 +19,7 @@ import (
 	cloudsrc "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	entrasrc "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
@@ -882,7 +883,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			ScanRunID:    &scanID,
 			Severity:     string(model.SeverityHigh),
 			Recovered:    true,
-			ErrorCode:    "KITE-E013",
+			ErrorCode:    kiteerrors.CodeScanDeadlineExceeded,
 			CreatedAt:    time.Now().UTC(),
 		})
 	}

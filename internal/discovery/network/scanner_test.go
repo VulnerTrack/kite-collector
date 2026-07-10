@@ -1,15 +1,57 @@
 package network
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
+
+// TestScanner_Discover_DeadlineExceededLogsCatalogE004 drives the scan with a
+// parent context already past its deadline, so the scan's own timeout context
+// reports DeadlineExceeded immediately — deterministic, no real network — and
+// asserts the timeout surfaces the catalogued KITE-E004 envelope.
+func TestScanner_Discover_DeadlineExceededLogsCatalogE004(t *testing.T) {
+	t.Setenv("KITE_MAX_SCAN_IPS", "1024")
+	t.Setenv("KITE_ALLOW_LINK_LOCAL", "false")
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	sink := newFakeSink()
+	s := NewWithSink(sink, "agent-test")
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Hour))
+	defer cancel()
+
+	_, err := s.Discover(ctx, map[string]any{
+		"scope":     []any{"192.0.2.0/30"}, // TEST-NET, 4 IPs
+		"tcp_ports": []any{float64(80)},
+	})
+	require.NoError(t, err, "a deadline yields partial results, not a hard error")
+
+	var rec map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var m map[string]any
+		if json.Unmarshal([]byte(line), &m) == nil && m["error_code"] == "KITE-E004" {
+			rec = m
+			break
+		}
+	}
+	require.NotNil(t, rec, "expected a KITE-E004 deadline log line")
+	assert.NotEmpty(t, rec["hint"], "E004 remediation hint must be present")
+}
 
 type fakeSink struct {
 	ports  map[string][]OpenPort

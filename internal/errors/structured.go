@@ -2,9 +2,27 @@ package errors
 
 import (
 	stderrors "errors"
+	"fmt"
 	"log/slog"
+	"os"
 	"runtime"
 )
+
+// WrapFileError classifies a filesystem error from operation op. A permission
+// failure is surfaced as the catalogued KITE-E008 (check ownership/permissions,
+// run as admin) with the cause preserved so errors.Is(err, os.ErrPermission)
+// still matches; any other error is annotated with op and returned unchanged in
+// shape; a nil error stays nil. This is the canonical way to produce E008 from
+// a file operation, shared by the identity and enrollment key/cert stores.
+func WrapFileError(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if stderrors.Is(err, os.ErrPermission) {
+		return FromCatalog(CodePermissionDenied, fmt.Errorf("%s: %w", op, err))
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
 
 // Error is a runtime error instance that renders as a structured envelope in
 // slog JSON logs:
@@ -91,6 +109,9 @@ func (e *Error) WithContext(ctx map[string]any) *Error {
 // but code-free so it stays clean when surfaced to callers (e.g. HTTP bodies);
 // the code travels in the structured fields.
 func (e *Error) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
 	switch {
 	case e.Message != "" && e.cause != nil:
 		return e.Message + ": " + e.cause.Error()
@@ -104,7 +125,12 @@ func (e *Error) Error() string {
 }
 
 // Unwrap exposes the underlying cause so errors.Is / errors.As traverse it.
-func (e *Error) Unwrap() error { return e.cause }
+func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
+}
 
 // LogValue implements slog.LogValuer so `slog.Any("error", err)` renders the
 // envelope as a nested group. Use Attrs for top-level fields instead.
@@ -114,6 +140,11 @@ func (e *Error) LogValue() slog.Value {
 
 // attrs returns the envelope as ordered slog attributes.
 func (e *Error) attrs() []slog.Attr {
+	// A typed-nil *Error (the classic Go footgun: returning a nil-valued
+	// concrete pointer as an error) must not panic in the logging path.
+	if e == nil {
+		return fallbackAttrs("<nil>")
+	}
 	ctx := e.Context
 	if ctx == nil {
 		// Emit an explicit empty object rather than letting slog elide a
@@ -125,6 +156,18 @@ func (e *Error) attrs() []slog.Attr {
 		slog.String("error_message", e.Error()),
 		slog.String("hint", e.Hint),
 		slog.Any("error_context", ctx),
+	}
+}
+
+// fallbackAttrs builds the envelope for an error that carries no structured
+// code/hint/context — a plain error or a nil *Error — keeping the four
+// top-level fields stable so downstream log queries never see a missing key.
+func fallbackAttrs(msg string) []slog.Attr {
+	return []slog.Attr{
+		slog.String("error_code", ""),
+		slog.String("error_message", msg),
+		slog.String("hint", ""),
+		slog.Any("error_context", map[string]any{}),
 	}
 }
 
@@ -142,13 +185,28 @@ func Attrs(err error) []slog.Attr {
 		return nil
 	}
 	var e *Error
-	if stderrors.As(err, &e) {
+	if stderrors.As(err, &e) && e != nil {
 		return e.attrs()
 	}
-	return []slog.Attr{
-		slog.String("error_code", ""),
-		slog.String("error_message", err.Error()),
-		slog.String("hint", ""),
-		slog.Any("error_context", map[string]any{}),
+	// Plain error, or a typed-nil *Error in the chain — fall back to the bare
+	// envelope. err.Error() is safe here: a nil *Error's Error() is guarded.
+	return fallbackAttrs(err.Error())
+}
+
+// Explain renders err for an operator (e.g. a failed CLI command). When err
+// carries a catalog code, the catalogued remediation (KiteError.Format) is
+// appended so the fix is shown inline instead of requiring a separate
+// `kite-collector error <code>` lookup; a plain error yields just its message,
+// and nil yields "".
+func Explain(err error) string {
+	if err == nil {
+		return ""
 	}
+	var e *Error
+	if stderrors.As(err, &e) && e != nil {
+		if entry := Lookup(e.Code); entry != nil {
+			return err.Error() + "\n\n" + entry.Format()
+		}
+	}
+	return err.Error()
 }

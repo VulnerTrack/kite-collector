@@ -7,6 +7,8 @@ import (
 	"runtime/debug"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // RecoveryMiddleware wraps an http.Handler with panic recovery. Panics are
@@ -67,14 +69,7 @@ func (w *boundedResponseWriter) Write(p []byte) (int, error) {
 	}
 	remaining := w.maxBytes - w.written
 	if remaining <= 0 {
-		w.truncated = true
-		if w.counter != nil {
-			w.counter.Inc()
-		}
-		slog.Warn("REST response truncated: size limit exceeded",
-			"code", string(LogCodeMiddlewareResponseTruncated),
-			"max_bytes", w.maxBytes,
-			"written", w.written)
+		w.markTruncated()
 		return len(p), nil
 	}
 	truncating := int64(len(p)) > remaining
@@ -84,19 +79,29 @@ func (w *boundedResponseWriter) Write(p []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(p)
 	w.written += int64(n)
 	if truncating {
-		w.truncated = true
-		if w.counter != nil {
-			w.counter.Inc()
-		}
-		slog.Warn("REST response truncated: size limit exceeded",
-			"code", string(LogCodeMiddlewareResponseTruncated),
-			"max_bytes", w.maxBytes,
-			"written", w.written)
+		w.markTruncated()
 	}
 	if err != nil {
 		return n, fmt.Errorf("bounded write: %w", err)
 	}
 	return n, nil
+}
+
+// markTruncated records that the response hit the size cap: it flips the
+// truncated flag, bumps the counter, and logs the event with the catalogued
+// KITE-E014 remediation hint (paginate / filter / raise the limit) so the
+// operator sees actionable next steps. Both truncation branches funnel here.
+func (w *boundedResponseWriter) markTruncated() {
+	w.truncated = true
+	if w.counter != nil {
+		w.counter.Inc()
+	}
+	slog.Warn("REST response truncated: size limit exceeded",
+		"code", string(LogCodeMiddlewareResponseTruncated),
+		"max_bytes", w.maxBytes,
+		"written", w.written,
+		"hint", kiteerrors.FromCatalog(kiteerrors.CodeResponseTruncated, nil).Hint,
+	)
 }
 
 // ResponseBoundingMiddleware limits the total bytes written to the HTTP

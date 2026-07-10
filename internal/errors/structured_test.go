@@ -88,3 +88,43 @@ func TestFromCatalogPullsMessageAndHint(t *testing.T) {
 		t.Errorf("Error() should include cause, got %q", err.Error())
 	}
 }
+
+// TestLogValue_RendersNestedEnvelopeThroughSlog locks the LogValuer contract
+// that every `slog.X(..., "error", structErr)` site relies on: a populated
+// *Error renders as the four-key envelope nested under its log key. A
+// regression here (dropping the LogValuer impl, or returning a scalar) would
+// silently flatten structured logs across the whole codebase with no test to
+// catch it. Complements TestAttrs* (the flat, top-level form).
+func TestLogValue_RendersNestedEnvelopeThroughSlog(t *testing.T) {
+	var buf strings.Builder
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	err := Wrap(stderrors.New("dial tcp: refused"), "KITE-E005", "UniFi controller unreachable").
+		WithHint("verify KITE_UNIFI_ENDPOINT").
+		With("endpoint", "https://ctrl:8443")
+
+	logger.Error("source failed", slog.Any("error", err))
+
+	var rec map[string]any
+	if e := json.Unmarshal([]byte(buf.String()), &rec); e != nil {
+		t.Fatalf("log line is not valid JSON: %v\n%s", e, buf.String())
+	}
+
+	env, ok := rec["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error field must be a nested object, got %T: %v", rec["error"], rec["error"])
+	}
+	if env["error_code"] != "KITE-E005" {
+		t.Errorf("nested error_code = %v, want KITE-E005", env["error_code"])
+	}
+	if env["error_message"] != "UniFi controller unreachable: dial tcp: refused" {
+		t.Errorf("nested error_message = %v", env["error_message"])
+	}
+	if env["hint"] != "verify KITE_UNIFI_ENDPOINT" {
+		t.Errorf("nested hint = %v", env["hint"])
+	}
+	ctx, ok := env["error_context"].(map[string]any)
+	if !ok || ctx["endpoint"] != "https://ctrl:8443" {
+		t.Errorf("nested error_context = %v", env["error_context"])
+	}
+}

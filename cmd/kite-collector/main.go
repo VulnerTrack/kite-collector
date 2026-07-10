@@ -3397,7 +3397,10 @@ func main() {
 	}
 
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// Show the catalogued remediation inline when the failure carries a
+		// KITE-E* code, so the operator sees the fix without a separate
+		// `kite-collector error <code>` lookup.
+		_, _ = fmt.Fprintln(os.Stderr, "Error: "+kiteerrors.Explain(err))
 		os.Exit(1)
 	}
 }

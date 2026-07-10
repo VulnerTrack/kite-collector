@@ -3,6 +3,7 @@ package wazuh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // -------------------------------------------------------------------------
@@ -138,7 +141,10 @@ func TestAuth_GetToken_BadCredentials(t *testing.T) {
 
 	_, err := auth.getToken(context.Background())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "HTTP 401")
+	var ke *kiteerrors.Error
+	require.True(t, errors.As(err, &ke), "bad credentials must yield a catalogued error")
+	assert.Equal(t, "KITE-E002", ke.Code)
+	assert.NotEmpty(t, ke.Hint)
 }
 
 func TestAuth_InvalidateToken(t *testing.T) {

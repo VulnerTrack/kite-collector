@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -311,6 +313,19 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	outcome := "completed"
 	if ctx.Err() != nil {
 		outcome = "aborted"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// The scan hit its overall deadline — surface the catalogued
+			// KITE-E004 remediation (raise scan_timeout / narrow scope /
+			// check firewall) as a flat envelope alongside the partial results.
+			e004 := kiteerrors.FromCatalog(kiteerrors.CodeNetworkScanTimeout, nil)
+			slog.LogAttrs(ctx, slog.LevelWarn,
+				"network scan exceeded its deadline; results are partial",
+				append([]slog.Attr{
+					slog.String("scan_id", scanID),
+					slog.Int("ips_scanned", probed),
+					slog.String("scan_timeout", parsed.ScanTimeout.String()),
+				}, kiteerrors.Attrs(e004)...)...)
+		}
 	}
 	scanEvent := ScanEvent{
 		ScanID:           scanID,

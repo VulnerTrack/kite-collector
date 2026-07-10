@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
 
@@ -76,6 +77,11 @@ func (a *wazuhAuth) getToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("wazuh auth: read body: %w", err)
 	}
 
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		// The Manager rejected the credentials — surface the catalogued
+		// KITE-E002 remediation (check KITE_WAZUH_USERNAME/PASSWORD, etc.).
+		return "", kiteerrors.FromCatalog(kiteerrors.CodeWazuhAuthFailed, nil).With("http_status", resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("wazuh auth: HTTP %d: %s", resp.StatusCode, truncateStr(string(body), 200))
 	}

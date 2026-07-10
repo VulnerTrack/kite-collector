@@ -75,7 +75,7 @@ func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]mod
 	token := os.Getenv("CF_API_TOKEN")
 	if token == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("cloud_dns_cloudflare: source enabled but CF_API_TOKEN not set")
+			return nil, errCredsMissing("cloud_dns_cloudflare: source enabled but CF_API_TOKEN not set")
 		}
 		slog.Warn("Cloudflare CF_API_TOKEN missing; skipping discovery",
 			"code", string(LogCodeCloudflareTokenMissing),

@@ -13,6 +13,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/api/middleware"
 	"github.com/vulnertrack/kite-collector/internal/config"
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -91,6 +92,16 @@ func (h *Handler) handleStartScan(w http.ResponseWriter, r *http.Request) {
 	var req scan.TriggerRequest
 	body, readErr := io.ReadAll(r.Body)
 	if readErr != nil {
+		// An over-limit body (from MaxBytesMiddleware) is a 413, not a 400.
+		// Surface the catalogued KITE-E015 remediation to the client — it is
+		// generic guidance (shrink payload / raise the limit / paginate), safe
+		// to expose.
+		var maxErr *http.MaxBytesError
+		if errors.As(readErr, &maxErr) {
+			e015 := kiteerrors.FromCatalog(kiteerrors.CodeRequestBodyTooLarge, nil)
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large: "+e015.Hint)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "read body: "+readErr.Error())
 		return
 	}
