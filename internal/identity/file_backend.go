@@ -7,7 +7,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
+
+// fileErr classifies a key-backend filesystem error, mapping a permission
+// failure to the catalogued KITE-E008. It delegates to the canonical shared
+// classifier so the identity and enrollment stores stay consistent.
+func fileErr(op string, err error) error {
+	return kiteerrors.WrapFileError(op, err)
+}
 
 // FileBackend stores private keys as base64-encoded files with 0600
 // permissions. This is the fallback backend used on all platforms.
@@ -31,13 +40,13 @@ func (b *FileBackend) Store(label string, key crypto.PrivateKey) error {
 	}
 
 	if err := os.MkdirAll(b.dir, 0o700); err != nil {
-		return fmt.Errorf("create key dir: %w", err)
+		return fileErr("create key dir", err)
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(edKey)
 	path := filepath.Join(b.dir, label+".key")
 	if err := os.WriteFile(path, []byte(encoded), 0o600); err != nil {
-		return fmt.Errorf("write key file: %w", err)
+		return fileErr("write key file", err)
 	}
 	return nil
 }
@@ -46,7 +55,7 @@ func (b *FileBackend) Load(label string) (crypto.PrivateKey, error) {
 	path := filepath.Join(b.dir, label+".key")
 	data, err := os.ReadFile(path) // #nosec G304 — path from trusted config
 	if err != nil {
-		return nil, fmt.Errorf("read key file: %w", err)
+		return nil, fileErr("read key file", err)
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(string(data))

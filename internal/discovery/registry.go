@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safety"
 )
@@ -86,6 +87,11 @@ func (r *Registry) Get(name string) Source {
 // The function only returns an error when the parent context is cancelled.
 func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[string]any) ([]model.Asset, error) {
 	if len(r.sources) == 0 {
+		// No sources registered — the scan can find nothing. Explain the no-op
+		// with the catalogued KITE-E009 remediation (enable at least one source
+		// or use --auto) instead of returning silently.
+		slog.LogAttrs(ctx, slog.LevelWarn, "no discovery sources registered; scan will find nothing",
+			kiteerrors.Attrs(kiteerrors.FromCatalog(kiteerrors.CodeNoDiscoverySources, nil))...)
 		return nil, nil
 	}
 
@@ -119,12 +125,16 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 			elapsed := time.Since(start)
 
 			if err != nil {
-				slog.Warn(
-					"discovery source failed",
-					"code", string(LogCodeRegistrySourceFailed),
-					"source", src.Name(),
-					"error", err,
-				)
+				// Emit the flat structured envelope (error_code/error_message/
+				// hint/error_context) so a source returning a *kiteerrors.Error
+				// surfaces its catalog code and remediation as top-level log
+				// fields; plain errors degrade to error_message only. The stable
+				// `code` pivot (LogCodeRegistrySourceFailed) is preserved.
+				attrs := append([]slog.Attr{
+					slog.String("code", string(LogCodeRegistrySourceFailed)),
+					slog.String("source", src.Name()),
+				}, kiteerrors.Attrs(err)...)
+				slog.LogAttrs(gctx, slog.LevelWarn, "discovery source failed", attrs...)
 				if r.circuitBreaker != nil {
 					r.circuitBreaker.RecordFailure(src.Name(), err.Error())
 				}

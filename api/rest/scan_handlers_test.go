@@ -186,6 +186,24 @@ func TestStartScan_ScopeSubsetAccepted(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, rec.Code, "body=%s", rec.Body.String())
 }
 
+func TestStartScan_OversizedBodyReturns413WithCatalogE015(t *testing.T) {
+	h, _, _, _ := newHandlerWithCoord(t)
+	// Wrap the mux with the request-size limit the production server applies.
+	wrapped := MaxBytesMiddleware(10, h.Mux()) // 10-byte cap
+
+	req := httptest.NewRequestWithContext(
+		context.Background(), http.MethodPost, "/api/v1/scans",
+		bytes.NewReader(make([]byte, 100)), // 100 bytes, well over the cap
+	)
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, req)
+
+	// An over-limit body is a 413, not a 400, and the catalogued E015
+	// remediation must reach the client.
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code, "body=%s", rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "max_request_bytes")
+}
+
 func TestStartScan_ScopeOutOfBoundsReturns400(t *testing.T) {
 	h, _, _, _ := newHandlerWithCoord(t)
 

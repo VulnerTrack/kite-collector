@@ -78,7 +78,7 @@ func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 	}
 	if creds.tenantID == "" || creds.clientID == "" || creds.clientSecret == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("cloud_dns_azure: source enabled but AZURE_TENANT_ID, AZURE_CLIENT_ID, or AZURE_CLIENT_SECRET not set")
+			return nil, errCredsMissing("cloud_dns_azure: source enabled but AZURE_TENANT_ID, AZURE_CLIENT_ID, or AZURE_CLIENT_SECRET not set")
 		}
 		slog.Warn("Azure DNS credentials missing; skipping discovery",
 			"code", string(LogCodeAzureDNSCredsMissing),

@@ -95,7 +95,7 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 	creds := loadAWSCredentials()
 	if creds.accessKey == "" || creds.secretKey == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("cloud_dns_route53: source enabled but AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not set")
+			return nil, errCredsMissing("cloud_dns_route53: source enabled but AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not set")
 		}
 		slog.Warn("Route53 AWS credentials missing; skipping discovery",
 			"code", string(LogCodeRoute53CredsMissing),

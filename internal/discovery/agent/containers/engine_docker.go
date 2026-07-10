@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // dockerAPIVersion is pinned to a widely-supported version; both Docker
@@ -209,7 +211,12 @@ func (c *dockerEngineCollector) listContainers(ctx context.Context) ([]dockerCon
 		c.baseURL+"/"+dockerAPIVersion+"/containers/json?all=true", nil)
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("list request: %w", err)
+		// A failed round-trip means the socket is present but the daemon is not
+		// answering — surface the catalogued KITE-E001 remediation (is Docker
+		// running? docker group? daemon reachable?). A non-200 status below is
+		// left generic: the daemon answered, so it is not an accessibility fault.
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeDockerNotAccessible, err).
+			With("socket", c.socket)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {

@@ -21,6 +21,14 @@ linters:
       confidence: medium
     govet:
       enable-all: true
+    wrapcheck:
+      # internal/errors is the structured-error construction layer: its helpers
+      # (FromCatalog, New, Wrap, WrapFileError) already return the wrapped
+      # KITE-E* form and are meant to be returned directly. wrapcheck still
+      # guards genuinely-external (third-party) errors elsewhere. (v2 config
+      # keys are kebab-case.)
+      ignore-package-globs:
+        - github.com/vulnertrack/kite-collector/internal/errors
 
 formatters:
   enable:

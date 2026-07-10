@@ -1,6 +1,10 @@
 package safety
 
 import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -8,6 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 func testCB() *CircuitBreaker {
@@ -29,6 +35,34 @@ func TestCircuitBreaker_HealthyToDegradedOnFailure(t *testing.T) {
 	cb.RecordFailure("docker", "connection refused")
 	assert.Equal(t, CircuitDegraded, cb.State("docker"))
 	assert.False(t, cb.ShouldSkip("docker"))
+}
+
+func TestCircuitBreaker_TripLogIncludesCatalogE012Hint(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	cb := testCB() // FailureThreshold: 3
+	cb.RecordFailure("docker", "err1")
+	cb.RecordFailure("docker", "err2")
+	cb.RecordFailure("docker", "err3") // trips the circuit
+	require.Equal(t, CircuitOpen, cb.State("docker"))
+
+	var rec map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var m map[string]any
+		if json.Unmarshal([]byte(line), &m) == nil && m["code"] == string(LogCodeSafetyCircuitTripped) {
+			rec = m
+			break
+		}
+	}
+	require.NotNil(t, rec, "expected a circuit-breaker-tripped log line")
+
+	hint, _ := rec["hint"].(string)
+	assert.NotEmpty(t, hint, "trip log must carry the E012 remediation hint")
+	// It must be the catalogued E012 remediation specifically.
+	assert.Equal(t, kiteerrors.FromCatalog(kiteerrors.CodeCircuitBreakerTripped, nil).Hint, hint)
 }
 
 func TestCircuitBreaker_DegradedToOpenOnThreshold(t *testing.T) {

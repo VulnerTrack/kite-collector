@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 const enrollURL = "https://pki.vulnertrack.io/pki/enroll"
@@ -27,9 +29,16 @@ type Result struct {
 	ClientKey          []byte
 }
 
+// httpDoer is the injectable HTTP transport — the real *http.Client in
+// production, a stub in tests — so the enrollment error paths are verifiable.
+type httpDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // Client performs enrollment handshakes with the PKI server.
 type Client struct {
 	logger *slog.Logger
+	http   httpDoer
 }
 
 // NewClient creates a new enrollment client.
@@ -37,7 +46,7 @@ func NewClient(logger *slog.Logger) *Client {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Client{logger: logger}
+	return &Client{logger: logger, http: http.DefaultClient}
 }
 
 // Enroll submits an enrollment request to the PKI server.
@@ -61,9 +70,14 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 		"agent_code", agentCode,
 		"endpoint", enrollURL)
 
-	resp, err := http.DefaultClient.Do(req)
+	doer := c.http
+	if doer == nil {
+		doer = http.DefaultClient // defensive: a zero-value Client still works
+	}
+	resp, err := doer.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("enroll request: %w", err)
+		// PKI server unreachable — surface the catalogued KITE-E017 remediation.
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed, err).With("phase", "connect")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -73,7 +87,10 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("PKI server returned %s: %s", resp.Status, data)
+		// PKI rejected the request (bad/expired token, wrong agent code, ...).
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
+			fmt.Errorf("PKI server returned %s: %s", resp.Status, data)).
+			With("http_status", resp.StatusCode)
 	}
 
 	var result struct {
@@ -103,7 +120,7 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 // StoreCertificates persists the enrollment result to dir.
 func StoreCertificates(dir string, result *Result) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create credential dir: %w", err)
+		return kiteerrors.WrapFileError("create credential dir", err)
 	}
 
 	files := map[string]struct {
@@ -118,7 +135,7 @@ func StoreCertificates(dir string, result *Result) error {
 	for name, f := range files {
 		path := filepath.Join(dir, name)
 		if err := os.WriteFile(path, f.data, f.perm); err != nil {
-			return fmt.Errorf("write %s: %w", name, err)
+			return kiteerrors.WrapFileError("write "+name, err)
 		}
 	}
 

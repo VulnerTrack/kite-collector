@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 func TestWithTransientRetry_RetriesOnIOErr(t *testing.T) {
@@ -33,6 +35,33 @@ func TestWithTransientRetry_GivesUpAfterMaxAttempts(t *testing.T) {
 	assert.Equal(t, 3, calls, "fn must be called exactly maxAttempts times")
 	assert.True(t, errors.Is(err, ErrTransientStorageExhausted),
 		"err must wrap ErrTransientStorageExhausted; got %v", err)
+}
+
+func TestWithTransientRetry_LockExhaustionReturnsCatalogE003(t *testing.T) {
+	err := withTransientRetry(2, func() error {
+		return errors.New("commit tx: database is locked (5)")
+	})
+	require.Error(t, err)
+	// Still detectable as retry-exhaustion by existing callers.
+	assert.True(t, errors.Is(err, ErrTransientStorageExhausted),
+		"lock exhaustion must still wrap ErrTransientStorageExhausted")
+	// Lock contention specifically carries the catalogued KITE-E003.
+	var ke *kiteerrors.Error
+	require.True(t, errors.As(err, &ke), "lock exhaustion must surface a *kiteerrors.Error")
+	assert.Equal(t, "KITE-E003", ke.Code)
+	assert.NotEmpty(t, ke.Hint)
+}
+
+func TestWithTransientRetry_DiskIOExhaustionStaysGeneric(t *testing.T) {
+	err := withTransientRetry(2, func() error {
+		return errors.New("commit tx: disk I/O error (5898)")
+	})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrTransientStorageExhausted))
+	// Disk I/O is transient but NOT a lock — it must not be mislabelled E003,
+	// whose lsof/fuser remediation would be wrong.
+	var ke *kiteerrors.Error
+	assert.False(t, errors.As(err, &ke), "disk-I/O exhaustion must not carry E003")
 }
 
 func TestWithTransientRetry_DoesNotRetryNonTransient(t *testing.T) {

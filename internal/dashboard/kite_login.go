@@ -755,7 +755,7 @@ func exchangeKiteOAuthCode(r *http.Request, oauth OAuthOptions, code, verifier, 
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, kiteerrors.FromCatalog("KITE-E016", err).With("stage", "build_request")
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeOAuthTokenExchange, err).With("stage", "build_request")
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -763,13 +763,13 @@ func exchangeKiteOAuthCode(r *http.Request, oauth OAuthOptions, code, verifier, 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, kiteerrors.FromCatalog("KITE-E016", err).With("stage", "network")
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeOAuthTokenExchange, err).With("stage", "network")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, kiteOAuthTokenMaxBody))
 	if err != nil {
-		return nil, kiteerrors.FromCatalog("KITE-E016", err).With("stage", "read_response")
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeOAuthTokenExchange, err).With("stage", "read_response")
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -778,16 +778,16 @@ func exchangeKiteOAuthCode(r *http.Request, oauth OAuthOptions, code, verifier, 
 
 	var token kiteOAuthTokenResponse
 	if err := json.Unmarshal(body, &token); err != nil {
-		return nil, kiteerrors.FromCatalog("KITE-E016", err).With("stage", "decode_response")
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeOAuthTokenExchange, err).With("stage", "decode_response")
 	}
 	if strings.TrimSpace(token.AccessToken) == "" {
-		return nil, kiteerrors.FromCatalog("KITE-E016", nil).With("stage", "missing_access_token")
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeOAuthTokenExchange, nil).With("stage", "missing_access_token")
 	}
 	return &token, nil
 }
 
 func formatKiteOAuthTokenError(status int, body []byte) error {
-	err := kiteerrors.FromCatalog("KITE-E016", nil).
+	err := kiteerrors.FromCatalog(kiteerrors.CodeOAuthTokenExchange, nil).
 		With("http_status", status)
 
 	var payload kiteOAuthTokenError

@@ -9,6 +9,8 @@ import (
 	"runtime/debug"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // Recover catches a panic in a deferred call, logs it with a stack trace,
@@ -24,6 +26,14 @@ func Recover(component string, counter *prometheus.CounterVec, retErr *error) {
 		return
 	}
 	stack := string(debug.Stack())
+
+	// Build the catalogued KITE-E011 error once so the log line and the error
+	// surfaced to the caller share the same code and remediation hint. The
+	// "panic in <component>: <value>" detail is preserved as the cause, so
+	// errors.Is/As and existing substring checks keep working.
+	panicErr := kiteerrors.FromCatalog(kiteerrors.CodePanicRecovered,
+		fmt.Errorf("panic in %s: %v", component, r)).With("component", component)
+
 	slog.Error(
 		"panic recovered in goroutine; converted to error and surfaced to caller",
 		"code", string(LogCodeSafetyPanicRecovered),
@@ -31,12 +41,13 @@ func Recover(component string, counter *prometheus.CounterVec, retErr *error) {
 		"error", fmt.Sprint(r),
 		"stack_trace", stack,
 		"recover_wrapper", "Recover",
+		"hint", panicErr.Hint,
 	)
 	if counter != nil {
 		counter.With(prometheus.Labels{"component": component}).Inc()
 	}
 	if retErr != nil {
-		*retErr = fmt.Errorf("panic in %s: %v", component, r)
+		*retErr = panicErr
 	}
 }
 
