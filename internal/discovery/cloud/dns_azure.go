@@ -18,7 +18,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
 
 const (
@@ -86,10 +88,25 @@ func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 		return nil, nil
 	}
 
+	// RFC-0137 R2/F3: own the client secret via connectorkit.Credentials and zero
+	// it (plus the bearer token, once acquired) after the last request this cycle.
+	ckCreds := connectorkit.Credentials{ClientSecret: creds.clientSecret}
+	defer ckCreds.Zero()
+
+	// RFC-0137 R5/R10: adopt connectorkit.SafeClient (30s timeout, safenet TLS)
+	// on the hardcoded ARM endpoint for the DNS list calls; test overrides keep
+	// their injected client.
+	hc, err := dnsSafeClient(HardeningSourceAzure, a.baseURL, defaultAzureARMBaseURL, a.httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("cloud_dns_azure: %w", err)
+	}
+	a.httpClient = hc
+
 	token, err := (&Azure{}).acquireToken(ctx, creds)
 	if err != nil {
 		return nil, fmt.Errorf("cloud_dns_azure: token: %w", err)
 	}
+	ckCreds.Token = token
 
 	var subscriptionIDs []string
 	if subscriptionID != "" {
@@ -260,6 +277,15 @@ func (a *AzureDNS) listZones(ctx context.Context, token, subscriptionID string) 
 // listRecordSets enumerates every record set in a single zone. zoneID is the
 // full ARM resource ID returned by listZones.
 func (a *AzureDNS) listRecordSets(ctx context.Context, token, zoneID string, isPrivate bool) ([]azureDNSRecordSet, error) {
+	// RFC-0137 R4/F6: zoneID is a provider-returned multi-segment ARM resource
+	// path interpolated (previously unescaped) into the recordsets request path.
+	// Validate every path segment before use so an injected traversal or control
+	// character cannot redirect the request.
+	if vErr := sanitizeAzureResourceID(zoneID); vErr != nil {
+		slog.Warn("Azure DNS rejecting record-set fetch for unsafe zone resource id",
+			"code", string(LogCodeAzureDNSUnsafeZoneID), "zone", zoneID, "error", vErr)
+		return nil, fmt.Errorf("cloud_dns_azure: %w", vErr)
+	}
 	apiVersion := azureDNSAPIVersion
 	if isPrivate {
 		apiVersion = "2020-06-01"
@@ -267,10 +293,14 @@ func (a *AzureDNS) listRecordSets(ctx context.Context, token, zoneID string, isP
 	apiURL := fmt.Sprintf("%s%s/recordsets?api-version=%s", a.baseURL, zoneID, apiVersion)
 
 	var all []azureDNSRecordSet
+	guard := connectorkit.NewGuard(HardeningSourceAzure)
 	for apiURL != "" {
 		body, err := a.bearerGet(ctx, token, apiURL)
 		if err != nil {
 			return all, err
+		}
+		if gErr := guard.NextPage(int64(len(body))); gErr != nil {
+			return all, fmt.Errorf("azure recordsets pagination guard: %w", gErr)
 		}
 		var resp azureDNSRecordSetsResponse
 		if uErr := json.Unmarshal(body, &resp); uErr != nil {
@@ -285,10 +315,14 @@ func (a *AzureDNS) listRecordSets(ctx context.Context, token, zoneID string, isP
 // fetchAllPages drives the ARM nextLink pagination protocol for zone listing.
 func (a *AzureDNS) fetchAllPages(ctx context.Context, token, apiURL string) ([]azureDNSZone, error) {
 	var all []azureDNSZone
+	guard := connectorkit.NewGuard(HardeningSourceAzure)
 	for apiURL != "" {
 		body, err := a.bearerGet(ctx, token, apiURL)
 		if err != nil {
 			return all, err
+		}
+		if gErr := guard.NextPage(int64(len(body))); gErr != nil {
+			return all, fmt.Errorf("azure zones pagination guard: %w", gErr)
 		}
 		var resp azureDNSZonesResponse
 		if uErr := json.Unmarshal(body, &resp); uErr != nil {
@@ -315,7 +349,7 @@ func (a *AzureDNS) bearerGet(ctx context.Context, token, apiURL string) ([]byte,
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDNSResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
@@ -325,6 +359,29 @@ func (a *AzureDNS) bearerGet(ctx context.Context, token, apiURL string) ([]byte,
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// sanitizeAzureResourceID validates a provider-returned ARM resource ID that is
+// interpolated verbatim into a request path (RFC-0137 R4/F6). ARM IDs are
+// multi-segment (e.g. /subscriptions/<sub>/resourceGroups/<rg>/providers/
+// Microsoft.Network/dnsZones/<zone>), so safenet.SanitizePathSegment — which
+// rejects "/" — is applied to each individual segment, including the terminal
+// zone-name segment. Any segment carrying a traversal sequence, control
+// character, or a character outside the allowlist rejects the whole ID.
+func sanitizeAzureResourceID(id string) error {
+	trimmed := strings.Trim(id, "/")
+	if trimmed == "" {
+		return fmt.Errorf("empty resource id")
+	}
+	for _, seg := range strings.Split(trimmed, "/") {
+		if seg == "" {
+			continue
+		}
+		if _, err := safenet.SanitizePathSegment(seg); err != nil {
+			return fmt.Errorf("unsafe segment %q in resource id %q: %w", seg, id, err)
+		}
+	}
+	return nil
+}
 
 // extractResourceGroup pulls the resource group out of an Azure resource ID.
 // Returns empty string when the ID does not contain a resourceGroups segment.
