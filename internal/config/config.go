@@ -16,6 +16,7 @@ type Config struct {
 	Identity       IdentityConfig       `mapstructure:"identity"`
 	LogLevel       string               `mapstructure:"log_level"`
 	OutputFormat   string               `mapstructure:"output_format"`
+	OAuth          OAuthConfig          `mapstructure:"oauth"`
 	Postgres       PostgresConfig       `mapstructure:"postgres"`
 	StaleThreshold string               `mapstructure:"stale_threshold"`
 	DataDir        string               `mapstructure:"data_dir"`
@@ -57,6 +58,15 @@ type FleetConfig struct {
 	Enabled           bool   `mapstructure:"enabled"`            // master toggle for fleet features
 	RequireEnrollment bool   `mapstructure:"require_enrollment"` // require agents to enroll before reporting
 	MTLSRequired      bool   `mapstructure:"mtls_required"`      // require mTLS on all endpoints
+}
+
+// OAuthConfig configures first-party OAuth linking for the local dashboard.
+type OAuthConfig struct {
+	SupabaseURL  string `mapstructure:"supabase_url"`
+	AuthorizeURL string `mapstructure:"authorize_url"`
+	ClientID     string `mapstructure:"client_id"`
+	Scope        string `mapstructure:"scope"`
+	RedirectPath string `mapstructure:"redirect_path"`
 }
 
 // ConnectivityConfig holds settings for network connectivity aids like tunnels.
@@ -388,6 +398,11 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("audit.process_env_secrets.enabled", false)
 	v.SetDefault("audit.process_env_secrets.max_pids", 10000)
 	v.SetDefault("posture.enabled", true)
+	v.SetDefault("oauth.supabase_url", "https://wjurmocfraqhdqarnytz.supabase.co")
+	v.SetDefault("oauth.authorize_url", "https://api.vulnertrack.com/auth/v1/oauth/authorize")
+	v.SetDefault("oauth.client_id", "d9be121a-a430-4c3a-9837-5cf67f9edfa3")
+	v.SetDefault("oauth.scope", "openid email")
+	v.SetDefault("oauth.redirect_path", "/oauth/callback")
 	v.SetDefault("streaming.interval", "6h")
 	v.SetDefault("streaming.otlp.endpoint", "https://otel.vulnertrack.io")
 	v.SetDefault("streaming.otlp.protocol", "grpc")
