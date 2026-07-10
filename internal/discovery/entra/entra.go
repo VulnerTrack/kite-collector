@@ -23,13 +23,23 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
 
 // SourceName is the stable identifier emitted on the
 // security.asset.discovery.source attribute and the discover.<source>
 // span suffix per RFC-0115.
 const SourceName = "entra"
+
+// maxGraphResponseBytes bounds how many bytes are read from any single Graph
+// response body. It is a hard backstop against a hostile or misbehaving
+// endpoint streaming an unbounded payload before the pagination guard's
+// per-page byte cap can evaluate it (RFC-0137 F5). Well above any legitimate
+// $top=999 page so the guard, not this limit, is the observable signal for
+// genuinely oversized tenants.
+const maxGraphResponseBytes int64 = 64 << 20 // 64 MiB
 
 // privilegedRoleTemplateIDs is the closed set of tier-0/tier-1 Entra role
 // template GUIDs that drive ENTRA-003 (overprivileged service principal)
@@ -118,7 +128,17 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		slog.Debug("entra: disabled by configuration")
 		return nil, nil
 	}
-	if conf.tenantID == "" || conf.clientID == "" || conf.clientSecret == "" {
+
+	// RFC-0137 R2/F3: load the client secret through connectorkit.Credentials,
+	// which clones it onto owned heap memory, and zero every secret field
+	// exactly once via a single deferred Zero() at the end of the sync cycle.
+	// This fixes the entra.go:141 bug where the previous defer reassigned a
+	// local variable (`token = strings.Repeat(...)`) instead of overwriting the
+	// backing array, and the total absence of any zeroing on the client secret.
+	creds := connectorkit.LoadCredentials(cfg)
+	defer creds.Zero()
+
+	if creds.TenantID == "" || creds.ClientID == "" || creds.ClientSecret == "" {
 		slog.Warn("entra: tenant_id, client_id, or client_secret not configured, skipping", "code", string(LogCodeDiscoverCredsMissing))
 		return nil, nil
 	}
@@ -133,12 +153,29 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		e.graphBaseURL = conf.graphBaseURL
 	}
 
-	token, err := e.acquireToken(ctx, conf)
+	// RFC-0137 R1/F2/F4: build the outbound client through connectorkit,
+	// validating any operator-supplied graph_base_url/token_base_url override
+	// against safenet.ValidateEndpoint (SSRF) and binding the request timeout
+	// the request_timeout_seconds config key finally controls. A rejected
+	// endpoint degrades gracefully to the same skip-with-WARN path as a token
+	// failure (RFC 7.4), never a hard error.
+	hc, err := e.hardenedClient(conf)
+	if err != nil {
+		slog.Warn("entra: outbound client construction failed (endpoint rejected or TLS config invalid), skipping",
+			"code", string(LogCodeDiscoverEndpointRejected), "error", err)
+		return nil, nil
+	}
+	e.httpClient = hc
+
+	token, err := e.acquireToken(ctx, conf, creds.ClientSecret)
 	if err != nil {
 		slog.Warn("entra: failed to acquire OAuth2 token, skipping", "code", string(LogCodeDiscoverTokenAcquireFailed), "error", err)
 		return nil, nil
 	}
-	defer func() { token = strings.Repeat("\x00", len(token)) }()
+	// Hand the bearer token to the same Credentials struct so the single
+	// deferred Zero() overwrites its backing memory too (R2: zeroed once, after
+	// last use in the sync cycle).
+	creds.Token = token
 
 	users, err := e.listUsers(ctx, token, conf)
 	if err != nil {
@@ -372,21 +409,79 @@ func buildSnapshot(
 	}
 }
 
+// hardenedClient builds the outbound HTTP client for a Discover cycle,
+// applying RFC-0137's transport hardening:
+//
+//   - F2 (SSRF): when the operator overrides graph_base_url or token_base_url
+//     via config, each override is validated through
+//     connectorkit.SafeClientWithTimeout before use, rejecting private,
+//     loopback, link-local, or non-HTTPS targets. The hardcoded Microsoft
+//     defaults — and the loopback endpoints tests inject via struct fields,
+//     which are not config-sourced — are trusted as-is, matching Intune's
+//     fixed-endpoint exemption and RFC-0057's hardcoded-URL policy.
+//   - F4: the returned client is bound to request_timeout_seconds, finally
+//     wiring that previously parsed-but-dead config value end-to-end.
+//   - R10: the KITE_ENTRA_INSECURE / KITE_ENTRA_CA_CERT TLS escape hatches are
+//     honoured for operators behind TLS-inspecting proxies.
+func (e *EntraID) hardenedClient(conf *entraConfig) (httpClient, error) {
+	timeout := time.Duration(conf.requestTimeoutSecs) * time.Second
+
+	// Validate each operator-overridden base URL. SafeClientWithTimeout returns
+	// a TLS-aware client bound to the request timeout; both overrides share
+	// identical TLS/timeout config, so a single resulting client serves the
+	// token and Graph endpoints alike.
+	var client *http.Client
+	for _, o := range []struct {
+		raw        string
+		overridden bool
+	}{
+		{e.tokenBaseURL, conf.tokenURLOverridden},
+		{e.graphBaseURL, conf.graphURLOverridden},
+	} {
+		if !o.overridden {
+			continue
+		}
+		c, _, err := connectorkit.SafeClientWithTimeout(SourceName, o.raw, false, timeout)
+		if err != nil {
+			return nil, fmt.Errorf("entra: %w", err)
+		}
+		client = c
+	}
+	if client != nil {
+		return client, nil
+	}
+
+	// No operator override: hardcoded Microsoft default or test-injected
+	// endpoint. Build a plain timeout client that still honours the TLS escape
+	// hatches, so request_timeout_seconds (F4) and custom-CA/insecure (R10)
+	// apply even on the fixed-endpoint path.
+	tlsCfg, err := safenet.TLSConfig("KITE_ENTRA_INSECURE", "KITE_ENTRA_CA_CERT")
+	if err != nil {
+		return nil, fmt.Errorf("entra: tls config: %w", err)
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+	}, nil
+}
+
 // acquireToken exchanges client credentials for an OAuth2 bearer token for
 // the Graph API scope, using the same pattern as
-// internal/discovery/mdm/intune.go.
-func (e *EntraID) acquireToken(ctx context.Context, conf *entraConfig) (string, error) {
+// internal/discovery/mdm/intune.go. The client secret is passed in from the
+// connectorkit.Credentials the caller owns and zeroes (RFC-0137 R2), never
+// read from a long-lived config struct.
+func (e *EntraID) acquireToken(ctx context.Context, conf *entraConfig, clientSecret string) (string, error) {
 	tokenURL := fmt.Sprintf("%s/%s/oauth2/v2.0/token",
 		e.tokenBaseURL, url.PathEscape(conf.tenantID))
 
 	form := url.Values{
 		"grant_type":    {"client_credentials"},
 		"client_id":     {conf.clientID},
-		"client_secret": {conf.clientSecret},
+		"client_secret": {clientSecret},
 		"scope":         {"https://graph.microsoft.com/.default"},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, //#nosec G107 -- operator-configured tenant URL
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, //#nosec G107 -- token base URL validated via connectorkit.SafeClientWithTimeout when operator-overridden; hardcoded Microsoft default otherwise
 		strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("creating token request: %w", err)
@@ -399,7 +494,7 @@ func (e *EntraID) acquireToken(ctx context.Context, conf *entraConfig) (string, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxGraphResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("reading token response: %w", err)
 	}
@@ -584,8 +679,17 @@ func (e *EntraID) listDirectoryRoles(ctx context.Context, token string) ([]entra
 // listRoleMembers fetches the members of a specific directory role. The
 // Graph endpoint returns heterogeneous principals (users, SPs, groups);
 // the @odata.type field disambiguates them.
+//
+// RFC-0137 R4/F6: roleID is a provider-returned identifier reflected back into
+// the request path, so it is sanitized with safenet.SanitizePathSegment
+// (traversal + charset allowlist) before interpolation, upgrading the previous
+// bare url.PathEscape.
 func (e *EntraID) listRoleMembers(ctx context.Context, token, roleID string) ([]entraDirectoryRoleMember, error) {
-	apiURL := fmt.Sprintf("%s/v1.0/directoryRoles/%s/members", e.graphBaseURL, url.PathEscape(roleID))
+	safeRoleID, err := safenet.SanitizePathSegment(roleID)
+	if err != nil {
+		return nil, fmt.Errorf("entra: unsafe directory role id %q: %w", roleID, err)
+	}
+	apiURL := fmt.Sprintf("%s/v1.0/directoryRoles/%s/members", e.graphBaseURL, safeRoleID)
 	return fetchAllPages[entraDirectoryRoleMember](ctx, e.httpClient, apiURL, token, 0)
 }
 
@@ -656,18 +760,30 @@ func (e *EntraID) buildDeviceAssets(devices []entraDevice, conf *entraConfig) []
 	return assets
 }
 
-// fetchAllPages walks @odata.nextLink pages until exhaustion or until the
-// circuit-breaker (max objects) trips. Empty / missing pages are tolerated.
+// fetchAllPages walks @odata.nextLink pages until exhaustion, the pagination
+// guard trips, or the per-endpoint maxObjects business cap is reached. Empty /
+// missing pages are tolerated.
+//
+// RFC-0137 R3/F5: every loop is bounded by safenet.PaginationGuardV2 (iteration
+// + per-page + cumulative byte caps, attributed to the entra source) — the
+// safety mechanism that replaces the ad hoc maxObjects integer as the guard
+// against a tenant that never signals its last page or returns oversized pages.
+// maxObjects is retained as an additional, config-driven business cap on the
+// number of objects returned per endpoint.
 func fetchAllPages[T any](ctx context.Context, hc httpClient, apiURL, token string, maxObjects int) ([]T, error) {
 	out := make([]T, 0, 64)
 	current := apiURL
+	guard := connectorkit.NewGuard(SourceName)
 	for current != "" {
 		if err := ctx.Err(); err != nil {
 			return out, fmt.Errorf("graph list cancelled: %w", err)
 		}
-		page, next, err := fetchPage[T](ctx, hc, current, token)
+		page, next, pageBytes, err := fetchPage[T](ctx, hc, current, token)
 		if err != nil {
 			return out, err
+		}
+		if gErr := guard.NextPage(int64(pageBytes)); gErr != nil {
+			return out, fmt.Errorf("entra pagination guard: %w", gErr)
 		}
 		out = append(out, page...)
 		if maxObjects > 0 && len(out) >= maxObjects {
@@ -686,28 +802,30 @@ func fetchAllPages[T any](ctx context.Context, hc httpClient, apiURL, token stri
 	return out, nil
 }
 
-// fetchPage fetches a single Graph page and returns the parsed values plus
-// the next-page URL (empty when no more pages).
-func fetchPage[T any](ctx context.Context, hc httpClient, apiURL, token string) ([]T, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil) //#nosec G107 -- operator-configured Graph URL
+// fetchPage fetches a single Graph page and returns the parsed values, the
+// next-page URL (empty when no more pages), and the raw body length so the
+// caller's pagination guard can enforce byte caps (RFC-0137 F5). The response
+// body is read under a hard maxGraphResponseBytes limit.
+func fetchPage[T any](ctx context.Context, hc httpClient, apiURL, token string) ([]T, string, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil) //#nosec G107 -- base URL validated via connectorkit.SafeClientWithTimeout when operator-overridden; hardcoded Microsoft default and the @odata.nextLink it returns otherwise
 	if err != nil {
-		return nil, "", fmt.Errorf("creating graph request: %w", err)
+		return nil, "", 0, fmt.Errorf("creating graph request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("executing graph request: %w", err)
+		return nil, "", 0, fmt.Errorf("executing graph request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxGraphResponseBytes))
 	if err != nil {
-		return nil, "", fmt.Errorf("reading graph response: %w", err)
+		return nil, "", 0, fmt.Errorf("reading graph response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("graph API returned %d: %s",
+		return nil, "", 0, fmt.Errorf("graph API returned %d: %s",
 			resp.StatusCode, truncateBytes(body, 500))
 	}
 
@@ -716,9 +834,9 @@ func fetchPage[T any](ctx context.Context, hc httpClient, apiURL, token string) 
 		Value    []T    `json:"value"`
 	}
 	if jErr := json.Unmarshal(body, &page); jErr != nil {
-		return nil, "", fmt.Errorf("parsing graph response: %w", jErr)
+		return nil, "", 0, fmt.Errorf("parsing graph response: %w", jErr)
 	}
-	return page.Value, page.NextLink, nil
+	return page.Value, page.NextLink, len(body), nil
 }
 
 // truncateBytes returns at most maxLen bytes of body as a string for safe

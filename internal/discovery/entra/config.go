@@ -19,10 +19,13 @@ const (
 )
 
 // entraConfig is the fully parsed source-specific configuration.
+//
+// The client secret is deliberately NOT stored here (RFC-0137 R2/F3): it is
+// loaded through connectorkit.Credentials in Discover, used once, and zeroed,
+// so it never lingers in a long-lived config struct that nothing zeroes.
 type entraConfig struct {
 	tenantID            string
 	clientID            string
-	clientSecret        string
 	graphBaseURL        string
 	tokenBaseURL        string
 	staleAccountDays    int
@@ -33,6 +36,12 @@ type entraConfig struct {
 	requestTimeoutSecs  int
 	pageSize            int
 	enabled             bool
+	// graphURLOverridden / tokenURLOverridden record whether the operator
+	// supplied a non-default graph_base_url / token_base_url via config (as
+	// opposed to a test injecting one via a struct field). Only config-sourced
+	// overrides are validated for SSRF; the hardcoded defaults are trusted.
+	graphURLOverridden bool
+	tokenURLOverridden bool
 }
 
 // parseConfig translates the source-specific config map produced by viper into
@@ -43,7 +52,6 @@ func parseConfig(cfg map[string]any) (*entraConfig, error) {
 		enabled:             boolCfg(cfg, "enabled", true),
 		tenantID:            strCfg(cfg, "tenant_id", ""),
 		clientID:            strCfg(cfg, "client_id", ""),
-		clientSecret:        strCfg(cfg, "client_secret", ""),
 		graphBaseURL:        strCfg(cfg, "graph_base_url", defaultGraphBaseURL),
 		tokenBaseURL:        strCfg(cfg, "token_base_url", defaultTokenBaseURL),
 		staleAccountDays:    intCfg(cfg, "stale_account_days", defaultStaleAccountDays),
@@ -54,6 +62,13 @@ func parseConfig(cfg map[string]any) (*entraConfig, error) {
 		requestTimeoutSecs:  intCfg(cfg, "request_timeout_seconds", defaultRequestTimeoutSecs),
 		pageSize:            intCfg(cfg, "page_size", defaultPageSize),
 	}
+
+	// An operator override is a config-supplied base URL that differs from the
+	// hardcoded Microsoft default. Tests inject their httptest endpoints via
+	// struct fields (not config), so they leave these false and stay on the
+	// trusted, non-validated path (RFC-0137 F2).
+	c.graphURLOverridden = c.graphBaseURL != defaultGraphBaseURL
+	c.tokenURLOverridden = c.tokenBaseURL != defaultTokenBaseURL
 
 	if err := c.validate(); err != nil {
 		return nil, err

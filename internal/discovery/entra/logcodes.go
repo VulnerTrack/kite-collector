@@ -15,6 +15,7 @@ const (
 	// --- discover surface --------------------------------------------
 	LogCodeDiscoverCredsMissing       LogCode = "entra.discover.creds_missing"        //#nosec G101 -- log code identifier signalling Entra ID credentials are missing, not a credential value
 	LogCodeDiscoverTokenAcquireFailed LogCode = "entra.discover.token_acquire_failed" //#nosec G101 -- log code identifier for Entra OAuth token acquisition failure, not a token value
+	LogCodeDiscoverEndpointRejected   LogCode = "entra.discover.endpoint_rejected"    //#nosec G101 -- log code identifier for a rejected/invalid Entra base URL, not a credential value
 
 	// --- enrich surface (Phase 2 enrichment paths) -------------------
 	LogCodeEnrichRoleAssignmentsFailed LogCode = "entra.enrich.role_assignments_failed"
