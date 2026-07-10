@@ -19,7 +19,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
 
 const (
@@ -83,7 +85,21 @@ func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]mod
 		return nil, nil
 	}
 
+	// RFC-0137 R2/F3: own the bearer token via connectorkit.Credentials and zero
+	// its backing memory once, after the last request this cycle.
+	ckCreds := connectorkit.Credentials{Token: token}
+	defer ckCreds.Zero()
+
 	accountID := toString(cfg["account_id"])
+
+	// RFC-0137 R5/R10: adopt connectorkit.SafeClient (shared 30s timeout, safenet
+	// TLS config) on the hardcoded Cloudflare endpoint; test overrides keep their
+	// injected client.
+	hc, err := dnsSafeClient(HardeningSourceCloudflare, c.baseURL, defaultCloudflareBaseURL, c.httpClient)
+	if err != nil {
+		return nil, fmt.Errorf("cloud_dns_cloudflare: %w", err)
+	}
+	c.httpClient = hc
 
 	zones, err := c.listZones(ctx, token, accountID)
 	if err != nil {
@@ -98,10 +114,21 @@ func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]mod
 			return nil, fmt.Errorf("cloud_dns_cloudflare: cancelled: %w", cErr)
 		}
 
+		// RFC-0137 R4/F6: z.ID is a provider-returned identifier interpolated
+		// (previously unescaped) into the dns_records request path. Sanitize it
+		// via safenet.SanitizePathSegment; skip any zone whose id is unsafe.
+		safeZoneID, sErr := safenet.SanitizePathSegment(z.ID)
+		if sErr != nil {
+			slog.Warn("Cloudflare skipping zone with unsafe zone id",
+				"code", string(LogCodeCloudflareUnsafeZoneID),
+				"zone", z.ID, "error", sErr)
+			continue
+		}
+
 		zoneUUID := uuid.Must(uuid.NewV7()).String()
 		zoneName := normalizeZoneName(z.Name)
 
-		records, rErr := c.listRecords(ctx, token, z.ID)
+		records, rErr := c.listRecords(ctx, token, safeZoneID)
 		if rErr != nil {
 			slog.Error(
 				"Cloudflare list-records failed; emitting partial zone data",
@@ -216,6 +243,7 @@ func (c *CloudflareDNS) listZones(ctx context.Context, token, accountID string) 
 		all  []cloudflareZone
 		page = 1
 	)
+	guard := connectorkit.NewGuard(HardeningSourceCloudflare)
 	for {
 		path := fmt.Sprintf("/zones?per_page=%d&page=%d", cloudflareDefaultPerPage, page)
 		if accountID != "" {
@@ -224,6 +252,9 @@ func (c *CloudflareDNS) listZones(ctx context.Context, token, accountID string) 
 		body, err := c.bearerGet(ctx, token, path)
 		if err != nil {
 			return nil, fmt.Errorf("zones list: %w", err)
+		}
+		if gErr := guard.NextPage(int64(len(body))); gErr != nil {
+			return all, fmt.Errorf("zones list pagination guard: %w", gErr)
 		}
 		var resp cloudflareZonesResponse
 		if uErr := json.Unmarshal(body, &resp); uErr != nil {
@@ -247,12 +278,16 @@ func (c *CloudflareDNS) listRecords(ctx context.Context, token, zoneID string) (
 		all  []cloudflareRecord
 		page = 1
 	)
+	guard := connectorkit.NewGuard(HardeningSourceCloudflare)
 	for {
 		path := fmt.Sprintf("/zones/%s/dns_records?per_page=%d&page=%d",
 			zoneID, cloudflareDefaultPerPage, page)
 		body, err := c.bearerGet(ctx, token, path)
 		if err != nil {
 			return nil, fmt.Errorf("records list: %w", err)
+		}
+		if gErr := guard.NextPage(int64(len(body))); gErr != nil {
+			return all, fmt.Errorf("records list pagination guard: %w", gErr)
 		}
 		var resp cloudflareRecordsResponse
 		if uErr := json.Unmarshal(body, &resp); uErr != nil {
@@ -286,7 +321,7 @@ func (c *CloudflareDNS) bearerGet(ctx context.Context, token, path string) ([]by
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDNSResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}

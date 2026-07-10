@@ -7,7 +7,12 @@
 // materialize CloudDNSZone and DNSRecord ontology entities.
 package cloud
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
+)
 
 // DNS provider identifiers — closed set enforced by the SQLite CHECK
 // constraint on cloud_dns_zones.provider.
@@ -21,6 +26,44 @@ const (
 	DNSSourceNameAzure      = "cloud_dns_azure"
 	DNSSourceNameGCP        = "cloud_dns_gcp"
 )
+
+// RFC-0137 hardening source names — the stable per-connector identifier used
+// for pagination-guard attribution, SafeClient TLS env namespacing
+// (KITE_<NAME>_INSECURE / KITE_<NAME>_CA_CERT), and the ConnectorSecurityProfile
+// source_name. These match the ontology source_name enum in RFC-0137 §4.1.1,
+// which differs from the discovery.Source Name() values ("cloud_dns_*").
+const (
+	HardeningSourceRoute53    = "route53"
+	HardeningSourceCloudflare = "cloudflare_dns"
+	HardeningSourceAzure      = "azure_dns"
+	HardeningSourceGCP        = "gcp_cloud_dns"
+)
+
+// maxDNSResponseBytes bounds how many bytes are read from any single cloud DNS
+// API response. It is a hard backstop against a hostile or misbehaving endpoint
+// streaming an unbounded body before the pagination guard's byte cap can
+// evaluate it (RFC-0137 F5).
+const maxDNSResponseBytes int64 = 64 << 20 // 64 MiB
+
+// dnsSafeClient returns the HTTP client a cloud DNS source should use. In
+// production (baseURL == prodDefault, the hardcoded provider endpoint) it builds
+// the client through connectorkit.SafeClient, adopting the shared 30s timeout,
+// safenet TLS config, and KITE_<NAME>_INSECURE / KITE_<NAME>_CA_CERT escape
+// hatches (RFC-0137 R5/R10). The hardcoded endpoint has no SSRF surface, but
+// routing through SafeClient makes TLS handling consistent with every other
+// connector. In tests (baseURL overridden to an httptest server) the
+// already-injected client is returned unchanged so loopback http endpoints stay
+// reachable — matching the baseURL-override convention the MDM connectors use.
+func dnsSafeClient(sourceName, baseURL, prodDefault string, existing httpDoer) (httpDoer, error) {
+	if baseURL != prodDefault {
+		return existing, nil
+	}
+	client, _, err := connectorkit.SafeClient(sourceName, baseURL, false)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", sourceName, err)
+	}
+	return client, nil
+}
 
 // AllowedDNSRecordTypes is the closed set enforced by the
 // cloud_dns_records.record_type CHECK constraint. Sources MUST coerce or
