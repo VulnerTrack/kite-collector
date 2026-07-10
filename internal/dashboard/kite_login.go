@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -34,8 +35,8 @@ type kiteOAuthTokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	IDToken      string `json:"id_token"`
 	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
 	Scope        string `json:"scope"`
+	ExpiresIn    int    `json:"expires_in"`
 }
 
 type kiteOAuthTokenError struct {
@@ -409,7 +410,8 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 	// with the callback-step redirect_uri in the token exchange logs.
 	if authErr == nil {
 		if redirectURI, err := buildKiteOAuthRedirectURI(collectorURL, oauth.RedirectPath); err == nil {
-			slog.Info("OAuth authorize step",
+			slog.Info( //#nosec G706 -- structured slog: message is a constant literal; r-derived attributes are emitted as escaped JSON values, not concatenated into the message
+				"OAuth authorize step",
 				"collector_url", collectorURL,
 				"redirect_uri", redirectURI,
 				"r_host", r.Host,
@@ -571,11 +573,11 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 	}()
 
 	if exchangeErr != nil {
-		logger.Error("OAuth token exchange FAILED",
-			"error", exchangeErr,
-			"redirect_uri", redirectURI,
-			"collector_url", collectorURL,
+		attrs := append(kiteerrors.Attrs(exchangeErr),
+			slog.String("redirect_uri", redirectURI),
+			slog.String("collector_url", collectorURL),
 		)
+		logger.LogAttrs(r.Context(), slog.LevelError, "OAuth token exchange FAILED", attrs...)
 		http.Error(w, "Kite OAuth token exchange failed: "+exchangeErr.Error(), http.StatusBadGateway)
 		return
 	}
@@ -686,7 +688,7 @@ func buildKiteOAuthAuthorizationURL(oauth OAuthOptions, collectorURL string) (st
 		clientID = defaultKiteOAuthClientID
 	}
 	if clientID == "" {
-		return "", "", "", fmt.Errorf("Kite OAuth is not configured. Set KITE_OAUTH_CLIENT_ID and reload this page")
+		return "", "", "", fmt.Errorf("kite OAuth is not configured; set KITE_OAUTH_CLIENT_ID and reload this page")
 	}
 
 	endpoint, err := url.Parse(resolveKiteOAuthAuthorizeURL(oauth))
@@ -722,7 +724,7 @@ func resolveKiteOAuthTokenURL(oauth OAuthOptions) (string, error) {
 	}
 	path := strings.TrimRight(endpoint.Path, "/")
 	if !strings.HasSuffix(path, "/authorize") {
-		return "", fmt.Errorf("Kite OAuth authorize URL must end in /authorize")
+		return "", fmt.Errorf("kite OAuth authorize URL must end in /authorize")
 	}
 	endpoint.Path = strings.TrimSuffix(path, "/authorize") + "/token"
 	endpoint.RawQuery = ""
@@ -753,7 +755,7 @@ func exchangeKiteOAuthCode(r *http.Request, oauth OAuthOptions, code, verifier, 
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("build token request: %w", err)
+		return nil, kiteerrors.FromCatalog("KITE-E016", err).With("stage", "build_request")
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -761,13 +763,13 @@ func exchangeKiteOAuthCode(r *http.Request, oauth OAuthOptions, code, verifier, 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request token endpoint: %w", err)
+		return nil, kiteerrors.FromCatalog("KITE-E016", err).With("stage", "network")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, kiteOAuthTokenMaxBody))
 	if err != nil {
-		return nil, fmt.Errorf("read token response: %w", err)
+		return nil, kiteerrors.FromCatalog("KITE-E016", err).With("stage", "read_response")
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -776,29 +778,32 @@ func exchangeKiteOAuthCode(r *http.Request, oauth OAuthOptions, code, verifier, 
 
 	var token kiteOAuthTokenResponse
 	if err := json.Unmarshal(body, &token); err != nil {
-		return nil, fmt.Errorf("decode token response: %w", err)
+		return nil, kiteerrors.FromCatalog("KITE-E016", err).With("stage", "decode_response")
 	}
 	if strings.TrimSpace(token.AccessToken) == "" {
-		return nil, fmt.Errorf("token response did not include an access_token")
+		return nil, kiteerrors.FromCatalog("KITE-E016", nil).With("stage", "missing_access_token")
 	}
 	return &token, nil
 }
 
 func formatKiteOAuthTokenError(status int, body []byte) error {
+	err := kiteerrors.FromCatalog("KITE-E016", nil).
+		With("http_status", status)
+
 	var payload kiteOAuthTokenError
-	if err := json.Unmarshal(body, &payload); err == nil {
+	if jsonErr := json.Unmarshal(body, &payload); jsonErr == nil {
 		switch {
 		case payload.ErrorDescription != "":
-			return fmt.Errorf("token endpoint returned %d: %s", status, payload.ErrorDescription)
+			err = err.With("provider_detail", payload.ErrorDescription)
 		case payload.Message != "":
-			return fmt.Errorf("token endpoint returned %d: %s", status, payload.Message)
+			err = err.With("provider_detail", payload.Message)
 		case payload.ErrorCode != "":
-			return fmt.Errorf("token endpoint returned %d: %s", status, payload.ErrorCode)
+			err = err.With("provider_error_code", payload.ErrorCode)
 		case payload.Error != "":
-			return fmt.Errorf("token endpoint returned %d: %s", status, payload.Error)
+			err = err.With("provider_error", payload.Error)
 		}
 	}
-	return fmt.Errorf("token endpoint returned %d", status)
+	return err
 }
 
 func buildKiteOAuthRedirectURI(collectorURL, redirectPath string) (string, error) {
@@ -840,7 +845,7 @@ func collectorBaseURL(r *http.Request, raw string) string {
 func randomBase64URL(n int) (string, error) {
 	buf := make([]byte, n)
 	if _, err := rand.Read(buf); err != nil {
-		return "", err
+		return "", fmt.Errorf("read random bytes: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
@@ -851,7 +856,7 @@ func codeChallengeS256(verifier string) string {
 }
 
 func setKiteOAuthCookie(w http.ResponseWriter, r *http.Request, name, value string) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //#nosec G124 -- Secure is set conditionally on r.TLS; the collector is commonly reached at http://localhost during setup, so unconditional Secure would break the flow
 		Name:     name,
 		Value:    value,
 		Path:     "/",
@@ -864,7 +869,7 @@ func setKiteOAuthCookie(w http.ResponseWriter, r *http.Request, name, value stri
 }
 
 func clearKiteOAuthCookie(w http.ResponseWriter, name string) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //#nosec G124 -- clearing cookie: empty value + MaxAge=-1; matches setKiteOAuthCookie which is conditionally Secure for localhost setup flows
 		Name:     name,
 		Value:    "",
 		Path:     "/",

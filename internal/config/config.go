@@ -246,12 +246,12 @@ type SourceConfig struct {
 	APIURL             string   `mapstructure:"api_url"`
 	InstanceURL        string   `mapstructure:"instance_url"`
 	Username           string   `mapstructure:"username"`
-	Password           string   `mapstructure:"password"`
-	Token              string   `mapstructure:"token"`
-	APIKey             string   `mapstructure:"api_key"`
+	Password           string   `mapstructure:"password" json:"-"`
+	Token              string   `mapstructure:"token" json:"-"`
+	APIKey             string   `mapstructure:"api_key" json:"-"`
 	TenantID           string   `mapstructure:"tenant_id"`
 	ClientID           string   `mapstructure:"client_id"`
-	ClientSecret       string   `mapstructure:"client_secret"`
+	ClientSecret       string   `mapstructure:"client_secret" json:"-"`
 	Table              string   `mapstructure:"table"`
 	SiteID             string   `mapstructure:"site_id"`
 	Regions            []string `mapstructure:"regions"`
