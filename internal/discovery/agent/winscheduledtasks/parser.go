@@ -3,6 +3,7 @@ package winscheduledtasks
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -170,7 +171,7 @@ func extractTriggerNames(innerXML string) []string {
 	dec := xml.NewDecoder(strings.NewReader(innerXML))
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

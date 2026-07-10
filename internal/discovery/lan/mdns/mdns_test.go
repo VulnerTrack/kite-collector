@@ -1,6 +1,7 @@
 package mdns
 
 import (
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestBuildQueryIsValidDNSMessage(t *testing.T) {
 	var seen []string
 	for {
 		q, err := p.Question()
-		if err == dnsmessage.ErrSectionDone {
+		if errors.Is(err, dnsmessage.ErrSectionDone) {
 			break
 		}
 		if err != nil {

@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // migrationNameRe enforces the YYYYMMDDHHMMSS_ timestamp prefix convention.
@@ -67,11 +69,22 @@ func EmbeddedMigrationCount() int {
 	return n
 }
 
-// Migrate applies all pending embedded SQL migrations in filename order.
-// It creates a schema_migrations tracking table, validates filenames,
+// Migrate applies all pending embedded SQL migrations. Any failure is
+// surfaced as the catalogued KITE-E010 error, preserving the underlying cause
+// for errors.Is/As, so operators get actionable remediation in structured
+// logs instead of a bare "migration failed" string.
+func (s *SQLiteStore) Migrate(ctx context.Context) error {
+	if err := s.applyMigrations(ctx); err != nil {
+		return kiteerrors.FromCatalog("KITE-E010", err)
+	}
+	return nil
+}
+
+// applyMigrations applies all pending embedded SQL migrations in filename
+// order. It creates a schema_migrations tracking table, validates filenames,
 // verifies checksums of previously applied migrations, and runs new ones
 // inside individual transactions.
-func (s *SQLiteStore) Migrate(ctx context.Context) error {
+func (s *SQLiteStore) applyMigrations(ctx context.Context) error {
 	// 1. Ensure the tracking table exists.
 	if _, err := s.db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (

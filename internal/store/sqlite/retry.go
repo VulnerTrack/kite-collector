@@ -68,5 +68,5 @@ func withTransientRetry(maxAttempts int, fn func() error) error {
 			time.Sleep(time.Duration(attempt*attempt) * 25 * time.Millisecond)
 		}
 	}
-	return fmt.Errorf("%w after %d attempts: %v", ErrTransientStorageExhausted, maxAttempts, lastErr)
+	return fmt.Errorf("%w after %d attempts: %w", ErrTransientStorageExhausted, maxAttempts, lastErr)
 }

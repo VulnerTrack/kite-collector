@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -110,7 +111,7 @@ func IsEncrypted(path string) (bool, error) {
 
 	header := make([]byte, 16)
 	n, err := f.Read(header)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return false, fmt.Errorf("read header %s: %w", path, err)
 	}
 	if n < 16 {

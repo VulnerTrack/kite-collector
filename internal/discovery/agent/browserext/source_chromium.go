@@ -120,7 +120,7 @@ func (c *chromiumCollector) collectProfile(ctx context.Context, br Browser, root
 		}
 		return ctx.Err()
 	})
-	if err != nil && err != filepath.SkipAll && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, filepath.SkipAll) && !os.IsNotExist(err) {
 		slog.Debug("browserext: walk error",
 			"browser", string(br), "profile", profile, "error", err)
 	}

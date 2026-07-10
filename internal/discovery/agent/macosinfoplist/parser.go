@@ -3,6 +3,7 @@ package macosinfoplist
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -78,7 +79,7 @@ func walkTokens(body []byte, out *PlistFields) error {
 	)
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -146,7 +147,7 @@ func readCharData(dec *xml.Decoder, elem string) (string, error) {
 	depth := 1
 	for depth > 0 {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return sb.String(), nil
 		}
 		if err != nil {

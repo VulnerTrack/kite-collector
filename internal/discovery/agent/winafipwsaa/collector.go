@@ -2,6 +2,7 @@ package winafipwsaa
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -269,7 +270,8 @@ func isFsNotExist(err error) bool {
 	if err == nil {
 		return false
 	}
-	if e, ok := err.(*fs.PathError); ok {
+	var e *fs.PathError
+	if errors.As(err, &e) {
 		return os.IsNotExist(e.Err)
 	}
 	return false

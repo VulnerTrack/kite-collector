@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // Config is the top-level configuration structure.
@@ -466,7 +468,7 @@ func Load(path string) (*Config, error) {
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("unmarshal config: %w", err)
+		return nil, kiteerrors.FromCatalog("KITE-E007", err).With("config_path", path)
 	}
 
 	return &cfg, nil
