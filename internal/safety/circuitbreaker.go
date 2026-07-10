@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // CircuitState represents the health state of a discovery source.
@@ -232,6 +234,9 @@ func (cb *CircuitBreaker) RecordFailure(sourceName string, reason string) {
 				"cooldown", s.cooldownDuration.String(),
 				"total_trips", s.totalTrips,
 				"last_failure_reason", reason,
+				// Surface the catalogued KITE-E012 remediation right at the
+				// trip so operators get actionable next steps in the log.
+				"hint", kiteerrors.FromCatalog(kiteerrors.CodeCircuitBreakerTripped, nil).Hint,
 			)
 			if cb.tripsCounter != nil {
 				cb.tripsCounter.With(prometheus.Labels{"source": sourceName}).Inc()

@@ -64,13 +64,50 @@ func TestCodes_ReturnsAll(t *testing.T) {
 	codes := Codes()
 	assert.Len(t, codes, len(Catalog))
 	assert.Equal(t, "KITE-E001", codes[0])
-	assert.Equal(t, "KITE-E016", codes[len(codes)-1])
+	assert.Equal(t, "KITE-E017", codes[len(codes)-1])
 }
 
 func TestCodes_Sorted(t *testing.T) {
 	codes := Codes()
 	for i := 1; i < len(codes); i++ {
 		assert.True(t, codes[i-1] < codes[i], "codes should be sorted: %s < %s", codes[i-1], codes[i])
+	}
+}
+
+func TestCatalogCodeConstants_MatchCatalog(t *testing.T) {
+	// Every exported Code* constant, by name. Kept explicit (not reflected) so
+	// a new catalog entry without a matching constant fails the length check.
+	consts := map[string]string{
+		"CodeDockerNotAccessible":     CodeDockerNotAccessible,
+		"CodeWazuhAuthFailed":         CodeWazuhAuthFailed,
+		"CodeSQLiteLocked":            CodeSQLiteLocked,
+		"CodeNetworkScanTimeout":      CodeNetworkScanTimeout,
+		"CodeUniFiUnreachable":        CodeUniFiUnreachable,
+		"CodeCloudCredentialsMissing": CodeCloudCredentialsMissing,
+		"CodeConfigInvalid":           CodeConfigInvalid,
+		"CodePermissionDenied":        CodePermissionDenied,
+		"CodeNoDiscoverySources":      CodeNoDiscoverySources,
+		"CodeMigrationFailed":         CodeMigrationFailed,
+		"CodePanicRecovered":          CodePanicRecovered,
+		"CodeCircuitBreakerTripped":   CodeCircuitBreakerTripped,
+		"CodeScanDeadlineExceeded":    CodeScanDeadlineExceeded,
+		"CodeResponseTruncated":       CodeResponseTruncated,
+		"CodeRequestBodyTooLarge":     CodeRequestBodyTooLarge,
+		"CodeOAuthTokenExchange":      CodeOAuthTokenExchange,
+		"CodeEnrollmentFailed":        CodeEnrollmentFailed,
+	}
+
+	// Direction 1: every constant resolves to a real catalog entry.
+	have := make(map[string]bool, len(consts))
+	for name, code := range consts {
+		assert.NotNilf(t, Lookup(code), "constant %s = %q has no catalog entry", name, code)
+		have[code] = true
+	}
+
+	// Direction 2: every catalog entry has a constant — no drift either way.
+	assert.Len(t, consts, len(Catalog), "number of Code constants must equal catalog size")
+	for code := range Catalog {
+		assert.Truef(t, have[code], "catalog entry %s has no exported Code constant", code)
 	}
 }
 

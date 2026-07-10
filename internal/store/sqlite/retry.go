@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // ErrTransientStorageExhausted is the sentinel returned by
@@ -20,26 +22,39 @@ var ErrTransientStorageExhausted = errors.New("transient storage error retries e
 // files (WAL/SHM/journal). Matching the family rather than every
 // individual extended code keeps the logic readable and forward-
 // compatible with future SQLite extended codes.
-var transientErrorNeedles = []string{
-	"disk i/o error",           // SQLITE_IOERR (10) and any extended *_IOERR_*
+// lockErrorNeedles are the transient substrings that specifically indicate
+// lock contention (another process holds the DB lock), which maps to the
+// catalogued KITE-E003 remediation. Kept separate from the disk-I/O family so
+// exhaustion can be labelled precisely.
+var lockErrorNeedles = []string{
 	"database is locked",       // SQLITE_BUSY (5)
 	"database table is locked", // SQLITE_LOCKED (6)
 }
 
-// isTransientSQLiteErr reports whether err matches one of the known
-// transient SQLite error families.
-func isTransientSQLiteErr(err error) bool {
+var transientErrorNeedles = append([]string{
+	"disk i/o error", // SQLITE_IOERR (10) and any extended *_IOERR_*
+}, lockErrorNeedles...)
+
+// matchesAny reports whether err's (lowercased) message contains any needle.
+func matchesAny(err error, needles []string) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	for _, n := range transientErrorNeedles {
+	for _, n := range needles {
 		if strings.Contains(msg, n) {
 			return true
 		}
 	}
 	return false
 }
+
+// isTransientSQLiteErr reports whether err matches one of the known
+// transient SQLite error families (disk I/O or lock contention).
+func isTransientSQLiteErr(err error) bool { return matchesAny(err, transientErrorNeedles) }
+
+// isSQLiteLockErr reports whether err is specifically a lock-contention error.
+func isSQLiteLockErr(err error) bool { return matchesAny(err, lockErrorNeedles) }
 
 // withTransientRetry runs fn up to maxAttempts times, retrying on
 // transient SQLite I/O errors. The transaction either committed or
@@ -68,5 +83,11 @@ func withTransientRetry(maxAttempts int, fn func() error) error {
 			time.Sleep(time.Duration(attempt*attempt) * 25 * time.Millisecond)
 		}
 	}
-	return fmt.Errorf("%w after %d attempts: %w", ErrTransientStorageExhausted, maxAttempts, lastErr)
+	composite := fmt.Errorf("%w after %d attempts: %w", ErrTransientStorageExhausted, maxAttempts, lastErr)
+	if isSQLiteLockErr(lastErr) {
+		// Lock contention specifically maps to KITE-E003; disk-I/O exhaustion
+		// keeps the generic transient error so its remediation stays accurate.
+		return kiteerrors.FromCatalog(kiteerrors.CodeSQLiteLocked, composite)
+	}
+	return composite
 }

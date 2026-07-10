@@ -1,9 +1,11 @@
 package rest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +15,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // ---------------------------------------------------------------------------
@@ -159,6 +163,35 @@ func TestResponseBoundingMiddleware_TruncatesLargeResponse(t *testing.T) {
 
 	val := testutil.ToFloat64(counter)
 	assert.Equal(t, float64(1), val, "truncation counter should be incremented")
+}
+
+func TestResponseBoundingMiddleware_TruncationLogIncludesCatalogE014Hint(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(strings.Repeat("x", 100)))
+	})
+	handler := ResponseBoundingMiddleware(50, nil, inner) // 50-byte limit forces truncation
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	var rec map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var m map[string]any
+		if json.Unmarshal([]byte(line), &m) == nil && m["code"] == string(LogCodeMiddlewareResponseTruncated) {
+			rec = m
+			break
+		}
+	}
+	require.NotNil(t, rec, "expected a response-truncated log line")
+
+	hint, _ := rec["hint"].(string)
+	assert.NotEmpty(t, hint, "truncation log must carry the E014 remediation hint")
+	assert.Equal(t, kiteerrors.FromCatalog(kiteerrors.CodeResponseTruncated, nil).Hint, hint)
 }
 
 func TestResponseBoundingMiddleware_AllowsSmallResponse(t *testing.T) {

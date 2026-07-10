@@ -8,7 +8,38 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
+
+// errDoer is an httpDoer whose Do always fails, simulating a Docker socket
+// that is present but whose daemon does not answer.
+type errDoer struct{ err error }
+
+func (d errDoer) Do(*http.Request) (*http.Response, error) { return nil, d.err }
+
+func TestDockerCollect_DaemonUnreachableReturnsCatalogE001(t *testing.T) {
+	c := &dockerEngineCollector{
+		baseURL: "http://docker.invalid",
+		client:  errDoer{err: errors.New("dial unix /var/run/docker.sock: connect: connection refused")},
+		runtime: RuntimeDocker,
+	}
+
+	if _, err := c.Collect(context.Background()); err != nil {
+		var ke *kiteerrors.Error
+		if !errors.As(err, &ke) {
+			t.Fatalf("expected a *kiteerrors.Error, got %T: %v", err, err)
+		}
+		if ke.Code != "KITE-E001" {
+			t.Errorf("Code = %q, want KITE-E001", ke.Code)
+		}
+		if ke.Hint == "" {
+			t.Error("expected the E001 remediation hint to be populated")
+		}
+	} else {
+		t.Fatal("expected an error when the daemon is unreachable")
+	}
+}
 
 func TestPinnedEnumStrings(t *testing.T) {
 	pairs := []struct{ got, want string }{

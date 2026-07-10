@@ -59,7 +59,7 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	if creds.tenantID == "" || creds.clientID == "" || creds.clientSecret == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("azure_vm: source enabled but AZURE_TENANT_ID, AZURE_CLIENT_ID, or AZURE_CLIENT_SECRET not set")
+			return nil, errCredsMissing("azure_vm: source enabled but AZURE_TENANT_ID, AZURE_CLIENT_ID, or AZURE_CLIENT_SECRET not set")
 		}
 		slog.Warn("Azure VM credentials missing; skipping discovery",
 			"code", string(LogCodeAzureVMCredsMissing),

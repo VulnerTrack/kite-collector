@@ -64,6 +64,30 @@ func Codes() []string {
 	return codes
 }
 
+// Exported code constants give call sites a compile-checked, self-documenting
+// identifier instead of a typo-prone string literal: FromCatalog(CodeConfigInvalid)
+// cannot silently degrade the way FromCatalog("KITE-E07") would. Every constant
+// is kept in sync with Catalog by TestCatalogCodeConstants_MatchCatalog.
+const (
+	CodeDockerNotAccessible     = "KITE-E001"
+	CodeWazuhAuthFailed         = "KITE-E002"
+	CodeSQLiteLocked            = "KITE-E003"
+	CodeNetworkScanTimeout      = "KITE-E004"
+	CodeUniFiUnreachable        = "KITE-E005"
+	CodeCloudCredentialsMissing = "KITE-E006" //#nosec G101 -- error catalog code identifier, not a credential
+	CodeConfigInvalid           = "KITE-E007"
+	CodePermissionDenied        = "KITE-E008"
+	CodeNoDiscoverySources      = "KITE-E009"
+	CodeMigrationFailed         = "KITE-E010"
+	CodePanicRecovered          = "KITE-E011"
+	CodeCircuitBreakerTripped   = "KITE-E012"
+	CodeScanDeadlineExceeded    = "KITE-E013"
+	CodeResponseTruncated       = "KITE-E014"
+	CodeRequestBodyTooLarge     = "KITE-E015"
+	CodeOAuthTokenExchange      = "KITE-E016"
+	CodeEnrollmentFailed        = "KITE-E017"
+)
+
 // Catalog is the authoritative map of all kite-collector error codes.
 var Catalog = map[string]KiteError{
 	"KITE-E001": {
@@ -202,6 +226,14 @@ var Catalog = map[string]KiteError{
 		Cause:   "The Kite OAuth token endpoint rejected the authorization-code exchange. Common causes are an expired or already-used authorization code, a redirect URI that does not match the one registered for the client, or an incorrect client ID.",
 		Remediation: map[string]string{
 			"default": "Restart the sign-in flow from the beginning so a fresh authorization code is issued (codes are single-use and short-lived).\nVerify KITE_OAUTH_CLIENT_ID matches the client registered with the platform.\nEnsure the collector's redirect URI is registered exactly, including scheme and port.\nInspect the structured log's error_context (http_status, provider_detail) for the provider's specific reason.",
+		},
+	},
+	"KITE-E017": {
+		Code:    "KITE-E017",
+		Message: "Enrollment failed",
+		Cause:   "The agent could not complete the enrollment handshake with the PKI server. Common causes are an invalid or expired enrollment token, an incorrect agent code, the PKI server being unreachable, or a TLS/CA trust problem.",
+		Remediation: map[string]string{
+			"default": "Verify the enrollment token is current and has not already been used or expired.\nCheck the agent code matches the one registered for this fleet.\nConfirm the PKI server is reachable from this host (network/firewall/DNS).\nIf using a private PKI, ensure its CA certificate is trusted.\nInspect the structured log's error_context (phase, http_status) for the specific failure point.",
 		},
 	},
 }

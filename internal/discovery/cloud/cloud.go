@@ -7,6 +7,19 @@
 // future release.
 package cloud
 
+import (
+	"errors"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+)
+
+// errCredsMissing wraps a provider-specific "credentials missing" detail as the
+// catalogued KITE-E006 error, so every cloud source surfaces the same code and
+// remediation while keeping its specific required-env message as the cause.
+func errCredsMissing(detail string) error {
+	return kiteerrors.FromCatalog(kiteerrors.CodeCloudCredentialsMissing, errors.New(detail))
+}
+
 // toStringSlice converts an any value (expected []any of strings or []string)
 // to []string. This mirrors the helper used in other discovery packages and
 // is used to extract config values like region lists from the untyped

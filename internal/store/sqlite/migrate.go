@@ -75,7 +75,7 @@ func EmbeddedMigrationCount() int {
 // logs instead of a bare "migration failed" string.
 func (s *SQLiteStore) Migrate(ctx context.Context) error {
 	if err := s.applyMigrations(ctx); err != nil {
-		return kiteerrors.FromCatalog("KITE-E010", err)
+		return kiteerrors.FromCatalog(kiteerrors.CodeMigrationFailed, err)
 	}
 	return nil
 }

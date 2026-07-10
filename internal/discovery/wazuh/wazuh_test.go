@@ -3,6 +3,7 @@ package wazuh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -419,7 +421,9 @@ func TestWazuh_Discover_AuthFailure(t *testing.T) {
 	w := New()
 	_, err := w.Discover(context.Background(), map[string]any{})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "HTTP 401")
+	var ke *kiteerrors.Error
+	require.True(t, errors.As(err, &ke), "auth failure should surface catalogued KITE-E002")
+	assert.Equal(t, "KITE-E002", ke.Code)
 }
 
 func TestWazuh_Discover_EndpointFromConfig(t *testing.T) {

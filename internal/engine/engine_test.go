@@ -586,6 +586,15 @@ func TestEngine_ScanDeadlineExceeded(t *testing.T) {
 
 	assert.Equal(t, string(model.ScanStatusTimedOut), result.Status)
 	assert.Equal(t, 1, result.ErrorCount)
+
+	// The breach must record a runtime incident carrying the catalogued
+	// KITE-E013 code so downstream tooling can pivot on a stable identifier.
+	// Asserting the literal (not the constant) independently pins the value.
+	incidents, listErr := ms.ListRuntimeIncidents(context.Background(), store.IncidentFilter{})
+	require.NoError(t, listErr)
+	require.Len(t, incidents, 1)
+	assert.Equal(t, "KITE-E013", incidents[0].ErrorCode)
+	assert.Equal(t, model.IncidentTimeoutExceeded, incidents[0].IncidentType)
 }
 
 func TestEngine_ScanDeadlineNotExceeded(t *testing.T) {

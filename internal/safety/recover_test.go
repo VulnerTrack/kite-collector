@@ -1,12 +1,15 @@
 package safety
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 func TestRecover_CatchesPanic(t *testing.T) {
@@ -22,6 +25,13 @@ func TestRecover_CatchesPanic(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "panic in test.source: boom")
+
+	// The recovered panic is now surfaced as the catalogued KITE-E011 error,
+	// with the panic detail preserved as the cause.
+	var ke *kiteerrors.Error
+	require.True(t, errors.As(err, &ke), "recovered panic must be a *kiteerrors.Error")
+	assert.Equal(t, kiteerrors.CodePanicRecovered, ke.Code)
+	assert.NotEmpty(t, ke.Hint, "E011 remediation hint must be populated")
 
 	val := testutil.ToFloat64(counter.With(prometheus.Labels{"component": "test.source"}))
 	assert.Equal(t, float64(1), val)

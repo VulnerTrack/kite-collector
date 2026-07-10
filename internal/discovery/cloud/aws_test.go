@@ -3,12 +3,15 @@ package cloud
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 func TestParseDescribeInstancesResponse(t *testing.T) {
@@ -78,6 +81,13 @@ func TestAWSDiscover_NoCredentials(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "source enabled")
+
+	// Credentials-missing on an explicitly-enabled source surfaces the
+	// catalogued KITE-E006, with the specific required-env message as the cause.
+	var ke *kiteerrors.Error
+	require.True(t, errors.As(err, &ke), "missing creds must surface a *kiteerrors.Error")
+	assert.Equal(t, "KITE-E006", ke.Code)
+	assert.NotEmpty(t, ke.Hint)
 }
 
 func TestAWSDiscover_MockEC2(t *testing.T) {

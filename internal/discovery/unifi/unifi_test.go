@@ -3,16 +3,40 @@ package unifi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
+
+// TestLocalClientLogin_UnreachableReturnsCatalogE005 pins that a controller
+// that cannot be connected to (every login endpoint fails the round-trip)
+// surfaces the catalogued KITE-E005, distinct from a credential rejection.
+func TestLocalClientLogin_UnreachableReturnsCatalogE005(t *testing.T) {
+	// Start then immediately close a server so its port refuses connections.
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	base, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	srv.Close()
+
+	c := &localClient{base: base, http: &http.Client{Timeout: time.Second}}
+
+	loginErr := c.login(context.Background(), "admin", "secret")
+	require.Error(t, loginErr)
+
+	var ke *kiteerrors.Error
+	require.True(t, errors.As(loginErr, &ke), "unreachable controller must surface a *kiteerrors.Error")
+	assert.Equal(t, "KITE-E005", ke.Code)
+	assert.NotEmpty(t, ke.Hint)
+}
 
 // -------------------------------------------------------------------------
 // Mock UniFi Controller

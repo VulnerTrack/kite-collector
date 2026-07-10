@@ -29,6 +29,7 @@ import (
 
 	"github.com/google/uuid"
 
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -383,7 +384,10 @@ func (c *localClient) login(ctx context.Context, username, password string) erro
 		"password": password,
 	})
 
-	// Try UDM/UniFi OS endpoint first, fall back to legacy.
+	// Try UDM/UniFi OS endpoint first, fall back to legacy. If every attempt
+	// fails to connect, the controller is unreachable (KITE-E005) rather than a
+	// credential problem — track that so the two are distinguished.
+	unreachable := true
 	for _, path := range []string{"/api/auth/login", "/api/login"} {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, //#nosec G704 -- endpoint is operator-configured, scheme-validated in newLocalClient
 			c.resolveURL(path), bytes.NewReader(payload))
@@ -396,6 +400,7 @@ func (c *localClient) login(ctx context.Context, username, password string) erro
 		if err != nil {
 			continue
 		}
+		unreachable = false // got a response — the controller is reachable
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 
@@ -405,6 +410,11 @@ func (c *localClient) login(ctx context.Context, username, password string) erro
 		}
 	}
 
+	if unreachable {
+		// Every endpoint failed to connect — the controller is down or the
+		// endpoint/port is wrong. Surface the catalogued KITE-E005 remediation.
+		return kiteerrors.FromCatalog(kiteerrors.CodeUniFiUnreachable, nil)
+	}
 	return fmt.Errorf("login failed — check credentials, endpoint, " +
 		"and ensure the account is a local admin (not a UI.com cloud account)")
 }

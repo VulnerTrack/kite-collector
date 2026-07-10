@@ -1,14 +1,20 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -80,6 +86,18 @@ func (f *failingSource) Discover(_ context.Context, _ map[string]any) ([]model.A
 	return nil, errors.New("simulated failure")
 }
 
+// structuredFailingSource returns a catalogued *kiteerrors.Error so tests can
+// assert the registry surfaces the flat structured envelope.
+type structuredFailingSource struct {
+	name string
+}
+
+func (f *structuredFailingSource) Name() string { return f.name }
+
+func (f *structuredFailingSource) Discover(_ context.Context, _ map[string]any) ([]model.Asset, error) {
+	return nil, kiteerrors.FromCatalog("KITE-E002", nil).With("phase", "auth")
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -112,10 +130,60 @@ func TestRegistry_DiscoverAll_RunsAllSources(t *testing.T) {
 }
 
 func TestRegistry_DiscoverAll_EmptyRegistry(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
 	reg := NewRegistry()
 	assets, err := reg.DiscoverAll(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Nil(t, assets)
+
+	// The silent no-op is now explained via the catalogued KITE-E009 envelope.
+	var rec map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var m map[string]any
+		if json.Unmarshal([]byte(line), &m) == nil && m["error_code"] == "KITE-E009" {
+			rec = m
+			break
+		}
+	}
+	require.NotNil(t, rec, "expected a KITE-E009 log line for the empty registry")
+	assert.NotEmpty(t, rec["hint"], "E009 remediation hint must be present")
+}
+
+func TestRegistry_FailedSource_LogsFlatStructuredEnvelope(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	reg := NewRegistry()
+	reg.Register(&structuredFailingSource{name: "wazuh"})
+
+	_, err := reg.DiscoverAll(context.Background(), map[string]map[string]any{"wazuh": {}})
+	require.NoError(t, err, "a failing source must not abort the run")
+
+	var rec map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var m map[string]any
+		if json.Unmarshal([]byte(line), &m) == nil && m["msg"] == "discovery source failed" {
+			rec = m
+			break
+		}
+	}
+	require.NotNil(t, rec, "expected a 'discovery source failed' log line")
+
+	// The catalog code/hint must appear as TOP-LEVEL fields, not nested.
+	assert.Equal(t, "KITE-E002", rec["error_code"])
+	assert.NotEmpty(t, rec["hint"])
+	// Stable pivots preserved alongside the envelope.
+	assert.Equal(t, string(LogCodeRegistrySourceFailed), rec["code"])
+	assert.Equal(t, "wazuh", rec["source"])
+	ctx, ok := rec["error_context"].(map[string]any)
+	require.True(t, ok, "error_context must be an object")
+	assert.Equal(t, "auth", ctx["phase"])
 }
 
 func TestRegistry_FailedSourceDoesNotAbortOthers(t *testing.T) {

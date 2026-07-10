@@ -34,3 +34,20 @@ func TestLoad_InvalidConfig_ReturnsCatalogE007(t *testing.T) {
 	// The underlying viper/mapstructure cause must remain reachable via Unwrap.
 	assert.NotEmpty(t, ke.Error())
 }
+
+// TestValidate_InvalidValue_ReturnsCatalogE007 pins that a bad configuration
+// value (not just a parse failure) is surfaced as the catalogued KITE-E007
+// error, with the specific field problem preserved as the cause.
+func TestValidate_InvalidValue_ReturnsCatalogE007(t *testing.T) {
+	cfg := &Config{LogLevel: "bogus"}
+
+	err := cfg.Validate()
+	require.Error(t, err)
+
+	var ke *kiteerrors.Error
+	require.True(t, errors.As(err, &ke), "validation error must be a *kiteerrors.Error")
+	assert.Equal(t, "KITE-E007", ke.Code)
+	assert.NotEmpty(t, ke.Hint, "hint should be populated from the catalog")
+	// The specific field problem stays reachable in the message chain.
+	assert.Contains(t, err.Error(), "log_level")
+}

@@ -468,15 +468,26 @@ func Load(path string) (*Config, error) {
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, kiteerrors.FromCatalog("KITE-E007", err).With("config_path", path)
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeConfigInvalid, err).With("config_path", path)
 	}
 
 	return &cfg, nil
 }
 
-// Validate checks configuration values for common errors and returns a
-// descriptive error for the first problem found.
+// Validate checks configuration values for common errors. Any problem is
+// surfaced as the catalogued KITE-E007 error, with the specific field message
+// preserved as the cause (reachable via errors.As/Unwrap), so a bad value
+// yields actionable remediation instead of a bare string.
 func (c *Config) Validate() error {
+	if err := c.validate(); err != nil {
+		return kiteerrors.FromCatalog(kiteerrors.CodeConfigInvalid, err)
+	}
+	return nil
+}
+
+// validate performs the field-by-field checks and returns a descriptive error
+// for the first problem found.
+func (c *Config) validate() error {
 	// Stale threshold must be parseable.
 	if c.StaleThreshold != "" {
 		if _, err := time.ParseDuration(c.StaleThreshold); err != nil {
