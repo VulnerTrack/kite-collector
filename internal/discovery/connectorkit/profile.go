@@ -36,8 +36,16 @@ const (
 // (not self-reported), turning "is this connector hardened?" from a
 // source-reading exercise into a queryable fact (ConnectorSecurityProfile).
 type SecurityProfile struct {
-	SourceName             string
-	TLSMode                string
+	SourceName string
+	TLSMode    string
+
+	// CredentialPrivilegeTier classifies the blast radius of the credential this
+	// connector holds (RFC-0137 4.1.1). It is descriptive metadata, not one of
+	// the six scored booleans, so it never affects HardeningScore. Defaults to
+	// PrivilegeTierUnknown for connectors that do not classify it. Kept with the
+	// other string fields so the struct stays optimally field-aligned.
+	CredentialPrivilegeTier string
+
 	HardeningScore         float32
 	EndpointValidated      bool
 	PathSegmentsSanitized  bool
@@ -45,12 +53,6 @@ type SecurityProfile struct {
 	CredentialsZeroed      bool
 	EnabledFlagRespected   bool
 	CircuitBreakerAttached bool
-
-	// CredentialPrivilegeTier classifies the blast radius of the credential this
-	// connector holds (RFC-0137 4.1.1). It is descriptive metadata, not one of
-	// the six scored booleans, so it never affects HardeningScore. Defaults to
-	// PrivilegeTierUnknown for connectors that do not classify it.
-	CredentialPrivilegeTier string
 }
 
 // ComputeScore sets HardeningScore to the fraction of the six hardening
