@@ -1,5 +1,10 @@
 .PHONY: build build-host test test-e2e test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
+# Let the Go toolchain auto-download the version pinned in go.mod when the
+# host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
+# 1.26.4 unless GOTOOLCHAIN is already exported. Applies to every recipe.
+export GOTOOLCHAIN ?= auto
+
 # Release matrix mirrored from .goreleaser.yaml. Catching cross-OS regressions
 # locally (e.g. syscall.Handle vs int on Windows) is the whole point of this
 # target — keep it in sync with the goreleaser `goos`/`goarch`/`ignore` block.
