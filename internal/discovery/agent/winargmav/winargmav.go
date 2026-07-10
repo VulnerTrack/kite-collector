@@ -316,7 +316,8 @@ func MemberKindFromPath(path string) MemberKind {
 		return MemberUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "/sgr/") ||
 		strings.Contains(lower, "sgr_") ||

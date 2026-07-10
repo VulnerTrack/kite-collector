@@ -166,7 +166,9 @@ func EvaluatePermissions(checks []permCheck, asset model.Asset) []model.ConfigFi
 				slog.Debug("permissions auditor: stat denied", "path", check.Path)
 				continue
 			}
-			slog.Warn("permissions auditor: stat failed", "path", check.Path, "error", err)
+			slog.Warn("permissions auditor: stat failed",
+				"code", string(LogCodePermissionsStatFailed),
+				"path", check.Path, "error", err)
 			continue
 		}
 

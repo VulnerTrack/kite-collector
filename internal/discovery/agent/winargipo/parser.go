@@ -26,67 +26,83 @@ type IPOFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|ipo[_\-]?password|ecm[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|ipo[_\-]?password|ecm[_\-]?password|api[_\-]?token|api[_\-]?key|api[_\-]?secret)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|ipo[_\-]?password|ecm[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|ipo[_\-]?password|ecm[_\-]?password|bearer[_\-]?token)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|ipo[_\-]?password|ecm[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|ipo[_\-]?password|ecm[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // bookrunnerALYCRE matches a bookrunner-ALYC marker in body.
 var bookrunnerALYCRE = regexp.MustCompile(
-	`(?i)\b(santander[_\- ]?investment|galicia[_\- ]?investments|bbva[_\- ]?ar|macro[_\- ]?securities|btg[_\- ]?pactual[_\- ]?ar|btg[_\- ]?pactual|allaria|cohen[_\- ]?bursatil|bacs|balanz[_\- ]?capital|itau[_\- ]?ar)\b`)
+	`(?i)\b(santander[_\- ]?investment|galicia[_\- ]?investments|bbva[_\- ]?ar|macro[_\- ]?securities|btg[_\- ]?pactual[_\- ]?ar|btg[_\- ]?pactual|allaria|cohen[_\- ]?bursatil|bacs|balanz[_\- ]?capital|itau[_\- ]?ar)\b`,
+)
 
 // bookrunnerRoleRE matches a bookrunner-role field.
 var bookrunnerRoleRE = regexp.MustCompile(
-	`(?i)"?(?:bookrunner[_\- ]?role|role|rol)"?\s*[:=>]\s*"?(lead[_\- ]?bookrunner|joint[_\- ]?bookrunner|co[_\- ]?manager|senior[_\- ]?co[_\- ]?manager|selling[_\- ]?group[_\- ]?member|stabilizing[_\- ]?agent|listing[_\- ]?agent)"?`)
+	`(?i)"?(?:bookrunner[_\- ]?role|role|rol)"?\s*[:=>]\s*"?(lead[_\- ]?bookrunner|joint[_\- ]?bookrunner|co[_\- ]?manager|senior[_\- ]?co[_\- ]?manager|selling[_\- ]?group[_\- ]?member|stabilizing[_\- ]?agent|listing[_\- ]?agent)"?`,
+)
 
 // offeringTypeRE matches an offering-type field.
 var offeringTypeRE = regexp.MustCompile(
-	`(?i)"?(?:offering[_\- ]?type|tipo[_\- ]?oferta|deal[_\- ]?type)"?\s*[:=>]\s*"?(ipo|spo|follow[_\- ]?on|rights[_\- ]?issue|block[_\- ]?trade|private[_\- ]?placement[_\- ]?pre[_\- ]?ipo|direct[_\- ]?listing|spac[_\- ]?merger|adr[_\- ]?issuance)"?`)
+	`(?i)"?(?:offering[_\- ]?type|tipo[_\- ]?oferta|deal[_\- ]?type)"?\s*[:=>]\s*"?(ipo|spo|follow[_\- ]?on|rights[_\- ]?issue|block[_\- ]?trade|private[_\- ]?placement[_\- ]?pre[_\- ]?ipo|direct[_\- ]?listing|spac[_\- ]?merger|adr[_\- ]?issuance)"?`,
+)
 
 // listingVenueRE matches a listing-venue field.
 var listingVenueRE = regexp.MustCompile(
-	`(?i)"?(?:listing[_\- ]?venue|venue|listing|mercado[_\- ]?listing)"?\s*[:=>]\s*"?(byma|bcba|mae|nyse|nasdaq|lse|bme|ssx|b3)"?`)
+	`(?i)"?(?:listing[_\- ]?venue|venue|listing|mercado[_\- ]?listing)"?\s*[:=>]\s*"?(byma|bcba|mae|nyse|nasdaq|lse|bme|ssx|b3)"?`,
+)
 
 // issuerCuitKeyRE matches issuer CUIT field.
 var issuerCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:issuer[_\- ]?cuit|emisor[_\- ]?cuit|company[_\- ]?cuit|cuit[_\- ]?emisor)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:issuer[_\- ]?cuit|emisor[_\- ]?cuit|company[_\- ]?cuit|cuit[_\- ]?emisor)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // bookrunnerCuitKeyRE matches bookrunner CUIT field.
 var bookrunnerCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:bookrunner[_\- ]?cuit|alyc[_\- ]?cuit|underwriter[_\- ]?cuit|cuit[_\- ]?alyc|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:bookrunner[_\- ]?cuit|alyc[_\- ]?cuit|underwriter[_\- ]?cuit|cuit[_\- ]?alyc|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // dealCodenameRE matches a deal codename (e.g. "Project Pampa").
 var dealCodenameRE = regexp.MustCompile(
-	`(?i)"?(?:deal[_\- ]?codename|project[_\- ]?codename|deal[_\- ]?name|code[_\- ]?name)"?\s*[:=>]\s*"?([A-Z][A-Za-z0-9\-\._ ]{2,64})"?`)
+	`(?i)"?(?:deal[_\- ]?codename|project[_\- ]?codename|deal[_\- ]?name|code[_\- ]?name)"?\s*[:=>]\s*"?([A-Z][A-Za-z0-9\-\._ ]{2,64})"?`,
+)
 
 // investorCountRE matches investor count.
 var investorCountRE = regexp.MustCompile(
-	`(?i)"?(?:investor[_\- ]?count|investors[_\- ]?total|inversores[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:investor[_\- ]?count|investors[_\- ]?total|inversores[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // allocationCountRE matches allocation count.
 var allocationCountRE = regexp.MustCompile(
-	`(?i)"?(?:allocation[_\- ]?count|allocations[_\- ]?total|asignaciones[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:allocation[_\- ]?count|allocations[_\- ]?total|asignaciones[_\- ]?count)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // insiderCountRE matches insider count.
 var insiderCountRE = regexp.MustCompile(
-	`(?i)"?(?:insider[_\- ]?count|insiders[_\- ]?count|insiders[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`)
+	`(?i)"?(?:insider[_\- ]?count|insiders[_\- ]?count|insiders[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,12})`,
+)
 
 // offeringSizeRE matches offering size in ARS.
 var offeringSizeRE = regexp.MustCompile(
-	`(?i)"?(?:offering[_\- ]?size[_\- ]?ars|deal[_\- ]?size[_\- ]?ars|tama(?:n|ñ)o[_\- ]?oferta[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:offering[_\- ]?size[_\- ]?ars|deal[_\- ]?size[_\- ]?ars|tama(?:n|ñ)o[_\- ]?oferta[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // greenshoeSizeRE matches greenshoe size in ARS.
 var greenshoeSizeRE = regexp.MustCompile(
-	`(?i)"?(?:greenshoe[_\- ]?size[_\- ]?ars|over[_\- ]?allotment[_\- ]?ars|opcion[_\- ]?greenshoe[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`)
+	`(?i)"?(?:greenshoe[_\- ]?size[_\- ]?ars|over[_\- ]?allotment[_\- ]?ars|opcion[_\- ]?greenshoe[_\- ]?ars)"?\s*[:=>]\s*"?(\d{1,15})`,
+)
 
 // bookrunnerFeeBpsRE matches bookrunner fee basis points.
 var bookrunnerFeeBpsRE = regexp.MustCompile(
-	`(?i)"?(?:bookrunner[_\- ]?fee[_\- ]?bps|underwriting[_\- ]?fee[_\- ]?bps|fee[_\- ]?bps|comision[_\- ]?bps)"?\s*[:=>]\s*"?(\d{1,7})`)
+	`(?i)"?(?:bookrunner[_\- ]?fee[_\- ]?bps|underwriting[_\- ]?fee[_\- ]?bps|fee[_\- ]?bps|comision[_\- ]?bps)"?\s*[:=>]\s*"?(\d{1,7})`,
+)
 
 // ParseIPO parses any IPO artifact body (shared parser).
 func ParseIPO(body []byte) IPOFields {

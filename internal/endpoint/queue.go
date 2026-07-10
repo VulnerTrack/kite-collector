@@ -66,7 +66,8 @@ func (q *Queue) Enqueue(ctx context.Context, route string, payload []byte) error
 	id := uuid.Must(uuid.NewV7()).String()
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	_, err := q.db.ExecContext(ctx,
+	_, err := q.db.ExecContext(
+		ctx,
 		"INSERT INTO queue (id, route, payload, created_at) VALUES (?, ?, ?, ?)",
 		id, route, payload, now,
 	)
@@ -87,7 +88,8 @@ type QueuedItem struct {
 
 // Peek returns up to limit items for the given route without removing them.
 func (q *Queue) Peek(ctx context.Context, route string, limit int) ([]QueuedItem, error) {
-	rows, err := q.db.QueryContext(ctx,
+	rows, err := q.db.QueryContext(
+		ctx,
 		"SELECT id, route, payload, attempts FROM queue WHERE route = ? ORDER BY created_at ASC LIMIT ?",
 		route, limit,
 	)

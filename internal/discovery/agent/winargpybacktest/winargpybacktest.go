@@ -331,7 +331,8 @@ func FrameworkFromPath(path string) Framework {
 		return FrameworkUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "vectorbt"):
 		return FrameworkVectorbt

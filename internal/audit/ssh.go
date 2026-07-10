@@ -132,7 +132,9 @@ func (s *SSH) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFinding
 			return nil, nil
 		}
 		if os.IsPermission(err) {
-			slog.Warn("ssh auditor: permission denied, skipping", "path", s.configPath)
+			slog.Warn("ssh auditor: permission denied, skipping",
+				"code", string(LogCodeSSHPermissionDenied),
+				"path", s.configPath)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("ssh audit: %w", err)

@@ -58,13 +58,13 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	for _, root := range paths {
 		abs, err := filepath.Abs(root)
 		if err != nil {
-			slog.Warn("code source: cannot resolve path", "path", root, "error", err)
+			slog.Warn("code source: cannot resolve path", "code", string(LogCodeScannerPathResolveFailed), "path", root, "error", err)
 			continue
 		}
 
 		repos, err := findRepos(ctx, abs, maxDepth)
 		if err != nil {
-			slog.Warn("code source: walk failed", "path", abs, "error", err)
+			slog.Warn("code source: walk failed", "code", string(LogCodeScannerWalkFailed), "path", abs, "error", err)
 			continue
 		}
 

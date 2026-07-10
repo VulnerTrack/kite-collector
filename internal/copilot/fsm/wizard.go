@@ -94,7 +94,7 @@ func (w *Wizard) Run(wc *WizardContext) error {
 		if node.SkipWhen != "" {
 			skipResult, err := w.engine.Evaluate(nodeID+"__skip", wc.CELContext())
 			if err != nil {
-				w.logger.Warn("skip_when evaluation failed", "node", nodeID, "err", err)
+				w.logger.Warn("skip_when evaluation failed", "code", string(LogCodeWizardSkipEvalFailed), "node", nodeID, "err", err)
 			} else if skip, ok := skipResult.(bool); ok && skip {
 				w.addTrace(wc, rules.TraceEntry{
 					NodeID:     nodeID,
@@ -125,7 +125,7 @@ func (w *Wizard) Run(wc *WizardContext) error {
 			nodeID, groupID, node.DefaultRule, wc.CELContext(),
 		)
 		if evalErr != nil {
-			w.logger.Warn("default_rule evaluation failed", "node", nodeID, "err", evalErr)
+			w.logger.Warn("default_rule evaluation failed", "code", string(LogCodeWizardDefaultEvalFailed), "node", nodeID, "err", evalErr)
 			defaultVal = nil
 		}
 

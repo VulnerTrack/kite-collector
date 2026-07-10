@@ -96,7 +96,8 @@ func (g *PaginationGuardV2) NextPage(pageBytes int64) error {
 			BytesTotal: g.bytesTotal,
 			Message: fmt.Sprintf(
 				"pagination exceeded %d iterations — possible infinite loop or "+
-					"API reporting incorrect totals", g.MaxIterations),
+					"API reporting incorrect totals", g.MaxIterations,
+			),
 		}
 		g.emitCap(err)
 		return err
@@ -114,7 +115,8 @@ func (g *PaginationGuardV2) NextPage(pageBytes int64) error {
 			Message: fmt.Sprintf(
 				"pagination page size %d bytes exceeds per-page cap %d "+
 					"(KITE_PAGINATION_MAX_BYTES_PER_PAGE)",
-				pageBytes, g.MaxBytesPerPage),
+				pageBytes, g.MaxBytesPerPage,
+			),
 		}
 		g.emitCap(err)
 		return err
@@ -129,7 +131,8 @@ func (g *PaginationGuardV2) NextPage(pageBytes int64) error {
 			Message: fmt.Sprintf(
 				"pagination cumulative %d bytes exceeds total cap %d "+
 					"(KITE_PAGINATION_MAX_BYTES_TOTAL)",
-				g.bytesTotal, g.MaxBytesTotal),
+				g.bytesTotal, g.MaxBytesTotal,
+			),
 		}
 		g.emitCap(err)
 		return err

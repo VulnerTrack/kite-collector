@@ -36,13 +36,13 @@ func (c *chainCollector) Collect(ctx context.Context) ([]Certificate, error) {
 		got, err := sub.Collect(ctx)
 		if err != nil {
 			slog.Warn("certificates: source collector failed",
-				"source", sub.Name(), "error", err)
+				"code", string(LogCodeChainSourceCollectorFailed), "source", sub.Name(), "error", err)
 			continue
 		}
 		for _, cert := range got {
 			if len(out) >= MaxCertificates {
 				slog.Warn("certificates: cap reached, dropping later sources",
-					"cap", MaxCertificates)
+					"code", string(LogCodeChainCapReached), "cap", MaxCertificates)
 				SortCertificates(out)
 				return out, nil
 			}

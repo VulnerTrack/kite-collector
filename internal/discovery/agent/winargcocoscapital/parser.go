@@ -32,73 +32,90 @@ type CocosFields struct {
 
 // bearerRE matches an `access_token` in Cocos credentials.
 var bearerRE = regexp.MustCompile(
-	`(?i)("|')?access[_-]?token("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?access[_-]?token("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // refreshRE matches `refresh_token`.
 var refreshRE = regexp.MustCompile(
-	`(?i)("|')?refresh[_-]?token("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?refresh[_-]?token("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // usernameRE matches `username` / `user` / `email`.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:username|user|email|usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:username|user|email|usuario)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // passwordRE matches a password row (line-anchored INI/JSON).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|clave|pass|passwd)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|clave|pass|passwd)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line in
 // Python source.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|clave|passwd)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|clave|passwd)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // twofaRE matches a TOTP / 2FA secret.
 var twofaRE = regexp.MustCompile(
-	`(?i)("|')?(?:totp|twofa|2fa|tfa)(?:[_-]?(?:secret|key|seed))?("|')?\s*[:=]\s*("|')?([A-Z2-7]{16,})`)
+	`(?i)("|')?(?:totp|twofa|2fa|tfa)(?:[_-]?(?:secret|key|seed))?("|')?\s*[:=]\s*("|')?([A-Z2-7]{16,})`,
+)
 
 // strategyImportRE detects cocos-api / pycocos imports.
 var strategyImportRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+cocos_api|import\s+cocos_api|from\s+pycocos|import\s+pycocos|from\s+cocos|import\s+cocos)`)
+	`(?im)^\s*(?:from\s+cocos_api|import\s+cocos_api|from\s+pycocos|import\s+pycocos|from\s+cocos|import\s+cocos)`,
+)
 
 // timestampMinRE matches `YYYY-MM-DD HH:MM[:SS]`.
 var timestampMinRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // pollRE matches a poll / GET / fetch marker.
 var pollRE = regexp.MustCompile(
-	`(?i)(?:\bpoll\b|\bfetch\b|GET\s+/|HTTP\s+200|response_status|polled)`)
+	`(?i)(?:\bpoll\b|\bfetch\b|GET\s+/|HTTP\s+200|response_status|polled)`,
+)
 
 // orderEntryRE matches an order entry.
 var orderEntryRE = regexp.MustCompile(
-	`(?i)"(?:order_id|orden_id|orderid|order_number|numero_orden|simbolo|symbol|ticker)"`)
+	`(?i)"(?:order_id|orden_id|orderid|order_number|numero_orden|simbolo|symbol|ticker)"`,
+)
 
 // positionRE matches a portfolio position entry.
 var positionRE = regexp.MustCompile(
-	`(?i)"(?:positions?|posici[oó]nes?|holdings?|tenencias?|titulos?)"`)
+	`(?i)"(?:positions?|posici[oó]nes?|holdings?|tenencias?|titulos?)"`,
+)
 
 // fciSubRE matches an FCI subscription entry.
 var fciSubRE = regexp.MustCompile(
-	`(?i)"(?:fci_id|fci_subscription|fci_name|fondo_comun|subscripcion_fci)"`)
+	`(?i)"(?:fci_id|fci_subscription|fci_name|fondo_comun|subscripcion_fci)"`,
+)
 
 // usdtAmountRE matches `usdt_amount=NN.NN` / `ars_amount=NN`
 // in a USDT trade log entry.
 var usdtAmountRE = regexp.MustCompile(
-	`(?i)(?:usdt[_\- ]?amount|ars[_\- ]?amount|notional|importe|monto)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:usdt[_\- ]?amount|ars[_\- ]?amount|notional|importe|monto)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // notionalRE matches a notional row.
 var notionalRE = regexp.MustCompile(
-	`(?i)(?:valor_mercado|importe|monto|valor|notional|amount|total)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:valor_mercado|importe|monto|valor|notional|amount|total)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // mepStemRE matches the ARS-denominated bond stem.
 var mepStemRE = regexp.MustCompile(
-	`(?i)\b(?:AL30|AL35|AL41|GD30|GD35|GD38|GD41|GD46)\b`)
+	`(?i)\b(?:AL30|AL35|AL41|GD30|GD35|GD38|GD41|GD46)\b`,
+)
 
 // mepDCRE matches the USD-MEP / USD-CCL bond counterpart.
 var mepDCRE = regexp.MustCompile(
-	`(?i)\b(?:AL30[DC]|AL35[DC]|AL41[DC]|GD30[DC]|GD35[DC]|GD38[DC]|GD41[DC]|GD46[DC])\b`)
+	`(?i)\b(?:AL30[DC]|AL35[DC]|AL41[DC]|GD30[DC]|GD35[DC]|GD38[DC]|GD41[DC]|GD46[DC])\b`,
+)
 
 // HasMEPCCLPattern reports whether body has both ARS bond
 // stem AND MEP/CCL counterpart.

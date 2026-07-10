@@ -31,23 +31,28 @@ type MCFields struct {
 // passwordRE matches a password row in MultiCharts.cfg /
 // BrokerProfiles\<broker>.cfg.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|mc[_\-]?password|broker[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|mc[_\-]?password|broker[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|mc[_\-]?password|broker[_\-]?password|rithmic[_\-]?password|tws[_\-]?password)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|mc[_\-]?password|broker[_\-]?password|rithmic[_\-]?password|tws[_\-]?password)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches a MultiCharts / plug-in API key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:mc[_\-]?api[_\-]?key|mc[_\-]?token|rithmic[_\-]?token|cqg[_\-]?token|iqfeed[_\-]?token|broker[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:mc[_\-]?api[_\-]?key|mc[_\-]?token|rithmic[_\-]?token|cqg[_\-]?token|iqfeed[_\-]?token|broker[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches MultiCharts / plug-in username.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:mc[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email|rithmic[_\-]?user)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:mc[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email|rithmic[_\-]?user)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // accountIDRE matches an MC account ID / broker account.
 var accountIDRE = regexp.MustCompile(
-	`(?i)"?(?:mc[_\-]?account|account[_\-]?id|accountid|broker[_\-]?account|trader[_\-]?id|account[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`)
+	`(?i)"?(?:mc[_\-]?account|account[_\-]?id|accountid|broker[_\-]?account|trader[_\-]?id|account[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,32})`,
+)
 
 // sendOrderRE detects Send-Order Strategy armed state. Two
 // surfaces:
@@ -57,54 +62,65 @@ var accountIDRE = regexp.MustCompile(
 //     `AutomatedTrading="enabled"`.
 //  3. Portfolio Trader auto-execution: `autoExecution=true`.
 var sendOrderRE = regexp.MustCompile(
-	`(?i)(?:send[_\- ]?order[_\- ]?enabled\s*=\s*(?:1|true|on|yes)|sendorders\s*=\s*"?true|autotrading[_\- ]?state\s*=\s*(?:on|enabled|true|1)|automatedtrading\s*=\s*"?(?:enabled|true|1)|autoexecution\s*=\s*"?(?:true|1)|auto[_\- ]?trading\s*=\s*(?:1|true|on|yes))`)
+	`(?i)(?:send[_\- ]?order[_\- ]?enabled\s*=\s*(?:1|true|on|yes)|sendorders\s*=\s*"?true|autotrading[_\- ]?state\s*=\s*(?:on|enabled|true|1)|automatedtrading\s*=\s*"?(?:enabled|true|1)|autoexecution\s*=\s*"?(?:true|1)|auto[_\- ]?trading\s*=\s*(?:1|true|on|yes))`,
+)
 
 // portfolioTraderRE detects Portfolio Trader markers — config
 // for multi-symbol portfolio strategy execution.
 var portfolioTraderRE = regexp.MustCompile(
-	`(?i)(?:portfolio[_\- ]?trader|portfoliotrader|portfolio[_\- ]?session|<portfolio[ >]|portfolio[_\- ]?strategy)`)
+	`(?i)(?:portfolio[_\- ]?trader|portfoliotrader|portfolio[_\- ]?session|<portfolio[ >]|portfolio[_\- ]?strategy)`,
+)
 
 // domArmedRE detects DOM (Depth-of-Market) Trading panel armed
 // state — scalper / HFT pattern.
 var domArmedRE = regexp.MustCompile(
-	`(?i)(?:dom[_\- ]?trading[_\- ]?enabled\s*=\s*(?:1|true|on|yes)|dom[_\- ]?armed\s*=\s*(?:1|true|on|yes)|domtrading\s*=\s*"?true|order[_\- ]?bar[_\- ]?armed\s*=\s*(?:1|true|on|yes))`)
+	`(?i)(?:dom[_\- ]?trading[_\- ]?enabled\s*=\s*(?:1|true|on|yes)|dom[_\- ]?armed\s*=\s*(?:1|true|on|yes)|domtrading\s*=\s*"?true|order[_\- ]?bar[_\- ]?armed\s*=\s*(?:1|true|on|yes))`,
+)
 
 // pluginConfigRE matches a broker-plug-in config section header.
 var pluginConfigRE = regexp.MustCompile(
-	`(?i)\[(?:IB|IBController|TWS|Rithmic|CQG|Continuum|IQFeed|InteractiveData|TT|MATbaRofex|Matba_Rofex|Matba-Rofex)\]`)
+	`(?i)\[(?:IB|IBController|TWS|Rithmic|CQG|Continuum|IQFeed|InteractiveData|TT|MATbaRofex|Matba_Rofex|Matba-Rofex)\]`,
+)
 
 // pluginCredentialRE matches a plug-in cleartext credential row.
 var pluginCredentialRE = regexp.MustCompile(
-	`(?i)(?:tws[_\- ]?port|ib[_\- ]?port|gateway[_\- ]?port|gateway[_\- ]?host|rithmic[_\- ]?(?:user|server|gateway)|cqg[_\- ]?(?:user|server)|iqfeed[_\- ]?(?:user|product)|api[_\- ]?username|client[_\- ]?id)\s*[:=]\s*\S+`)
+	`(?i)(?:tws[_\- ]?port|ib[_\- ]?port|gateway[_\- ]?port|gateway[_\- ]?host|rithmic[_\- ]?(?:user|server|gateway)|cqg[_\- ]?(?:user|server)|iqfeed[_\- ]?(?:user|product)|api[_\- ]?username|client[_\- ]?id)\s*[:=]\s*\S+`,
+)
 
 // orderEventRE matches an order/fill event in a trade-log row.
 var orderEventRE = regexp.MustCompile(
-	`(?i)(?:OrderFilled|FillEvent|FillID|order[_\- ]?id|fill[_\- ]?id|executed[_\- ]?qty|^\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}.*\bFILL\b)`)
+	`(?i)(?:OrderFilled|FillEvent|FillID|order[_\- ]?id|fill[_\- ]?id|executed[_\- ]?qty|^\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}.*\bFILL\b)`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM:SS`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // messageMarkerRE matches per-message markers used to estimate
 // message rate (DOM updates dominate in MultiCharts logs).
 var messageMarkerRE = regexp.MustCompile(
-	`(?i)(?:MarketDataUpdate|MarketDepthUpdate|DOMUpdate|HeartBeat|LogonResponse|TradeAccountResponse|ExecutionReport|OrderUpdate|QuoteUpdate)`)
+	`(?i)(?:MarketDataUpdate|MarketDepthUpdate|DOMUpdate|HeartBeat|LogonResponse|TradeAccountResponse|ExecutionReport|OrderUpdate|QuoteUpdate)`,
+)
 
 // symbolEntryRE matches MultiCharts symbol entries: workspace
 // XML `<Symbol>DLR</Symbol>`, .wsp `Symbol=ES`, JSON
 // `"symbol":"6E"`, Portfolio Trader `<sym>...</sym>`,
 // PowerLanguage `inputs: Symbol("DLR")`.
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:"?(?:symbol(?:_\w+)?|sym|simbolo|ticker|instrument|contract|root)"?\s*[:=]\s*"?|<symbol[^>]*>|<sym[^>]*>|Symbol\(\s*"|InsertSymbol\(\s*")([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)(?:"?(?:symbol(?:_\w+)?|sym|simbolo|ticker|instrument|contract|root)"?\s*[:=]\s*"?|<symbol[^>]*>|<sym[^>]*>|Symbol\(\s*"|InsertSymbol\(\s*")([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // portfolioSymRE matches Portfolio Trader symbol entries in
 // .pls files — counts how many symbols the portfolio runs.
 var portfolioSymRE = regexp.MustCompile(
-	`(?i)<(?:symbol|sym|instrument)[^>]*>([A-Za-z0-9_\-\./]{2,32})</(?:symbol|sym|instrument)>`)
+	`(?i)<(?:symbol|sym|instrument)[^>]*>([A-Za-z0-9_\-\./]{2,32})</(?:symbol|sym|instrument)>`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseMCConfig parses MultiCharts.cfg / BrokerProfiles cfg.
 func ParseMCConfig(body []byte) MCFields {

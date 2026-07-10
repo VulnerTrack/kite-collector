@@ -39,13 +39,13 @@ func (c *chainCollector) Collect(ctx context.Context) ([]Credential, error) {
 		got, err := sub.Collect(ctx)
 		if err != nil {
 			slog.Warn("cloudcreds: source collector failed",
-				"source", sub.Name(), "error", err)
+				"code", string(LogCodeChainSourceCollectorFailed), "source", sub.Name(), "error", err)
 			continue
 		}
 		for _, c := range got {
 			if len(out) >= MaxCredentials {
 				slog.Warn("cloudcreds: cap reached, dropping later sources",
-					"cap", MaxCredentials)
+					"code", string(LogCodeChainCapReached), "cap", MaxCredentials)
 				SortCredentials(out)
 				return out, nil
 			}

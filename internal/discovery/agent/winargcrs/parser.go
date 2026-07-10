@@ -27,61 +27,73 @@ type CRSFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|crs[_\-]?password|afip[_\-]?password|taxit[_\-]?password|filing[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|crs[_\-]?password|afip[_\-]?password|taxit[_\-]?password|filing[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|crs[_\-]?password|afip[_\-]?password|taxit[_\-]?password|filing[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|crs[_\-]?password|afip[_\-]?password|taxit[_\-]?password|filing[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|crs[_\-]?password|afip[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|crs[_\-]?password|afip[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // foreignTINRE matches an OECD CRS foreign TIN element. CRS
 // schema 2.0 uses `<crs:TIN issuedBy="XX">...</crs:TIN>` form.
 var foreignTINRE = regexp.MustCompile(
-	`(?is)<(?:crs:|fatca:|stf:)?TIN(?:\s+issuedBy\s*=\s*"([A-Z]{2})")?\s*>\s*([A-Za-z0-9\-]{5,40})\s*<`)
+	`(?is)<(?:crs:|fatca:|stf:)?TIN(?:\s+issuedBy\s*=\s*"([A-Z]{2})")?\s*>\s*([A-Za-z0-9\-]{5,40})\s*<`,
+)
 
 // foreignTINJSONRE matches a JSON form `"tin": "...", "tin_country":
 // "..."`. The country may come either as `tin_country` or
 // `issuedBy` separate field.
 var foreignTINJSONRE = regexp.MustCompile(
-	`(?i)"(?:foreign_tin|tin_number|tax_id|tin)"\s*:\s*"([A-Za-z0-9\-]{5,40})"[\s,\n]*(?:"(?:tin_country|tin_country_code|issued_by|country_code)"\s*:\s*"([A-Z]{2})")?`)
+	`(?i)"(?:foreign_tin|tin_number|tax_id|tin)"\s*:\s*"([A-Za-z0-9\-]{5,40})"[\s,\n]*(?:"(?:tin_country|tin_country_code|issued_by|country_code)"\s*:\s*"([A-Z]{2})")?`,
+)
 
 // giinRE matches a Global Intermediary Identification Number
 // (GIIN). FATCA-registered FFIs have a 19-char dot-delimited
 // GIIN: `XXXXXX.XXXXX.XX.XXX`.
 var giinRE = regexp.MustCompile(
-	`(?i)\b([A-Z0-9]{6}\.[A-Z0-9]{5}\.[A-Z]{2}\.[0-9]{3})\b`)
+	`(?i)\b([A-Z0-9]{6}\.[A-Z0-9]{5}\.[A-Z]{2}\.[0-9]{3})\b`,
+)
 
 // afipReceiptRE matches an AFIP filing-receipt confirmation
 // number. AFIP uses 13-15 digit confirmation numbers prefixed
 // with `RG` or just numeric.
 var afipReceiptRE = regexp.MustCompile(
-	`(?i)"?(?:afip[_\-]?receipt|receipt[_\-]?id|confirmation[_\-]?id|nro[_\-]?presentacion|presentacion[_\-]?id|filing[_\-]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{6,32})"?`)
+	`(?i)"?(?:afip[_\-]?receipt|receipt[_\-]?id|confirmation[_\-]?id|nro[_\-]?presentacion|presentacion[_\-]?id|filing[_\-]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{6,32})"?`,
+)
 
 // accountHolderCountRE matches `<crs:AccountNumber>` repetition.
 // CRS bodies list one `<AccountReport>` per account; counting
 // `<AccountReport` opening tags gives the report volume.
 var accountHolderCountRE = regexp.MustCompile(
-	`(?i)<(?:crs:|fatca:|stf:)?AccountReport\b`)
+	`(?i)<(?:crs:|fatca:|stf:)?AccountReport\b`,
+)
 
 // balanceUSDRE matches a USD balance amount field. CRS schema
 // uses `<crs:AccountBalance currCode="USD">...</crs:AccountBalance>`.
 var balanceUSDRE = regexp.MustCompile(
-	`(?is)<(?:crs:|fatca:|stf:)?AccountBalance[^>]*currCode\s*=\s*"USD"[^>]*>\s*(\d{1,15}(?:\.\d+)?)\s*<`)
+	`(?is)<(?:crs:|fatca:|stf:)?AccountBalance[^>]*currCode\s*=\s*"USD"[^>]*>\s*(\d{1,15}(?:\.\d+)?)\s*<`,
+)
 
 // balanceUSDJSONRE matches a JSON form `"balance_usd": <amount>`.
 var balanceUSDJSONRE = regexp.MustCompile(
-	`(?i)"(?:balance_usd|balance_dollars|account_balance_usd|balance)"\s*:\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"(?:balance_usd|balance_dollars|account_balance_usd|balance)"\s*:\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // reportableJurisdictionRE matches `<crs:ResCountryCode>XX</...>`.
 var reportableJurisdictionRE = regexp.MustCompile(
-	`(?i)<(?:crs:|fatca:|stf:)?ResCountryCode\s*>([A-Z]{2})<`)
+	`(?i)<(?:crs:|fatca:|stf:)?ResCountryCode\s*>([A-Z]{2})<`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseCRSBody parses an OECD CRS XML body.
 func ParseCRSBody(body []byte) CRSFields {

@@ -147,7 +147,8 @@ func upsertEntraUsers(ctx context.Context, tx *sql.Tx, tenantID string, users []
 		if mErr != nil {
 			return fmt.Errorf("entra upsert: marshal assigned_roles: %w", mErr)
 		}
-		if _, eErr := stmt.ExecContext(ctx,
+		if _, eErr := stmt.ExecContext(
+			ctx,
 			uuid.Must(uuid.NewV7()).String(),
 			tenantID,
 			u.ObjectID,
@@ -202,7 +203,8 @@ func upsertEntraServicePrincipals(ctx context.Context, tx *sql.Tx, tenantID stri
 		if mErr != nil {
 			return fmt.Errorf("entra upsert: marshal oauth2 scopes: %w", mErr)
 		}
-		if _, eErr := stmt.ExecContext(ctx,
+		if _, eErr := stmt.ExecContext(
+			ctx,
 			uuid.Must(uuid.NewV7()).String(),
 			tenantID,
 			sp.ObjectID,
@@ -254,7 +256,8 @@ func upsertEntraGroups(ctx context.Context, tx *sql.Tx, tenantID string, groups 
 		if mErr != nil {
 			return fmt.Errorf("entra upsert: marshal group_types: %w", mErr)
 		}
-		if _, eErr := stmt.ExecContext(ctx,
+		if _, eErr := stmt.ExecContext(
+			ctx,
 			uuid.Must(uuid.NewV7()).String(),
 			tenantID,
 			g.ObjectID,
@@ -312,7 +315,8 @@ func upsertEntraDevices(ctx context.Context, tx *sql.Tx, tenantID string, device
 		if _, ok := validTrustTypes[trustType]; !ok {
 			trustType = "AzureAD"
 		}
-		if _, eErr := stmt.ExecContext(ctx,
+		if _, eErr := stmt.ExecContext(
+			ctx,
 			uuid.Must(uuid.NewV7()).String(),
 			tenantID,
 			d.ObjectID,
@@ -362,7 +366,8 @@ func upsertEntraRoleAssignments(ctx context.Context, tx *sql.Tx, tenantID string
 		if _, ok := validPrincipalTypes[pType]; !ok {
 			pType = "user"
 		}
-		if _, eErr := stmt.ExecContext(ctx,
+		if _, eErr := stmt.ExecContext(
+			ctx,
 			uuid.Must(uuid.NewV7()).String(),
 			tenantID,
 			a.PrincipalObjectID,

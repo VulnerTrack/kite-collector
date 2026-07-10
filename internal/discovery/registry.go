@@ -105,6 +105,7 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 			// quarantined collector apart from a missing one.
 			if r.circuitBreaker != nil && r.circuitBreaker.ShouldSkip(src.Name()) {
 				slog.Warn("discovery source skipped: circuit open",
+					"code", string(LogCodeRegistrySourceCircuitOpen),
 					"source", src.Name())
 				r.emitHeartbeat(ctx, src.Name(), model.HeartbeatCircuitOpen, 0, 0)
 				return nil
@@ -118,7 +119,9 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 			elapsed := time.Since(start)
 
 			if err != nil {
-				slog.Warn("discovery source failed",
+				slog.Warn(
+					"discovery source failed",
+					"code", string(LogCodeRegistrySourceFailed),
 					"source", src.Name(),
 					"error", err,
 				)
@@ -141,7 +144,8 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 				r.circuitBreaker.RecordSuccess(src.Name())
 			}
 
-			slog.Info("discovery source completed",
+			slog.Info(
+				"discovery source completed",
 				"source", src.Name(),
 				"assets", len(discovered),
 			)
@@ -177,7 +181,9 @@ func (r *Registry) emitHeartbeat(
 		return
 	}
 	if err := r.heartbeatRecorder.Record(ctx, source, status, itemsEmitted, duration); err != nil {
-		slog.Warn("heartbeat record failed",
+		slog.Warn(
+			"heartbeat record failed",
+			"code", string(LogCodeHeartbeatRecordFailed),
 			"source", source,
 			"status", status,
 			"error", err,

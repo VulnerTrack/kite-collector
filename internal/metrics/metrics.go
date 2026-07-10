@@ -189,7 +189,7 @@ func (m *Metrics) Serve(addr string) *http.Server {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("metrics server exited", "error", err)
+			slog.Error("metrics server exited", "code", string(LogCodeServerExited), "error", err)
 		}
 	}()
 

@@ -31,61 +31,75 @@ type BymadataFields struct {
 
 // apiKeyRE matches a bymadata API key / vendor key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:bymadata[_-]?(?:api[_-]?key|key|token|vendor[_-]?key|client[_-]?id)|vendor[_-]?key|api[_-]?key|access[_-]?token|client[_-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?(?:bymadata[_-]?(?:api[_-]?key|key|token|vendor[_-]?key|client[_-]?id)|vendor[_-]?key|api[_-]?key|access[_-]?token|client[_-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // usernameRE matches `username` / `user` / `email`.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:username|user|email|usuario|vendor[_\-]?id|client[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:username|user|email|usuario|vendor[_\-]?id|client[_\-]?name)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // passwordRE matches a password row (line-anchored INI/JSON/XML).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd|vendor[_\-]?pass)"?\s*(?:[:=>]|>)\s*\S+`)
+	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd|vendor[_\-]?pass)"?\s*(?:[:=>]|>)\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>` on a single line.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`)
+	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line in
 // Python source.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|clave|passwd|api_key|vendor_key)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|clave|passwd|api_key|vendor_key)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // fixFASTRE detects FIX-FAST 5.0 session markers.
 var fixFASTRE = regexp.MustCompile(
-	`(?i)(?:8=FIXT\.1\.1|8=FIX\.5\.0|fixfast|fix[_\- ]?fast|fast[_\- ]?template|9=\d+\x01|35=W|35=X|35=d|MDFullGrp)`)
+	`(?i)(?:8=FIXT\.1\.1|8=FIX\.5\.0|fixfast|fix[_\- ]?fast|fast[_\- ]?template|9=\d+\x01|35=W|35=X|35=d|MDFullGrp)`,
+)
 
 // fixSenderRE matches FIX SenderCompID.
 var fixSenderRE = regexp.MustCompile(
-	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // fixTargetRE matches FIX TargetCompID.
 var fixTargetRE = regexp.MustCompile(
-	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // websocketRE detects WS handshake / streaming markers.
 var websocketRE = regexp.MustCompile(
-	`(?i)(?:wss?://[a-z0-9_\-\.]+|Sec-WebSocket-Key|Upgrade:\s*websocket|websocket[_\- ]?handshake|hub[_\- ]?connect|hub[_\- ]?subscribe|stream[_\- ]?subscribe)`)
+	`(?i)(?:wss?://[a-z0-9_\-\.]+|Sec-WebSocket-Key|Upgrade:\s*websocket|websocket[_\- ]?handshake|hub[_\- ]?connect|hub[_\- ]?subscribe|stream[_\- ]?subscribe)`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM[:SS]`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // messageMarkerRE matches per-message log markers used to
 // estimate message rate (FIX-FAST or WS payload lines).
 var messageMarkerRE = regexp.MustCompile(
-	`(?i)(?:35=W|35=X|35=d|MarketDataIncrementalRefresh|MarketDataSnapshotFullRefresh|md_update|mdupdate|book_update|trade_tick|level1_update|level2_update)`)
+	`(?i)(?:35=W|35=X|35=d|MarketDataIncrementalRefresh|MarketDataSnapshotFullRefresh|md_update|mdupdate|book_update|trade_tick|level1_update|level2_update)`,
+)
 
 // symbolJSONRE matches a JSON / INI symbol entry.
 var symbolJSONRE = regexp.MustCompile(
-	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento|55=)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento|55=)"?\s*[:=]\s*"?([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // symbolXMLRE matches `<symbol>…</symbol>`.
 var symbolXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:symbol|simbolo|ticker|instrument)\s*>([A-Za-z0-9_\-\./]{2,32})<\s*/\s*(?:symbol|simbolo|ticker|instrument)\s*>`)
+	`(?i)<\s*(?:symbol|simbolo|ticker|instrument)\s*>([A-Za-z0-9_\-\./]{2,32})<\s*/\s*(?:symbol|simbolo|ticker|instrument)\s*>`,
+)
 
 // sdkImportRE detects bymadata SDK imports.
 var sdkImportRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+bymadata|import\s+bymadata|from\s+ar\.com\.byma\.bymadata|import\s+ar\.com\.byma\.bymadata)`)
+	`(?im)^\s*(?:from\s+bymadata|import\s+bymadata|from\s+ar\.com\.byma\.bymadata|import\s+ar\.com\.byma\.bymadata)`,
+)
 
 // ParseBymadataCredentials parses an api_key.json / config.
 func ParseBymadataCredentials(body []byte) BymadataFields {

@@ -333,7 +333,8 @@ func SujetoObligadoFromPath(path string) SujetoObligadoKind {
 		return SujetoUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	switch {
 	case strings.Contains(lower, "/alyc/") ||
 		strings.Contains(lower, "alyc_") ||

@@ -13,5 +13,7 @@ func NewCollector() Collector {
 
 type noopCollector struct{}
 
-func (noopCollector) Name() string                          { return "mdm-fingerprint-noop" }
-func (noopCollector) Collect(_ context.Context) (State, error) { return State{Source: SourceNoProbe}, nil }
+func (noopCollector) Name() string { return "mdm-fingerprint-noop" }
+func (noopCollector) Collect(_ context.Context) (State, error) {
+	return State{Source: SourceNoProbe}, nil
+}

@@ -161,7 +161,8 @@ func runCopilot(cmd *cobra.Command, f copilotFlags) error {
 		prompter = tui.NewLinePrompter()
 	}
 
-	wiz := fsm.NewWizard(s, eng, sorted, prompter,
+	wiz := fsm.NewWizard(
+		s, eng, sorted, prompter,
 		fsm.WithExplain(f.explain),
 		fsm.WithLogger(logger),
 	)

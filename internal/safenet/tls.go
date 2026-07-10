@@ -22,6 +22,7 @@ func TLSConfig(insecureEnv, caCertEnv string) (*tls.Config, error) {
 	insecure, _ := strconv.ParseBool(os.Getenv(insecureEnv))
 	if insecure {
 		slog.Warn("TLS verification disabled",
+			"code", string(LogCodeTLSVerificationDisabled),
 			"env", insecureEnv,
 			"warning", "not recommended for production")
 		cfg.InsecureSkipVerify = true //nolint:gosec // user-controlled opt-in via env var

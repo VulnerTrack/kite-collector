@@ -91,7 +91,9 @@ func NewManager(ctx context.Context, configs []config.EndpointConfig, logger *sl
 	for _, cfg := range configs {
 		ep, err := m.connect(cfg)
 		if err != nil {
-			logger.Warn("skipping endpoint — connection failed",
+			logger.Warn(
+				"skipping endpoint — connection failed",
+				"code", string(LogCodeManagerConnectSkipped),
 				"name", cfg.Name,
 				"address", cfg.Address,
 				"error", err,
@@ -141,11 +143,12 @@ func (m *Manager) connect(cfg config.EndpointConfig) (*Endpoint, error) {
 		opts = append(opts, grpc.WithTransportCredentials(capture))
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		m.logger.Warn("endpoint has no TLS configured — insecure", "name", cfg.Name)
+		m.logger.Warn("endpoint has no TLS configured — insecure", "code", string(LogCodeManagerNoTLS), "name", cfg.Name)
 	}
 
 	// Channel binding interceptors use the captured TLS state (nil-safe).
-	opts = append(opts,
+	opts = append(
+		opts,
 		grpc.WithUnaryInterceptor(ChannelBindingInterceptor(capture)),
 		grpc.WithStreamInterceptor(ChannelBindingStreamInterceptor(capture)),
 	)

@@ -80,7 +80,7 @@ func (c *gopsutilCollector) Collect(ctx context.Context) ([]Listener, error) {
 		out = append(out, l)
 		if len(out) >= MaxListeners {
 			slog.Warn("listeners: capping inventory at MaxListeners",
-				"observed_so_far", len(out), "cap", MaxListeners)
+				"code", string(LogCodeCollectorInventoryCapped), "observed_so_far", len(out), "cap", MaxListeners)
 			break
 		}
 	}

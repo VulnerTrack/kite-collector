@@ -151,7 +151,8 @@ func TestUpsertEntraSnapshot_Idempotent(t *testing.T) {
 
 	// Capture updated_at after first insert.
 	var firstUpdatedAt int64
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT updated_at FROM entra_users WHERE object_id = 'user-1'`,
 	).Scan(&firstUpdatedAt))
 
@@ -168,7 +169,8 @@ func TestUpsertEntraSnapshot_Idempotent(t *testing.T) {
 
 	// updated_at must have advanced; created_at must not.
 	var secondUpdatedAt int64
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT updated_at FROM entra_users WHERE object_id = 'user-1'`,
 	).Scan(&secondUpdatedAt))
 	assert.Greater(t, secondUpdatedAt, firstUpdatedAt,
@@ -208,19 +210,22 @@ func TestUpsertEntraSnapshot_DefaultsRespectChecks(t *testing.T) {
 	require.NoError(t, s.UpsertEntraSnapshot(ctx, snap))
 
 	var trustType string
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT trust_type FROM entra_devices WHERE object_id = 'dev-empty-trust'`,
 	).Scan(&trustType))
 	assert.Equal(t, "AzureAD", trustType)
 
 	var spType string
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT service_principal_type FROM entra_service_principals WHERE object_id = 'sp-empty-type'`,
 	).Scan(&spType))
 	assert.Equal(t, "Application", spType)
 
 	var pType string
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT principal_type FROM entra_role_assignments WHERE principal_object_id = 'principal-x'`,
 	).Scan(&pType))
 	assert.Equal(t, "user", pType)

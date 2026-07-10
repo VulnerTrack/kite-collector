@@ -86,7 +86,8 @@ func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		if cfg != nil {
 			return nil, fmt.Errorf("cloud_dns_gcp: source enabled but could not obtain access token: %w", err)
 		}
-		slog.Warn("GCP DNS access token acquire failed; skipping discovery",
+		slog.Warn(
+			"GCP DNS access token acquire failed; skipping discovery",
 			"code", string(LogCodeGCPDNSTokenAcquireFailed),
 			"error", err,
 			"project_id", projectID,
@@ -115,7 +116,8 @@ func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 		records, rErr := g.listResourceRecordSets(ctx, token, projectID, z.Name)
 		if rErr != nil {
-			slog.Error("GCP DNS list-record-sets failed; emitting partial zone data",
+			slog.Error(
+				"GCP DNS list-record-sets failed; emitting partial zone data",
 				"code", string(LogCodeGCPDNSListRecordsFailed),
 				"error", rErr,
 				"zone", z.Name,
@@ -149,7 +151,8 @@ func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		for _, rec := range records {
 			recType := strings.ToUpper(rec.Type)
 			if !IsValidDNSRecordType(recType) {
-				slog.Debug("GCP DNS skipping unsupported record type",
+				slog.Debug(
+					"GCP DNS skipping unsupported record type",
 					"code", string(LogCodeGCPDNSSkipUnsupportedType),
 					"zone", z.Name,
 					"type", rec.Type,
@@ -178,7 +181,8 @@ func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				LastSyncedAt: now,
 			})
 
-			slog.Info("cloud DNS record discovered",
+			slog.Info(
+				"cloud DNS record discovered",
 				"code", string(LogCodeDNSRecordDiscovered),
 				"cloud_dns.provider", DNSProviderGCPCloudDNS,
 				"cloud_dns.zone_id", z.Name,
@@ -190,7 +194,8 @@ func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			)
 		}
 
-		slog.Info("cloud DNS zone discovered",
+		slog.Info(
+			"cloud DNS zone discovered",
 			"code", string(LogCodeDNSZoneDiscovered),
 			"cloud_dns.provider", DNSProviderGCPCloudDNS,
 			"cloud_dns.zone_id", z.Name,
@@ -206,7 +211,8 @@ func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	g.lastSnapshot = snap
 	g.mu.Unlock()
 
-	slog.Info("GCP DNS discovery complete",
+	slog.Info(
+		"GCP DNS discovery complete",
 		"code", string(LogCodeGCPDNSComplete),
 		"zones", len(snap.Zones),
 		"records", len(snap.Records),

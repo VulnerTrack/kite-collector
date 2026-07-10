@@ -44,7 +44,8 @@ func TestSQLiteStore_WriteScanEvent(t *testing.T) {
 			ips_enumerated, ips_scanned, ips_responsive
 		FROM network_scan_events WHERE scan_id = ?`, scanID)
 	require.NoError(t, row.Scan(
-		&gotScanID, &gotAgent, &gotOutcome, &ipsEnum, &ipsScan, &ipsResp))
+		&gotScanID, &gotAgent, &gotOutcome, &ipsEnum, &ipsScan, &ipsResp,
+	))
 	assert.Equal(t, scanID, gotScanID)
 	assert.Equal(t, "agent-x", gotAgent)
 	assert.Equal(t, "completed", gotOutcome)
@@ -122,7 +123,8 @@ func TestSQLiteStore_WriteOpenPorts(t *testing.T) {
 func TestSQLiteStore_WriteOpenPorts_EmptyIsNoop(t *testing.T) {
 	s := newTestStore(t)
 	require.NoError(t, s.WriteOpenPorts(
-		context.Background(), uuid.Must(uuid.NewV7()).String(), nil))
+		context.Background(), uuid.Must(uuid.NewV7()).String(), nil,
+	))
 }
 
 func TestSQLiteStore_WriteOpenPorts_RejectsEmptyScanID(t *testing.T) {
@@ -139,7 +141,8 @@ func TestSQLiteStore_WriteGuardEvent(t *testing.T) {
 
 	ev := safenet.NewGuardEvent(
 		safenet.GuardSSRFScopeBlock, safenet.GuardActionRejected,
-		"network.scanner", "scope=[169.254.169.254/32]", `{"cidr":"169.254.169.254/32"}`)
+		"network.scanner", "scope=[169.254.169.254/32]", `{"cidr":"169.254.169.254/32"}`,
+	)
 	ev.ScanID = "scan-xyz"
 
 	require.NoError(t, s.WriteGuardEvent(ctx, ev))
@@ -153,7 +156,8 @@ func TestSQLiteStore_WriteGuardEvent(t *testing.T) {
 			input_summary, details_json, scan_id
 		FROM safety_guard_events`)
 	require.NoError(t, row.Scan(
-		&gtype, &action, &source, &summary, &details, &scanID))
+		&gtype, &action, &source, &summary, &details, &scanID,
+	))
 	assert.Equal(t, "ssrf_scope_block", gtype)
 	assert.Equal(t, "rejected", action)
 	assert.Equal(t, "network.scanner", source)
@@ -169,7 +173,8 @@ func TestSQLiteStore_WriteGuardEvent_NullScanID(t *testing.T) {
 
 	ev := safenet.NewGuardEvent(
 		safenet.GuardPaginationByteCap, safenet.GuardActionRejected,
-		"connector.vps.hetzner", "page=42 bytes=11534336", "")
+		"connector.vps.hetzner", "page=42 bytes=11534336", "",
+	)
 	require.NoError(t, s.WriteGuardEvent(ctx, ev))
 
 	var scanID *string

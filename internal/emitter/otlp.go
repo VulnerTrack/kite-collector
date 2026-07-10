@@ -144,6 +144,7 @@ func normalizeOTLPEndpoint(raw string) (string, error) {
 		}
 		slog.Warn(
 			"otlp: endpoint missing scheme; defaulting to https",
+			"code", string(LogCodeOTLPSchemeMissing),
 			"endpoint", raw,
 			"normalized", normalized,
 		)

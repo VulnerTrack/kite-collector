@@ -26,7 +26,8 @@ func DefaultGlobalRoots() []string {
 	}
 	if home := os.Getenv("HOME"); home != "" {
 		// Direct user-level prefix.
-		roots = append(roots,
+		roots = append(
+			roots,
 			filepath.Join(home, ".npm-global", "lib", "node_modules"),
 			filepath.Join(home, "node_modules"),
 		)

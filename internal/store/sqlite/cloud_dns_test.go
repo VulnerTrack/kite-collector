@@ -109,7 +109,8 @@ func TestUpsertCloudDNSSnapshot_IdempotentOnNaturalKey(t *testing.T) {
 	require.NoError(t, s.UpsertCloudDNSSnapshot(ctx, snap))
 
 	var firstZoneID string
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT id FROM cloud_dns_zones WHERE provider_zone_id = 'Z1ABCDEFG'`,
 	).Scan(&firstZoneID))
 
@@ -123,7 +124,8 @@ func TestUpsertCloudDNSSnapshot_IdempotentOnNaturalKey(t *testing.T) {
 	assert.Equal(t, 1, countRows(ctx, t, s, "cloud_dns_zones"))
 
 	var afterZoneID string
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT id FROM cloud_dns_zones WHERE provider_zone_id = 'Z1ABCDEFG'`,
 	).Scan(&afterZoneID))
 	assert.Equal(t, firstZoneID, afterZoneID,
@@ -187,10 +189,12 @@ func TestUpsertCloudDNSSnapshot_DefaultsAppliedOnEmptyFields(t *testing.T) {
 		ttl         uint32
 		values      string
 	)
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT raw_metadata FROM cloud_dns_zones WHERE provider_zone_id = 'ZDEFAULT'`,
 	).Scan(&rawMetadata))
-	require.NoError(t, s.RawDB().QueryRowContext(ctx,
+	require.NoError(t, s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT ttl, values_json FROM cloud_dns_records WHERE record_name = 'defaults.test.' AND record_type = 'TXT'`,
 	).Scan(&ttl, &values))
 

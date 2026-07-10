@@ -107,7 +107,9 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 	// Wait for the tunnel to become healthy.
 	localAddr := fmt.Sprintf("localhost:%d", m.cfg.LocalPort)
 	if err := m.waitHealthy(tunnelCtx, localAddr); err != nil {
-		m.logger.Warn("tunnel not healthy after start, continuing without tunnel",
+		m.logger.Warn(
+			"tunnel not healthy after start, continuing without tunnel",
+			"code", string(LogCodeManagerStartUnhealthy),
 			"error", err,
 			"provider", m.cfg.Provider,
 		)
@@ -119,7 +121,8 @@ func (m *Manager) Start(ctx context.Context) (string, error) {
 
 	m.instance.Status = StatusConnected
 	m.instance.LastConnectedAt = time.Now()
-	m.logger.Info("tunnel healthy",
+	m.logger.Info(
+		"tunnel healthy",
 		"provider", m.cfg.Provider,
 		"local_addr", localAddr,
 		"target", m.cfg.Target,
@@ -197,7 +200,8 @@ func (m *Manager) startProcess(ctx context.Context) error {
 	}
 
 	m.instance.PID = m.cmd.Process.Pid
-	m.logger.Info("tunnel subprocess started",
+	m.logger.Info(
+		"tunnel subprocess started",
 		"provider", m.cfg.Provider,
 		"pid", m.instance.PID,
 		"binary", path,
@@ -215,7 +219,8 @@ func (m *Manager) logOutput(stream string, r io.Reader) {
 	for {
 		n, err := r.Read(buf)
 		if n > 0 {
-			m.logger.Debug("tunnel output",
+			m.logger.Debug(
+				"tunnel output",
 				"stream", stream,
 				"provider", m.cfg.Provider,
 				"line", string(buf[:n]),
@@ -249,7 +254,8 @@ func (m *Manager) waitHealthy(ctx context.Context, addr string) error {
 			return nil
 		}
 
-		m.logger.Debug("tunnel health probe failed",
+		m.logger.Debug(
+			"tunnel health probe failed",
 			"addr", addr,
 			"attempt", attempt+1,
 			"error", err,
@@ -286,7 +292,9 @@ func (m *Manager) monitor(ctx context.Context) {
 
 		if m.cfg.RestartMax > 0 && int(restartCount) > m.cfg.RestartMax {
 			m.instance.Status = StatusFailed
-			m.logger.Error("tunnel restart limit reached, giving up",
+			m.logger.Error(
+				"tunnel restart limit reached, giving up",
+				"code", string(LogCodeManagerRestartLimit),
 				"provider", m.cfg.Provider,
 				"restart_count", restartCount,
 				"restart_max", m.cfg.RestartMax,
@@ -298,7 +306,9 @@ func (m *Manager) monitor(ctx context.Context) {
 
 		// Exponential backoff: base * 2^(n-1), capped at max.
 		delay := m.backoff(restartCount)
-		m.logger.Warn("tunnel subprocess exited, restarting",
+		m.logger.Warn(
+			"tunnel subprocess exited, restarting",
+			"code", string(LogCodeManagerSubprocessExited),
 			"provider", m.cfg.Provider,
 			"restart_count", restartCount,
 			"backoff", delay,
@@ -317,7 +327,9 @@ func (m *Manager) monitor(ctx context.Context) {
 		}
 
 		if err := m.startProcess(ctx); err != nil {
-			m.logger.Error("tunnel restart failed",
+			m.logger.Error(
+				"tunnel restart failed",
+				"code", string(LogCodeManagerRestartFailed),
 				"provider", m.cfg.Provider,
 				"error", err,
 			)
@@ -327,14 +339,15 @@ func (m *Manager) monitor(ctx context.Context) {
 
 		localAddr := fmt.Sprintf("localhost:%d", m.cfg.LocalPort)
 		if err := m.waitHealthy(ctx, localAddr); err != nil {
-			m.logger.Warn("tunnel not healthy after restart", "error", err)
+			m.logger.Warn("tunnel not healthy after restart", "code", string(LogCodeManagerRestartUnhealthy), "error", err)
 			m.mu.Unlock()
 			continue
 		}
 
 		m.instance.Status = StatusConnected
 		m.instance.LastConnectedAt = time.Now()
-		m.logger.Info("tunnel reconnected",
+		m.logger.Info(
+			"tunnel reconnected",
 			"provider", m.cfg.Provider,
 			"restart_count", restartCount,
 			"pid", m.instance.PID,

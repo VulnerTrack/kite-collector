@@ -101,7 +101,8 @@ func upsertCloudDNSZones(ctx context.Context, tx *sql.Tx, zones []cloud.DNSZone,
 		if metadata == "" {
 			metadata = "{}"
 		}
-		if _, eErr := stmt.ExecContext(ctx,
+		if _, eErr := stmt.ExecContext(
+			ctx,
 			z.ID,
 			z.Provider,
 			z.ProviderZoneID,
@@ -172,7 +173,8 @@ func upsertCloudDNSRecords(ctx context.Context, tx *sql.Tx, records []cloud.DNSR
 		if r.DeletedAt != nil {
 			deletedAt = sql.NullInt64{Int64: r.DeletedAt.Unix(), Valid: true}
 		}
-		if _, eErr := stmt.ExecContext(ctx,
+		if _, eErr := stmt.ExecContext(
+			ctx,
 			r.ID,
 			r.ZoneID,
 			r.RecordName,

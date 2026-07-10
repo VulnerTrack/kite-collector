@@ -387,7 +387,8 @@ func buildNBSTATQuery() []byte {
 	// Encoded name: length=32, then 'CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' for `*`,
 	// then null terminator.
 	buf = append(buf, 0x20)
-	buf = append(buf,
+	buf = append(
+		buf,
 		'C', 'K', 'A', 'A', 'A', 'A', 'A', 'A',
 		'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A',
 		'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A',

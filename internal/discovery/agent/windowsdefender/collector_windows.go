@@ -24,7 +24,8 @@ func (c *powershellCollector) Collect(ctx context.Context) (State, error) {
 	if err := ctx.Err(); err != nil {
 		return State{}, fmt.Errorf("context cancelled: %w", err)
 	}
-	out, err := c.run(ctx,
+	out, err := c.run(
+		ctx,
 		"-NoProfile", "-NonInteractive", "-NoLogo",
 		"-ExecutionPolicy", "Bypass",
 		"-OutputFormat", "Text",

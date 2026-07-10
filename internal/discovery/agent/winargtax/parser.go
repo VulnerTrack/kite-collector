@@ -25,65 +25,80 @@ type TaxFields struct {
 
 // passwordRE matches a password row in INI / JSON / XML form.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|tax[_\-]?password|afip[_\-]?password|taxit[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|tax[_\-]?password|afip[_\-]?password|taxit[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)"?\b(?:password|passwd|api_key|api_secret|tax[_\-]?password|afip[_\-]?password|taxit[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)"?\b(?:password|passwd|api_key|api_secret|tax[_\-]?password|afip[_\-]?password|taxit[_\-]?password)\b"?\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // passwordXMLRE matches `<password>secret</password>` form.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|passwd|tax[_\-]?password|afip[_\-]?password)\s*>([^<]{1,})<\s*/`)
+	`(?i)<\s*(?:password|passwd|tax[_\-]?password|afip[_\-]?password)\s*>([^<]{1,})<\s*/`,
+)
 
 // engagementIDRE matches a tax engagement identifier.
 var engagementIDRE = regexp.MustCompile(
-	`(?i)"?(?:engagement[_\- ]?id|nro[_\- ]?engagement|client[_\- ]?engagement|tax[_\- ]?engagement[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:engagement[_\- ]?id|nro[_\- ]?engagement|client[_\- ]?engagement|tax[_\- ]?engagement[_\- ]?id)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // clientNameRE matches the client name.
 var clientNameRE = regexp.MustCompile(
-	`(?i)"?(?:client[_\- ]?name|nombre[_\- ]?cliente|client|cliente)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_&,]{4,80})"?`)
+	`(?i)"?(?:client[_\- ]?name|nombre[_\- ]?cliente|client|cliente)"?\s*[:=>]\s*"?([A-Za-zÀ-ÿ0-9 .\-_&,]{4,80})"?`,
+)
 
 // afipFilingIDRE matches an AFIP filing-receipt identifier.
 var afipFilingIDRE = regexp.MustCompile(
-	`(?i)"?(?:afip[_\- ]?filing[_\- ]?id|presentacion[_\- ]?afip|nro[_\- ]?afip|afip[_\- ]?receipt)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`)
+	`(?i)"?(?:afip[_\- ]?filing[_\- ]?id|presentacion[_\- ]?afip|nro[_\- ]?afip|afip[_\- ]?receipt)"?\s*[:=>]\s*"?([A-Z0-9\-]{4,32})"?`,
+)
 
 // taxFirmRE matches the tax-firm self-identification.
 var taxFirmRE = regexp.MustCompile(
-	`(?i)"?(?:tax[_\- ]?firm|tax[_\- ]?advisor|firma[_\- ]?fiscal|estudio[_\- ]?fiscal)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_&]{3,60})`)
+	`(?i)"?(?:tax[_\- ]?firm|tax[_\- ]?advisor|firma[_\- ]?fiscal|estudio[_\- ]?fiscal)"?\s*[:=>]\s*"?([A-Za-z0-9 .\-_&]{3,60})`,
+)
 
 // taxRoleRE matches the tax-role field.
 var taxRoleRE = regexp.MustCompile(
-	`(?i)"?(?:tax[_\- ]?role|rol[_\- ]?fiscal|role)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`)
+	`(?i)"?(?:tax[_\- ]?role|rol[_\- ]?fiscal|role)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`,
+)
 
 // taxRegimeRE matches a tax-regime field. Char class includes
 // `.` for "Ley 23.576" / "Ley 27.430" patterns.
 var taxRegimeRE = regexp.MustCompile(
-	`(?i)"?(?:tax[_\- ]?regime|regimen[_\- ]?fiscal|régimen[_\- ]?fiscal|impuesto)"?\s*[:=>]\s*"?([A-Za-z0-9\-_. ]{4,40})`)
+	`(?i)"?(?:tax[_\- ]?regime|regimen[_\- ]?fiscal|régimen[_\- ]?fiscal|impuesto)"?\s*[:=>]\s*"?([A-Za-z0-9\-_. ]{4,40})`,
+)
 
 // prePublicationDraftRE matches DRAFT / RESERVADO / EYES-ONLY
 // markers in pre-publication tax documents.
 var prePublicationDraftRE = regexp.MustCompile(
-	`(?im)\b(?:DRAFT|BORRADOR|RESERVADO|RESTRICTED|CONFIDENCIAL|CONFIDENTIAL|FOR[_\- ]?DISCUSSION[_\- ]?ONLY|FOR[_\- ]?INTERNAL[_\- ]?USE|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|PRELIMINARY|PRELIMINAR|INTERNO|EYES[_\- ]?ONLY|PRIVILEGED|TAX[_\- ]?ADVICE[_\- ]?ONLY)\b`)
+	`(?im)\b(?:DRAFT|BORRADOR|RESERVADO|RESTRICTED|CONFIDENCIAL|CONFIDENTIAL|FOR[_\- ]?DISCUSSION[_\- ]?ONLY|FOR[_\- ]?INTERNAL[_\- ]?USE|NOT[_\- ]?FOR[_\- ]?DISTRIBUTION|NO[_\- ]?CIRCULAR|PRELIMINARY|PRELIMINAR|INTERNO|EYES[_\- ]?ONLY|PRIVILEGED|TAX[_\- ]?ADVICE[_\- ]?ONLY)\b`,
+)
 
 // billableHoursRE matches a billable-hours total field.
 var billableHoursRE = regexp.MustCompile(
-	`(?i)"?(?:billable[_\- ]?hours|horas[_\- ]?facturables|total[_\- ]?hours|hours[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,6}(?:[.,]\d+)?)`)
+	`(?i)"?(?:billable[_\- ]?hours|horas[_\- ]?facturables|total[_\- ]?hours|hours[_\- ]?total)"?\s*[:=>]\s*"?(\d{1,6}(?:[.,]\d+)?)`,
+)
 
 // hnwThresholdRE matches the BP filing total wealth amount.
 var hnwThresholdRE = regexp.MustCompile(
-	`(?i)"?(?:bp[_\- ]?total|bienes[_\- ]?personales[_\- ]?total|total[_\- ]?bienes|patrimonio[_\- ]?total|total[_\- ]?patrimonio)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:bp[_\- ]?total|bienes[_\- ]?personales[_\- ]?total|total[_\- ]?bienes|patrimonio[_\- ]?total|total[_\- ]?patrimonio)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // taxReserveRE matches a FIN 48 / IAS 12 tax-reserve field.
 var taxReserveRE = regexp.MustCompile(
-	`(?i)"?(?:tax[_\- ]?reserve|reserva[_\- ]?fiscal|provision[_\- ]?fiscal|fin[_\- ]?48[_\- ]?reserve)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`)
+	`(?i)"?(?:tax[_\- ]?reserve|reserva[_\- ]?fiscal|provision[_\- ]?fiscal|fin[_\- ]?48[_\- ]?reserve)"?\s*[:=>]\s*"?\$?(\d{1,15}(?:[.,]\d+)?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|titular[_\- ]?cuit|cuit[_\- ]?cliente|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|titular[_\- ]?cuit|cuit[_\- ]?cliente|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // lawyerCuilKeyRE matches `lawyer_cuil: NN-NNNNNNNN-N`.
 var lawyerCuilKeyRE = regexp.MustCompile(
-	`(?i)"?(?:tax[_\- ]?advisor[_\- ]?cuil|lawyer[_\- ]?cuil|partner[_\- ]?cuil|asesor[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:tax[_\- ]?advisor[_\- ]?cuil|lawyer[_\- ]?cuil|partner[_\- ]?cuil|asesor[_\- ]?cuil|cuil)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseFiscalOpinion parses a fiscal opinion body.
 func ParseFiscalOpinion(body []byte) TaxFields {

@@ -119,7 +119,7 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		return nil, nil
 	}
 	if conf.tenantID == "" || conf.clientID == "" || conf.clientSecret == "" {
-		slog.Warn("entra: tenant_id, client_id, or client_secret not configured, skipping")
+		slog.Warn("entra: tenant_id, client_id, or client_secret not configured, skipping", "code", string(LogCodeDiscoverCredsMissing))
 		return nil, nil
 	}
 
@@ -135,7 +135,7 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 
 	token, err := e.acquireToken(ctx, conf)
 	if err != nil {
-		slog.Warn("entra: failed to acquire OAuth2 token, skipping", "error", err)
+		slog.Warn("entra: failed to acquire OAuth2 token, skipping", "code", string(LogCodeDiscoverTokenAcquireFailed), "error", err)
 		return nil, nil
 	}
 	defer func() { token = strings.Repeat("\x00", len(token)) }()
@@ -162,7 +162,9 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	// set even when the audit-grade snapshot is incomplete.
 	roleAssignments, principalRoles, err := e.collectPrivilegedRoleAssignments(ctx, token)
 	if err != nil {
-		slog.Warn("entra: role-assignment enumeration failed; ENTRA-002/003 findings will be incomplete",
+		slog.Warn(
+			"entra: role-assignment enumeration failed; ENTRA-002/003 findings will be incomplete",
+			"code", string(LogCodeEnrichRoleAssignmentsFailed),
 			"error", err,
 		)
 		roleAssignments = nil
@@ -171,7 +173,9 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	mfaByObjectID := make(map[string]bool)
 	mfa, err := e.listMfaRegistrations(ctx, token, conf)
 	if err != nil {
-		slog.Warn("entra: MFA registration enumeration failed; ENTRA-002 findings will be incomplete",
+		slog.Warn(
+			"entra: MFA registration enumeration failed; ENTRA-002 findings will be incomplete",
+			"code", string(LogCodeEnrichMfaRegistrationFailed),
 			"error", err,
 		)
 	}
@@ -186,7 +190,8 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	e.lastSnapshot = snap
 	e.mu.Unlock()
 
-	slog.Info("entra: discovery complete",
+	slog.Info(
+		"entra: discovery complete",
 		"users", len(users),
 		"service_principals", len(sps),
 		"groups", len(groups),
@@ -227,7 +232,9 @@ func (e *EntraID) collectPrivilegedRoleAssignments(ctx context.Context, token st
 		}
 		members, mErr := e.listRoleMembers(ctx, token, role.ID)
 		if mErr != nil {
-			slog.Warn("entra: failed to list members for privileged role",
+			slog.Warn(
+				"entra: failed to list members for privileged role",
+				"code", string(LogCodeEnrichRoleMembersFailed),
 				"role_template_id", role.RoleTemplateID,
 				"role_display_name", role.DisplayName,
 				"error", mErr,
@@ -553,7 +560,9 @@ func (e *EntraID) listMfaRegistrations(ctx context.Context, token string, conf *
 	out, err := fetchAllPages[entraMfaRegistration](ctx, e.httpClient, apiURL, token, conf.maxUsers)
 	if err != nil {
 		if isGraphLicenseGate(err) {
-			slog.Warn("entra: MFA registration report unavailable (license/permission gate); skipping ENTRA-002 enrichment",
+			slog.Warn(
+				"entra: MFA registration report unavailable (license/permission gate); skipping ENTRA-002 enrichment",
+				"code", string(LogCodeEnrichMfaReportUnavailable),
 				"error", err,
 			)
 			return nil, nil
@@ -662,7 +671,9 @@ func fetchAllPages[T any](ctx context.Context, hc httpClient, apiURL, token stri
 		}
 		out = append(out, page...)
 		if maxObjects > 0 && len(out) >= maxObjects {
-			slog.Warn("entra: max_objects circuit breaker tripped — truncating",
+			slog.Warn(
+				"entra: max_objects circuit breaker tripped — truncating",
+				"code", string(LogCodePaginationMaxObjectsTripped),
 				"max_objects", maxObjects,
 			)
 			if len(out) > maxObjects {

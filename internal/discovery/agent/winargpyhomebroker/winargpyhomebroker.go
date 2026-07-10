@@ -290,7 +290,8 @@ func ArtifactKindFromName(name string) ArtifactKind {
 
 // brokerKeyRE matches `"broker": "<name>"` / `broker = <name>`.
 var brokerKeyRE = regexp.MustCompile(
-	`(?i)"?broker"?\s*[:=]\s*"?([a-z][a-z\-_]{2,30})"?`)
+	`(?i)"?broker"?\s*[:=]\s*"?([a-z][a-z\-_]{2,30})"?`,
+)
 
 // BrokerFromBody scans for known broker hostnames + the
 // explicit `broker:` key in a pyhomebroker config / cookie /
@@ -360,7 +361,8 @@ func BrokerFromPath(path string) Broker {
 		return BrokerUnknown
 	}
 	lower := strings.ToLower(
-		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"))
+		strings.ReplaceAll(filepath.ToSlash(path), `\`, "/"),
+	)
 	type entry struct {
 		token  string
 		result Broker

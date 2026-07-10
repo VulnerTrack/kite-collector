@@ -69,7 +69,9 @@ func logPipxDiagnostic(exitCode int, stderr []byte) {
 		strings.Contains(string(stderr), "missing python interpreter") {
 		hint = "pipx may have hidden broken venvs; run `pipx reinstall-all`"
 	}
-	slog.Warn("software: pipx reported diagnostic on non-zero exit",
+	slog.Warn(
+		"software: pipx reported diagnostic on non-zero exit",
+		"code", string(LogCodePipxNonZeroExitDiagnostic),
 		"exit_code", exitCode,
 		"stderr", msg,
 		"hint", hint,

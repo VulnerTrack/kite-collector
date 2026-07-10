@@ -83,17 +83,20 @@ func TestIsSensitivePathTarget(t *testing.T) {
 func TestIsSelfDestructiveSyscallExclude(t *testing.T) {
 	// Exclude audit_control on exit list = T1562.006 indicator.
 	if !IsSelfDestructiveSyscallExclude(
-		ActionNever, ListExit, []string{"audit_control"}) {
+		ActionNever, ListExit, []string{"audit_control"},
+	) {
 		t.Fatal("never+exit+audit_control must flag self-destructive")
 	}
 	// Always allow → not self-destructive.
 	if IsSelfDestructiveSyscallExclude(
-		ActionAlways, ListExit, []string{"audit_control"}) {
+		ActionAlways, ListExit, []string{"audit_control"},
+	) {
 		t.Fatal("always must NOT flag self-destructive")
 	}
 	// Never+exit on a benign syscall is not self-destructive.
 	if IsSelfDestructiveSyscallExclude(
-		ActionNever, ListExit, []string{"openat"}) {
+		ActionNever, ListExit, []string{"openat"},
+	) {
 		t.Fatal("openat exclusion is not audit-suppression")
 	}
 }

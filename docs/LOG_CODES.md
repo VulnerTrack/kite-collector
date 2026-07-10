@@ -12,9 +12,29 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 306 codes across 21 packages.
+**Catalog size:** 444 codes across 57 packages.
 
 ---
+
+## `grpcapi` (api/grpc)
+
+Source: [`api/grpc/logcodes.go`](../api/grpc/logcodes.go) · 6 codes
+
+**interceptors surface — panic recovery in unary/stream handlers**
+
+| Code | Constant | Description |
+|---|---|---|
+| `grpc.interceptors.unary_panic_recovered` | `LogCodeInterceptorsUnaryPanicRecovered` | — |
+| `grpc.interceptors.stream_panic_recovered` | `LogCodeInterceptorsStreamPanicRecovered` | — |
+
+**server surface — listener lifecycle and per-RPC failures**
+
+| Code | Constant | Description |
+|---|---|---|
+| `grpc.server.insecure_listener` | `LogCodeServerInsecureListener` | — |
+| `grpc.server.asset_upsert_failed` | `LogCodeServerAssetUpsertFail` | — |
+| `grpc.server.software_upsert_failed` | `LogCodeServerSoftwareUpsertFail` | — |
+| `grpc.server.heartbeat_cn_mismatch` | `LogCodeServerHeartbeatCNMismatch` | — |
 
 ## `rest` (api/rest)
 
@@ -74,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 24 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 25 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -131,6 +151,12 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.scan.periodic_complete` | `LogCodeScanPeriodicComplete` | — |
 | `agent.lifecycle.shutdown` | `LogCodeAgentShutdown` | — |
 
+**engine surface — scan engine identity wiring**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent.engine.identity_unavailable` | `LogCodeEngineIdentityUnavailable` | — |
+
 **cli surface — inspector / wizard commands**
 
 | Code | Constant | Description |
@@ -145,9 +171,86 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.enroll.request_submitted` | `LogCodeEnrollRequestSubmitted` | — |
 | `agent.enroll.complete` | `LogCodeEnrollComplete` | — |
 
+## `audit` (internal/audit)
+
+Source: [`internal/audit/logcodes.go`](../internal/audit/logcodes.go) · 11 codes
+
+**auditor surface — top-level fan-out orchestrator**
+
+| Code | Constant | Description |
+|---|---|---|
+| `audit.auditor.auditor_failed` | `LogCodeAuditorFailed` | — |
+
+**permissions surface — file permission checks**
+
+| Code | Constant | Description |
+|---|---|---|
+| `audit.permissions.stat_failed` | `LogCodePermissionsStatFailed` | — |
+
+**service surface — listening-port discovery**
+
+| Code | Constant | Description |
+|---|---|---|
+| `audit.service.port_discovery_failed` | `LogCodeServicePortDiscoveryFailed` | — |
+
+**ssh surface — sshd_config parsing**
+
+| Code | Constant | Description |
+|---|---|---|
+| `audit.ssh.permission_denied` | `LogCodeSSHPermissionDenied` | — |
+
+**container_env surface — Docker env-var secret scanning**
+
+| Code | Constant | Description |
+|---|---|---|
+| `audit.container_env.missing_container_id_tag` | `LogCodeContainerEnvMissingTag` | — |
+| `audit.container_env.list_failed` | `LogCodeContainerEnvListFailed` | — |
+| `audit.container_env.max_containers_cap_reached` | `LogCodeContainerEnvMaxCapReached` | — |
+
+**process_env surface — /proc env-var secret scanning**
+
+| Code | Constant | Description |
+|---|---|---|
+| `audit.process_env.read_proc_failed` | `LogCodeProcessEnvReadProcFailed` | — |
+| `audit.process_env.max_pids_cap_reached` | `LogCodeProcessEnvMaxCapReached` | — |
+
+**secrets surface — repository content scanning**
+
+| Code | Constant | Description |
+|---|---|---|
+| `audit.secrets.missing_path_tag` | `LogCodeSecretsMissingPathTag` | — |
+| `audit.secrets.walk_error` | `LogCodeSecretsWalkError` | — |
+
+## `autodiscovery` (internal/autodiscovery)
+
+Source: [`internal/autodiscovery/logcodes.go`](../internal/autodiscovery/logcodes.go) · 2 codes
+
+**port surface — TCP-port probe outcomes**
+
+| Code | Constant | Description |
+|---|---|---|
+| `autodiscovery.port.insecure_probe` | `LogCodePortInsecureProbe` | — |
+
+**docker surface — Docker Engine API probe failures**
+
+| Code | Constant | Description |
+|---|---|---|
+| `autodiscovery.docker.probe_failed` | `LogCodeDockerProbeFailed` | — |
+
+## `fsm` (internal/copilot/fsm)
+
+Source: [`internal/copilot/fsm/logcodes.go`](../internal/copilot/fsm/logcodes.go) · 2 codes
+
+**wizard surface — per-node CEL evaluation failures**
+
+| Code | Constant | Description |
+|---|---|---|
+| `copilot_fsm.wizard.skip_eval_failed` | `LogCodeWizardSkipEvalFailed` | — |
+| `copilot_fsm.wizard.default_eval_failed` | `LogCodeWizardDefaultEvalFailed` | — |
+
 ## `dashboard` (internal/dashboard)
 
-Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 17 codes
+Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 30 codes
 
 **observability surface — /observability page + /api/v1/observability/***
 
@@ -195,6 +298,39 @@ Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) ·
 | `dashboard.install.uninstall_confirm_render_failed` | `LogCodeUninstallConfirmRender` | — |
 | `dashboard.install.agent_uninstall_failed` | `LogCodeAgentUninstall` | — |
 | `dashboard.install.agent_state_identity_failed` | `LogCodeAgentStateIdentity` | — |
+| `dashboard.install.json_encode_failed` | `LogCodeInstallJSONEncode` | — |
+
+**server bootstrap surface — Serve()**
+
+| Code | Constant | Description |
+|---|---|---|
+| `dashboard.serve.static_sub_fs_failed` | `LogCodeServeStaticSubFS` | — |
+| `dashboard.serve.fragment_render_failed` | `LogCodeServeFragmentRender` | — |
+| `dashboard.serve.tab_page_render_failed` | `LogCodeServeTabPageRender` | — |
+| `dashboard.serve.table_page_render_failed` | `LogCodeServeTablePageRender` | — |
+
+**csv export surface — /api/v1/{assets,software,findings,tables}/export.csv**
+
+| Code | Constant | Description |
+|---|---|---|
+| `dashboard.export.assets_csv_failed` | `LogCodeExportAssetsCSV` | — |
+| `dashboard.export.software_csv_failed` | `LogCodeExportSoftwareCSV` | — |
+| `dashboard.export.findings_csv_failed` | `LogCodeExportFindingsCSV` | — |
+| `dashboard.export.table_csv_failed` | `LogCodeExportTableCSV` | — |
+
+**scan surface — POST /api/v1/scan**
+
+| Code | Constant | Description |
+|---|---|---|
+| `dashboard.scan.trigger_failed` | `LogCodeScanTrigger` | — |
+
+**onboarding bootstrap surface — Serve() onboarding wiring**
+
+| Code | Constant | Description |
+|---|---|---|
+| `dashboard.onboarding.disabled_no_wrap_key` | `LogCodeOnboardingDisabledNoWrapKey` | — |
+| `dashboard.onboarding.disabled_store_not_sqlite` | `LogCodeOnboardingDisabledNoSQLite` | — |
+| `dashboard.onboarding.fragment_render_failed` | `LogCodeOnboardingFragmentRender` | — |
 
 ## `dedup` (internal/dedup)
 
@@ -208,6 +344,199 @@ Source: [`internal/dedup/logcodes.go`](../internal/dedup/logcodes.go) · 4 codes
 | `dedup.batch.updated` | `LogCodeDedupUpdated` | — |
 | `dedup.batch.new` | `LogCodeDedupNew` | — |
 | `dedup.batch.completed` | `LogCodeDedupCompleted` | — |
+
+## `discovery` (internal/discovery)
+
+Source: [`internal/discovery/logcodes.go`](../internal/discovery/logcodes.go) · 3 codes
+
+**--- registry surface (per-source orchestration) -----------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `discovery.registry.source_circuit_open` | `LogCodeRegistrySourceCircuitOpen` | — |
+| `discovery.registry.source_failed` | `LogCodeRegistrySourceFailed` | — |
+
+**--- heartbeat surface -------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `discovery.heartbeat.record_failed` | `LogCodeHeartbeatRecordFailed` | — |
+
+## `agent` (internal/discovery/agent)
+
+Source: [`internal/discovery/agent/logcodes.go`](../internal/discovery/agent/logcodes.go) · 6 codes
+
+**probe surface — host inspection lifecycle, per-collector failures, and interface enumeration warnings**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_discovery.probe.interfaces_collect_failed` | `LogCodeProbeInterfacesCollectFailed` | — |
+| `agent_discovery.probe.software_collect_failed` | `LogCodeProbeSoftwareCollectFailed` | — |
+| `agent_discovery.probe.drivers_collect_failed` | `LogCodeProbeDriversCollectFailed` | — |
+| `agent_discovery.probe.driver_collector_errors` | `LogCodeProbeDriverCollectorErrors` | — |
+| `agent_discovery.probe.interface_addrs_failed` | `LogCodeProbeInterfaceAddrsFailed` | — |
+| `agent_discovery.probe.software_parse_errors` | `LogCodeProbeSoftwareParseErrors` | — |
+
+## `browserext` (internal/discovery/agent/browserext)
+
+Source: [`internal/discovery/agent/browserext/logcodes.go`](../internal/discovery/agent/browserext/logcodes.go) · 2 codes
+
+**chain surface — per-source collector failures and the global cap-reached warning when MaxExtensions is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_browserext.chain.source_collector_failed` | `LogCodeChainSourceCollectorFailed` | — |
+| `agent_browserext.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+## `certificates` (internal/discovery/agent/certificates)
+
+Source: [`internal/discovery/agent/certificates/logcodes.go`](../internal/discovery/agent/certificates/logcodes.go) · 2 codes
+
+**chain surface — per-source collector failures and the global cap-reached warning when MaxCertificates is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_certificates.chain.source_collector_failed` | `LogCodeChainSourceCollectorFailed` | — |
+| `agent_certificates.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+## `cloudcreds` (internal/discovery/agent/cloudcreds)
+
+Source: [`internal/discovery/agent/cloudcreds/logcodes.go`](../internal/discovery/agent/cloudcreds/logcodes.go) · 2 codes
+
+**chain surface — per-source collector failures and the global cap-reached warning when MaxCredentials is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_cloudcreds.chain.source_collector_failed` | `LogCodeChainSourceCollectorFailed` | — |
+| `agent_cloudcreds.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+## `containers` (internal/discovery/agent/containers)
+
+Source: [`internal/discovery/agent/containers/logcodes.go`](../internal/discovery/agent/containers/logcodes.go) · 2 codes
+
+**chain surface — per-runtime collector failures and the global cap-reached warning when MaxContainers is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_containers.chain.runtime_collector_failed` | `LogCodeChainRuntimeCollectorFailed` | — |
+| `agent_containers.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+## `driver` (internal/discovery/agent/driver)
+
+Source: [`internal/discovery/agent/driver/logcodes.go`](../internal/discovery/agent/driver/logcodes.go) · 1 codes
+
+**registry surface — per-collector lifecycle and aggregation errors when the multi-source driver registry runs the fan-out**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_driver.registry.collector_failed` | `LogCodeRegistryCollectorFailed` | — |
+
+## `editorext` (internal/discovery/agent/editorext)
+
+Source: [`internal/discovery/agent/editorext/logcodes.go`](../internal/discovery/agent/editorext/logcodes.go) · 2 codes
+
+**chain surface — per-source collector failures and the global cap-reached warning when MaxExtensions is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_editorext.chain.source_collector_failed` | `LogCodeChainSourceCollectorFailed` | — |
+| `agent_editorext.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+## `firewall` (internal/discovery/agent/firewall)
+
+Source: [`internal/discovery/agent/firewall/logcodes.go`](../internal/discovery/agent/firewall/logcodes.go) · 2 codes
+
+**chain surface — per-engine collector failures and the global cap-reached warning when MaxRules is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_firewall.chain.engine_collector_failed` | `LogCodeChainEngineCollectorFailed` | — |
+| `agent_firewall.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+## `listeners` (internal/discovery/agent/listeners)
+
+Source: [`internal/discovery/agent/listeners/logcodes.go`](../internal/discovery/agent/listeners/logcodes.go) · 1 codes
+
+**collector surface — inventory cap warnings when listener enumeration would otherwise exceed MaxListeners**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_listeners.collector.inventory_capped` | `LogCodeCollectorInventoryCapped` | — |
+
+## `processes` (internal/discovery/agent/processes)
+
+Source: [`internal/discovery/agent/processes/logcodes.go`](../internal/discovery/agent/processes/logcodes.go) · 1 codes
+
+**collector surface — inventory cap warnings and per-process enumeration failures**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_processes.collector.inventory_capped` | `LogCodeCollectorInventoryCapped` | — |
+
+## `scheduled` (internal/discovery/agent/scheduled)
+
+Source: [`internal/discovery/agent/scheduled/logcodes.go`](../internal/discovery/agent/scheduled/logcodes.go) · 2 codes
+
+**chain surface — per-source collector failures and the global cap-reached warning when MaxJobs is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_scheduled.chain.source_collector_failed` | `LogCodeChainSourceCollectorFailed` | — |
+| `agent_scheduled.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+## `software` (internal/discovery/agent/software)
+
+Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/agent/software/logcodes.go) · 2 codes
+
+**registry surface — per-collector lifecycle and aggregation errors when the multi-package-manager registry runs the fan-out**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_software.registry.collector_failed` | `LogCodeRegistryCollectorFailed` | — |
+
+**pipx surface — diagnostics scraped from pipx CLI stderr on non-zero exit codes**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_software.pipx.non_zero_exit_diagnostic` | `LogCodePipxNonZeroExitDiagnostic` | — |
+
+## `vms` (internal/discovery/agent/vms)
+
+Source: [`internal/discovery/agent/vms/logcodes.go`](../internal/discovery/agent/vms/logcodes.go) · 2 codes
+
+**chain surface — per-hypervisor collector failures and the global cap-reached warning when MaxVMs is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_vms.chain.hypervisor_collector_failed` | `LogCodeChainHypervisorCollectorFailed` | — |
+| `agent_vms.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+## `volumes` (internal/discovery/agent/volumes)
+
+Source: [`internal/discovery/agent/volumes/logcodes.go`](../internal/discovery/agent/volumes/logcodes.go) · 1 codes
+
+**collector surface — inventory cap warnings and per-partition enumeration failures**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_volumes.collector.inventory_capped` | `LogCodeCollectorInventoryCapped` | — |
+
+## `vpn` (internal/discovery/agent/vpn)
+
+Source: [`internal/discovery/agent/vpn/logcodes.go`](../internal/discovery/agent/vpn/logcodes.go) · 3 codes
+
+**chain surface — per-source collector failures and the global cap-reached warning when MaxProfiles is hit mid-chain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_vpn.chain.source_collector_failed` | `LogCodeChainSourceCollectorFailed` | — |
+| `agent_vpn.chain.cap_reached` | `LogCodeChainCapReached` | — |
+
+**tailscale surface — risk signal raised when this host can see mesh peers owned by another user (node sharing). End-user devices holding cross-account routes is unusual and may indicate over- shared infrastructure or stale share grants.**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_vpn.tailscale.shared_peers_detected` | `LogCodeTailscaleSharedPeersDetected` | — |
 
 ## `cloud` (internal/discovery/cloud)
 
@@ -319,6 +648,24 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | `cloud.retry.rate_limited` | `LogCodeRetryRateLimited` | — |
 | `cloud.retry.server_error` | `LogCodeRetryServerError` | — |
 
+## `storage` (internal/discovery/cloud/storage)
+
+Source: [`internal/discovery/cloud/storage/logcodes.go`](../internal/discovery/cloud/storage/logcodes.go) · 4 codes
+
+**--- signatures surface (signature catalogue loading) ------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `cloud_storage.signatures.load_failed` | `LogCodeSignaturesLoadFailed` | — |
+
+**--- crawl surface (page + direct-target probing) ----------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `cloud_storage.crawl.page_failed` | `LogCodeCrawlPageFailed` | — |
+| `cloud_storage.crawl.script_probe_failed` | `LogCodeCrawlScriptProbeFailed` | — |
+| `cloud_storage.crawl.direct_probe_failed` | `LogCodeCrawlDirectProbeFailed` | — |
+
 ## `cmdb` (internal/discovery/cmdb)
 
 Source: [`internal/discovery/cmdb/logcodes.go`](../internal/discovery/cmdb/logcodes.go) · 10 codes
@@ -342,6 +689,55 @@ Source: [`internal/discovery/cmdb/logcodes.go`](../internal/discovery/cmdb/logco
 | `cmdb.servicenow.completed` | `LogCodeServiceNowComplete` | — |
 | `cmdb.servicenow.auth_failed` | `LogCodeServiceNowAuthFailed` | — |
 | `cmdb.servicenow.skip_unparseable_ci` | `LogCodeServiceNowSkipUnparseable` | — |
+
+## `code` (internal/discovery/code)
+
+Source: [`internal/discovery/code/logcodes.go`](../internal/discovery/code/logcodes.go) · 2 codes
+
+**--- scanner surface (repo discovery walk) -----------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `code.scanner.path_resolve_failed` | `LogCodeScannerPathResolveFailed` | — |
+| `code.scanner.walk_failed` | `LogCodeScannerWalkFailed` | — |
+
+## `docker` (internal/discovery/docker)
+
+Source: [`internal/discovery/docker/logcodes.go`](../internal/discovery/docker/logcodes.go) · 3 codes
+
+**--- enumerate surface (container / image enumeration) ----------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `docker.enumerate.env_inspect_failed` | `LogCodeEnumerateEnvInspectFailed` | — |
+| `docker.enumerate.inspect_failed` | `LogCodeEnumerateInspectFailed` | — |
+| `docker.enumerate.list_images_failed` | `LogCodeEnumerateListImagesFailed` | — |
+
+## `entra` (internal/discovery/entra)
+
+Source: [`internal/discovery/entra/logcodes.go`](../internal/discovery/entra/logcodes.go) · 7 codes
+
+**--- discover surface --------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `entra.discover.creds_missing` | `LogCodeDiscoverCredsMissing` | #nosec G101 -- log code identifier signalling Entra ID credentials are missing, not a credential value |
+| `entra.discover.token_acquire_failed` | `LogCodeDiscoverTokenAcquireFailed` | #nosec G101 -- log code identifier for Entra OAuth token acquisition failure, not a token value |
+
+**--- enrich surface (Phase 2 enrichment paths) -------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `entra.enrich.role_assignments_failed` | `LogCodeEnrichRoleAssignmentsFailed` | — |
+| `entra.enrich.mfa_registration_failed` | `LogCodeEnrichMfaRegistrationFailed` | — |
+| `entra.enrich.role_members_failed` | `LogCodeEnrichRoleMembersFailed` | — |
+| `entra.enrich.mfa_report_unavailable` | `LogCodeEnrichMfaReportUnavailable` | — |
+
+**--- pagination surface ------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `entra.pagination.max_objects_tripped` | `LogCodePaginationMaxObjectsTripped` | — |
 
 ## `lldp` (internal/discovery/lan/lldp)
 
@@ -410,6 +806,23 @@ Source: [`internal/discovery/lan/wsdiscovery/logcodes.go`](../internal/discovery
 | `lan_wsdiscovery.discover.open_sender_failed` | `LogCodeWSDOpenSenderFail` | — |
 | `lan_wsdiscovery.discover.send_failed` | `LogCodeWSDSendFail` | — |
 
+## `ldap` (internal/discovery/ldap)
+
+Source: [`internal/discovery/ldap/logcodes.go`](../internal/discovery/ldap/logcodes.go) · 3 codes
+
+**--- search surface (computer object enumeration) ----------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `ldap.search.skip_malformed_entry` | `LogCodeSearchSkipMalformedEntry` | — |
+| `ldap.search.max_objects_tripped` | `LogCodeSearchMaxObjectsTripped` | — |
+
+**--- dial surface (DC connection attempts) -----------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `ldap.dial.failed_next_dc` | `LogCodeDialFailedNextDC` | — |
+
 ## `manifests` (internal/discovery/manifests)
 
 Source: [`internal/discovery/manifests/logcodes.go`](../internal/discovery/manifests/logcodes.go) · 13 codes
@@ -471,6 +884,21 @@ Source: [`internal/discovery/mdm/logcodes.go`](../internal/discovery/mdm/logcode
 | `mdm.sccm.auth_failed` | `LogCodeSCCMAuthFailed` | — |
 | `mdm.sccm.skip_unparseable_device` | `LogCodeSCCMSkipUnparseable` | — |
 | `mdm.sccm.completed` | `LogCodeSCCMComplete` | — |
+
+## `network` (internal/discovery/network)
+
+Source: [`internal/discovery/network/logcodes.go`](../internal/discovery/network/logcodes.go) · 6 codes
+
+**scanner surface — top-level scan loop lifecycle, persistence failures, and per-target skip events**
+
+| Code | Constant | Description |
+|---|---|---|
+| `network.scanner.starting` | `LogCodeScannerStarting` | — |
+| `network.scanner.safety_guard_fired` | `LogCodeScannerSafetyGuardFired` | — |
+| `network.scanner.guard_event_persist_failed` | `LogCodeScannerGuardEventPersistFail` | — |
+| `network.scanner.scan_event_persist_failed` | `LogCodeScannerScanEventPersistFail` | — |
+| `network.scanner.open_ports_persist_failed` | `LogCodeScannerOpenPortsPersistFail` | — |
+| `network.scanner.invalid_cidr_skipped` | `LogCodeScannerInvalidCIDRSkipped` | — |
 
 ## `paas` (internal/discovery/paas)
 
@@ -537,6 +965,36 @@ Source: [`internal/discovery/paas/logcodes.go`](../internal/discovery/paas/logco
 | `paas.retry.network_error` | `LogCodePaaSRetryNetworkError` | — |
 | `paas.retry.rate_limited` | `LogCodePaaSRetryRateLimited` | — |
 | `paas.retry.server_error` | `LogCodePaaSRetryServerError` | — |
+
+## `proxmox` (internal/discovery/proxmox)
+
+Source: [`internal/discovery/proxmox/logcodes.go`](../internal/discovery/proxmox/logcodes.go) · 4 codes
+
+**--- enumerate surface (per-node guest enumeration) --------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `proxmox.enumerate.vms_failed` | `LogCodeEnumerateVMsFailed` | — |
+| `proxmox.enumerate.lxc_failed` | `LogCodeEnumerateLXCFailed` | — |
+| `proxmox.enumerate.vm_config_failed` | `LogCodeEnumerateVMConfigFailed` | — |
+| `proxmox.enumerate.snapshots_failed` | `LogCodeEnumerateSnapshotsFailed` | — |
+
+## `unifi` (internal/discovery/unifi)
+
+Source: [`internal/discovery/unifi/logcodes.go`](../internal/discovery/unifi/logcodes.go) · 3 codes
+
+**--- cloud surface (Site Manager / Cloud API) -------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `unifi.cloud.list_devices_failed` | `LogCodeCloudListDevicesFailed` | — |
+
+**--- local surface (on-prem controller) -------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `unifi.local.list_clients_failed` | `LogCodeLocalListClientsFailed` | — |
+| `unifi.local.list_devices_failed` | `LogCodeLocalListDevicesFailed` | — |
 
 ## `vps` (internal/discovery/vps)
 
@@ -621,9 +1079,71 @@ Source: [`internal/discovery/vps/logcodes.go`](../internal/discovery/vps/logcode
 | `vps.retry.rate_limited` | `LogCodeVPSRetryRateLimited` | — |
 | `vps.retry.server_error` | `LogCodeVPSRetryServerError` | — |
 
+## `wazuh` (internal/discovery/wazuh)
+
+Source: [`internal/discovery/wazuh/logcodes.go`](../internal/discovery/wazuh/logcodes.go) · 9 codes
+
+**--- auth surface ------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `wazuh.auth.default_credentials` | `LogCodeAuthDefaultCredentials` | #nosec G101 -- log code identifier signalling default Wazuh API credentials are in use, not a credential value |
+
+**--- enrich surface (per-agent enrichment fetches) ---------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `wazuh.enrich.packages_failed` | `LogCodeEnrichPackagesFailed` | — |
+| `wazuh.enrich.vulnerabilities_failed` | `LogCodeEnrichVulnerabilitiesFailed` | — |
+| `wazuh.enrich.sca_policies_failed` | `LogCodeEnrichSCAPoliciesFailed` | — |
+| `wazuh.enrich.sca_checks_failed` | `LogCodeEnrichSCAChecksFailed` | — |
+| `wazuh.enrich.ports_failed` | `LogCodeEnrichPortsFailed` | — |
+| `wazuh.enrich.interfaces_failed` | `LogCodeEnrichInterfacesFailed` | — |
+| `wazuh.enrich.addresses_failed` | `LogCodeEnrichAddressesFailed` | — |
+
+**--- agents surface (agent listing) ------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `wazuh.agents.skip_invalid_json` | `LogCodeAgentsSkipInvalidJSON` | — |
+
+## `emitter` (internal/emitter)
+
+Source: [`internal/emitter/logcodes.go`](../internal/emitter/logcodes.go) · 1 codes
+
+**otlp surface — OTLP endpoint normalization warnings**
+
+| Code | Constant | Description |
+|---|---|---|
+| `emitter.otlp.scheme_missing` | `LogCodeOTLPSchemeMissing` | — |
+
+## `endpoint` (internal/endpoint)
+
+Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 5 codes
+
+**manager surface — connection lifecycle and configuration**
+
+| Code | Constant | Description |
+|---|---|---|
+| `endpoint.manager.connect_skipped` | `LogCodeManagerConnectSkipped` | — |
+| `endpoint.manager.no_tls` | `LogCodeManagerNoTLS` | — |
+
+**health surface — transitions to degraded/unreachable state**
+
+| Code | Constant | Description |
+|---|---|---|
+| `endpoint.health.degraded` | `LogCodeHealthDegraded` | — |
+| `endpoint.health.unreachable` | `LogCodeHealthUnreachable` | — |
+
+**tofu surface — server certificate fingerprint mismatch**
+
+| Code | Constant | Description |
+|---|---|---|
+| `endpoint.tofu.fingerprint_mismatch` | `LogCodeTOFUMismatch` | — |
+
 ## `engine` (internal/engine)
 
-Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 34 codes
+Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 35 codes
 
 **discovery surface — phase 1 of the scan pipeline**
 
@@ -699,6 +1219,12 @@ Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 34 co
 |---|---|---|
 | `engine.retry.attempt_failed` | `LogCodeRetryAttemptFailed` | — |
 
+**observability reconcile (inline call in scan-run loop)**
+
+| Code | Constant | Description |
+|---|---|---|
+| `engine.observability.reconcile_failed` | `LogCodeObservabilityReconcileFailed` | — |
+
 ## `enrollment` (internal/enrollment)
 
 Source: [`internal/enrollment/logcodes.go`](../internal/enrollment/logcodes.go) · 4 codes
@@ -722,19 +1248,91 @@ Source: [`internal/enrollment/logcodes.go`](../internal/enrollment/logcodes.go) 
 | `enrollment.keybackend.below_policy` | `LogCodeEnrollmentKeyBackendBelowPolicy` | — |
 | `enrollment.keybackend.meets_policy` | `LogCodeEnrollmentKeyBackendOK` | — |
 
+## `envelope` (internal/envelope)
+
+Source: [`internal/envelope/logcodes.go`](../internal/envelope/logcodes.go) · 1 codes
+
+**jwks surface — JWKS cache refresh failures**
+
+| Code | Constant | Description |
+|---|---|---|
+| `envelope.jwks.refresh_failed` | `LogCodeJWKSRefreshFailed` | — |
+
+## `identity` (internal/identity)
+
+Source: [`internal/identity/logcodes.go`](../internal/identity/logcodes.go) · 7 codes
+
+**detect surface — key backend auto-detection / preference resolution**
+
+| Code | Constant | Description |
+|---|---|---|
+| `identity.detect.tpm_unavailable` | `LogCodeDetectTPMUnavailable` | — |
+| `identity.detect.keyring_unavailable` | `LogCodeDetectKeyringUnavailable` | — |
+
+**harden_linux surface — process hardening syscalls**
+
+| Code | Constant | Description |
+|---|---|---|
+| `identity.harden_linux.set_dumpable_failed` | `LogCodeHardenDumpableFailed` | — |
+| `identity.harden_linux.mlockall_failed` | `LogCodeHardenMlockallFailed` | — |
+
+**lifecycle surface — LoadOrCreate / generate / populateBinaryHash**
+
+| Code | Constant | Description |
+|---|---|---|
+| `identity.lifecycle.stamp_expected_hash_failed` | `LogCodeLifecycleStampExpectedHashFailed` | — |
+| `identity.lifecycle.binary_hash_unavailable` | `LogCodeLifecycleBinaryHashUnavailable` | — |
+| `identity.lifecycle.expected_hash_unavailable_first_boot` | `LogCodeLifecycleExpectedHashUnavailable` | — |
+
+## `metrics` (internal/metrics)
+
+Source: [`internal/metrics/logcodes.go`](../internal/metrics/logcodes.go) · 1 codes
+
+**server surface — Prometheus HTTP server lifecycle failures**
+
+| Code | Constant | Description |
+|---|---|---|
+| `metrics.server.exited` | `LogCodeServerExited` | — |
+
 ## `observability` (internal/observability)
 
-Source: [`internal/observability/logcodes.go`](../internal/observability/logcodes.go) · 9 codes
+Source: [`internal/observability/logcodes.go`](../internal/observability/logcodes.go) · 10 codes
 
 | `observability.heartbeat.emitted` | `LogCodeHeartbeatEmitted` | — |
 | `observability.heartbeat.persist_failed` | `LogCodeHeartbeatPersistErr` | — |
 | `observability.heartbeat.emit_failed` | `LogCodeHeartbeatEmitErr` | — |
 | `observability.reconcile.start` | `LogCodeReconcileStart` | — |
 | `observability.reconcile.complete` | `LogCodeReconcileComplete` | — |
+| `observability.reconcile.incident_persist_failed` | `LogCodeReconcileIncidentPersistFailed` | — |
 | `observability.tamper.bad_signature` | `LogCodeTamperBadSignature` | — |
 | `observability.tamper.binary_hash_drift` | `LogCodeTamperBinaryDrift` | — |
 | `observability.canary.missing_collector` | `LogCodeCanaryMissing` | — |
 | `observability.canary.extra_collector` | `LogCodeCanaryExtra` | — |
+
+## `safenet` (internal/safenet)
+
+Source: [`internal/safenet/logcodes.go`](../internal/safenet/logcodes.go) · 6 codes
+
+**tls surface — TLS configuration warnings**
+
+| Code | Constant | Description |
+|---|---|---|
+| `safenet.tls.verification_disabled` | `LogCodeTLSVerificationDisabled` | — |
+
+**env surface — env-var parse failures and goroutine panic recovery**
+
+| Code | Constant | Description |
+|---|---|---|
+| `safenet.env.invalid_bool` | `LogCodeEnvInvalidBool` | — |
+| `safenet.env.invalid_int` | `LogCodeEnvInvalidInt` | — |
+| `safenet.env.goroutine_panic_recovered` | `LogCodeEnvGoroutinePanic` | — |
+
+**scope_guard surface — runtime scanner safety clamps**
+
+| Code | Constant | Description |
+|---|---|---|
+| `safenet.scope_guard.concurrency_clamped` | `LogCodeScopeGuardConcurrencyClamped` | — |
+| `safenet.scope_guard.invalid_int_env` | `LogCodeScopeGuardInvalidIntEnv` | — |
 
 ## `safety` (internal/safety)
 
@@ -801,4 +1399,18 @@ Source: [`internal/store/sqlite/logcodes.go`](../internal/store/sqlite/logcodes.
 | `sqlitestore.migrate.column_exists_recovery` | `LogCodeMigrateColumnExists` | — |
 | `sqlitestore.migrate.applied` | `LogCodeMigrateApplied` | — |
 | `sqlitestore.migrate.entry_removed` | `LogCodeMigrateEntryRemoved` | — |
+
+## `tunnel` (internal/tunnel)
+
+Source: [`internal/tunnel/logcodes.go`](../internal/tunnel/logcodes.go) · 5 codes
+
+**manager surface — tunnel subprocess lifecycle and health**
+
+| Code | Constant | Description |
+|---|---|---|
+| `tunnel.manager.start_unhealthy` | `LogCodeManagerStartUnhealthy` | — |
+| `tunnel.manager.restart_limit_reached` | `LogCodeManagerRestartLimit` | — |
+| `tunnel.manager.subprocess_exited` | `LogCodeManagerSubprocessExited` | — |
+| `tunnel.manager.restart_failed` | `LogCodeManagerRestartFailed` | — |
+| `tunnel.manager.restart_unhealthy` | `LogCodeManagerRestartUnhealthy` | — |
 

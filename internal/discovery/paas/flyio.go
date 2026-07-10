@@ -64,7 +64,8 @@ func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 
 		safeName, err := safenet.SanitizePathSegment(app.Name)
 		if err != nil {
-			slog.Warn("Fly.io app name failed path-segment validation; skipping",
+			slog.Warn(
+				"Fly.io app name failed path-segment validation; skipping",
 				"code", string(LogCodeFlyIOInvalidAppName),
 				"error", err,
 				"app", sanitizeLogValue(app.Name),
@@ -74,7 +75,8 @@ func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 
 		var machines []flyMachine
 		if err := client.get(ctx, "/v1/apps/"+safeName+"/machines", &machines); err != nil {
-			slog.Warn("Fly.io list-machines for app failed; skipping",
+			slog.Warn(
+				"Fly.io list-machines for app failed; skipping",
 				"code", string(LogCodeFlyIOListMachinesFailed),
 				"error", err,
 				"app", sanitizeLogValue(app.Name),

@@ -131,7 +131,8 @@ func TestParseBlueZInfoEmpty(t *testing.T) {
 
 func TestDeviceMACFromPath(t *testing.T) {
 	a, d := DeviceMACFromPath(
-		"/var/lib/bluetooth/AA:BB:CC:DD:EE:FF/11:22:33:44:55:66/info")
+		"/var/lib/bluetooth/AA:BB:CC:DD:EE:FF/11:22:33:44:55:66/info",
+	)
 	if a != "AA:BB:CC:DD:EE:FF" {
 		t.Fatalf("adapter=%q", a)
 	}

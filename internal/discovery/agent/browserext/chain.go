@@ -35,13 +35,13 @@ func (c *chainCollector) Collect(ctx context.Context) ([]Extension, error) {
 		got, err := sub.Collect(ctx)
 		if err != nil {
 			slog.Warn("browserext: source collector failed",
-				"source", sub.Name(), "error", err)
+				"code", string(LogCodeChainSourceCollectorFailed), "source", sub.Name(), "error", err)
 			continue
 		}
 		for _, e := range got {
 			if len(out) >= MaxExtensions {
 				slog.Warn("browserext: cap reached, dropping later sources",
-					"cap", MaxExtensions)
+					"code", string(LogCodeChainCapReached), "cap", MaxExtensions)
 				SortExtensions(out)
 				return out, nil
 			}

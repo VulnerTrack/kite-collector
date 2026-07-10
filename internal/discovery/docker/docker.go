@@ -77,7 +77,7 @@ func (d *Docker) ListContainerEnvs(ctx context.Context, cfg map[string]any) ([]C
 		}
 		detail, inspErr := client.inspectContainer(ctx, c.ID)
 		if inspErr != nil {
-			slog.Warn("docker: env inspect failed", "container", truncate(c.ID, 12), "error", inspErr)
+			slog.Warn("docker: env inspect failed", "code", string(LogCodeEnumerateEnvInspectFailed), "container", truncate(c.ID, 12), "error", inspErr)
 			continue
 		}
 		if detail == nil || len(detail.Config.Env) == 0 {
@@ -131,14 +131,14 @@ func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	for _, c := range containers {
 		detail, inspErr := client.inspectContainer(ctx, c.ID)
 		if inspErr != nil {
-			slog.Warn("docker: inspect failed", "container", c.ID[:12], "error", inspErr)
+			slog.Warn("docker: inspect failed", "code", string(LogCodeEnumerateInspectFailed), "container", c.ID[:12], "error", inspErr)
 		}
 		assets = append(assets, containerToAsset(c, detail, now))
 	}
 
 	images, imgErr := client.listImages(ctx)
 	if imgErr != nil {
-		slog.Warn("docker: list images failed", "error", imgErr)
+		slog.Warn("docker: list images failed", "code", string(LogCodeEnumerateListImagesFailed), "error", imgErr)
 	} else {
 		slog.Info("docker: images discovered", "count", len(images)) //#nosec G706 -- structured slog
 	}

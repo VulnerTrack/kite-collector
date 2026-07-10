@@ -27,77 +27,92 @@ type KDBFields struct {
 
 // passwordRE matches a password row in .q script / .qrc.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|kdb[_\-]?password|q[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|kdb[_\-]?password|q[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line / Q-form
 // `pwd:"..."`.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|kdb[_\-]?password|kdb[_\-]?secret|q[_\-]?password|pwd)\s*[:=]\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|kdb[_\-]?password|kdb[_\-]?secret|q[_\-]?password|pwd)\s*[:=]\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches a KDB+ / external-broker API key embedded in
 // a Q feed-handler script.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:kdb[_\-]?api[_\-]?key|kdb[_\-]?token|broker[_\-]?token|exchange[_\-]?token|api[_\-]?key|api[_\-]?token|access[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:kdb[_\-]?api[_\-]?key|kdb[_\-]?token|broker[_\-]?token|exchange[_\-]?token|api[_\-]?key|api[_\-]?token|access[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches KDB+ / handler login.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:kdb[_\-]?username|q[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:kdb[_\-]?username|q[_\-]?username|broker[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // rpcHandlerRE matches a Q remote-call handler definition.
 // `.z.ps` / `.z.po` / `.z.pg` / `.z.ws` are KDB+'s well-known
 // hooks for IPC / WebSocket / HTTP / sync RPC; setting any of
 // these exposes a remote-code-execution surface.
 var rpcHandlerRE = regexp.MustCompile(
-	`(?i)(?:\.z\.p[so]\s*:|\.z\.pg\s*:|\.z\.ws\s*:|\.z\.ph\s*:|\.z\.pp\s*:|\.z\.pi\s*:|\.z\.zd\s*:)`)
+	`(?i)(?:\.z\.p[so]\s*:|\.z\.pg\s*:|\.z\.ws\s*:|\.z\.ph\s*:|\.z\.pp\s*:|\.z\.pi\s*:|\.z\.zd\s*:)`,
+)
 
 // subscriberRE detects feed-handler / tickerplant config
 // markers.
 var subscriberRE = regexp.MustCompile(
-	`(?i)(?:tickerplant|feed[_\- ]?handler|subscribe\b|\.u\.sub|\.tp\.|upd\s*:|tp[_\- ]?cfg|sub[_\- ]?fn)`)
+	`(?i)(?:tickerplant|feed[_\- ]?handler|subscribe\b|\.u\.sub|\.tp\.|upd\s*:|tp[_\- ]?cfg|sub[_\- ]?fn)`,
+)
 
 // licenseRE detects KX commercial license body (.lic file
 // content). KX licenses start with version markers + hex
 // fingerprint, but the safest heuristic is to look for
 // `kdb+` and `KX Systems` strings in the body.
 var licenseRE = regexp.MustCompile(
-	`(?i)(?:kdb\+|kx[_\- ]?systems|KXSYS|k4[_\.]lic|kc[_\.]lic|expir(?:y|es)[_\- ]?date|seat[_\- ]?count|cpu[_\- ]?count)`)
+	`(?i)(?:kdb\+|kx[_\- ]?systems|KXSYS|k4[_\.]lic|kc[_\.]lic|expir(?:y|es)[_\- ]?date|seat[_\- ]?count|cpu[_\- ]?count)`,
+)
 
 // licensePersonalRE detects personal-edition (free) license
 // markers — kdb+pe.
 var licensePersonalRE = regexp.MustCompile(
-	`(?i)(?:kdb\+pe|personal[_\- ]?edition|32[_\- ]?bit[_\- ]?edition|non[_\- ]?commercial)`)
+	`(?i)(?:kdb\+pe|personal[_\- ]?edition|32[_\- ]?bit[_\- ]?edition|non[_\- ]?commercial)`,
+)
 
 // licenseEvalRE detects evaluation / trial license markers.
 var licenseEvalRE = regexp.MustCompile(
-	`(?i)(?:evaluation|trial|temporary|30[_\- ]?day|90[_\- ]?day)`)
+	`(?i)(?:evaluation|trial|temporary|30[_\- ]?day|90[_\- ]?day)`,
+)
 
 // tableNameRE matches a Q `.<table>:` table-definition line,
 // e.g. `trades:([]ts:`timestamp$();sym:`symbol$();price:`float$())`.
 var tableNameRE = regexp.MustCompile(
-	`(?m)^\s*([a-zA-Z][a-zA-Z0-9_]{0,30})\s*:\s*\(\s*\[\s*\]`)
+	`(?m)^\s*([a-zA-Z][a-zA-Z0-9_]{0,30})\s*:\s*\(\s*\[\s*\]`,
+)
 
 // symbolKeywordRE matches symbol-literal mentions inside Q
 // scripts — typically backtick + symbol, e.g. `DLR, `ES.
 var symbolKeywordRE = regexp.MustCompile(
-	"`([A-Z][A-Z0-9.\\-/]{1,16})\\b")
+	"`([A-Z][A-Z0-9.\\-/]{1,16})\\b",
+)
 
 // autoloadRE detects `\l <script>` (load) directives in .qrc /
 // startup chains.
 var autoloadRE = regexp.MustCompile(
-	`(?m)^\s*\\l\s+\S+`)
+	`(?m)^\s*\\l\s+\S+`,
+)
 
 // tplogRecordRE detects per-record markers in a tplog file.
 var tplogRecordRE = regexp.MustCompile(
-	`(?i)(?:upd\s*\[|upd\(\s*` + "`" + `[a-z0-9_]+|\bupd\b\s*,)`)
+	`(?i)(?:upd\s*\[|upd\(\s*` + "`" + `[a-z0-9_]+|\bupd\b\s*,)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // nodeRoleRE detects which KDB+ node role a script implements,
 // based on conventional naming + content markers.
 var nodeRoleRE = regexp.MustCompile(
-	`(?i)(?:tickerplant|feed[_\- ]?handler|\.u\.tick|\bRDB\b|real[_\- ]?time[_\- ]?database|\bHDB\b|historical[_\- ]?database|gateway|\.gw\.|client[_\- ]?proc)`)
+	`(?i)(?:tickerplant|feed[_\- ]?handler|\.u\.tick|\bRDB\b|real[_\- ]?time[_\- ]?database|\bHDB\b|historical[_\- ]?database|gateway|\.gw\.|client[_\- ]?proc)`,
+)
 
 // ParseKDBConfig parses a generic KDB+ / .qrc cfg body.
 func ParseKDBConfig(body []byte) KDBFields {

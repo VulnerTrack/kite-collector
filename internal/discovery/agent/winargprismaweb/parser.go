@@ -31,69 +31,85 @@ type PrismaWebFields struct {
 
 // passwordRE matches a password row (line-anchored INI/JSON/XML).
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`)
+	`(?im)^\s*(?:<\s*)?"?(?:password|clave|pass|passwd)"?\s*(?:[:=>]|>)\s*\S+`,
+)
 
 // passwordXMLRE matches `<password>…</password>` on a single line.
 var passwordXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`)
+	`(?i)<\s*(?:password|clave)\s*>[^<\n]{1,}<\s*/\s*(?:password|clave)\s*>`,
+)
 
 // fixDropCopyRE detects FIX 4.x drop-copy session markers.
 var fixDropCopyRE = regexp.MustCompile(
-	`(?i)(?:8=FIX\.4\.[24]|8=FIXT\.1\.1|drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP|TradeCaptureReport)`)
+	`(?i)(?:8=FIX\.4\.[24]|8=FIXT\.1\.1|drop[_\- ]?copy|DropCopySession|TargetSubID=DROP|10010=DROP|TradeCaptureReport)`,
+)
 
 // fixSenderRE matches FIX SenderCompID.
 var fixSenderRE = regexp.MustCompile(
-	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:49=|SenderCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // fixTargetRE matches FIX TargetCompID.
 var fixTargetRE = regexp.MustCompile(
-	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`)
+	`(?i)(?:56=|TargetCompID["'\s:=]+)([A-Z0-9_\-\.]{2,32})`,
+)
 
 // timestampRE matches `YYYY-MM-DD HH:MM[:SS]`.
 var timestampRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // settlementEventRE matches a settlement entry.
 var settlementEventRE = regexp.MustCompile(
-	`(?i)(?:settlement[_\- ]?id|liquidacion[_\- ]?id|liquidaci[oó]n[_\- ]?id|settle[_\- ]?entry|trade[_\- ]?settle|t\+1|t\+2)`)
+	`(?i)(?:settlement[_\- ]?id|liquidacion[_\- ]?id|liquidaci[oó]n[_\- ]?id|settle[_\- ]?entry|trade[_\- ]?settle|t\+1|t\+2)`,
+)
 
 // settlementFailRE matches a failed settlement event.
 var settlementFailRE = regexp.MustCompile(
-	`(?i)(?:settlement[_\- ]?fail|settle[_\- ]?fail|fail[_\- ]?to[_\- ]?deliver|fail[_\- ]?to[_\- ]?receive|liquidacion[_\- ]?fallida|FTR|FTD|failed[_\- ]?settle|t\+1[_\- ]?fail)`)
+	`(?i)(?:settlement[_\- ]?fail|settle[_\- ]?fail|fail[_\- ]?to[_\- ]?deliver|fail[_\- ]?to[_\- ]?receive|liquidacion[_\- ]?fallida|FTR|FTD|failed[_\- ]?settle|t\+1[_\- ]?fail)`,
+)
 
 // marginCallRE matches a margin-call event.
 var marginCallRE = regexp.MustCompile(
-	`(?i)(?:margin[_\- ]?call|llamada[_\- ]?margen|call[_\- ]?margen|margin[_\- ]?notice|margin[_\- ]?event)`)
+	`(?i)(?:margin[_\- ]?call|llamada[_\- ]?margen|call[_\- ]?margen|margin[_\- ]?notice|margin[_\- ]?event)`,
+)
 
 // optionsExerciseRE matches an options exercise / assignment.
 var optionsExerciseRE = regexp.MustCompile(
-	`(?i)(?:ejercicio[_\- ]?opcion|ejercicio[_\- ]?opci[oó]n|options?[_\- ]?exercise|options?[_\- ]?assignment|asignacion[_\- ]?opcion|exer[_\- ]?notice)`)
+	`(?i)(?:ejercicio[_\- ]?opcion|ejercicio[_\- ]?opci[oó]n|options?[_\- ]?exercise|options?[_\- ]?assignment|asignacion[_\- ]?opcion|exer[_\- ]?notice)`,
+)
 
 // fciCashflowRE matches an FCI cashflow event.
 var fciCashflowRE = regexp.MustCompile(
-	`(?i)(?:fci[_\- ]?cashflow|fci[_\- ]?flujo|suscripcion[_\- ]?fci|rescate[_\- ]?fci|fci[_\- ]?subscription|fci[_\- ]?redemption|fci[_\- ]?primary)`)
+	`(?i)(?:fci[_\- ]?cashflow|fci[_\- ]?flujo|suscripcion[_\- ]?fci|rescate[_\- ]?fci|fci[_\- ]?subscription|fci[_\- ]?redemption|fci[_\- ]?primary)`,
+)
 
 // symbolEntryRE matches a JSON/XML/INI symbol entry or FIX
 // tag `55=AAPL` (the `=` is part of the tag, so this form
 // has a separate alternative branch).
 var symbolEntryRE = regexp.MustCompile(
-	`(?i)(?:\b55=|"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`)
+	`(?i)(?:\b55=|"?(?:symbol|simbolo|s[ií]mbolo|ticker|especie|instrumento)"?\s*[:=]\s*"?)([A-Za-z0-9_\-\./]{2,32})`,
+)
 
 // notionalRE matches a notional / settlement amount.
 var notionalRE = regexp.MustCompile(
-	`(?i)(?:notional|importe|monto|valor|amount|settlement[_\- ]?amount|liquidacion[_\- ]?amount|garantias|collateral[_\- ]?amount|margin[_\- ]?amount)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:notional|importe|monto|valor|amount|settlement[_\- ]?amount|liquidacion[_\- ]?amount|garantias|collateral[_\- ]?amount|margin[_\- ]?amount)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // collateralRE matches a garantías / collateral amount.
 var collateralRE = regexp.MustCompile(
-	`(?i)(?:garantias|garant[íi]as|collateral|collateral[_\- ]?amount|margen[_\- ]?inicial|initial[_\- ]?margin|garantia[_\- ]?total)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`)
+	`(?i)(?:garantias|garant[íi]as|collateral|collateral[_\- ]?amount|margen[_\- ]?inicial|initial[_\- ]?margin|garantia[_\- ]?total)"?\s*[:=]\s*"?([0-9]+(?:\.[0-9]{3})*(?:[.,][0-9]{1,4})?)`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|counterparty[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit|counterparty[_\- ]?cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // clienteCuitXMLRE matches `<cliente_cuit>…</cliente_cuit>`.
 var clienteCuitXMLRE = regexp.MustCompile(
-	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit|counterparty[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`)
+	`(?i)<\s*(?:cliente[_\-]?cuit|cuit[_\-]?cliente|titular[_\-]?cuit|cuit|counterparty[_\-]?cuit)\s*>(\d{2}-?\d{8}-?\d)`,
+)
 
 // ParsePrismaWebCredentials parses an api_key / config body.
 func ParsePrismaWebCredentials(body []byte) PrismaWebFields {

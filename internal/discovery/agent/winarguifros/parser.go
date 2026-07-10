@@ -32,56 +32,68 @@ type UIFFields struct {
 // pepRE detects a PEP-list marker. UIF Resol. 134 mandates a
 // "Persona Expuesta Políticamente" tag in the report body.
 var pepRE = regexp.MustCompile(
-	`(?i)(?:persona[_\s]+expuesta[_\s]+politicamente|politically[_\s]+exposed|\bpep\b\s*[:=])`)
+	`(?i)(?:persona[_\s]+expuesta[_\s]+politicamente|politically[_\s]+exposed|\bpep\b\s*[:=])`,
+)
 
 // sanctionsRE detects an OFAC/UN/EU sanctions-list marker.
 var sanctionsRE = regexp.MustCompile(
-	`(?i)(?:ofac|sdn[_\s]+list|un[_\s]+consolidated|eu[_\s]+sanctions|sanctions[_\s]+match|listado[_\s]+sancion)`)
+	`(?i)(?:ofac|sdn[_\s]+list|un[_\s]+consolidated|eu[_\s]+sanctions|sanctions[_\s]+match|listado[_\s]+sancion)`,
+)
 
 // structuringRE detects a smurfing / structuring marker.
 var structuringRE = regexp.MustCompile(
-	`(?i)(?:smurfing|structuring|fractionamiento|estructuraci[oó]n|sub[\s_-]*threshold)`)
+	`(?i)(?:smurfing|structuring|fractionamiento|estructuraci[oó]n|sub[\s_-]*threshold)`,
+)
 
 // kycRE detects a KYC dossier body marker.
 var kycRE = regexp.MustCompile(
-	`(?i)(?:kyc|know[_\s\-]your[_\s\-]customer|due[_\s\-]diligence|debida[_\s]+diligencia|conocimiento[_\s]+cliente)`)
+	`(?i)(?:kyc|know[_\s\-]your[_\s\-]customer|due[_\s\-]diligence|debida[_\s]+diligencia|conocimiento[_\s]+cliente)`,
+)
 
 // statusRE matches a `<status>filed</status>` /
 // `Status: rejected` row.
 var statusRE = regexp.MustCompile(
-	`(?i)(?:status|estado|estado_reporte)\s*[:=>]\s*([A-Za-z]+)`)
+	`(?i)(?:status|estado|estado_reporte)\s*[:=>]\s*([A-Za-z]+)`,
+)
 
 // alertRE matches an alert entry tag.
 var alertRE = regexp.MustCompile(
-	`(?i)<\s*(alert|alerta|monitoring[_\-]?alert)[\s>/]`)
+	`(?i)<\s*(alert|alerta|monitoring[_\-]?alert)[\s>/]`,
+)
 
 // amountRE matches an `Importe=NN,NN` / `<importe>NN</importe>`
 // in the body. Captures cents-equivalent.
 var amountRE = regexp.MustCompile(
-	`(?i)(?:importe|monto|valor|amount|nominal|total)\s*[:=>]\s*([0-9][0-9\.,]*)`)
+	`(?i)(?:importe|monto|valor|amount|nominal|total)\s*[:=>]\s*([0-9][0-9\.,]*)`,
+)
 
 // transactionRE matches a per-transaction tag.
 var transactionRE = regexp.MustCompile(
-	`(?i)<\s*(?:operacion|transaccion|transaction|movimiento)[\s>/]`)
+	`(?i)<\s*(?:operacion|transaccion|transaction|movimiento)[\s>/]`,
+)
 
 // pepNameRE matches a `<pep_name>Nombre Apellido</pep_name>`
 // or `pep_name: ...` line. We don't persist the raw name;
 // only its hash.
 var pepNameRE = regexp.MustCompile(
-	`(?i)(?:pep[_\s]?name|nombre[_\s]?pep|nombre[_\s]?politico|persona[_\s]+expuesta)\s*[:=>]\s*"?([A-Za-z][A-Za-z\s\.\-']{3,80})"?`)
+	`(?i)(?:pep[_\s]?name|nombre[_\s]?pep|nombre[_\s]?politico|persona[_\s]+expuesta)\s*[:=>]\s*"?([A-Za-z][A-Za-z\s\.\-']{3,80})"?`,
+)
 
 // jurisdictionRE matches a `country: VEN` / `<country>Iran</country>` /
 // `jurisdiction: ...` row.
 var jurisdictionRE = regexp.MustCompile(
-	`(?i)(?:country|pais|jurisdiction|jurisdicci[oó]n|residencia[_\s]+fiscal|nacionalidad)\s*[:=>]\s*"?([A-Za-z][A-Za-z\s\-]{2,40})"?`)
+	`(?i)(?:country|pais|jurisdiction|jurisdicci[oó]n|residencia[_\s]+fiscal|nacionalidad)\s*[:=>]\s*"?([A-Za-z][A-Za-z\s\-]{2,40})"?`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N` etc.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|client[_\- ]?cuit|titular[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|client[_\- ]?cuit|titular[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // officerCuitKeyRE matches `oficial_cumplimiento_cuit:...`.
 var officerCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:oficial[_\- ]?cumplimiento[_\- ]?cuit|compliance[_\- ]?officer[_\- ]?cuit|cuit[_\- ]?(?:oficial|officer))"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:oficial[_\- ]?cumplimiento[_\- ]?cuit|compliance[_\- ]?officer[_\- ]?cuit|cuit[_\- ]?(?:oficial|officer))"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseUIFReport parses a UIF ROS / ROI / RFT / KYC body.
 //

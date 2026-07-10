@@ -56,6 +56,9 @@ const (
 	LogCodeScanPeriodicComplete  LogCode = "agent.scan.periodic_complete"
 	LogCodeAgentShutdown         LogCode = "agent.lifecycle.shutdown"
 
+	// engine surface — scan engine identity wiring
+	LogCodeEngineIdentityUnavailable LogCode = "agent.engine.identity_unavailable"
+
 	// cli surface — inspector / wizard commands
 	LogCodeCLIFlushWriter        LogCode = "agent.cli.flush_writer_failed"
 	LogCodeCLIConfigLoadFallback LogCode = "agent.cli.config_load_fallback"

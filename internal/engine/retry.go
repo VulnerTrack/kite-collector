@@ -39,7 +39,8 @@ func retry(ctx context.Context, maxAttempts int, baseDelay time.Duration, fn fun
 			delay = maxRetryDelay
 		}
 
-		slog.Warn("retry attempt failed, backing off",
+		slog.Warn(
+			"retry attempt failed, backing off",
 			"code", string(LogCodeRetryAttemptFailed),
 			"attempt", attempt+1,
 			"max_attempts", maxAttempts,

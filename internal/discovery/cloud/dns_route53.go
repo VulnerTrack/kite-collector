@@ -109,7 +109,8 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 			"role_arn", role)
 		assumed, err := (&AWS{}).assumeRole(ctx, creds, route53Region, role)
 		if err != nil {
-			slog.Error("Route53 AssumeRole failed; falling back to source credentials",
+			slog.Error(
+				"Route53 AssumeRole failed; falling back to source credentials",
 				"code", string(LogCodeRoute53AssumeRoleFailed),
 				"error", err,
 				"role_arn", role,
@@ -140,7 +141,8 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 
 		dnssecEnabled, dErr := r.getDNSSECStatus(ctx, creds, providerZoneID)
 		if dErr != nil {
-			slog.Warn("Route53 GetDNSSEC failed; defaulting to disabled",
+			slog.Warn(
+				"Route53 GetDNSSEC failed; defaulting to disabled",
 				"code", string(LogCodeRoute53GetDNSSECFailed),
 				"error", dErr,
 				"zone", providerZoneID,
@@ -150,7 +152,8 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 
 		records, rErr := r.listResourceRecordSets(ctx, creds, providerZoneID)
 		if rErr != nil {
-			slog.Error("Route53 ListResourceRecordSets failed; emitting partial zone data",
+			slog.Error(
+				"Route53 ListResourceRecordSets failed; emitting partial zone data",
 				"code", string(LogCodeRoute53ListRecordsFailed),
 				"error", rErr,
 				"zone", providerZoneID,
@@ -184,7 +187,8 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 		for _, rec := range records {
 			recType := strings.ToUpper(rec.Type)
 			if !IsValidDNSRecordType(recType) {
-				slog.Debug("Route53 skipping unsupported record type",
+				slog.Debug(
+					"Route53 skipping unsupported record type",
 					"code", string(LogCodeRoute53SkipUnsupportedType),
 					"zone", providerZoneID,
 					"type", rec.Type,
@@ -220,7 +224,8 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 				LastSyncedAt:  now,
 			})
 
-			slog.Info("cloud DNS record discovered",
+			slog.Info(
+				"cloud DNS record discovered",
 				"code", string(LogCodeDNSRecordDiscovered),
 				"cloud_dns.provider", DNSProviderRoute53,
 				"cloud_dns.zone_id", providerZoneID,
@@ -233,7 +238,8 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 			)
 		}
 
-		slog.Info("cloud DNS zone discovered",
+		slog.Info(
+			"cloud DNS zone discovered",
 			"code", string(LogCodeDNSZoneDiscovered),
 			"cloud_dns.provider", DNSProviderRoute53,
 			"cloud_dns.zone_id", providerZoneID,
@@ -249,7 +255,8 @@ func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.
 	r.lastSnapshot = snap
 	r.mu.Unlock()
 
-	slog.Info("Route53 DNS discovery complete",
+	slog.Info(
+		"Route53 DNS discovery complete",
 		"code", string(LogCodeRoute53Complete),
 		"zones", len(snap.Zones),
 		"records", len(snap.Records),

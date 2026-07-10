@@ -114,7 +114,8 @@ func (s *SQLiteStore) UpsertEnrolledIdentity(ctx context.Context, id EnrolledIde
 	if first.IsZero() {
 		first = now
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(
+		ctx, `
 		INSERT INTO enrolled_identity (
 			id, api_key_fingerprint, api_key_wrapped,
 			first_enrolled_at, last_enrolled_at
@@ -224,7 +225,8 @@ func (s *SQLiteStore) InsertProbeResult(ctx context.Context, r ProbeResultRecord
 	if r.CheckedAt.IsZero() {
 		r.CheckedAt = time.Now().UTC()
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(
+		ctx, `
 		INSERT INTO probe_result (
 			probe_run_id, probe_name, result, latency_ms, diagnostic, checked_at
 		) VALUES (?, ?, ?, ?, ?, ?)

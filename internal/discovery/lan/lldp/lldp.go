@@ -113,7 +113,8 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			slog.Warn("lldpctl returned non-zero; LLDP discovery skipped",
+			slog.Warn(
+				"lldpctl returned non-zero; LLDP discovery skipped",
 				"code", string(LogCodeLLDPCtlNonZero),
 				"exit_code", exitErr.ExitCode(),
 				"stderr", string(exitErr.Stderr),

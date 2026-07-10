@@ -29,47 +29,57 @@ type PrimaryFields struct {
 // bearerRE detects an `access_token`/`Bearer ...` row in a
 // JSON / config body.
 var bearerRE = regexp.MustCompile(
-	`(?i)("|')?(access[_-]?token|bearer|auth[_-]?token)("|')?\s*[:=]\s*("|')?Bearer\s+([A-Za-z0-9_\-\.\+/=]{20,})|(?i)("|')?(access[_-]?token|bearer|auth[_-]?token)("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?(access[_-]?token|bearer|auth[_-]?token)("|')?\s*[:=]\s*("|')?Bearer\s+([A-Za-z0-9_\-\.\+/=]{20,})|(?i)("|')?(access[_-]?token|bearer|auth[_-]?token)("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // refreshRE detects a refresh_token row.
 var refreshRE = regexp.MustCompile(
-	`(?i)("|')?refresh[_-]?token("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-\.\+/=]{20,})`)
+	`(?i)("|')?refresh[_-]?token("|')?\s*[:=]\s*("|')?([A-Za-z0-9_\-\.\+/=]{20,})`,
+)
 
 // passwordRE detects a Password / clave row in pyrofex INI.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:password|clave|secret|api[_-]?secret)\s*[:=]\s*\S+`)
+	`(?im)^\s*(?:password|clave|secret|api[_-]?secret)\s*[:=]\s*\S+`,
+)
 
 // strategyImportRE detects an `import pyRofex` / `from pyRofex
 // import ...` line in a Python script.
 var strategyImportRE = regexp.MustCompile(
-	`(?im)^\s*(?:from\s+pyRofex|import\s+pyRofex|from\s+pyrofex|import\s+pyrofex)`)
+	`(?im)^\s*(?:from\s+pyRofex|import\s+pyRofex|from\s+pyrofex|import\s+pyrofex)`,
+)
 
 // timestampMinuteRE matches per-minute timestamps in an
 // orders log (`YYYY-MM-DD HH:MM`).
 var timestampMinuteRE = regexp.MustCompile(
-	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2})`)
+	`(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2})`,
+)
 
 // orderRE matches an order entry marker in the audit log
 // (case-insensitive `order` keyword or HTTP POST /orders).
 var orderRE = regexp.MustCompile(
-	`(?i)(?:\border\b|POST\s+/orders|new[_-]?order|order[_-]?status|side\s*[:=]\s*(?:buy|sell))`)
+	`(?i)(?:\border\b|POST\s+/orders|new[_-]?order|order[_-]?status|side\s*[:=]\s*(?:buy|sell))`,
+)
 
 // instrumentRE matches a `symbol`/`ticker`/`instrument_id`
 // key in JSON / config bodies.
 var instrumentRE = regexp.MustCompile(
-	`(?i)("|')?(symbol|ticker|instrument_id|instrumentId)("|')?\s*[:=]\s*"`)
+	`(?i)("|')?(symbol|ticker|instrument_id|instrumentId)("|')?\s*[:=]\s*"`,
+)
 
 // wsSubRE matches a websocket subscription entry.
 var wsSubRE = regexp.MustCompile(
-	`(?i)("|')?(subscription|subscribe|topic)("|')?\s*[:=]\s*"`)
+	`(?i)("|')?(subscription|subscribe|topic)("|')?\s*[:=]\s*"`,
+)
 
 // cuentaKeyRE matches `cuenta_comitente: NNNNN`.
 var cuentaKeyRE = regexp.MustCompile(
-	`(?i)("|')?(cuenta_comitente|cuenta|account_id|account)("|')?\s*[:=]\s*"?(\d{4,12})"?`)
+	`(?i)("|')?(cuenta_comitente|cuenta|account_id|account)("|')?\s*[:=]\s*"?(\d{4,12})"?`,
+)
 
 // notionalKeyRE matches `notional`/`amount` in an order log.
 var notionalKeyRE = regexp.MustCompile(
-	`(?i)("|')?(notional|amount|quantity|price)("|')?\s*[:=]\s*"?([0-9][0-9\.,]*)`)
+	`(?i)("|')?(notional|amount|quantity|price)("|')?\s*[:=]\s*"?([0-9][0-9\.,]*)`,
+)
 
 // ParsePrimaryConfig parses a credentials.json / pyrofex.ini /
 // config.yaml body. Captures bearer + refresh + password.

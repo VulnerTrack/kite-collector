@@ -188,7 +188,8 @@ var (
 	//   action.id == "literal"
 	//   action.id.indexOf("literal") | .startsWith("literal")
 	jsActionID = regexp.MustCompile(
-		`action\.id\s*(?:===?|\.(?:indexOf|startsWith)\s*\()\s*["']([^"']+)["']`)
+		`action\.id\s*(?:===?|\.(?:indexOf|startsWith)\s*\()\s*["']([^"']+)["']`,
+	)
 	jsReturnsYES = regexp.MustCompile(`return\s+polkit\.Result\.YES\b`)
 )
 

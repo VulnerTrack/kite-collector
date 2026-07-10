@@ -26,6 +26,12 @@ func TestPinnedEnumStrings(t *testing.T) {
 		{string(TypeCiscoAnyConnect), "cisco-anyconnect"},
 		{string(TypeFortinet), "fortinet"},
 		{string(TypePulse), "pulse"},
+		{string(TypeGlobalProtect), "globalprotect"},
+		{string(TypeCheckPoint), "checkpoint"},
+		{string(TypeDirectAccess), "directaccess"},
+		{string(TypeNordLayer), "nordlayer"},
+		{string(TypeProtonVPN), "protonvpn"},
+		{string(TypeMullvad), "mullvad"},
 		{string(TypeUnknown), "unknown"},
 	}
 	for _, p := range pairs {

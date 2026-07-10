@@ -125,7 +125,9 @@ func (s *Secrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigF
 
 	repoPath := extractRepoPath(asset.Tags)
 	if repoPath == "" {
-		slog.Warn("secrets: repository asset has no path tag, skipping", "asset_id", asset.ID)
+		slog.Warn("secrets: repository asset has no path tag, skipping",
+			"code", string(LogCodeSecretsMissingPathTag),
+			"asset_id", asset.ID)
 		return nil, nil
 	}
 
@@ -176,11 +178,14 @@ func (s *Secrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigF
 	})
 
 	if err != nil && err != filepath.SkipAll {
-		slog.Warn("secrets: walk error", "asset_id", asset.ID, "error", err)
+		slog.Warn("secrets: walk error",
+			"code", string(LogCodeSecretsWalkError),
+			"asset_id", asset.ID, "error", err)
 	}
 
 	if len(findings) > 0 {
-		slog.Info("secrets: findings detected",
+		slog.Info(
+			"secrets: findings detected",
 			"asset_id", asset.ID,
 			"path", repoPath,
 			"count", len(findings),

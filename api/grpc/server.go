@@ -133,7 +133,7 @@ func (s *Server) Serve() error {
 		opts = append(opts, grpc.Creds(credentials.NewTLS(s.tlsConfig)))
 		s.logger.Info("gRPC server using mTLS", "addr", s.addr)
 	} else {
-		s.logger.Warn("gRPC server running WITHOUT TLS — not recommended for production", "addr", s.addr)
+		s.logger.Warn("gRPC server running WITHOUT TLS — not recommended for production", "code", string(LogCodeServerInsecureListener), "addr", s.addr)
 	}
 
 	s.grpc = grpc.NewServer(opts...)
@@ -195,7 +195,7 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 		}
 
 		if upsertErr := s.store.UpsertAsset(ctx, asset); upsertErr != nil {
-			s.logger.Warn("gRPC: failed to upsert asset", "hostname", snapshot.Hostname, "error", upsertErr)
+			s.logger.Warn("gRPC: failed to upsert asset", "code", string(LogCodeServerAssetUpsertFail), "hostname", snapshot.Hostname, "error", upsertErr)
 			rejected++
 			continue
 		}
@@ -215,7 +215,7 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 				})
 			}
 			if swErr := s.store.UpsertSoftware(ctx, asset.ID, sw); swErr != nil {
-				s.logger.Warn("gRPC: failed to upsert software", "asset_id", asset.ID, "error", swErr)
+				s.logger.Warn("gRPC: failed to upsert software", "code", string(LogCodeServerSoftwareUpsertFail), "asset_id", asset.ID, "error", swErr)
 			}
 		}
 
@@ -252,6 +252,7 @@ func (s *Server) ReportFindings(stream kitev1.CollectorService_ReportFindingsSer
 func (s *Server) Heartbeat(ctx context.Context, req *kitev1.HeartbeatRequest) (*kitev1.HeartbeatResponse, error) {
 	if certCN := peerCN(ctx); certCN != "" && req.AgentId != certCN {
 		s.logger.Warn("gRPC: heartbeat agent_id mismatch",
+			"code", string(LogCodeServerHeartbeatCNMismatch),
 			"request_agent_id", req.AgentId,
 			"cert_cn", certCN,
 		)

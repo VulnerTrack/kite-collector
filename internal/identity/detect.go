@@ -19,7 +19,8 @@ func DetectKeyBackend(preference, dataDir string, logger *slog.Logger) KeyBacken
 			logger.Info("key backend: TPM 2.0 (requested)")
 			return b
 		}
-		logger.Warn("TPM requested but not available, falling back to file")
+		logger.Warn("TPM requested but not available, falling back to file",
+			"code", string(LogCodeDetectTPMUnavailable))
 		return NewFileBackend(dataDir)
 
 	case "keyring":
@@ -28,7 +29,8 @@ func DetectKeyBackend(preference, dataDir string, logger *slog.Logger) KeyBacken
 			logger.Info("key backend: OS keyring (requested)")
 			return b
 		}
-		logger.Warn("keyring requested but not available, falling back to file")
+		logger.Warn("keyring requested but not available, falling back to file",
+			"code", string(LogCodeDetectKeyringUnavailable))
 		return NewFileBackend(dataDir)
 
 	case "file":

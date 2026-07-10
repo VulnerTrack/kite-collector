@@ -28,28 +28,34 @@ type SterlingFields struct {
 
 // passwordRE matches a password row.
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:password|passwd|clave|sterling[_\-]?password|clearing[_\-]?password|trader[_\-]?password)"?\s*[:=]\s*\S+`)
+	`(?im)^\s*"?(?:password|passwd|clave|sterling[_\-]?password|clearing[_\-]?password|trader[_\-]?password)"?\s*[:=]\s*\S+`,
+)
 
 // passwordInlineRE matches `password="..."` mid-line.
 var passwordInlineRE = regexp.MustCompile(
-	`(?i)\b(?:password|passwd|api_key|api_secret|sterling[_\-]?password|sterling[_\-]?secret|clearing[_\-]?password|trader[_\-]?password|fix[_\-]?password)\s*=\s*["'][^"']{1,}["']`)
+	`(?i)\b(?:password|passwd|api_key|api_secret|sterling[_\-]?password|sterling[_\-]?secret|clearing[_\-]?password|trader[_\-]?password|fix[_\-]?password)\s*=\s*["'][^"']{1,}["']`,
+)
 
 // apiKeyRE matches Sterling / clearing API key / token.
 var apiKeyRE = regexp.MustCompile(
-	`(?i)("|')?(?:sterling[_\-]?api[_\-]?key|sterling[_\-]?token|clearing[_\-]?token|fix[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`)
+	`(?i)("|')?(?:sterling[_\-]?api[_\-]?key|sterling[_\-]?token|clearing[_\-]?token|fix[_\-]?token|api[_\-]?key|api[_\-]?token)("|')?\s*[:=]\s*"?([A-Za-z0-9_\-\.\+/=]{16,})`,
+)
 
 // usernameRE matches Sterling / clearing login.
 var usernameRE = regexp.MustCompile(
-	`(?im)^\s*"?(?:sterling[_\-]?username|trader[_\-]?user|clearing[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`)
+	`(?im)^\s*"?(?:sterling[_\-]?username|trader[_\-]?user|clearing[_\-]?user|username|user|login[_\-]?id|email)"?\s*[:=]\s*"?([A-Za-z0-9_.@\-]{3,80})"?`,
+)
 
 // traderIDRE matches a Sterling trader ID (typically 3-6
 // alphanumeric).
 var traderIDRE = regexp.MustCompile(
-	`(?i)"?(?:trader[_\-]?id|sterling[_\-]?trader[_\-]?id|trader[_\-]?code|registration[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,16})`)
+	`(?i)"?(?:trader[_\-]?id|sterling[_\-]?trader[_\-]?id|trader[_\-]?code|registration[_\-]?id)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{3,16})`,
+)
 
 // branchIDRE matches a Sterling branch / office ID.
 var branchIDRE = regexp.MustCompile(
-	`(?i)"?(?:branch[_\-]?id|sterling[_\-]?branch[_\-]?id|office[_\-]?id|branch[_\-]?code|office[_\-]?code)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{2,16})`)
+	`(?i)"?(?:branch[_\-]?id|sterling[_\-]?branch[_\-]?id|office[_\-]?id|branch[_\-]?code|office[_\-]?code)"?\s*[:=]\s*"?([A-Za-z0-9_\-]{2,16})`,
+)
 
 // hotkeyRE matches a HotKey binding row. Common Sterling
 // HotKey forms: `Ctrl+1=BUY`, `Alt-3=SHORT`, `F2=COVER`,
@@ -57,48 +63,57 @@ var branchIDRE = regexp.MustCompile(
 // actions without a modifier; modifier-prefixed bindings
 // (Ctrl/Alt/Shift) carry a `+` or `-` separator.
 var hotkeyRE = regexp.MustCompile(
-	`(?i)(?:(?:Ctrl|Alt|Shift)[\-+]\w+|F\d{1,2})\s*=\s*(?:BUY|SELL|SHORT|COVER|CANCEL|FLATTEN|EXIT|MARKET|LIMIT)`)
+	`(?i)(?:(?:Ctrl|Alt|Shift)[\-+]\w+|F\d{1,2})\s*=\s*(?:BUY|SELL|SHORT|COVER|CANCEL|FLATTEN|EXIT|MARKET|LIMIT)`,
+)
 
 // fixRouteRE matches FIX SenderCompID / TargetCompID — sign
 // of a direct FIX route to an exchange.
 var fixRouteRE = regexp.MustCompile(
-	`(?i)(?:SenderCompID|TargetCompID|49=|56=)\s*[:=]\s*[A-Z0-9_\-\.]{2,32}`)
+	`(?i)(?:SenderCompID|TargetCompID|49=|56=)\s*[:=]\s*[A-Z0-9_\-\.]{2,32}`,
+)
 
 // orderFillRE matches a per-fill row in Sterling OrderLog.csv.
 // Sterling logs `OrdID,Symbol,Side,Qty,Px,FillTime` typical
 // header; data rows have numeric OrdID + symbol + qty.
 var orderFillRE = regexp.MustCompile(
-	`(?im)^(?:OrdID|orderid|order_id)?,?\d+,[A-Z][A-Z0-9.\-]{1,8},(?:BUY|SELL|SHORT|COVER|B|S|SS|BC),`)
+	`(?im)^(?:OrdID|orderid|order_id)?,?\d+,[A-Z][A-Z0-9.\-]{1,8},(?:BUY|SELL|SHORT|COVER|B|S|SS|BC),`,
+)
 
 // shortLocateRE matches a short-locate request row.
 var shortLocateRE = regexp.MustCompile(
-	`(?i)(?:short[_\- ]?locate|locate[_\- ]?req|locate[_\- ]?id|borrow[_\- ]?req|borrow[_\- ]?id)`)
+	`(?i)(?:short[_\- ]?locate|locate[_\- ]?req|locate[_\- ]?id|borrow[_\- ]?req|borrow[_\- ]?id)`,
+)
 
 // dailyLossRE matches a per-trader daily loss limit field.
 var dailyLossRE = regexp.MustCompile(
-	`(?i)(?:daily[_\- ]?loss[_\- ]?limit|max[_\- ]?daily[_\- ]?loss|loss[_\- ]?cap)\s*[:=]\s*"?\$?(\d{2,12}(?:[.,]\d+)?)`)
+	`(?i)(?:daily[_\- ]?loss[_\- ]?limit|max[_\- ]?daily[_\- ]?loss|loss[_\- ]?cap)\s*[:=]\s*"?\$?(\d{2,12}(?:[.,]\d+)?)`,
+)
 
 // maxPositionRE matches a per-trader max-position cap field.
 var maxPositionRE = regexp.MustCompile(
-	`(?i)(?:max[_\- ]?position|position[_\- ]?cap|max[_\- ]?qty)\s*[:=]\s*"?\$?(\d{2,12}(?:[.,]\d+)?)`)
+	`(?i)(?:max[_\- ]?position|position[_\- ]?cap|max[_\- ]?qty)\s*[:=]\s*"?\$?(\d{2,12}(?:[.,]\d+)?)`,
+)
 
 // optionsSymbolRE matches an option-chain symbol (Sterling's
 // options use `<root>_<expiry><strike><CP>` form, e.g.
 // `AAPL_240419P00170000`). Loose heuristic: any sym with
 // `_` and length > 12 + ends in `[CP]` digits.
 var optionsSymbolRE = regexp.MustCompile(
-	`(?i)\b([A-Z]{1,5}_\d{6}[CP]\d{8})\b`)
+	`(?i)\b([A-Z]{1,5}_\d{6}[CP]\d{8})\b`,
+)
 
 // symbolEntryRE matches a per-symbol entry in layouts /
 // orderlog / chart def. Also matches CSV-style data rows
 // `<digit-OrdID>,<SYMBOL>,(BUY|SELL|SHORT|COVER),` because
 // Sterling OrderLog.csv lacks per-row keyword markers.
 var symbolEntryRE = regexp.MustCompile(
-	`(?im)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument)"?\s*[:=]\s*"?|<symbol[^>]*>|^\d+,)([A-Z][A-Z0-9_\-\./]{0,7})`)
+	`(?im)(?:"?(?:symbol(?:_\w+)?|sym|ticker|instrument)"?\s*[:=]\s*"?|<symbol[^>]*>|^\d+,)([A-Z][A-Z0-9_\-\./]{0,7})`,
+)
 
 // clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`)
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|titular[_\- ]?cuit|cuit)"?\s*[:=]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
 
 // ParseSterlingConfig parses a generic Sterling cfg body.
 func ParseSterlingConfig(body []byte) SterlingFields {
@@ -175,7 +190,8 @@ func ParseSterlingTraderRiskLimits(body []byte) SterlingFields {
 	out := ParseSterlingConfig(body)
 	if m := dailyLossRE.FindSubmatch(body); len(m) > 1 {
 		raw := strings.ReplaceAll(strings.ReplaceAll(
-			string(m[1]), ",", ""), ".00", "")
+			string(m[1]), ",", "",
+		), ".00", "")
 		v, err := strconv.ParseInt(raw, 10, 64)
 		if err == nil {
 			out.DailyLossLimitUSD = v
@@ -183,7 +199,8 @@ func ParseSterlingTraderRiskLimits(body []byte) SterlingFields {
 	}
 	if m := maxPositionRE.FindSubmatch(body); len(m) > 1 {
 		raw := strings.ReplaceAll(strings.ReplaceAll(
-			string(m[1]), ",", ""), ".00", "")
+			string(m[1]), ",", "",
+		), ".00", "")
 		v, err := strconv.ParseInt(raw, 10, 64)
 		if err == nil {
 			out.MaxPositionUSD = v

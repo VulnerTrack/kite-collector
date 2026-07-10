@@ -33,37 +33,44 @@ type SIOPELFields struct {
 // keeps operator credentials in either Password=, Clave=, or
 // PasswordOp= keys, sometimes with the prefix "siopel.".
 var passwordRE = regexp.MustCompile(
-	`(?im)^\s*(?:siopel\.)?(?:password(?:op)?|clave|claveop|passop|operadorpwd)\s*=\s*\S+`)
+	`(?im)^\s*(?:siopel\.)?(?:password(?:op)?|clave|claveop|passop|operadorpwd)\s*=\s*\S+`,
+)
 
 // matriculaIniRE matches `Operador=NNNN` / `Matricula=NNNN`
 // in INI files.
 var matriculaIniRE = regexp.MustCompile(
-	`(?im)^\s*(?:Operador|MatriculaOperador|Matricula)\s*=\s*(\d{1,5})`)
+	`(?im)^\s*(?:Operador|MatriculaOperador|Matricula)\s*=\s*(\d{1,5})`,
+)
 
 // dealerIniRE matches `Dealer=ABCD` in INI files.
 var dealerIniRE = regexp.MustCompile(
-	`(?im)^\s*Dealer(?:Code)?\s*=\s*([A-Za-z]{3,5})`)
+	`(?im)^\s*Dealer(?:Code)?\s*=\s*([A-Za-z]{3,5})`,
+)
 
 // concertacionRE matches a SIOPEL log "CONCERTACION OK" /
 // "CONCERTACION-OK" / "Concertación realizada" marker.
 var concertacionRE = regexp.MustCompile(
-	`(?i)concertaci[oó]n[\s_\-]*(?:ok|realizada|exitosa|aceptada)`)
+	`(?i)concertaci[oó]n[\s_\-]*(?:ok|realizada|exitosa|aceptada)`,
+)
 
 // bajaRE matches a log baja / cancel marker.
 var bajaRE = regexp.MustCompile(
-	`(?i)(?:baja|cancelaci[oó]n)[\s_\-]*(?:ok|realizada|aceptada)`)
+	`(?i)(?:baja|cancelaci[oó]n)[\s_\-]*(?:ok|realizada|aceptada)`,
+)
 
 // timestampRE matches a `YYYY-MM-DD HH:MM[:SS]` or
 // `YYYY/MM/DD HH:MM[:SS]` token at line start (SIOPEL logs).
 var timestampRE = regexp.MustCompile(
-	`(?m)^\s*(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`)
+	`(?m)^\s*(20\d{2}[\-\/](?:0[1-9]|1[0-2])[\-\/](?:0[1-9]|[12]\d|3[01])\s+\d{1,2}:\d{2}(?::\d{2})?)`,
+)
 
 // caucionTenorRE matches a `Plazo=NN` / `Tenor=NN` /
 // `<plazo>NN</plazo>` (in days) entry from a rueda-caución
 // record. Accepts ini/csv key=value form and xml >value<
 // form on either side of the separator.
 var caucionTenorRE = regexp.MustCompile(
-	`(?i)(?:plazo|tenor|dias?_caucion|caucion_dias)\s*[:=>]\s*(\d{1,3})`)
+	`(?i)(?:plazo|tenor|dias?_caucion|caucion_dias)\s*[:=>]\s*(\d{1,3})`,
+)
 
 // mepRE / cclRE detect MEP / CCL operation markers used to
 // surface the MEP-CCL arbitrage pattern (paired in-session).
@@ -75,7 +82,8 @@ var (
 // notionalInlineRE matches an `Importe=NN,NN` anywhere on a
 // pipe/semicolon-delimited line (per-line CSV/TSV scan).
 var notionalInlineRE = regexp.MustCompile(
-	`(?i)(?:Importe|Monto|Valor|Nominal|Notional)\s*[:=]\s*([0-9][0-9\.,]*)`)
+	`(?i)(?:Importe|Monto|Valor|Nominal|Notional)\s*[:=]\s*([0-9][0-9\.,]*)`,
+)
 
 // ParseSIOPELConfig parses a SIOPEL INI / CFG body.
 //
@@ -99,7 +107,8 @@ func ParseSIOPELConfig(body []byte) SIOPELFields {
 	// adjacent `CuitOperador=` row).
 	if m := cuitRE.FindSubmatch(body); m != nil {
 		out.OperatorCuitRaw = strings.Join(
-			[]string{string(m[1]), string(m[2]), string(m[3])}, "")
+			[]string{string(m[1]), string(m[2]), string(m[3])}, "",
+		)
 	}
 	return out
 }

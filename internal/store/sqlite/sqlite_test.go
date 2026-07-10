@@ -488,7 +488,8 @@ func TestScanRun_TriggerSourceIndex(t *testing.T) {
 	ctx := context.Background()
 
 	var name string
-	err := s.RawDB().QueryRowContext(ctx,
+	err := s.RawDB().QueryRowContext(
+		ctx,
 		`SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?`,
 		"idx_scan_runs_trigger_source",
 	).Scan(&name)

@@ -115,7 +115,7 @@ func (r *Registry) Collect(ctx context.Context) *Result {
 
 			if err != nil {
 				slog.Warn("software: collector failed",
-					"name", c.Name(), "error", err)
+					"code", string(LogCodeRegistryCollectorFailed), "name", c.Name(), "error", err)
 				merged.Errs = append(merged.Errs, CollectError{
 					Collector: c.Name(),
 					Err:       err,
@@ -124,7 +124,8 @@ func (r *Registry) Collect(ctx context.Context) *Result {
 			}
 
 			merged.Merge(res)
-			slog.Info("software: collector completed",
+			slog.Info(
+				"software: collector completed",
 				"name", c.Name(),
 				"packages", len(res.Items),
 				"errors", res.TotalErrors(),
