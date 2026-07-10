@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -177,7 +178,7 @@ func (s *Secrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigF
 		return nil
 	})
 
-	if err != nil && err != filepath.SkipAll {
+	if err != nil && !errors.Is(err, filepath.SkipAll) {
 		slog.Warn("secrets: walk error",
 			"code", string(LogCodeSecretsWalkError),
 			"asset_id", asset.ID, "error", err)
