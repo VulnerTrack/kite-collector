@@ -1315,6 +1315,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			AppVersion:       version,
 			Commit:           commit,
 			PlatformEndpoint: cfg.Streaming.OTLP.Endpoint,
+			OAuth:            dashboardOAuthOptions(cfg),
 		})
 		go func() {
 			slog.Info("dashboard server starting",
@@ -2637,13 +2638,16 @@ installed service uses, so this command Just Works after install.`,
 			// present). A load failure is not fatal here — the dashboard
 			// still renders, just without a live endpoint.
 			platformEndpoint := ""
+			var oauth dashboard.OAuthOptions
 			if inspectorCfg, loadErr := config.Load(""); loadErr == nil && inspectorCfg != nil {
 				platformEndpoint = inspectorCfg.Streaming.OTLP.Endpoint
+				oauth = dashboardOAuthOptions(inspectorCfg)
 			}
 			opts := dashboard.Options{
 				AppVersion:       version,
 				Commit:           commit,
 				PlatformEndpoint: platformEndpoint,
+				OAuth:            oauth,
 			}
 			if enableInstall {
 				opts.Installer = newRealInstaller()
@@ -2711,6 +2715,19 @@ func dashboardModeLabel(withAgent, enableInstall bool) string {
 func dashboardLoginURL(addr string) string {
 	base := "http://" + dashboardBrowserAddr(addr)
 	return base + "/kite-login?collector=" + url.QueryEscape(base)
+}
+
+func dashboardOAuthOptions(cfg *config.Config) dashboard.OAuthOptions {
+	if cfg == nil {
+		return dashboard.OAuthOptions{}
+	}
+	return dashboard.OAuthOptions{
+		SupabaseURL:  cfg.OAuth.SupabaseURL,
+		AuthorizeURL: cfg.OAuth.AuthorizeURL,
+		ClientID:     cfg.OAuth.ClientID,
+		Scope:        cfg.OAuth.Scope,
+		RedirectPath: cfg.OAuth.RedirectPath,
+	}
 }
 
 func dashboardBrowserAddr(addr string) string {

@@ -2,8 +2,10 @@ package dashboard
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -126,17 +128,57 @@ func TestRoute_GET_Root_RedirectsToAssetsWhenEnrolled(t *testing.T) {
 }
 
 func TestRoute_GET_KiteLogin_ReturnsLaunchAuthPage(t *testing.T) {
-	handler := newTestHandler(t)
+	st := testStore(t)
+	rc := testContext()
+	srv := Serve(":0", st, rc, nil, Options{
+		OAuth: OAuthOptions{
+			AuthorizeURL: "https://api.example.test/auth/v1/oauth/authorize",
+			ClientID:     "kite-client-id",
+			Scope:        "openid email",
+			RedirectPath: "/oauth/callback",
+		},
+	})
+	handler := srv.Handler
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
+	body := html.UnescapeString(rec.Body.String())
 	assert.Contains(t, body, `<body class="kite-auth-page">`)
 	assert.Contains(t, body, "Vulnertrack")
 	assert.Contains(t, body, "Sign In")
 	assert.Contains(t, body, "http://127.0.0.1:9090")
+	assert.NotContains(t, body, "code_verifier")
+
+	authHref := hrefWithPrefix(t, body, "https://api.example.test/auth/v1/oauth/authorize?")
+	authURL, err := url.Parse(authHref)
+	require.NoError(t, err)
+	q := authURL.Query()
+	assert.Equal(t, "code", q.Get("response_type"))
+	assert.Equal(t, "kite-client-id", q.Get("client_id"))
+	assert.Equal(t, "http://127.0.0.1:9090/oauth/callback", q.Get("redirect_uri"))
+	assert.Equal(t, "openid email", q.Get("scope"))
+	assert.Equal(t, "S256", q.Get("code_challenge_method"))
+	assert.NotEmpty(t, q.Get("state"))
+	assert.NotEmpty(t, q.Get("code_challenge"))
+
+	var stateCookie, verifierCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		switch c.Name {
+		case kiteOAuthStateCookie:
+			stateCookie = c
+		case kiteOAuthVerifierCookie:
+			verifierCookie = c
+		}
+	}
+	require.NotNil(t, stateCookie)
+	require.NotNil(t, verifierCookie)
+	assert.Equal(t, q.Get("state"), stateCookie.Value)
+	assert.Equal(t, q.Get("code_challenge"), codeChallengeS256(verifierCookie.Value))
+	assert.True(t, stateCookie.HttpOnly)
+	assert.True(t, verifierCookie.HttpOnly)
+	assert.Equal(t, http.SameSiteLaxMode, stateCookie.SameSite)
 }
 
 func TestRoute_GET_KiteSuccess_ReturnsAccessGrantedPage(t *testing.T) {
@@ -157,6 +199,7 @@ func TestRoute_GET_KiteSuccess_ReturnsAccessGrantedPage(t *testing.T) {
 func TestRoute_GET_RootWithOAuthParams_ReturnsAccessGrantedPage(t *testing.T) {
 	handler := newTestHandler(t)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?state=abc&code=xyz", nil)
+	req.AddCookie(&http.Cookie{Name: kiteOAuthStateCookie, Value: "abc"})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -164,6 +207,27 @@ func TestRoute_GET_RootWithOAuthParams_ReturnsAccessGrantedPage(t *testing.T) {
 	body := rec.Body.String()
 	assert.Contains(t, body, `<body class="kite-success-page">`)
 	assert.Contains(t, body, "Go to Dashboard")
+}
+
+func TestRoute_GET_RootWithOAuthParams_RejectsStateMismatch(t *testing.T) {
+	handler := newTestHandler(t)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?state=abc&code=xyz", nil)
+	req.AddCookie(&http.Cookie{Name: kiteOAuthStateCookie, Value: "different"})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "state mismatch")
+}
+
+func hrefWithPrefix(t *testing.T, body, prefix string) string {
+	t.Helper()
+	idx := strings.Index(body, `href="`+prefix)
+	require.NotEqual(t, -1, idx, "body should contain href prefix %q", prefix)
+	start := idx + len(`href="`)
+	end := strings.Index(body[start:], `"`)
+	require.NotEqual(t, -1, end)
+	return body[start : start+end]
 }
 
 // TestRoute_GET_TablesByName_Plain_ReturnsFullShellWithTableContent — a
