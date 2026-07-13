@@ -88,6 +88,8 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     justify-content: center;
     min-height: 100vh;
     margin: 0;
+    padding: 24px;
+    box-sizing: border-box;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background: radial-gradient(circle at 50% 50%, #fdfdfd 0%, #f4f5f7 100%);
     color: #1C252E;
@@ -299,63 +301,74 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 <link rel="stylesheet" href="/static/style.css">
 <style>
   body.kite-success-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     min-height: 100vh;
     margin: 0;
-    background: #ffffff;
+    padding: 24px;
+    box-sizing: border-box;
+    background: radial-gradient(circle at 50% 50%, #fdfdfd 0%, #f4f5f7 100%);
     color: #1C252E;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
-  .kite-success-wrap {
-    width: min(420px, calc(100vw - 48px));
-    margin: 0 auto;
-    padding-top: 22vh;
+  .kite-success-card {
+    background: #ffffff;
+    border: 1px solid rgba(145, 158, 171, 0.16);
+    border-radius: 16px;
+    box-shadow: 0 12px 40px -4px rgba(145, 158, 171, 0.12), 0 2px 10px -2px rgba(145, 158, 171, 0.08);
+    width: 100%;
+    max-width: 420px;
+    padding: 40px 32px;
+    box-sizing: border-box;
+    text-align: center;
   }
   .kite-success-logo {
     display: block;
     width: 148px;
     height: auto;
-    margin-bottom: 48px;
+    margin: 0 auto 32px auto;
   }
   .kite-success-heading {
     display: flex;
     align-items: center;
-    gap: 14px;
+    justify-content: center;
+    gap: 12px;
     margin: 0 0 18px 0;
-    font-size: 1.75rem;
-    font-weight: 600;
-    letter-spacing: 0;
+    font-size: 1.6rem;
+    font-weight: 700;
     color: #1C252E;
   }
   .kite-success-check {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     background: #22C55E;
     color: #ffffff;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 800;
     line-height: 1;
-    box-shadow: 0 5px 14px rgba(34, 197, 94, 0.28);
+    box-shadow: 0 4px 10px rgba(34, 197, 94, 0.2);
   }
   .kite-success-copy {
-    margin: 0 0 12px 0;
+    margin: 0 0 16px 0;
     color: #637381;
-    font-size: 1rem;
-    line-height: 1.45;
+    font-size: 0.95rem;
+    line-height: 1.5;
   }
   .kite-success-actions {
-    margin-top: 32px;
+    margin-top: 28px;
   }
   .kite-success-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 44px;
-    padding: 0 20px;
-    border-radius: 22px;
+    height: 48px;
+    width: 100%;
+    border-radius: 24px;
     background: #FF3131;
     color: #ffffff;
     font-size: 0.95rem;
@@ -369,22 +382,10 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
     box-shadow: 0 6px 16px rgba(255, 49, 49, 0.3);
     transform: translateY(-1px);
   }
-  @media (max-width: 640px) {
-    .kite-success-wrap {
-      padding-top: 18vh;
-    }
-    .kite-success-logo {
-      width: 128px;
-      margin-bottom: 36px;
-    }
-    .kite-success-heading {
-      font-size: 1.45rem;
-    }
-  }
 </style>
 </head>
 <body class="kite-success-page">
-<main class="kite-success-wrap" aria-labelledby="kite-success-title">
+<main class="kite-success-card" aria-labelledby="kite-success-title">
   <img class="kite-success-logo" src="/static/img/vulnertrack_banner_dark.png" alt="Vulnertrack">
   <h1 class="kite-success-heading" id="kite-success-title">
     <span>Success!</span>
