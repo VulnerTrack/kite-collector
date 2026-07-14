@@ -29,7 +29,7 @@ For the fastest binary-only install, skip service registration:
 After it finishes:
 
 ```powershell
-kite-collector enroll --agent-code <code> --token <token>
+kite-collector install --agent-code <code>   # sign in with Vulnertrack in the browser
 kite-collector service start --user
 kite-collector service status --user
 ```
@@ -149,10 +149,13 @@ sc.exe stop  kite-collector
 
 ## First-time enrollment
 
-Before the service can stream anything useful, enroll the agent:
+Before the service can stream anything useful, enroll the agent by re-running
+install with your agent code — it prints a sign-in URL; open it in any
+browser, approve the collector, and paste the code back (or pass
+`--token pki_enroll_v1_...` to use a legacy enrollment token instead):
 
 ```powershell
-kite-collector enroll --agent-code <code> --token <token>
+kite-collector install --agent-code <code>
 ```
 
 This writes mTLS material into the certificate store (`%LOCALAPPDATA%\kite-collector\data\`
