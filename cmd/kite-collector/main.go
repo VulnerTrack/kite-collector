@@ -212,6 +212,7 @@ lifecycle events for downstream consumption.`,
 		newVersionCmd(),
 		newErrorCmd(),
 		newEnrollCmd(),
+		newLoginCmd(),
 		newEndpointsCmd(),
 		newTrustCmd(),
 		newCheckOTLPCmd(),
@@ -2979,6 +2980,131 @@ func runEnroll(agentCode, token, certsDir string) error {
 		"expires", result.CertificateExpires,
 	)
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// login command — OAuth sign-in enrollment (copy/paste code flow)
+// ---------------------------------------------------------------------------
+
+func newLoginCmd() *cobra.Command {
+	var (
+		issuer      string
+		clientID    string
+		redirectURI string
+		scope       string
+		agentCode   string
+		certsDir    string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "login",
+		Short: "Sign in with Vulnertrack and enroll this agent (no pasted secrets)",
+		Long: `Enroll this agent by signing in with your Vulnertrack account instead of
+pasting a long-lived enrollment token.
+
+The command prints a sign-in URL. Open it in any browser — it does not have
+to be on this machine — sign in, approve the collector, then paste the code
+the browser shows back into this terminal. The code is single-use, expires
+in minutes, and is useless without the PKCE verifier this process holds in
+memory, so nothing durable or secret ever crosses the clipboard.
+
+Example:
+  kite-collector login --agent-code kite-agent-prod \
+    --issuer https://<project>.supabase.co/auth/v1 \
+    --client-id 9a8b7c6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runLogin(cmd, enrollment.OAuthConfig{
+				Issuer:      issuer,
+				ClientID:    clientID,
+				RedirectURI: redirectURI,
+				Scope:       scope,
+			}, agentCode, certsDir)
+		},
+	}
+
+	cmd.Flags().StringVar(&issuer, "issuer", os.Getenv("KITE_OAUTH_ISSUER"),
+		"IdP auth base URL, e.g. https://<project>.supabase.co/auth/v1 (env KITE_OAUTH_ISSUER)")
+	cmd.Flags().StringVar(&clientID, "client-id", os.Getenv("KITE_OAUTH_CLIENT_ID"),
+		"OAuth public client ID registered for kite-collector (env KITE_OAUTH_CLIENT_ID)")
+	cmd.Flags().StringVar(&redirectURI, "redirect-uri",
+		envOrDefault("KITE_OAUTH_REDIRECT_URI", "https://app.vulnertrack.io/cli-auth"),
+		"registered redirect URI that displays the code to paste (env KITE_OAUTH_REDIRECT_URI)")
+	cmd.Flags().StringVar(&scope, "scope", "openid email", "OAuth scopes to request")
+	cmd.Flags().StringVar(&agentCode, "agent-code", "", "agent code assigned by the server (required)")
+	cmd.Flags().StringVar(&certsDir, "certs-dir", defaultKiteDataDir(),
+		fmt.Sprintf("directory to store certificates (e.g. %s/<agent-code>)", defaultKiteDataDir()))
+	_ = cmd.MarkFlagRequired("agent-code")
+
+	return cmd
+}
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func runLogin(cmd *cobra.Command, cfg enrollment.OAuthConfig, agentCode, certsDir string) error {
+	if cfg.Issuer == "" || cfg.ClientID == "" {
+		return fmt.Errorf("--issuer and --client-id are required (or set KITE_OAUTH_ISSUER / KITE_OAUTH_CLIENT_ID)")
+	}
+
+	pkce, err := enrollment.NewPKCE()
+	if err != nil {
+		return err
+	}
+	state, err := enrollment.NewState()
+	if err != nil {
+		return err
+	}
+	authURL, err := cfg.AuthorizeURL(pkce.Challenge, state)
+	if err != nil {
+		return err
+	}
+
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "\nTo connect this collector to Vulnertrack, open this URL in any browser:\n\n    %s\n\nSign in, approve the collector, then paste the code the browser shows.\n\n", authURL)
+	fmt.Fprint(out, "Paste code here: ")
+
+	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+	if err != nil && line == "" {
+		return fmt.Errorf("read code: %w", err)
+	}
+	code := strings.TrimSpace(line)
+	// Forgiving paste: accept the full redirect URL as well as the bare code.
+	if parsed, perr := url.Parse(code); perr == nil && parsed.Query().Get("code") != "" {
+		if s := parsed.Query().Get("state"); s != "" && s != state {
+			return fmt.Errorf("state mismatch — the pasted URL belongs to a different sign-in attempt; run login again")
+		}
+		code = parsed.Query().Get("code")
+	}
+	if code == "" {
+		return fmt.Errorf("no code entered")
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+	exchangeCtx, cancelExchange := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelExchange()
+
+	tok, err := enrollment.NewOAuthClient().ExchangeCode(exchangeCtx, cfg, code, pkce.Verifier)
+	if err != nil {
+		return fmt.Errorf("code exchange failed: %w", err)
+	}
+
+	slog.Default().Info(
+		"sign-in complete; presenting JWT to PKI server for certificate issuance",
+		"code", string(LogCodeLoginTokenAcquired),
+		"agent_code", agentCode,
+		"issuer", cfg.Issuer,
+	)
+
+	// The JWT rides the existing enrollment token field; the PKI server's
+	// dual-mode dispatch (RFC-0127) validates non-HMAC tokens against the
+	// IdP JWKS instead of the pki_enrollment_tokens table.
+	return runEnroll(agentCode, tok.AccessToken, certsDir)
 }
 
 // ---------------------------------------------------------------------------
