@@ -14,6 +14,7 @@ import (
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 
+	"github.com/vulnertrack/kite-collector/internal/enrollment"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 )
 
@@ -126,23 +127,28 @@ func newProgramService(o svcOpts) (service.Service, *program, error) {
 
 func newInstallCmd() *cobra.Command {
 	var (
-		certsDir  string
-		binaryDir string
-		cfgFile   string
-		dbPath    string
-		endpoint  string
-		agentCode string
-		token     string
-		userMode  bool
-		dryRun    bool
-		verbose   bool
-		noStart   bool
+		certsDir    string
+		binaryDir   string
+		cfgFile     string
+		dbPath      string
+		endpoint    string
+		agentCode   string
+		token       string
+		issuer      string
+		clientID    string
+		redirectURI string
+		scope       string
+		userMode    bool
+		dryRun      bool
+		verbose     bool
+		noStart     bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install kite-collector as a system or user service",
-		Long: `Register the kite-collector streaming agent with the OS service manager.
+		Short: "Install kite-collector as a service and sign in with Vulnertrack",
+		Long: `Register the kite-collector streaming agent with the OS service manager
+and enroll it with the platform.
 
 This command works on Linux (systemd, upstart, sysv, OpenRC), macOS (launchd),
 and Windows (Service Control Manager) via the kardianos/service library.
@@ -156,11 +162,15 @@ What it does:
   2. Creates {certs-dir}/   (certificate store)
   3. Registers the "kite-collector" service with the OS service manager
   4. Configures it to run "kite-collector service run --certs-dir {certs-dir}"
-  5. If --agent-code and --token are provided, enrolls the agent inline
+  5. If --agent-code is provided, enrolls the agent inline:
+       - sign-in flow (default): prints a URL to open in any browser; sign
+         in, approve the collector, and paste the code back — the code is
+         single-use and expires in minutes, no durable secret is pasted
+       - legacy token flow: pass --token pki_enroll_v1_... to skip sign-in
   6. If enrollment succeeds (or certs are already present), starts the service
 
 One-shot usage (recommended):
-  kite-collector install --agent-code <code> --token <token>`,
+  kite-collector install --agent-code <code>`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if certsDir == "" {
 				certsDir = defaultCertsDir(userMode)
@@ -168,10 +178,10 @@ One-shot usage (recommended):
 			if binaryDir == "" {
 				binaryDir = defaultBinaryDir(userMode)
 			}
-			// Enrollment requires both code AND token; passing one
-			// without the other is a flag mistake, not a partial install.
-			if (agentCode == "") != (token == "") {
-				return fmt.Errorf("--agent-code and --token must be set together")
+			// A token without an agent code is a flag mistake, not a
+			// partial install.
+			if token != "" && agentCode == "" {
+				return fmt.Errorf("--token requires --agent-code")
 			}
 			return runInstall(cmd, installArgs{
 				certsDir:  certsDir,
@@ -181,10 +191,16 @@ One-shot usage (recommended):
 				endpoint:  endpoint,
 				agentCode: agentCode,
 				token:     token,
-				userMode:  userMode,
-				dryRun:    dryRun,
-				verbose:   verbose,
-				noStart:   noStart,
+				oauth: enrollment.OAuthConfig{
+					Issuer:      issuer,
+					ClientID:    clientID,
+					RedirectURI: redirectURI,
+					Scope:       scope,
+				},
+				userMode: userMode,
+				dryRun:   dryRun,
+				verbose:  verbose,
+				noStart:  noStart,
 			})
 		},
 	}
@@ -202,9 +218,17 @@ One-shot usage (recommended):
 	cmd.Flags().StringVar(&endpoint, "endpoint", "",
 		"OTLP endpoint override to pass to the service (optional)")
 	cmd.Flags().StringVar(&agentCode, "agent-code", "",
-		"agent code from the server; passed to enrollment inline (paired with --token)")
+		"agent code from the server; triggers inline enrollment via sign-in (or --token)")
 	cmd.Flags().StringVar(&token, "token", "",
-		"enrollment token; passed to enrollment inline (paired with --agent-code)")
+		"legacy enrollment token (pki_enroll_v1_...); skips the sign-in flow")
+	cmd.Flags().StringVar(&issuer, "issuer", os.Getenv("KITE_OAUTH_ISSUER"),
+		"IdP auth base URL for sign-in, e.g. https://<project>.supabase.co/auth/v1 (env KITE_OAUTH_ISSUER)")
+	cmd.Flags().StringVar(&clientID, "client-id", os.Getenv("KITE_OAUTH_CLIENT_ID"),
+		"OAuth public client ID registered for kite-collector (env KITE_OAUTH_CLIENT_ID)")
+	cmd.Flags().StringVar(&redirectURI, "redirect-uri",
+		envOrDefault("KITE_OAUTH_REDIRECT_URI", "https://app.vulnertrack.io/cli-auth"),
+		"registered redirect URI that displays the code to paste (env KITE_OAUTH_REDIRECT_URI)")
+	cmd.Flags().StringVar(&scope, "scope", "openid email", "OAuth scopes to request during sign-in")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false,
 		"run the service with debug logging")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false,
@@ -385,6 +409,7 @@ type installArgs struct {
 	endpoint  string
 	agentCode string
 	token     string
+	oauth     enrollment.OAuthConfig
 	userMode  bool
 	dryRun    bool
 	verbose   bool
@@ -422,8 +447,12 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 		_, _ = fmt.Fprintf(out, "    arguments:  %v\n", cfg.Arguments)
 		_, _ = fmt.Fprintf(out, "    platform:   %s\n", service.Platform())
 		if a.agentCode != "" {
-			_, _ = fmt.Fprintf(out, "  enroll agent_code=%s token=<redacted> → %s\n",
-				a.agentCode, a.certsDir)
+			method := "sign-in (browser + pasted code)"
+			if a.token != "" {
+				method = "legacy token"
+			}
+			_, _ = fmt.Fprintf(out, "  enroll agent_code=%s via %s → %s\n",
+				a.agentCode, method, a.certsDir)
 		}
 		_, _ = fmt.Fprintf(out, "  enable boot persistence (%s)\n", runtime.GOOS)
 		if !a.noStart {
@@ -482,19 +511,31 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	}
 
 	// Inline enrollment so the operator does not have to chain a second
-	// command. We run enroll AFTER service registration so a failure here
+	// command. We run it AFTER service registration so a failure here
 	// still leaves the service registered (the operator can re-run
-	// `kite-collector enroll` with the same args later) — the defer'd
-	// post-install report will explain the state either way.
+	// `install --agent-code` later) — the defer'd post-install report
+	// will explain the state either way.
 	enrolled := false
-	if a.agentCode != "" && a.token != "" {
-		if err := runEnroll(a.agentCode, a.token, a.certsDir); err != nil {
-			_, _ = fmt.Fprintf(out, "  ✗  enrollment failed: %v\n", err)
-			// Don't propagate — service is registered; the operator can
-			// retry `kite-collector enroll` without re-running install.
-		} else {
-			_, _ = fmt.Fprintf(out, "  ✓  enrolled agent %q\n", a.agentCode)
-			enrolled = true
+	if a.agentCode != "" {
+		credential := a.token
+		if credential == "" {
+			// Default path: interactive sign-in. The short-lived JWT rides
+			// the same enrollment token field as the legacy HMAC tokens.
+			jwt, signErr := oauthSignIn(cmd, a.oauth)
+			if signErr != nil {
+				_, _ = fmt.Fprintf(out, "  ✗  sign-in failed: %v\n", signErr)
+			}
+			credential = jwt
+		}
+		if credential != "" {
+			if err := runEnroll(a.agentCode, credential, a.certsDir); err != nil {
+				_, _ = fmt.Fprintf(out, "  ✗  enrollment failed: %v\n", err)
+				// Don't propagate — service is registered; the operator can
+				// re-run `install --agent-code` without losing anything.
+			} else {
+				_, _ = fmt.Fprintf(out, "  ✓  enrolled agent %q\n", a.agentCode)
+				enrolled = true
+			}
 		}
 	}
 
@@ -559,8 +600,9 @@ func printPostInstall(out io.Writer, binPath, certsDir string, userMode bool) {
 	step := 1
 	if !st.CertsEnrolled {
 		_, _ = fmt.Fprintf(out,
-			"  %d. Enroll this agent (one-time) — pass the same --certs-dir the service uses:\n"+
-				"       %s enroll --agent-code <code> --token <token> --certs-dir %s\n\n",
+			"  %d. Enroll this agent (one-time) — re-run install with your agent code\n"+
+				"     to sign in with Vulnertrack (or pass --token for a legacy token):\n"+
+				"       %s install --agent-code <code> --certs-dir %s\n\n",
 			step, binPath, certsDir)
 		step++
 	}
@@ -591,7 +633,7 @@ func enrollmentLabel(st installer.State) string {
 	case st.CertsEnrolled:
 		return "ca.pem + agent.pem + agent-key.pem present"
 	case st.CertsDirExists:
-		return "empty — run `enroll` to populate"
+		return "empty — run `install --agent-code <code>` to enroll"
 	default:
 		return "certs dir missing"
 	}

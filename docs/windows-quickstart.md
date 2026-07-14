@@ -42,17 +42,17 @@ This scans the local machine and stores results in `.\data\kite.db`.
 
 ## Interactive setup
 
-Run the setup wizard to detect available services and configure credentials:
+Install the agent as a service and sign in with your Vulnertrack account:
 
 ```
-kite-collector init
+kite-collector install --agent-code <code>
 ```
 
-The wizard will:
-1. Scan for infrastructure services (Docker, Wazuh, etc.)
-2. Prompt for credentials when needed
-3. Generate a `kite-collector.yaml` config file
-4. Show `set` (CMD) or `$env:` (PowerShell) commands for environment variables
+The command prints a sign-in URL — open it in any browser, approve the
+collector, and paste the code back into the terminal. Double-clicking
+`kite-collector.exe` from File Explorer opens the graphical installer
+instead. For source discovery and credential configuration, use the
+browser dashboard (`kite-collector dashboard`).
 
 ## Docker on Windows
 
@@ -60,7 +60,7 @@ kite-collector automatically detects Docker Desktop via:
 1. The Windows named pipe `\\.\pipe\docker_engine`
 2. TCP fallback on `localhost:2375`
 
-If Docker Desktop is running, it will be detected by `kite-collector scan --auto` or `kite-collector init`.
+If Docker Desktop is running, it will be detected by `kite-collector scan --auto`.
 
 ### Enabling TCP access
 
