@@ -66,4 +66,7 @@ const (
 	// enrollment surface — CLI-driven enrollment wizard
 	LogCodeEnrollRequestSubmitted LogCode = "agent.enroll.request_submitted"
 	LogCodeEnrollComplete         LogCode = "agent.enroll.complete"
+
+	// login surface — OAuth sign-in enrollment (copy/paste code flow)
+	LogCodeLoginTokenAcquired LogCode = "agent.login.token_acquired"
 )
