@@ -29,6 +29,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeEngineIdentityUnavailable,
 		LogCodeCLIFlushWriter, LogCodeCLIConfigLoadFallback,
 		LogCodeEnrollRequestSubmitted, LogCodeEnrollComplete,
+		LogCodeLoginTokenAcquired,
 	}
 
 	for _, c := range codes {
@@ -66,6 +67,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 		LogCodeEngineIdentityUnavailable,
 		LogCodeCLIFlushWriter, LogCodeCLIConfigLoadFallback,
 		LogCodeEnrollRequestSubmitted, LogCodeEnrollComplete,
+		LogCodeLoginTokenAcquired,
 	}
 	for _, c := range all {
 		assert.False(t, seen[c],
