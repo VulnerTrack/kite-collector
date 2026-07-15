@@ -434,11 +434,12 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 		if dbg := r.URL.Query().Get("dashboard"); dbg != "" {
 			setKiteOAuthCookie(w, r, kiteOAuthDashboardCookie, dbg)
 		}
-		if waitID := strings.TrimSpace(r.URL.Query().Get("wait_id")); waitID != "" {
+		waitID := strings.TrimSpace(r.URL.Query().Get("wait_id"))
+		if waitID != "" {
 			setKiteOAuthCookie(w, r, kiteOAuthWaitCookie, waitID)
+			http.Redirect(w, r, resolveKiteOAuthLaunchURL(r.Context(), authURL), http.StatusSeeOther)
+			return
 		}
-		http.Redirect(w, r, resolveKiteOAuthLaunchURL(r.Context(), authURL), http.StatusSeeOther)
-		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	view := kiteLoginView{
