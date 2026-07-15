@@ -161,7 +161,8 @@ func TestHandleEnroll_RoundTrip(t *testing.T) {
 func TestHandleEnroll_RejectsMissingAPIKey(t *testing.T) {
 	h := newOnboardingHarness(t, nil)
 	form := url.Values{
-		"api_key": {""},
+		"email":    {""},
+		"password": {""},
 	}
 	rec := h.do(
 		t, "POST", "/api/v1/identity/enroll",
@@ -169,7 +170,7 @@ func TestHandleEnroll_RejectsMissingAPIKey(t *testing.T) {
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 	)
 	assert.Equal(t, http.StatusOK, rec.Code, "validation errors render inline, not 4xx")
-	assert.Contains(t, rec.Body.String(), "API key is required")
+	assert.Contains(t, rec.Body.String(), "Email and password are required")
 }
 
 func TestHandleEnroll_NoPlaintextLeaksInResponses(t *testing.T) {

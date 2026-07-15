@@ -47,6 +47,7 @@ type onboardingDeps struct {
 	PlatformEndpoint string
 	WrapKey          []byte
 	TLSConfig        config.TLSConfig
+	OAuth            OAuthOptions
 	// ScanEnabled tells the post-completion launcher panel whether to surface
 	// the "Run your first scan" CTA. True when the dashboard was wired with
 	// both a scan.Coordinator and a config.Config (the same condition the
@@ -158,17 +159,17 @@ const onboardingBody = `<div id="onboarding-toasts" class="toasts" aria-live="po
     </section>
 
     <section class="card onboarding-step-card" id="enroll-card">
-      <h2>2. Enroll platform token</h2>
-      <p class="muted">Paste the platform endpoint and API key. The plaintext key is
-         never stored or echoed after this POST &mdash; only a <code>sha256[:8]</code>
-         fingerprint is shown afterwards.</p>
+      <h2>2. Connect collector</h2>
+      <p class="muted">Sign in with VulnerTrack from your browser to authorize this collector.
+         Kite stores the resulting enrollment locally and shows only a
+         <code>sha256[:8]</code> fingerprint afterwards.</p>
       <details class="trust-panel">
-        <summary>Where does my key go?</summary>
+        <summary>What gets stored?</summary>
         <ul>
-          <li><strong>Stored locally only.</strong> The key is AES-256-GCM wrapped and written to your local SQLite DB at the certs-dir path &mdash; never to a remote service.</li>
+          <li><strong>Stored locally only.</strong> The enrollment credential is AES-256-GCM wrapped and written to your local SQLite DB at the certs-dir path.</li>
           <li><strong>Wrap key is in-memory.</strong> A fresh 32-byte AEAD wrap key is generated on each dashboard startup. Restarting the dashboard invalidates the wrapped blob; you'll see "fingerprint mismatch" and need to re-enroll. This is by design &mdash; the at-rest blob is useless without the in-memory wrap key.</li>
           <li><strong>No exfiltration before stream.</strong> Until you press "Start streaming" in step&nbsp;4, no agent data leaves this host. The connection check (step&nbsp;3) sends only synthetic probes &mdash; never real asset data.</li>
-          <li><strong>Plaintext never logged.</strong> Only the first 8 hex chars of the SHA-256 fingerprint appear in logs, the dashboard UI, or the support bundle.</li>
+          <li><strong>Secret never logged.</strong> Only the first 8 hex chars of the SHA-256 fingerprint appear in logs, the dashboard UI, or the support bundle.</li>
         </ul>
       </details>
       <div id="enroll-fragment"
@@ -551,6 +552,7 @@ type enrollView struct {
 	Error                 string
 	ReadOnly              bool
 	Enrolled              bool
+	TurnstileSiteKey      string
 }
 
 var enrollFragmentTmpl = template.Must(template.New("enroll").Parse(`
@@ -568,37 +570,24 @@ var enrollFragmentTmpl = template.Must(template.New("enroll").Parse(`
 </div>
 {{- end}}
 <p>Platform endpoint: <code>{{.Endpoint}}</code> <span class="muted small">(from collector config)</span></p>
-<form id="enroll-form"
-      hx-post="/api/v1/identity/enroll"
-      hx-target="#enroll-fragment"
-      hx-swap="innerHTML">
-  <div class="form-row">
-    <label for="api_key">API key</label>
-    <input id="api_key" name="api_key" type="password"
-           placeholder="paste the platform-issued token"
-           autocomplete="off"
-           autofocus
-           minlength="8"
-           required
-           {{- if .Error}} aria-invalid="true" aria-describedby="enroll-error-msg"{{end}}
-           {{if .ReadOnly}}disabled{{end}}>
-    <p class="muted small">
-      Don't have one yet?
-      <a href="https://app.vulnertrack.io/settings/tokens" target="_blank" rel="noopener noreferrer">Generate one in the platform console &rarr;</a>
-    </p>
-  </div>
-  {{- if .Error}}<p id="enroll-error-msg" class="enroll-error badge-red" role="alert">{{.Error}}</p>{{end}}
-  <button class="btn" type="submit" {{if .ReadOnly}}disabled{{end}}>
-    {{if .Enrolled}}Re-enroll{{else}}Enroll{{end}}
-  </button>
+<div class="enroll-action-container" style="margin-top: 1.5rem;">
   {{- if .ReadOnly}}
-  <p class="muted small">Read-only inspector mode &mdash; enroll disabled.</p>
+    <p class="muted small">Read-only inspector mode &mdash; enroll disabled.</p>
+  {{- else}}
+    {{- if .Error}}<p id="enroll-error-msg" class="enroll-error badge-red" role="alert" style="margin: 0 0 0.85rem 0; padding: 6px 10px; font-size: 0.8rem; border-radius: 8px;">{{.Error}}</p>{{end}}
+    <div style="padding: 1.25rem; border: 1px dashed var(--palette-divider, #e5e7eb); border-radius: 12px; background: rgba(145, 158, 171, 0.02);">
+      <h3 style="margin: 0 0 0.4rem 0; font-size: 0.9rem; font-weight: 600; color: var(--palette-text-primary, #1c252e);">Link via browser</h3>
+      <p class="muted small" style="margin-bottom: 0.85rem; line-height: 1.4;">Sign in securely from your browser and connect this collector to your VulnerTrack account.</p>
+      <a class="btn btn-primary" href="/kite-login?dashboard=/onboarding#check-card" style="width: 100%; text-align: center; justify-content: center; box-shadow: none;">
+        {{if .Enrolled}}Re-link collector{{else}}Link collector / Sign in &rarr;{{end}}
+      </a>
+    </div>
   {{- end}}
-</form>
+</div>
 `))
 
 func renderEnrollFragment(w io.Writer, ctx context.Context, deps onboardingDeps) error {
-	view := enrollView{ReadOnly: deps.Store == nil, Endpoint: deps.PlatformEndpoint}
+	view := enrollView{ReadOnly: deps.Store == nil, Endpoint: deps.PlatformEndpoint, TurnstileSiteKey: deps.OAuth.TurnstileSiteKey}
 	if deps.Store != nil {
 		id, err := deps.Store.GetEnrolledIdentity(ctx)
 		if err != nil && !errors.Is(err, sqlite.ErrNoIdentity) {
@@ -632,7 +621,7 @@ func shortFingerprint(fp string) string {
 
 func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 	ctx := r.Context()
-	view := enrollView{Endpoint: deps.PlatformEndpoint}
+	view := enrollView{Endpoint: deps.PlatformEndpoint, TurnstileSiteKey: deps.OAuth.TurnstileSiteKey}
 
 	if deps.Store == nil {
 		view.ReadOnly = true
@@ -658,10 +647,36 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 		return
 	}
 
-	apiKey := r.PostFormValue("api_key")
+	email := r.PostFormValue("email")
+	password := r.PostFormValue("password")
+	var apiKey string
+
+	if email != "" && password != "" {
+		if strings.TrimSpace(deps.OAuth.TurnstileSiteKey) == "" {
+			view.Error = "Direct sign-in requires captcha configuration. Set KITE_OAUTH_TURNSTILE_SITE_KEY or use browser linking."
+			writeEnrollFragment(w, deps.Logger, view)
+			return
+		}
+		captchaToken := r.PostFormValue("cf-turnstile-response")
+		if strings.TrimSpace(captchaToken) == "" {
+			view.Error = "Complete the captcha challenge before signing in"
+			writeEnrollFragment(w, deps.Logger, view)
+			return
+		}
+		token, err := loginToSupabase(ctx, deps.OAuth.SupabaseURL, deps.OAuth.SupabaseAnonKey, email, password, captchaToken)
+		if err != nil {
+			deps.Logger.Error("Direct login to Supabase failed", "error", err, "email", email)
+			view.Error = "Login failed: " + err.Error()
+			writeEnrollFragment(w, deps.Logger, view)
+			return
+		}
+		apiKey = token
+	} else {
+		apiKey = r.PostFormValue("api_key")
+	}
 
 	if strings.TrimSpace(apiKey) == "" {
-		view.Error = "API key is required"
+		view.Error = "Email and password are required"
 		writeEnrollFragment(w, deps.Logger, view)
 		return
 	}
@@ -754,6 +769,95 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 	}
 	buf.WriteString(`</div>`)
 	_, _ = w.Write(buf.Bytes())
+}
+
+func loginToSupabase(ctx context.Context, supabaseURL, anonKey, email, password, captchaToken string) (string, error) {
+	if supabaseURL == "" {
+		return "", errors.New("supabase url is not configured")
+	}
+	if anonKey == "" {
+		return "", errors.New("supabase anon key is not configured")
+	}
+
+	loginURL := fmt.Sprintf("%s/auth/v1/token?grant_type=password", strings.TrimRight(supabaseURL, "/"))
+
+	type securityMeta struct {
+		CaptchaToken string `json:"captcha_token"`
+	}
+	type loginPayload struct {
+		Email              string        `json:"email"`
+		Password           string        `json:"password"`
+		GoTrueMetaSecurity *securityMeta `json:"gotrue_meta_security,omitempty"`
+	}
+
+	payload := loginPayload{
+		Email:    email,
+		Password: password,
+	}
+	if captchaToken != "" {
+		payload.GoTrueMetaSecurity = &securityMeta{
+			CaptchaToken: captchaToken,
+		}
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode credentials: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, loginURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("apikey", anonKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("network error authenticating with Supabase: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1MB limit
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var errPayload struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+			Message          string `json:"msg"`
+		}
+		if jsonErr := json.Unmarshal(respBody, &errPayload); jsonErr == nil {
+			if errPayload.ErrorDescription != "" {
+				return "", errors.New(errPayload.ErrorDescription)
+			}
+			if errPayload.Message != "" {
+				return "", errors.New(errPayload.Message)
+			}
+			if errPayload.Error != "" {
+				return "", errors.New(errPayload.Error)
+			}
+		}
+		return "", fmt.Errorf("auth server returned status %d", resp.StatusCode)
+	}
+
+	var tokenResponse struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(respBody, &tokenResponse); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if strings.TrimSpace(tokenResponse.AccessToken) == "" {
+		return "", errors.New("empty access token returned from auth server")
+	}
+
+	return tokenResponse.AccessToken, nil
 }
 
 func writeEnrollFragment(w http.ResponseWriter, logger *slog.Logger, view enrollView) {
