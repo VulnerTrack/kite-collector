@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 452 codes across 57 packages.
+**Catalog size:** 457 codes across 57 packages.
 
 ---
 
@@ -540,7 +540,7 @@ Source: [`internal/discovery/agent/vpn/logcodes.go`](../internal/discovery/agent
 
 ## `cloud` (internal/discovery/cloud)
 
-Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/logcodes.go) · 61 codes
+Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/logcodes.go) · 65 codes
 
 **--- AWS EC2 compute discovery -----------------------------------**
 
@@ -597,6 +597,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | `cloud.dns_route53.get_dnssec_failed` | `LogCodeRoute53GetDNSSECFailed` | — |
 | `cloud.dns_route53.list_records_failed` | `LogCodeRoute53ListRecordsFailed` | — |
 | `cloud.dns_route53.skip_unsupported_record_type` | `LogCodeRoute53SkipUnsupportedType` | — |
+| `cloud.dns_route53.unsafe_zone_id` | `LogCodeRoute53UnsafeZoneID` | — |
 | `cloud.dns_route53.completed` | `LogCodeRoute53Complete` | — |
 
 **--- Cloudflare DNS discovery ------------------------------------**
@@ -607,6 +608,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | `cloud.dns_cloudflare.token_missing` | `LogCodeCloudflareTokenMissing` | #nosec G101 -- log code identifier emitted when the Cloudflare API token env var is absent, not a token value |
 | `cloud.dns_cloudflare.list_records_failed` | `LogCodeCloudflareListRecordsFailed` | — |
 | `cloud.dns_cloudflare.skip_unsupported_record_type` | `LogCodeCloudflareSkipUnsupportedType` | — |
+| `cloud.dns_cloudflare.unsafe_zone_id` | `LogCodeCloudflareUnsafeZoneID` | — |
 | `cloud.dns_cloudflare.completed` | `LogCodeCloudflareComplete` | — |
 
 **--- Azure DNS discovery -----------------------------------------**
@@ -618,6 +620,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | `cloud.dns_azure.list_zones_failed` | `LogCodeAzureDNSListZonesFailed` | — |
 | `cloud.dns_azure.list_records_failed` | `LogCodeAzureDNSListRecordsFailed` | — |
 | `cloud.dns_azure.skip_unsupported_record_type` | `LogCodeAzureDNSSkipUnsupportedType` | — |
+| `cloud.dns_azure.unsafe_zone_id` | `LogCodeAzureDNSUnsafeZoneID` | — |
 | `cloud.dns_azure.completed` | `LogCodeAzureDNSComplete` | — |
 
 **--- GCP DNS discovery -------------------------------------------**
@@ -629,6 +632,7 @@ Source: [`internal/discovery/cloud/logcodes.go`](../internal/discovery/cloud/log
 | `cloud.dns_gcp.token_acquire_failed` | `LogCodeGCPDNSTokenAcquireFailed` | #nosec G101 -- log code identifier for GCP DNS OAuth token acquisition failure, not a token value |
 | `cloud.dns_gcp.list_records_failed` | `LogCodeGCPDNSListRecordsFailed` | — |
 | `cloud.dns_gcp.skip_unsupported_record_type` | `LogCodeGCPDNSSkipUnsupportedType` | — |
+| `cloud.dns_gcp.unsafe_zone_id` | `LogCodeGCPDNSUnsafeZoneID` | — |
 | `cloud.dns_gcp.completed` | `LogCodeGCPDNSComplete` | — |
 
 **--- Cross-provider DNS-discovery shared events ------------------ Zone + record "discovered" entries are emitted by every provider in the same shape (so dashboards can sum across providers via `code IN (...)` filters). The provider is always available in the structured fields for per-provider breakdowns.**
@@ -733,7 +737,7 @@ Source: [`internal/discovery/docker/logcodes.go`](../internal/discovery/docker/l
 
 ## `entra` (internal/discovery/entra)
 
-Source: [`internal/discovery/entra/logcodes.go`](../internal/discovery/entra/logcodes.go) · 7 codes
+Source: [`internal/discovery/entra/logcodes.go`](../internal/discovery/entra/logcodes.go) · 8 codes
 
 **--- discover surface --------------------------------------------**
 
@@ -741,6 +745,7 @@ Source: [`internal/discovery/entra/logcodes.go`](../internal/discovery/entra/log
 |---|---|---|
 | `entra.discover.creds_missing` | `LogCodeDiscoverCredsMissing` | #nosec G101 -- log code identifier signalling Entra ID credentials are missing, not a credential value |
 | `entra.discover.token_acquire_failed` | `LogCodeDiscoverTokenAcquireFailed` | #nosec G101 -- log code identifier for Entra OAuth token acquisition failure, not a token value |
+| `entra.discover.endpoint_rejected` | `LogCodeDiscoverEndpointRejected` | #nosec G101 -- log code identifier for a rejected/invalid Entra base URL, not a credential value |
 
 **--- enrich surface (Phase 2 enrichment paths) -------------------**
 
