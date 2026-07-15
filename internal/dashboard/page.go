@@ -40,9 +40,10 @@ const indexPageTemplate = `<!DOCTYPE html>
 <meta name="htmx-config" content='{"historyCacheSize": 20}'>
 <title>kite-collector dashboard</title>
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=1.0.1">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 <a class="skip-link" href="#content">Skip to main content</a>
@@ -56,7 +57,7 @@ const indexPageTemplate = `<!DOCTYPE html>
          width="160" height="40">
     <span class="brand-sub">kite-collector &middot; Cybersecurity Asset Discovery Agent</span>
   </a>
-  <div class="topbar-actions">
+  <div class="topbar-nav">
     <a href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true"
        class="btn btn-ghost {{ if eq .ActiveTab "onboarding" }}active{{ end }}"
        onclick="setActive(this)">Onboarding</a>
@@ -66,12 +67,16 @@ const indexPageTemplate = `<!DOCTYPE html>
           hx-swap="innerHTML"
           title="Agent onboarding health — click Onboarding to drill in"
           aria-label="Agent health summary"></span>
-    <span hx-get="/fragments/scan-controls" hx-trigger="load" hx-swap="innerHTML"></span>
-    <div id="scan-status"
-         hx-get="/fragments/scan-status"
-         hx-trigger="load, every 3s"
-         hx-swap="innerHTML">
-      <span class="badge badge-gray">Loading scan status&hellip;</span>
+  </div>
+  <div class="topbar-actions">
+    <div class="topbar-scan-group">
+      <span hx-get="/fragments/scan-controls" hx-trigger="load" hx-swap="innerHTML"></span>
+      <div id="scan-status"
+           hx-get="/fragments/scan-status"
+           hx-trigger="load, every 3s"
+           hx-swap="innerHTML">
+        <span class="badge badge-gray">Loading scan status&hellip;</span>
+      </div>
     </div>
   </div>
 </header>
@@ -184,9 +189,35 @@ function initDataGrids(root) {
     });
   });
 }
-document.addEventListener('DOMContentLoaded', function() { initDataGrids(); });
+function renderTurnstileWidgets(root) {
+  if (!window.turnstile) {
+    return;
+  }
+  if (typeof turnstile.implicitRender === 'function') {
+    turnstile.implicitRender();
+    return;
+  }
+  if (typeof turnstile.render !== 'function') {
+    return;
+  }
+  var scope = root || document;
+  scope.querySelectorAll('.cf-turnstile').forEach(function(el) {
+    if (el.dataset.turnstileRendered === '1' || el.querySelector('iframe')) {
+      return;
+    }
+    try {
+      turnstile.render(el);
+      el.dataset.turnstileRendered = '1';
+    } catch (_) {}
+  });
+}
+document.addEventListener('DOMContentLoaded', function() {
+  initDataGrids();
+  renderTurnstileWidgets();
+});
 document.body.addEventListener('htmx:afterSwap', function(evt) {
   initDataGrids(evt.detail && evt.detail.target);
+  renderTurnstileWidgets(evt.detail && evt.detail.target);
 });
 </script>
 </body>

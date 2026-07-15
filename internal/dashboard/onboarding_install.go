@@ -603,11 +603,11 @@ type installStatusFragmentView struct {
 var installStatusFragmentTmpl = template.Must(template.New("install-status").Funcs(template.FuncMap{
 	"actionLabel": actionLabel,
 	"actionBadge": actionBadge,
-	"checkmark": func(ok bool) string {
+	"checkmark": func(ok bool) template.HTML {
 		if ok {
-			return "✓"
+			return template.HTML(`<span class="chk-badge chk-ok">✓</span>`)
 		}
-		return "—"
+		return template.HTML(`<span class="chk-badge chk-pending">—</span>`)
 	},
 }).Parse(`
 <div class="install-status">
@@ -1047,7 +1047,7 @@ func anchorForAction(action string) string {
 	case installer.ActionInstall, installer.ActionRegisterService:
 		return "#install-card"
 	case installer.ActionEnroll:
-		return "#enroll-card"
+		return "/kite-login?dashboard=/onboarding#check-card"
 	case installer.ActionStartService:
 		return "#stream-card"
 	case installer.ActionReady, "streaming":

@@ -2,7 +2,6 @@ package dashboard
 
 import (
 	"context"
-	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -127,7 +126,7 @@ func TestRoute_GET_Root_RedirectsToAssetsWhenEnrolled(t *testing.T) {
 		"enrolled host should land on /assets, the steady-state home")
 }
 
-func TestRoute_GET_KiteLogin_ReturnsLaunchAuthPage(t *testing.T) {
+func TestRoute_GET_KiteLogin_RedirectsToAuthorize(t *testing.T) {
 	st := testStore(t)
 	rc := testContext()
 	srv := Serve(":0", st, rc, nil, Options{
@@ -143,15 +142,10 @@ func TestRoute_GET_KiteLogin_ReturnsLaunchAuthPage(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusOK, rec.Code)
-	body := html.UnescapeString(rec.Body.String())
-	assert.Contains(t, body, `<body class="kite-auth-page">`)
-	assert.Contains(t, body, "Vulnertrack")
-	assert.Contains(t, body, "Sign In")
-	assert.Contains(t, body, "http://127.0.0.1:9090")
-	assert.NotContains(t, body, "code_verifier")
-
-	authHref := hrefWithPrefix(t, body, "https://api.example.test/auth/v1/oauth/authorize?")
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	authHref := rec.Header().Get("Location")
+	require.NotEmpty(t, authHref)
+	assert.True(t, strings.HasPrefix(authHref, "https://api.example.test/auth/v1/oauth/authorize?"))
 	authURL, err := url.Parse(authHref)
 	require.NoError(t, err)
 	q := authURL.Query()

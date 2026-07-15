@@ -156,11 +156,12 @@ What it does:
   2. Creates {certs-dir}/   (certificate store)
   3. Registers the "kite-collector" service with the OS service manager
   4. Configures it to run "kite-collector service run --certs-dir {certs-dir}"
-  5. If --agent-code and --token are provided, enrolls the agent inline
+  5. If --agent-code and --token are provided, runs legacy PKI enrollment inline
   6. If enrollment succeeds (or certs are already present), starts the service
 
 One-shot usage (recommended):
-  kite-collector install --agent-code <code> --token <token>`,
+  kite-collector install
+  kite-collector enroll`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if certsDir == "" {
 				certsDir = defaultCertsDir(userMode)
@@ -559,9 +560,9 @@ func printPostInstall(out io.Writer, binPath, certsDir string, userMode bool) {
 	step := 1
 	if !st.CertsEnrolled {
 		_, _ = fmt.Fprintf(out,
-			"  %d. Enroll this agent (one-time) — pass the same --certs-dir the service uses:\n"+
-				"       %s enroll --agent-code <code> --token <token> --certs-dir %s\n\n",
-			step, binPath, certsDir)
+			"  %d. Enroll this collector (one-time):\n"+
+				"       %s enroll\n\n",
+			step, binPath)
 		step++
 	}
 	_, _ = fmt.Fprintf(out,
