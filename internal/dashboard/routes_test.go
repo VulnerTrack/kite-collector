@@ -126,7 +126,7 @@ func TestRoute_GET_Root_RedirectsToAssetsWhenEnrolled(t *testing.T) {
 		"enrolled host should land on /assets, the steady-state home")
 }
 
-func TestRoute_GET_KiteLogin_RedirectsToAuthorize(t *testing.T) {
+func TestRoute_GET_KiteLogin_RendersManualSignInByDefault(t *testing.T) {
 	st := testStore(t)
 	rc := testContext()
 	srv := Serve(":0", st, rc, nil, Options{
@@ -139,6 +139,45 @@ func TestRoute_GET_KiteLogin_RedirectsToAuthorize(t *testing.T) {
 	})
 	handler := srv.Handler
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `<body class="kite-auth-page">`)
+	assert.Contains(t, body, `>Sign In</a>`)
+	assert.Contains(t, body, `href="https://api.example.test/auth/v1/oauth/authorize?`)
+	assert.Empty(t, rec.Header().Get("Location"))
+
+	var stateCookie, verifierCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		switch c.Name {
+		case kiteOAuthStateCookie:
+			stateCookie = c
+		case kiteOAuthVerifierCookie:
+			verifierCookie = c
+		}
+	}
+	require.NotNil(t, stateCookie)
+	require.NotNil(t, verifierCookie)
+	assert.True(t, stateCookie.HttpOnly)
+	assert.True(t, verifierCookie.HttpOnly)
+	assert.Equal(t, http.SameSiteLaxMode, stateCookie.SameSite)
+}
+
+func TestRoute_GET_KiteLogin_WithWaitIDRedirectsToAuthorize(t *testing.T) {
+	st := testStore(t)
+	rc := testContext()
+	srv := Serve(":0", st, rc, nil, Options{
+		OAuth: OAuthOptions{
+			AuthorizeURL: "https://api.example.test/auth/v1/oauth/authorize",
+			ClientID:     "kite-client-id",
+			Scope:        "openid email",
+			RedirectPath: "/oauth/callback",
+		},
+	})
+	handler := srv.Handler
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090&wait_id=terminal-flow", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -158,18 +197,23 @@ func TestRoute_GET_KiteLogin_RedirectsToAuthorize(t *testing.T) {
 	assert.NotEmpty(t, q.Get("code_challenge"))
 
 	var stateCookie, verifierCookie *http.Cookie
+	var waitCookie *http.Cookie
 	for _, c := range rec.Result().Cookies() {
 		switch c.Name {
 		case kiteOAuthStateCookie:
 			stateCookie = c
 		case kiteOAuthVerifierCookie:
 			verifierCookie = c
+		case kiteOAuthWaitCookie:
+			waitCookie = c
 		}
 	}
 	require.NotNil(t, stateCookie)
 	require.NotNil(t, verifierCookie)
+	require.NotNil(t, waitCookie)
 	assert.Equal(t, q.Get("state"), stateCookie.Value)
 	assert.Equal(t, q.Get("code_challenge"), codeChallengeS256(verifierCookie.Value))
+	assert.Equal(t, "terminal-flow", waitCookie.Value)
 	assert.True(t, stateCookie.HttpOnly)
 	assert.True(t, verifierCookie.HttpOnly)
 	assert.Equal(t, http.SameSiteLaxMode, stateCookie.SameSite)
