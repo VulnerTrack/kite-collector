@@ -209,6 +209,8 @@ lifecycle events for downstream consumption.`,
 		newDashboardCmd(),
 		newVersionCmd(),
 		newErrorCmd(),
+		newEnrollCmd(),
+		newUnenrollCmd(),
 		newEndpointsCmd(),
 		newTrustCmd(),
 		newCheckOTLPCmd(),
@@ -2394,7 +2396,7 @@ func newDashboardCmd() *cobra.Command {
 	// installed service uses, so launching `kite-collector dashboard` on a
 	// freshly-installed host opens the dashboard against the real DB rather
 	// than spawning an empty ./kite.db in the current working directory.
-	defaultDB := filepath.Join(defaultKiteDataDir(), "kite.db")
+	defaultDB := filepath.Join(installer.DetectDefaults().Options.CertsDir, "kite.db")
 	defaultCerts := defaultKiteDataDir()
 
 	cmd := &cobra.Command{
@@ -2571,16 +2573,26 @@ func dashboardLoginURL(addr string) string {
 	return base + "/kite-login?collector=" + url.QueryEscape(base)
 }
 
+func dashboardLoginURLWithWait(addr, waitID string) string {
+	loginURL := dashboardLoginURL(addr)
+	if strings.TrimSpace(waitID) == "" {
+		return loginURL
+	}
+	return loginURL + "&wait_id=" + url.QueryEscape(waitID)
+}
+
 func dashboardOAuthOptions(cfg *config.Config) dashboard.OAuthOptions {
 	if cfg == nil {
 		return dashboard.OAuthOptions{}
 	}
 	return dashboard.OAuthOptions{
-		SupabaseURL:  cfg.OAuth.SupabaseURL,
-		AuthorizeURL: cfg.OAuth.AuthorizeURL,
-		ClientID:     cfg.OAuth.ClientID,
-		Scope:        cfg.OAuth.Scope,
-		RedirectPath: cfg.OAuth.RedirectPath,
+		SupabaseURL:      cfg.OAuth.SupabaseURL,
+		SupabaseAnonKey:  cfg.OAuth.SupabaseAnonKey,
+		TurnstileSiteKey: cfg.OAuth.TurnstileSiteKey,
+		AuthorizeURL:     cfg.OAuth.AuthorizeURL,
+		ClientID:         cfg.OAuth.ClientID,
+		Scope:            cfg.OAuth.Scope,
+		RedirectPath:     cfg.OAuth.RedirectPath,
 	}
 }
 
@@ -2765,6 +2777,325 @@ func runTrust(endpointName, cfgFile, dataDirOverride string) error {
 // ---------------------------------------------------------------------------
 // enrollment helpers — invoked by `install` (sign-in flow or legacy token)
 // ---------------------------------------------------------------------------
+
+func newEnrollCmd() *cobra.Command {
+	var (
+		agentCode string
+		token     string
+		certsDir  string
+		dbPath    string
+		addr      string
+		cfgFile   string
+		noBrowser bool
+		userMode  bool
+	)
+
+	defaultDB := filepath.Join(installer.DetectDefaults().Options.CertsDir, "kite.db")
+
+	cmd := &cobra.Command{
+		Use:   "enroll",
+		Short: "Enroll this collector with VulnerTrack",
+		Long: `Start the VulnerTrack login flow for this collector.
+
+When run without PKI flags, enroll opens the local browser-based login flow
+and also prints the URL so it can be copied from a terminal or SSH session.
+
+The legacy PKI enrollment flow is still available by passing --agent-code and
+--token.
+
+Examples:
+  kite-collector enroll
+  kite-collector enroll --no-browser
+  kite-collector enroll --agent-code kite-agent-prod --token pki_enroll_v1_...`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if userMode && !cmd.Flag("db").Changed {
+				dbPath = filepath.Join(installer.DefaultCertsDir(true), "kite.db")
+			}
+			hasAgentCode := strings.TrimSpace(agentCode) != ""
+			hasToken := strings.TrimSpace(token) != ""
+			if hasAgentCode || hasToken {
+				if !hasAgentCode || !hasToken {
+					return fmt.Errorf("--agent-code and --token must be provided together for PKI enrollment")
+				}
+				return runEnroll(agentCode, token, certsDir)
+			}
+			if cmd.Flag("certs-dir").Changed {
+				return fmt.Errorf("--certs-dir is only used with --agent-code and --token")
+			}
+			return runPlatformLoginEnroll(addr, dbPath, cfgFile, noBrowser)
+		},
+	}
+
+	cmd.Flags().StringVar(&agentCode, "agent-code", "", "agent code assigned by the PKI server")
+	cmd.Flags().StringVar(&token, "token", "", "PKI enrollment token")
+	cmd.Flags().StringVar(&certsDir, "certs-dir", defaultKiteDataDir(),
+		fmt.Sprintf("directory to store certificates (e.g. %s/<agent-code>)", defaultKiteDataDir()))
+	cmd.Flags().StringVar(&dbPath, "db", defaultDB,
+		"path to SQLite database used by the local dashboard login flow")
+	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:9090", "listen address for the local dashboard login flow")
+	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to agent config file")
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "print the login URL without opening a browser")
+	cmd.Flags().BoolVar(&userMode, "user", false, "resolve --db against the per-user install paths")
+
+	return cmd
+}
+
+func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error {
+	previousLogger := slog.Default()
+	quietLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	slog.SetDefault(quietLogger)
+	defer slog.SetDefault(previousLogger)
+
+	waitID := uuid.Must(uuid.NewV7()).String()
+	loginURL := dashboardLoginURLWithWait(addr, waitID)
+	baseURL := "http://" + dashboardBrowserAddr(addr)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	if dashboardReachable(loginURL) {
+		printEnrollmentLaunch(resolveDashboardLaunchLocation(ctx, loginURL), noBrowser)
+		if !noBrowser {
+			dashboard.OpenBrowser(loginURL)
+		}
+		if err := waitForDashboardEnrollment(ctx, baseURL, waitID); err != nil {
+			return err
+		}
+		fmt.Println()
+		fmt.Println("Enrollment complete.")
+		return nil
+	}
+
+	sqlite.WarnIfPathIsSuspect(slog.Default(), dbPath)
+	encStore, err := openSQLiteStore(dbPath, config.IdentityConfig{})
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer func() { _ = encStore.Close() }()
+
+	st := encStore.Store
+	if err := st.Migrate(ctx); err != nil {
+		return fmt.Errorf("migrate store: %w", err)
+	}
+
+	platformEndpoint := ""
+	var oauth dashboard.OAuthOptions
+	if cfg, loadErr := config.Load(cfgFile); loadErr == nil && cfg != nil {
+		platformEndpoint = cfg.Streaming.OTLP.Endpoint
+		oauth = dashboardOAuthOptions(cfg)
+	} else if cfg, loadErr := config.Load(""); loadErr == nil && cfg != nil {
+		platformEndpoint = cfg.Streaming.OTLP.Endpoint
+		oauth = dashboardOAuthOptions(cfg)
+	}
+
+	rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
+	logger := slog.Default()
+	srv := dashboard.Serve(addr, st, rc, logger, dashboard.Options{
+		AppVersion:       version,
+		Commit:           commit,
+		PlatformEndpoint: platformEndpoint,
+		OAuth:            oauth,
+	})
+
+	go func() {
+		logger.Info("enroll dashboard listening",
+			"code", string(LogCodeDashboardListening),
+			"addr", addr,
+			"mode", "enroll")
+		if listenErr := srv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
+			logger.Error("enroll dashboard listener failed",
+				"code", string(LogCodeDashboardListenerFailed),
+				"error", listenErr,
+				"addr", addr)
+		}
+	}()
+
+	if !waitForDashboard(loginURL, 3*time.Second) {
+		return fmt.Errorf("dashboard did not become reachable at %s", baseURL)
+	}
+	printEnrollmentLaunch(resolveDashboardLaunchLocation(ctx, loginURL), noBrowser)
+	if !noBrowser {
+		dashboard.OpenBrowser(loginURL)
+	}
+
+	waitErr := waitForDashboardEnrollment(ctx, baseURL, waitID)
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutCancel()
+	shutErr := srv.Shutdown(shutCtx)
+	if waitErr != nil {
+		return waitErr
+	}
+	if shutErr != nil {
+		return shutErr
+	}
+	fmt.Println()
+	fmt.Println("Enrollment complete.")
+	return nil
+}
+
+func printEnrollmentLaunch(launchURL string, noBrowser bool) {
+	if noBrowser {
+		fmt.Println("Open this URL in your browser:")
+	} else {
+		fmt.Println("Opened VulnerTrack authorization in your browser:")
+	}
+	fmt.Println()
+	fmt.Println(launchURL)
+}
+
+func dashboardReachable(rawURL string) bool {
+	client := http.Client{
+		Timeout: 750 * time.Millisecond,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Get(rawURL) // #nosec G107 -- URL is derived from the local dashboard listen address.
+	if err != nil {
+		return false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode >= 200 && resp.StatusCode < 500
+}
+
+func waitForDashboard(rawURL string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if dashboardReachable(rawURL) {
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
+
+func resolveDashboardLaunchLocation(ctx context.Context, loginURL string) string {
+	client := http.Client{
+		Timeout: 2 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loginURL, nil)
+	if err != nil {
+		return loginURL
+	}
+	resp, err := client.Do(req) // #nosec G107 -- URL is derived from the local dashboard listen address.
+	if err != nil {
+		return loginURL
+	}
+	defer func() { _ = resp.Body.Close() }()
+	location := strings.TrimSpace(resp.Header.Get("Location"))
+	if location == "" {
+		return loginURL
+	}
+	return location
+}
+
+func waitForDashboardEnrollment(ctx context.Context, baseURL, waitID string) error {
+	waitURL := strings.TrimRight(baseURL, "/") + "/api/v1/enrollment/wait/" + url.PathEscape(waitID)
+	client := http.Client{
+		Timeout: 2 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		complete, err := dashboardEnrollmentWaitComplete(ctx, client, waitURL)
+		if err == nil && complete {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("enrollment wait canceled")
+		case <-ticker.C:
+		}
+	}
+}
+
+func dashboardEnrollmentWaitComplete(ctx context.Context, client http.Client, waitURL string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, waitURL, nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := client.Do(req) // #nosec G107 -- URL is derived from the local dashboard listen address.
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, nil
+	}
+	var payload struct {
+		Complete bool `json:"complete"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return false, err
+	}
+	return payload.Complete, nil
+}
+
+func newUnenrollCmd() *cobra.Command {
+	var (
+		dbPath      string
+		identityDir string
+		userMode    bool
+	)
+
+	defaultDB := filepath.Join(installer.DetectDefaults().Options.CertsDir, "kite.db")
+
+	cmd := &cobra.Command{
+		Use:   "unenroll",
+		Short: "Remove the local VulnerTrack enrollment",
+		Long: `Remove the local VulnerTrack platform identity from the collector database.
+
+This resets the browser-based Kite/VulnerTrack login state so the next
+` + "`kite-collector enroll`" + ` run asks you to sign in again. It does not remove PKI
+certificates or unregister the OS service.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if userMode && !cmd.Flag("db").Changed {
+				dbPath = filepath.Join(installer.DefaultCertsDir(true), "kite.db")
+			}
+			return runPlatformUnenroll(dbPath, identityDir)
+		},
+	}
+
+	cmd.Flags().StringVar(&dbPath, "db", defaultDB, "path to SQLite database")
+	cmd.Flags().StringVar(&identityDir, "identity-dir", "", "identity data directory used to decrypt the database")
+	cmd.Flags().BoolVar(&userMode, "user", false, "resolve --db against the per-user install paths")
+	return cmd
+}
+
+func runPlatformUnenroll(dbPath, identityDir string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	encStore, err := openSQLiteStore(dbPath, config.IdentityConfig{DataDir: identityDir})
+	if err != nil {
+		return fmt.Errorf("open store: %w", err)
+	}
+	defer func() { _ = encStore.Close() }()
+
+	st := encStore.Store
+	if err := st.Migrate(ctx); err != nil {
+		return fmt.Errorf("migrate store: %w", err)
+	}
+	sqliteStore, ok := st.(*sqlite.SQLiteStore)
+	if !ok {
+		return fmt.Errorf("unenroll requires sqlite store")
+	}
+	if err := sqliteStore.DeleteEnrolledIdentity(ctx); err != nil {
+		return err
+	}
+	fmt.Println("Local VulnerTrack enrollment removed.")
+	return nil
+}
 
 func runEnroll(agentCode, token, certsDir string) error {
 	runID := uuid.Must(uuid.NewV7()).String()
@@ -3268,6 +3599,24 @@ func (a dashboardStreamAdapter) Status() dashboard.StreamStatus {
 // ---------------------------------------------------------------------------
 
 func main() {
+	loadEnvFile(".env")
+
+	if os.Getenv("KITE_OAUTH_SUPABASE_URL") == "" {
+		if u := os.Getenv("SUPABASE_URL"); u != "" {
+			os.Setenv("KITE_OAUTH_SUPABASE_URL", u)
+		}
+	}
+	if os.Getenv("KITE_OAUTH_SUPABASE_ANON_KEY") == "" {
+		if k := os.Getenv("SUPABASE_ANON_KEY"); k != "" {
+			os.Setenv("KITE_OAUTH_SUPABASE_ANON_KEY", k)
+		}
+	}
+	if os.Getenv("KITE_OAUTH_TURNSTILE_SITE_KEY") == "" {
+		if t := os.Getenv("TURNSTILE_SITE_KEY"); t != "" {
+			os.Setenv("KITE_OAUTH_TURNSTILE_SITE_KEY", t)
+		}
+	}
+
 	if osutil.IsDoubleClicked() {
 		osutil.HideConsole()
 		// On Windows, the GUI wizard is the friendly default for double-click
@@ -3307,5 +3656,34 @@ func printFakePrompt() {
 		fmt.Printf("\nPS %s> ", cwd)
 	} else {
 		fmt.Printf("\n%s> ", cwd)
+	}
+}
+
+func loadEnvFile(paths ...string) {
+	for _, p := range paths {
+		content, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(content), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			if (strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"")) ||
+				(strings.HasPrefix(val, "'") && strings.HasSuffix(val, "'")) {
+				val = val[1 : len(val)-1]
+			}
+			if os.Getenv(key) == "" {
+				os.Setenv(key, val)
+			}
+		}
 	}
 }

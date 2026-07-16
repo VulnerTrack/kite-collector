@@ -64,11 +64,13 @@ type FleetConfig struct {
 
 // OAuthConfig configures first-party OAuth linking for the local dashboard.
 type OAuthConfig struct {
-	SupabaseURL  string `mapstructure:"supabase_url"`
-	AuthorizeURL string `mapstructure:"authorize_url"`
-	ClientID     string `mapstructure:"client_id"`
-	Scope        string `mapstructure:"scope"`
-	RedirectPath string `mapstructure:"redirect_path"`
+	SupabaseURL      string `mapstructure:"supabase_url"`
+	SupabaseAnonKey  string `mapstructure:"supabase_anon_key"`
+	TurnstileSiteKey string `mapstructure:"turnstile_site_key"`
+	AuthorizeURL     string `mapstructure:"authorize_url"`
+	ClientID         string `mapstructure:"client_id"`
+	Scope            string `mapstructure:"scope"`
+	RedirectPath     string `mapstructure:"redirect_path"`
 }
 
 // ConnectivityConfig holds settings for network connectivity aids like tunnels.
@@ -422,6 +424,8 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("audit.process_env_secrets.max_pids", 10000)
 	v.SetDefault("posture.enabled", true)
 	v.SetDefault("oauth.supabase_url", "https://wjurmocfraqhdqarnytz.supabase.co")
+	v.SetDefault("oauth.supabase_anon_key", "")
+	v.SetDefault("oauth.turnstile_site_key", "")
 	v.SetDefault("oauth.authorize_url", "https://api.vulnertrack.com/auth/v1/oauth/authorize")
 	v.SetDefault("oauth.client_id", "d9be121a-a430-4c3a-9837-5cf67f9edfa3")
 	v.SetDefault("oauth.scope", "openid email")
