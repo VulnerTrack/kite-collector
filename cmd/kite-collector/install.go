@@ -170,7 +170,8 @@ What it does:
   6. If enrollment succeeds (or certs are already present), starts the service
 
 One-shot usage (recommended):
-  kite-collector install --agent-code <code>`,
+  kite-collector install
+  kite-collector enroll`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if certsDir == "" {
 				certsDir = defaultCertsDir(userMode)
@@ -600,10 +601,9 @@ func printPostInstall(out io.Writer, binPath, certsDir string, userMode bool) {
 	step := 1
 	if !st.CertsEnrolled {
 		_, _ = fmt.Fprintf(out,
-			"  %d. Enroll this agent (one-time) — re-run install with your agent code\n"+
-				"     to sign in with Vulnertrack (or pass --token for a legacy token):\n"+
-				"       %s install --agent-code <code> --certs-dir %s\n\n",
-			step, binPath, certsDir)
+			"  %d. Enroll this collector (one-time):\n"+
+				"       %s enroll\n\n",
+			step, binPath)
 		step++
 	}
 	_, _ = fmt.Fprintf(out,

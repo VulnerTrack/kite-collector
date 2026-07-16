@@ -2,7 +2,6 @@ package dashboard
 
 import (
 	"context"
-	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -127,7 +126,7 @@ func TestRoute_GET_Root_RedirectsToAssetsWhenEnrolled(t *testing.T) {
 		"enrolled host should land on /assets, the steady-state home")
 }
 
-func TestRoute_GET_KiteLogin_ReturnsLaunchAuthPage(t *testing.T) {
+func TestRoute_GET_KiteLogin_RendersManualSignInByDefault(t *testing.T) {
 	st := testStore(t)
 	rc := testContext()
 	srv := Serve(":0", st, rc, nil, Options{
@@ -144,24 +143,11 @@ func TestRoute_GET_KiteLogin_ReturnsLaunchAuthPage(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	body := html.UnescapeString(rec.Body.String())
+	body := rec.Body.String()
 	assert.Contains(t, body, `<body class="kite-auth-page">`)
-	assert.Contains(t, body, "Vulnertrack")
-	assert.Contains(t, body, "Sign In")
-	assert.Contains(t, body, "http://127.0.0.1:9090")
-	assert.NotContains(t, body, "code_verifier")
-
-	authHref := hrefWithPrefix(t, body, "https://api.example.test/auth/v1/oauth/authorize?")
-	authURL, err := url.Parse(authHref)
-	require.NoError(t, err)
-	q := authURL.Query()
-	assert.Equal(t, "code", q.Get("response_type"))
-	assert.Equal(t, "kite-client-id", q.Get("client_id"))
-	assert.Equal(t, "http://127.0.0.1:9090/oauth/callback", q.Get("redirect_uri"))
-	assert.Equal(t, "openid email", q.Get("scope"))
-	assert.Equal(t, "S256", q.Get("code_challenge_method"))
-	assert.NotEmpty(t, q.Get("state"))
-	assert.NotEmpty(t, q.Get("code_challenge"))
+	assert.Contains(t, body, `>Sign In</a>`)
+	assert.Contains(t, body, `href="https://api.example.test/auth/v1/oauth/authorize?`)
+	assert.Empty(t, rec.Header().Get("Location"))
 
 	var stateCookie, verifierCookie *http.Cookie
 	for _, c := range rec.Result().Cookies() {
@@ -174,8 +160,60 @@ func TestRoute_GET_KiteLogin_ReturnsLaunchAuthPage(t *testing.T) {
 	}
 	require.NotNil(t, stateCookie)
 	require.NotNil(t, verifierCookie)
+	assert.True(t, stateCookie.HttpOnly)
+	assert.True(t, verifierCookie.HttpOnly)
+	assert.Equal(t, http.SameSiteLaxMode, stateCookie.SameSite)
+}
+
+func TestRoute_GET_KiteLogin_WithWaitIDRedirectsToAuthorize(t *testing.T) {
+	st := testStore(t)
+	rc := testContext()
+	srv := Serve(":0", st, rc, nil, Options{
+		OAuth: OAuthOptions{
+			AuthorizeURL: "https://api.example.test/auth/v1/oauth/authorize",
+			ClientID:     "kite-client-id",
+			Scope:        "openid email",
+			RedirectPath: "/oauth/callback",
+		},
+	})
+	handler := srv.Handler
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090&wait_id=terminal-flow", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	authHref := rec.Header().Get("Location")
+	require.NotEmpty(t, authHref)
+	assert.True(t, strings.HasPrefix(authHref, "https://api.example.test/auth/v1/oauth/authorize?"))
+	authURL, err := url.Parse(authHref)
+	require.NoError(t, err)
+	q := authURL.Query()
+	assert.Equal(t, "code", q.Get("response_type"))
+	assert.Equal(t, "kite-client-id", q.Get("client_id"))
+	assert.Equal(t, "http://127.0.0.1:9090/oauth/callback", q.Get("redirect_uri"))
+	assert.Equal(t, "openid email", q.Get("scope"))
+	assert.Equal(t, "S256", q.Get("code_challenge_method"))
+	assert.NotEmpty(t, q.Get("state"))
+	assert.NotEmpty(t, q.Get("code_challenge"))
+
+	var stateCookie, verifierCookie *http.Cookie
+	var waitCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		switch c.Name {
+		case kiteOAuthStateCookie:
+			stateCookie = c
+		case kiteOAuthVerifierCookie:
+			verifierCookie = c
+		case kiteOAuthWaitCookie:
+			waitCookie = c
+		}
+	}
+	require.NotNil(t, stateCookie)
+	require.NotNil(t, verifierCookie)
+	require.NotNil(t, waitCookie)
 	assert.Equal(t, q.Get("state"), stateCookie.Value)
 	assert.Equal(t, q.Get("code_challenge"), codeChallengeS256(verifierCookie.Value))
+	assert.Equal(t, "terminal-flow", waitCookie.Value)
 	assert.True(t, stateCookie.HttpOnly)
 	assert.True(t, verifierCookie.HttpOnly)
 	assert.Equal(t, http.SameSiteLaxMode, stateCookie.SameSite)
