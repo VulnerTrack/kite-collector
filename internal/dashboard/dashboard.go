@@ -77,6 +77,11 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		serveKiteLoginPage(w, r, opts.OAuth)
 	})
 	mux.HandleFunc("GET /kite-success", serveKiteSuccessPage)
+	mux.HandleFunc("GET /api/v1/enrollment/wait/{id}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, logger, http.StatusOK, map[string]bool{
+			"complete": kiteOAuthWaitComplete(r.PathValue("id")),
+		})
+	})
 	kiteOAuthEnrollment := kiteOAuthEnrollmentOptions{Logger: logger, PlatformEndpoint: opts.PlatformEndpoint}
 	mux.HandleFunc("GET /oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment)
@@ -383,6 +388,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				Installer:        opts.Installer,
 				ScanEnabled:      opts.Coordinator != nil && opts.BaseConfig != nil,
 				TLSConfig:        tlsCfg,
+				OAuth:            opts.OAuth,
 			})
 			kiteOAuthEnrollment.Store = sqliteStore
 			kiteOAuthEnrollment.WrapKey = wrapKey

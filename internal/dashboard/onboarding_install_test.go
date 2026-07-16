@@ -378,7 +378,7 @@ func TestOnboardingPage_CardsAreNumberedOneToFour(t *testing.T) {
 	// operators wondered "is step 0 optional? a pre-step?"
 	for _, want := range []string{
 		"1. Install agent",
-		"2. Enroll platform token",
+		"2. Connect collector",
 		"3. Connection check",
 		"4. Streaming",
 	} {
@@ -390,7 +390,7 @@ func TestOnboardingPage_CardsAreNumberedOneToFour(t *testing.T) {
 	// future template edit can't silently re-introduce the off-by-one.
 	for _, gone := range []string{
 		">0. Install agent<",
-		">1. Enroll platform token<",
+		">1. Connect collector<",
 		">2. Connection check<",
 		">3. Streaming<",
 	} {
@@ -1481,7 +1481,7 @@ func TestOnboardingPage_IncludesTrustPanel(t *testing.T) {
 	rec := h.do(t, "GET", "/onboarding", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
-	assert.Contains(t, body, "Where does my key go?",
+	assert.Contains(t, body, "What gets stored?",
 		"enroll card must surface the trust-panel disclosure so security-conscious operators can self-serve the answer")
 	assert.Contains(t, body, "AES-256-GCM",
 		"trust panel must explicitly name the wrapping algorithm (operators search for this)")

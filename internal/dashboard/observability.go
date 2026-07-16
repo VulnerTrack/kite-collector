@@ -1260,25 +1260,27 @@ func scanStatusBadge(status string) string {
 // panel, probe metrics table, scan stats card, Prometheus link.
 var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <div id="observability-root"
+     class="observability-page"
      hx-get="{{.Freshness.WrapperGetURL}}"
      {{if not .Freshness.Paused}}hx-trigger="every 15s"{{end}}
      hx-swap="outerHTML"
      hx-preserve="false">
-<header class="onboarding-header">
+<header class="onboarding-header observability-hero">
   <div class="onboarding-header-row">
     <div class="onboarding-title">
       <h1>Local observability</h1>
-      <p class="muted small">
-        Self-observability for the agent on this host &middot;
-        <a href="/metrics" target="_blank" rel="noopener">Prometheus /metrics</a>
-        for external scrapers &middot;
-        <a href="/api/v1/observability/snapshot.json" download>JSON snapshot</a>
-        (scripted monitoring &amp; archival) &middot;
-        <a href="/api/v1/observability/snapshot.md" target="_blank" rel="noopener">Markdown summary</a>
-        (paste into Slack, PRs, tickets — renders natively).
+      <p class="muted small observability-hero-copy">
+        Self-observability for the agent on this host. Health, probes, scans,
+        streaming and runtime signals are computed from local state.
       </p>
+      <div class="observability-actions" aria-label="Observability exports and integrations">
+        <a href="/metrics" target="_blank" rel="noopener">Prometheus /metrics</a>
+        <a href="/api/v1/observability/snapshot.json" download>JSON snapshot</a>
+        <a href="/api/v1/observability/snapshot.md" target="_blank" rel="noopener">Markdown summary</a>
+      </div>
     </div>
-    <div class="onboarding-mode">
+    <div class="onboarding-mode observability-status-panel">
+      <span class="muted small observability-status-label">Agent status</span>
       <span class="badge {{.HealthClass}}">{{.HealthSummary}}</span>
       {{if .HealthDetail}}
         <span class="muted small health-rollup-detail" title="Subsystems not passing — drill into Healthchecks below for details">&mdash; {{.HealthDetail}}</span>
@@ -1305,7 +1307,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   </div>
 </header>
 
-<nav class="page-jumpnav" aria-label="Observability page sections">
+<nav class="page-jumpnav observability-jumpnav" aria-label="Observability page sections">
   <span class="page-jumpnav-label muted small">Jump to:</span>
   <a href="#section-health">Health</a>
   <a href="#section-failures">Failures</a>
@@ -1317,10 +1319,12 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   <a href="#section-prometheus">Prometheus</a>
 </nav>
 
-<section class="card" id="section-health">
+<div class="observability-grid">
+<section class="card observability-card observability-card--health" id="section-health">
   <h2>Healthchecks</h2>
   <p class="muted">Per-subsystem status, recomputed on each page render.</p>
-  <table>
+  <div class="observability-table-wrap">
+  <table class="observability-table">
     <thead><tr><th>Subsystem</th><th>Status</th><th>Detail</th></tr></thead>
     <tbody>
     {{range .Health}}
@@ -1332,13 +1336,15 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     {{end}}
     </tbody>
   </table>
+  </div>
 </section>
 
-<section class="card" id="section-probes">
+<section class="card observability-card observability-card--wide observability-card--probes" id="section-probes">
   <h2>Probe metrics</h2>
   {{if .HasProbeData}}
     <p class="muted">Aggregated across the last 200 probe runs.</p>
-    <table>
+    <div class="observability-table-wrap">
+    <table class="observability-table">
       <thead>
         <tr><th>Probe</th><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Pass rate</th><th>Median latency</th><th>p95 latency</th><th title="Status-page-style tape of the last 20 runs — oldest left, newest right">Last 20</th><th>Latency trend</th></tr>
       </thead>
@@ -1359,12 +1365,13 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       {{end}}
       </tbody>
     </table>
+    </div>
   {{else}}
     <p class="muted">No probe runs yet. Run a connection check on <a href="/onboarding?step=check">step 3</a> to populate.</p>
   {{end}}
 </section>
 
-<section class="card" id="section-failures">
+<section class="card observability-card observability-card--failures" id="section-failures">
   <h2>Recent failures</h2>
   {{if .HasFailures}}
     <p class="muted">Last {{len .RecentFailures}} probe failures with their diagnostic messages. The number-one debugging question — &ldquo;why is it failing?&rdquo; — answered without scrolling through every event.</p>
@@ -1401,7 +1408,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   {{end}}
 </section>
 
-<section class="card" id="section-activity">
+<section class="card observability-card observability-card--activity" id="section-activity">
   <h2>Recent activity</h2>
   {{if .HasActivity}}
     <p class="muted">Most recent 20 events from probes &amp; scans, interleaved by timestamp. Closes the &ldquo;what just happened?&rdquo; gap between the per-card snapshots.</p>
@@ -1420,25 +1427,28 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   {{end}}
 </section>
 
-<section class="card" id="section-scans">
+<section class="card observability-card" id="section-scans">
   <h2>Scan metrics</h2>
   {{if .HasScanData}}
-    <table class="kv">
+    <div class="observability-table-wrap">
+    <table class="kv observability-kv">
       <tr><td>Total scans</td><td>{{.ScanStats.Total}}</td></tr>
       <tr><td>Latest scan</td><td><span class="badge {{.ScanStats.LatestBadge}}">{{.ScanStats.LatestStatus}}</span> &middot; started {{.ScanStats.LatestStartedAt}}</td></tr>
       <tr><td>Latest duration</td><td>{{.ScanStats.LatestDuration}}</td></tr>
       <tr><td>Average duration (last 20)</td><td>{{.ScanStats.AverageDuration}}</td></tr>
       <tr><td>Recent durations</td><td class="spark-cell">{{.ScanStats.TrendSVG}}</td></tr>
     </table>
+    </div>
   {{else}}
     <p class="muted">No scans yet. Trigger one from <a href="/onboarding">/onboarding</a>'s launcher panel.</p>
   {{end}}
 </section>
 
-<section class="card" id="section-stream">
+<section class="card observability-card" id="section-stream">
   <h2>Stream health</h2>
   {{if .Stream}}
-    <table class="kv">
+    <div class="observability-table-wrap">
+    <table class="kv observability-kv">
       <tr><td>State</td><td><span class="badge {{.Stream.StateBadge}}">{{.Stream.State}}</span></td></tr>
       <tr><td>Events sent</td><td>{{.Stream.TotalSent}}</td></tr>
       <tr><td>Backlog depth</td><td>{{.Stream.BacklogDepth}}</td></tr>
@@ -1453,17 +1463,19 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       <tr><td>Last error</td><td><span class="badge badge-red">{{.Stream.LastErrorText}}</span></td></tr>
       {{end}}
     </table>
+    </div>
     <p class="muted small">Backlog depth above zero usually indicates a slow or unreachable OTLP collector. Sustained growth is the early warning before events start dropping.</p>
   {{else}}
     <p class="muted">No StreamController wired (inspector / read-only mode). Start the agent with <code>kite-collector dashboard</code> (default --with-agent=true) to populate.</p>
   {{end}}
 </section>
 
-<section class="card" id="section-runtime">
+<section class="card observability-card observability-card--wide" id="section-runtime">
   <h2>Runtime &amp; storage</h2>
   <p class="muted">Dashboard process telemetry + on-host SQLite store size. Watch the
      heap and goroutine counts for leak symptoms; watch DB size for unbounded growth.</p>
-  <table class="kv">
+  <div class="observability-table-wrap">
+  <table class="kv observability-kv">
     <tr><td>Go version</td><td><code>{{.Runtime.GoVersion}}</code></td></tr>
     <tr><td>Heap allocated</td><td>{{.Runtime.HeapAlloc}} <span class="spark-cell">{{.Runtime.HeapTrendSVG}}</span></td></tr>
     <tr><td>Heap system</td><td>{{.Runtime.HeapSys}}</td></tr>
@@ -1481,10 +1493,11 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     <tr><td>findings surfaced</td><td>{{.Runtime.FindingRows}}</td></tr>
     {{end}}
   </table>
+  </div>
   <p class="muted small">Heap &amp; goroutine sparklines show up to the last 60 samples (one per page render &middot; 15 minutes of in-memory history at the 15s auto-refresh cadence; lost on dashboard restart).</p>
 </section>
 
-<section class="card" id="section-prometheus">
+<section class="card observability-card observability-card--wide observability-card--prometheus" id="section-prometheus">
   <h2>Prometheus integration</h2>
   <p class="muted">The agent exposes a Prometheus-format scrape endpoint at
      <a href="/metrics" target="_blank" rel="noopener"><code>/metrics</code></a>
@@ -1492,8 +1505,9 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
      Probe duration histograms, scan counters, and HTTP request metrics are all
      surfaced there.</p>
 </section>
+</div>
 
-<p class="muted small">Local observability — no data leaves this host. All stats are computed from the on-host SQLite store. <span class="muted small">Auto-refreshes every 15 seconds.</span></p>
+<p class="muted small observability-footnote">Local observability — no data leaves this host. All stats are computed from the on-host SQLite store. <span class="muted small">Auto-refreshes every 15 seconds.</span></p>
 
 <script>
   // Iteration-31 passive-monitoring affordance: a backgrounded tab shows
