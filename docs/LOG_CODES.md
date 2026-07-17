@@ -175,7 +175,7 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 
 | Code | Constant | Description |
 |---|---|---|
-| `agent.login.token_acquired` | `LogCodeLoginTokenAcquired` | — |
+| `agent.login.token_acquired` | `LogCodeLoginTokenAcquired` | #nosec G101 -- log code literal, not a credential |
 
 ## `audit` (internal/audit)
 
