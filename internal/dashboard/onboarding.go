@@ -46,8 +46,8 @@ type onboardingDeps struct {
 	Commit           string
 	PlatformEndpoint string
 	WrapKey          []byte
-	TLSConfig        config.TLSConfig
 	OAuth            OAuthOptions
+	TLSConfig        config.TLSConfig
 	// ScanEnabled tells the post-completion launcher panel whether to surface
 	// the "Run your first scan" CTA. True when the dashboard was wired with
 	// both a scan.Coordinator and a config.Config (the same condition the
@@ -550,9 +550,9 @@ type enrollView struct {
 	FirstEnrolledRelative string // "2h ago" — primary display for human-glance reading
 	LastEnrolledRelative  string
 	Error                 string
+	TurnstileSiteKey      string
 	ReadOnly              bool
 	Enrolled              bool
-	TurnstileSiteKey      string
 }
 
 var enrollFragmentTmpl = template.Must(template.New("enroll").Parse(`
@@ -785,9 +785,9 @@ func loginToSupabase(ctx context.Context, supabaseURL, anonKey, email, password,
 		CaptchaToken string `json:"captcha_token"`
 	}
 	type loginPayload struct {
+		GoTrueMetaSecurity *securityMeta `json:"gotrue_meta_security,omitempty"`
 		Email              string        `json:"email"`
 		Password           string        `json:"password"`
-		GoTrueMetaSecurity *securityMeta `json:"gotrue_meta_security,omitempty"`
 	}
 
 	payload := loginPayload{
@@ -800,7 +800,7 @@ func loginToSupabase(ctx context.Context, supabaseURL, anonKey, email, password,
 		}
 	}
 
-	bodyBytes, err := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(payload) //#nosec G117 -- Password field is the credential we intentionally send to the Supabase password-grant endpoint
 	if err != nil {
 		return "", fmt.Errorf("failed to encode credentials: %w", err)
 	}
@@ -1811,7 +1811,7 @@ func buildTLSConfig(cfg config.TLSConfig) (*tls.Config, error) {
 	tlsCfg := &tls.Config{
 		RootCAs:            pool,
 		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: os.Getenv("KITE_INSECURE_SKIP_VERIFY") == "true",
+		InsecureSkipVerify: os.Getenv("KITE_INSECURE_SKIP_VERIFY") == "true", //#nosec G402 -- opt-in via KITE_INSECURE_SKIP_VERIFY env var for debug against self-signed dev backends
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if os.Getenv("KITE_INSECURE_SKIP_VERIFY") == "true" {
 				return nil

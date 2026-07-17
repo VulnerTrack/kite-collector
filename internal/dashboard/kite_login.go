@@ -453,6 +453,7 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 		http.Error(w, fmt.Sprintf("render kite login: %v", err), http.StatusInternalServerError)
 	}
 }
+
 func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	dashboardURL := r.URL.Query().Get("dashboard")
@@ -640,7 +641,7 @@ func resolveKiteOAuthLaunchURL(ctx context.Context, authURL string) string {
 		return authURL
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authURL, nil) //#nosec G704 -- authURL host was validated to be api.vulnertrack.com above
 	if err != nil {
 		return authURL
 	}
@@ -652,7 +653,7 @@ func resolveKiteOAuthLaunchURL(ctx context.Context, authURL string) string {
 			return http.ErrUseLastResponse
 		},
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //#nosec G704 -- authURL host was validated to be api.vulnertrack.com above
 	if err != nil {
 		return authURL
 	}

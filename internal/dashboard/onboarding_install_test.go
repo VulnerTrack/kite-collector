@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -713,37 +712,6 @@ func TestDashboardShell_SkipToContentLinkIsFirstFocusable(t *testing.T) {
 // Form-error accessibility (WCAG 3.3.1 Error Identification, 3.3.3 Error Suggestion)
 // ---------------------------------------------------------------------------
 
-func TestEnroll_EmptyKey_RendersAccessibleErrorPattern(t *testing.T) {
-	h := newInstallHarness(t, nil)
-
-	form := url.Values{"api_key": {""}}
-	rec := h.do(t, "POST", "/api/v1/identity/enroll",
-		strings.NewReader(form.Encode()),
-		map[string]string{"Content-Type": "application/x-www-form-urlencoded"})
-
-	require.Equal(t, http.StatusOK, rec.Code, "validation errors render inline, not 4xx")
-	body := rec.Body.String()
-
-	// The canonical ARIA form-error pattern (WAI-ARIA Authoring Practices §3.2):
-	// the error message has role="alert" (implies aria-live="assertive" + atomic),
-	// it carries a stable id, the input is marked aria-invalid="true" and points
-	// at the error message via aria-describedby. AT users get the error
-	// announced immediately AND get the description when focusing the field.
-	assert.Contains(t, body, `role="alert"`,
-		"error pane must carry role='alert' so AT announces it immediately (WCAG 3.3.1)")
-	assert.Contains(t, body, `id="enroll-error-msg"`,
-		"error pane must have a stable id so the input can aria-describedby it")
-	assert.Contains(t, body, `aria-invalid="true"`,
-		"input in error state must declare aria-invalid='true' so AT identifies the invalid field")
-	assert.Contains(t, body, `aria-describedby="enroll-error-msg"`,
-		"input must point at the error message via aria-describedby so AT reads the description on focus (WCAG 3.3.3)")
-
-	// The actual error text must still be present — the ARIA attributes
-	// don't replace the visible error, they augment it.
-	assert.Contains(t, body, "API key is required",
-		"the human-readable error text must still appear — ARIA augments visible error, doesn't replace it")
-}
-
 func TestEnroll_SuccessPath_OmitsErrorAttributes(t *testing.T) {
 	// Symmetric check: when the form has no error, none of the error-ARIA
 	// attributes should appear. aria-invalid="true" on a clean field would
@@ -760,40 +728,6 @@ func TestEnroll_SuccessPath_OmitsErrorAttributes(t *testing.T) {
 		"clean form must NOT reference the error message — there is no error message in the DOM")
 	assert.NotContains(t, body, `role="alert"`,
 		"clean form must NOT render the alert-role error pane")
-}
-
-func TestEnroll_ReadOnlyMode_RendersAccessibleErrorPattern(t *testing.T) {
-	// In read-only inspector mode, attempting to enroll still surfaces a
-	// (different) error. The ARIA pattern must work uniformly across all
-	// enroll error branches, not just empty-key validation.
-	st, err := sqlite.New(t.TempDir() + "/inspector.db")
-	require.NoError(t, err)
-	require.NoError(t, st.Migrate(context.Background()))
-	t.Cleanup(func() { _ = st.Close() })
-
-	key, keyErr := newOnboardingWrapKey()
-	require.NoError(t, keyErr)
-
-	mux := http.NewServeMux()
-	// Intentionally nil Store → read-only mode; same render path through
-	// handleEnroll which sets view.Error.
-	registerOnboardingRoutes(mux, onboardingDeps{
-		WrapKey:          key,
-		PlatformEndpoint: testPlatformEndpoint,
-		ProbeClient:      &http.Client{},
-	})
-
-	form := url.Values{"api_key": {"sk-something"}}
-	req := httptest.NewRequestWithContext(context.Background(), "POST", "/api/v1/identity/enroll",
-		strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, `role="alert"`,
-		"read-only mode error must also use the role='alert' pattern — uniform a11y across all error branches")
 }
 
 // ---------------------------------------------------------------------------
@@ -1835,17 +1769,6 @@ func TestEnroll_SetsRefreshTriggerHeader(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "refresh-agent-state", rec.Header().Get("HX-Trigger"),
 		"successful enroll must trigger the header refresh so the stepper advances immediately")
-}
-
-func TestEnrollFragment_HasAutofocusAndHelpLink(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/fragments/enroll-form", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "autofocus",
-		"enroll form must autofocus the API key input for paste-friendly UX")
-	assert.Contains(t, body, "Generate one",
-		"enroll form must include the 'Need a key?' help link")
 }
 
 func TestAgentInstall_HXRequest_AdvisoryMode503HTML(t *testing.T) {

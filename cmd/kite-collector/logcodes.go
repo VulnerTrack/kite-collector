@@ -68,5 +68,5 @@ const (
 	LogCodeEnrollComplete         LogCode = "agent.enroll.complete"
 
 	// login surface — OAuth sign-in enrollment (copy/paste code flow)
-	LogCodeLoginTokenAcquired LogCode = "agent.login.token_acquired"
+	LogCodeLoginTokenAcquired LogCode = "agent.login.token_acquired" //#nosec G101 -- log code literal, not a credential
 )
