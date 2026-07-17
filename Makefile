@@ -1,4 +1,4 @@
-.PHONY: build build-host test test-e2e test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host test test-e2e test-smoke-containers test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -121,6 +121,12 @@ test-race:
 
 test-e2e:
 	go test -tags e2e -count=1 -timeout 120s ./tests/e2e/...
+
+# Container-discovery smoke test: stands up fixture containers via
+# docker-compose and asserts the collector's connection + data quality
+# against them. Requires docker + the compose plugin (not just `go test`).
+test-smoke-containers:
+	./tests/e2e/containers/run.sh
 
 test-cloud:
 	go test -tags cloud -count=1 -timeout 60s ./internal/discovery/cloud/...
