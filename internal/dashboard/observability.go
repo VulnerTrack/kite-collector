@@ -1271,7 +1271,10 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       <h1>Local observability</h1>
       <p class="muted small observability-hero-copy">
         Self-observability for the agent on this host. Health, probes, scans,
-        streaming and runtime signals are computed from local state.
+        streaming and runtime signals are computed from local state. Download the
+        JSON snapshot for scripted monitoring or feed it into your existing
+        observability pipeline. Paste the Markdown summary into Slack, a PR
+        description, or a support ticket when you need to share state.
       </p>
       <div class="observability-actions" aria-label="Observability exports and integrations">
         <a href="/metrics" target="_blank" rel="noopener">Prometheus /metrics</a>
@@ -1307,7 +1310,8 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   </div>
 </header>
 
-<nav class="page-jumpnav observability-jumpnav" aria-label="Observability page sections">
+<div class="observability-jumpnav">
+<nav class="page-jumpnav" aria-label="Observability page sections">
   <span class="page-jumpnav-label muted small">Jump to:</span>
   <a href="#section-health">Health</a>
   <a href="#section-failures">Failures</a>
@@ -1318,6 +1322,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   <a href="#section-runtime">Runtime</a>
   <a href="#section-prometheus">Prometheus</a>
 </nav>
+</div>
 
 <div class="observability-grid">
 <section class="card observability-card observability-card--health" id="section-health">

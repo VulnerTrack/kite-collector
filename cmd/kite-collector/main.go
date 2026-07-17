@@ -2926,7 +2926,7 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 		return waitErr
 	}
 	if shutErr != nil {
-		return shutErr
+		return fmt.Errorf("shutdown dashboard: %w", shutErr)
 	}
 	fmt.Println()
 	fmt.Println("Enrollment complete.")
@@ -2950,7 +2950,13 @@ func dashboardReachable(rawURL string) bool {
 			return http.ErrUseLastResponse
 		},
 	}
-	resp, err := client.Get(rawURL) // #nosec G107 -- URL is derived from the local dashboard listen address.
+	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil) // #nosec G107 -- URL is derived from the local dashboard listen address.
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}
@@ -3020,11 +3026,11 @@ func waitForDashboardEnrollment(ctx context.Context, baseURL, waitID string) err
 func dashboardEnrollmentWaitComplete(ctx context.Context, client http.Client, waitURL string) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, waitURL, nil)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("build wait request: %w", err)
 	}
 	resp, err := client.Do(req) // #nosec G107 -- URL is derived from the local dashboard listen address.
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("call wait endpoint: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -3035,7 +3041,7 @@ func dashboardEnrollmentWaitComplete(ctx context.Context, client http.Client, wa
 		Complete bool `json:"complete"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return false, err
+		return false, fmt.Errorf("decode wait response: %w", err)
 	}
 	return payload.Complete, nil
 }
@@ -3091,7 +3097,7 @@ func runPlatformUnenroll(dbPath, identityDir string) error {
 		return fmt.Errorf("unenroll requires sqlite store")
 	}
 	if err := sqliteStore.DeleteEnrolledIdentity(ctx); err != nil {
-		return err
+		return fmt.Errorf("delete enrolled identity: %w", err)
 	}
 	fmt.Println("Local VulnerTrack enrollment removed.")
 	return nil
@@ -3156,20 +3162,20 @@ func oauthSignIn(cmd *cobra.Command, cfg enrollment.OAuthConfig) (string, error)
 
 	pkce, err := enrollment.NewPKCE()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("generate PKCE: %w", err)
 	}
 	state, err := enrollment.NewState()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("generate OAuth state: %w", err)
 	}
 	authURL, err := cfg.AuthorizeURL(pkce.Challenge, state)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("build authorize URL: %w", err)
 	}
 
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "\nTo connect this collector to Vulnertrack, open this URL in any browser:\n\n    %s\n\nSign in, approve the collector, then paste the code the browser shows.\n\n", authURL)
-	fmt.Fprint(out, "Paste code here: ")
+	_, _ = fmt.Fprintf(out, "\nTo connect this collector to Vulnertrack, open this URL in any browser:\n\n    %s\n\nSign in, approve the collector, then paste the code the browser shows.\n\n", authURL)
+	_, _ = fmt.Fprint(out, "Paste code here: ")
 
 	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 	if err != nil && line == "" {
@@ -3603,17 +3609,17 @@ func main() {
 
 	if os.Getenv("KITE_OAUTH_SUPABASE_URL") == "" {
 		if u := os.Getenv("SUPABASE_URL"); u != "" {
-			os.Setenv("KITE_OAUTH_SUPABASE_URL", u)
+			_ = os.Setenv("KITE_OAUTH_SUPABASE_URL", u)
 		}
 	}
 	if os.Getenv("KITE_OAUTH_SUPABASE_ANON_KEY") == "" {
 		if k := os.Getenv("SUPABASE_ANON_KEY"); k != "" {
-			os.Setenv("KITE_OAUTH_SUPABASE_ANON_KEY", k)
+			_ = os.Setenv("KITE_OAUTH_SUPABASE_ANON_KEY", k)
 		}
 	}
 	if os.Getenv("KITE_OAUTH_TURNSTILE_SITE_KEY") == "" {
 		if t := os.Getenv("TURNSTILE_SITE_KEY"); t != "" {
-			os.Setenv("KITE_OAUTH_TURNSTILE_SITE_KEY", t)
+			_ = os.Setenv("KITE_OAUTH_TURNSTILE_SITE_KEY", t)
 		}
 	}
 
@@ -3661,7 +3667,7 @@ func printFakePrompt() {
 
 func loadEnvFile(paths ...string) {
 	for _, p := range paths {
-		content, err := os.ReadFile(p)
+		content, err := os.ReadFile(p) //#nosec G304 -- callers pass literal paths like ".env" from main; not user-supplied
 		if err != nil {
 			continue
 		}
@@ -3682,7 +3688,7 @@ func loadEnvFile(paths ...string) {
 				val = val[1 : len(val)-1]
 			}
 			if os.Getenv(key) == "" {
-				os.Setenv(key, val)
+				_ = os.Setenv(key, val)
 			}
 		}
 	}

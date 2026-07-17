@@ -275,16 +275,6 @@ func TestRoute_GET_RootWithOAuthParams_RejectsStateMismatch(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "state mismatch")
 }
 
-func hrefWithPrefix(t *testing.T, body, prefix string) string {
-	t.Helper()
-	idx := strings.Index(body, `href="`+prefix)
-	require.NotEqual(t, -1, idx, "body should contain href prefix %q", prefix)
-	start := idx + len(`href="`)
-	end := strings.Index(body[start:], `"`)
-	require.NotEqual(t, -1, end)
-	return body[start : start+end]
-}
-
 // TestRoute_GET_TablesByName_Plain_ReturnsFullShellWithTableContent — a
 // drill-in URL like /tables/scan_runs (a table the migration always creates)
 // MUST also return the full shell with the Tables nav highlighted and the
