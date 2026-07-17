@@ -1,0 +1,109 @@
+# Smoke test harness for the per-host container discovery collector
+# (internal/discovery/agent/containers). It stands up a handful of fixture
+# containers whose security-relevant properties are known and deterministic,
+# then runs the collector inside a Go test that mounts the same Docker socket
+# and asserts it extracts each property correctly.
+#
+# Run via ./run.sh (which starts the fixtures, then `compose run` the runner
+# and propagates its exit code). Fixtures are matched by the com.vulnertrack.*
+# labels, never by container name, so the compose project prefix is irrelevant.
+name: kite-containers-smoke
+
+services:
+  # ---------------------------------------------------------------------------
+  # Fixtures — each exercises a distinct field the audit pipeline relies on.
+  # ---------------------------------------------------------------------------
+
+  # Running container with a published port, a read-only bind mount, and labels.
+  # Exercises: image, state=running, ports, mounts(ro), labels.
+  smoke-web:
+    image: nginx:1.27-alpine
+    labels:
+      com.vulnertrack.smoke: "1"
+      com.vulnertrack.role: "web"
+    ports:
+      - "18080:80"
+    volumes:
+      - ./fixtures/index.html:/usr/share/nginx/html/index.html:ro
+    restart: "no"
+
+  # --privileged → CWE-732 (Incorrect Permission Assignment).
+  smoke-privileged:
+    image: alpine:3.20
+    labels:
+      com.vulnertrack.smoke: "1"
+      com.vulnertrack.role: "privileged"
+    privileged: true
+    command: ["sleep", "3600"]
+    restart: "no"
+
+  # --network=host → CWE-668 (Exposure of Resource to Wrong Sphere).
+  # No `ports:` — host networking is incompatible with port publishing.
+  smoke-hostnet:
+    image: alpine:3.20
+    labels:
+      com.vulnertrack.smoke: "1"
+      com.vulnertrack.role: "hostnet"
+    network_mode: host
+    command: ["sleep", "3600"]
+    restart: "no"
+
+  # Explicit non-root user → root_uid extraction (uid != 0).
+  smoke-nonroot:
+    image: alpine:3.20
+    labels:
+      com.vulnertrack.smoke: "1"
+      com.vulnertrack.role: "nonroot"
+    user: "1000:1000"
+    command: ["sleep", "3600"]
+    restart: "no"
+
+  # Exits immediately with a known code → state=exited + exit_code capture.
+  smoke-exited:
+    image: alpine:3.20
+    labels:
+      com.vulnertrack.smoke: "1"
+      com.vulnertrack.role: "exited"
+    command: ["sh", "-c", "exit 7"]
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Runner — the collector under test, talking to the host Docker socket
+  # read-only (guideline 4.2: the collector only ever GETs).
+  # ---------------------------------------------------------------------------
+  runner:
+    image: golang:1.26-bookworm
+    working_dir: /src
+    environment:
+      # Point the collector at the mounted socket explicitly (it would also
+      # auto-detect /var/run/docker.sock, but being explicit documents intent).
+      KITE_DOCKER_HOST: "unix:///var/run/docker.sock"
+      # readonly: the source tree is mounted :ro; all deps are already pinned
+      # in go.sum, so no write to go.mod/go.sum is ever needed.
+      GOFLAGS: "-mod=readonly"
+      # The golang:1.26 image pins GOTOOLCHAIN=local and may ship an older
+      # 1.26.x than go.mod requires. `auto` lets Go fetch the pinned toolchain
+      # into the (writable) module cache — mirrors the repo Makefile.
+      GOTOOLCHAIN: "auto"
+      # Keep module/build caches on a named volume so repeated runs are fast.
+      GOCACHE: "/gocache"
+      GOMODCACHE: "/gomodcache"
+    volumes:
+      - ../../..:/src:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - gocache:/gocache
+      - gomodcache:/gomodcache
+    command:
+      - "go"
+      - "test"
+      - "-tags"
+      - "smoke"
+      - "-count=1"
+      - "-v"
+      - "-run"
+      - "TestContainersSmoke"
+      - "./tests/e2e/containers/..."
+
+volumes:
+  gocache:
+  gomodcache:
