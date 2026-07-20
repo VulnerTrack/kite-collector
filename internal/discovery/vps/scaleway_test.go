@@ -61,13 +61,13 @@ func TestScaleway_Discover_Success(t *testing.T) {
 
 	s := NewScaleway()
 	s.baseURL = srv.URL
-	assets, err := s.Discover(context.Background(), map[string]any{})
+	machines, err := s.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 2)
+	assert.Len(t, machines, 2)
 
-	web := findAssetByHostname(assets, "web-scw")
+	web := findMachineByHostname(machines, "web-scw")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeCloudInstance, web.AssetType)
+	assert.Equal(t, model.MachineTypeCloudInstance, web.MachineType)
 	assert.Equal(t, "scaleway", web.DiscoverySource)
 	assert.Equal(t, "Ubuntu 22.04", web.OSFamily)
 	assert.Equal(t, "fr-par-1", web.Environment)
@@ -78,7 +78,7 @@ func TestScaleway_Discover_Success(t *testing.T) {
 	assert.NotContains(t, webTags, "warning")
 
 	// Stopped server gets warning.
-	db := findAssetByHostname(assets, "db-scw")
+	db := findMachineByHostname(machines, "db-scw")
 	require.NotNil(t, db)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
@@ -94,9 +94,9 @@ func TestScaleway_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_SCALEWAY_SECRET_KEY")
 
-	assets, err := s.Discover(context.Background(), nil)
+	machines, err := s.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestScaleway_Discover_AuthFailure(t *testing.T) {

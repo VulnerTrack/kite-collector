@@ -1,7 +1,7 @@
 // Package wsdiscovery implements a WS-Discovery (OASIS Web Services Dynamic
 // Discovery) probe source. It sends a SOAP Probe to 239.255.255.250:3702
 // (and ff02::c:3702 for IPv6), collects ProbeMatch responses for a bounded
-// window, and emits one asset per unique EndpointReference.
+// window, and emits one machine per unique EndpointReference.
 //
 // WS-Discovery is the protocol of choice for:
 //   - ONVIF IP cameras and NVRs (almost universal)
@@ -112,7 +112,7 @@ type responder struct {
 //	listen_window string    response window (default 4s, max 30s)
 //	disable_ipv4  bool
 //	disable_ipv6  bool
-func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	parsed := parseConfig(cfg)
 
 	ctx, cancel := context.WithTimeout(ctx, parsed.ListenWindow+2*time.Second)
@@ -212,7 +212,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	cancel()
 	wg.Wait()
 
-	return assetsFromResponders(responders), nil
+	return machinesFromResponders(responders), nil
 }
 
 func pickInterfaces(wanted []string) ([]net.Interface, error) {
@@ -433,15 +433,15 @@ func absorb(r *responder, pm probeMatch) {
 	}
 }
 
-// assetsFromResponders flattens the per-device map into a deterministic
-// asset list.
-func assetsFromResponders(in map[string]*responder) []model.Asset {
+// machinesFromResponders flattens the per-device map into a deterministic
+// machine list.
+func machinesFromResponders(in map[string]*responder) []model.Machine {
 	keys := make([]string, 0, len(in))
 	for k := range in {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	out := make([]model.Asset, 0, len(keys))
+	out := make([]model.Machine, 0, len(keys))
 	for _, k := range keys {
 		r := in[k]
 		hostname := r.hostname
@@ -454,8 +454,8 @@ func assetsFromResponders(in map[string]*responder) []model.Asset {
 				hostname = k
 			}
 		}
-		a := model.Asset{
-			AssetType:       classify(r.types, r.scopes),
+		a := model.Machine{
+			MachineType:     classify(r.types, r.scopes),
 			Hostname:        hostname,
 			DiscoverySource: "wsdiscovery",
 			FirstSeenAt:     r.lastSeen,
@@ -470,30 +470,30 @@ func assetsFromResponders(in map[string]*responder) []model.Asset {
 	return out
 }
 
-// classify maps observed Types/Scopes to an AssetType. We lean on the
+// classify maps observed Types/Scopes to an MachineType. We lean on the
 // strongest signal first: ONVIF scope → camera; printer scope → appliance;
 // Computer type → workstation; otherwise fall back to iot_device.
-func classify(types, scopes string) model.AssetType {
+func classify(types, scopes string) model.MachineType {
 	t := strings.ToLower(types)
 	s := strings.ToLower(scopes)
 	switch {
 	case strings.Contains(s, "onvif://") ||
 		strings.Contains(t, "networkvideotransmitter") ||
 		strings.Contains(t, "networkvideodisplay"):
-		return model.AssetTypeIOTDevice
+		return model.MachineTypeIOTDevice
 	case strings.Contains(s, "ldap.printer") ||
 		strings.Contains(t, "printer") ||
 		strings.Contains(t, "printerservicev10") ||
 		strings.Contains(t, "printerservicev20"):
-		return model.AssetTypeAppliance
+		return model.MachineTypeAppliance
 	case strings.Contains(t, "computer") ||
 		strings.Contains(s, "pkitypes.microsoft.com") ||
 		strings.Contains(s, "microsoft.com/windows"):
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	case strings.Contains(t, "device"):
-		return model.AssetTypeIOTDevice
+		return model.MachineTypeIOTDevice
 	default:
-		return model.AssetTypeIOTDevice
+		return model.MachineTypeIOTDevice
 	}
 }
 

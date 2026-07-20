@@ -71,14 +71,14 @@ func TestUpCloud_Discover_Success(t *testing.T) {
 
 	u := NewUpCloud()
 	u.baseURL = srv.URL
-	assets, err := u.Discover(context.Background(), map[string]any{})
+	machines, err := u.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 2)
+	assert.Len(t, machines, 2)
 
 	// Verify running server with public IPv4 extracted.
-	web := findAssetByHostname(assets, "web-uc")
+	web := findMachineByHostname(machines, "web-uc")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeCloudInstance, web.AssetType)
+	assert.Equal(t, model.MachineTypeCloudInstance, web.MachineType)
 	assert.Equal(t, "upcloud", web.DiscoverySource)
 	assert.Equal(t, "fi-hel1", web.Environment)
 
@@ -88,7 +88,7 @@ func TestUpCloud_Discover_Success(t *testing.T) {
 	assert.NotContains(t, webTags, "warning")
 
 	// Verify stopped server: hostname falls back to Title, gets warning.
-	db := findAssetByHostname(assets, "DB Server")
+	db := findMachineByHostname(machines, "DB Server")
 	require.NotNil(t, db)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
@@ -105,9 +105,9 @@ func TestUpCloud_Discover_MissingCredentials(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_UPCLOUD_USERNAME")
 
-	assets, err := u.Discover(context.Background(), nil)
+	machines, err := u.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestUpCloud_Discover_AuthFailure(t *testing.T) {

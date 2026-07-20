@@ -186,36 +186,36 @@ func (e *enrollingServer) Enroll(_ context.Context, req *kitev1.EnrollRequest) (
 
 type memStore struct{}
 
-func (m *memStore) UpsertAsset(_ context.Context, _ model.Asset) error { return nil }
-func (m *memStore) UpsertAssets(_ context.Context, a []model.Asset) (int, int, error) {
+func (m *memStore) UpsertMachine(_ context.Context, _ model.Machine) error { return nil }
+func (m *memStore) UpsertMachines(_ context.Context, a []model.Machine) (int, int, error) {
 	return len(a), 0, nil
 }
 
-func (m *memStore) GetAssetByID(_ context.Context, _ uuid.UUID) (*model.Asset, error) {
+func (m *memStore) GetMachineByID(_ context.Context, _ uuid.UUID) (*model.Machine, error) {
 	return nil, store.ErrNotFound
 }
 
-func (m *memStore) GetAssetByNaturalKey(_ context.Context, _ string) (*model.Asset, error) {
+func (m *memStore) GetMachineByNaturalKey(_ context.Context, _ string) (*model.Machine, error) {
 	return nil, nil
 }
 
-func (m *memStore) GetAssetsByNaturalKeys(_ context.Context, _ []string) (map[string]model.Asset, error) {
+func (m *memStore) GetMachinesByNaturalKeys(_ context.Context, _ []string) (map[string]model.Machine, error) {
 	return nil, nil
 }
 
-func (m *memStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
+func (m *memStore) ListMachines(_ context.Context, _ store.MachineFilter) ([]model.Machine, error) {
 	return nil, nil
 }
 
-func (m *memStore) GetStaleAssets(_ context.Context, _ time.Duration) ([]model.Asset, error) {
+func (m *memStore) GetStaleMachines(_ context.Context, _ time.Duration) ([]model.Machine, error) {
 	return nil, nil
 }
-func (m *memStore) InsertEvent(_ context.Context, _ model.AssetEvent) error { return nil }
-func (m *memStore) InsertEvents(_ context.Context, _ []model.AssetEvent) error {
+func (m *memStore) InsertEvent(_ context.Context, _ model.MachineEvent) error { return nil }
+func (m *memStore) InsertEvents(_ context.Context, _ []model.MachineEvent) error {
 	return nil
 }
 
-func (m *memStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.AssetEvent, error) {
+func (m *memStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.MachineEvent, error) {
 	return nil, nil
 }
 func (m *memStore) CreateScanRun(_ context.Context, _ model.ScanRun) error { return nil }

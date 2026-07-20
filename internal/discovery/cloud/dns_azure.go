@@ -58,13 +58,13 @@ func (a *AzureDNS) Snapshot() *DNSSnapshot {
 
 // Discover enumerates every Azure DNS zone in the configured subscriptions
 // (or every accessible subscription if none configured) along with its
-// recordSets. Discover never returns assets.
+// recordSets. Discover never returns machines.
 //
 // Supported config keys:
 //
 //	enabled         – bool   (default: true)
 //	subscription_id – string optional override of AZURE_SUBSCRIPTION_ID
-func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (a *AzureDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if cfg != nil {
 		if enabled, ok := cfg["enabled"].(bool); ok && !enabled {
 			slog.Debug("Azure DNS discovery disabled by configuration",
@@ -580,5 +580,5 @@ type azureDNSCAARecord struct {
 // Compile-time assertion that AzureDNS satisfies discovery.Source.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*AzureDNS)(nil)

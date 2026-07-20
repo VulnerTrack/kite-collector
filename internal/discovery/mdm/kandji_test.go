@@ -67,13 +67,13 @@ func TestKandji_Discover_Success(t *testing.T) {
 		"api_key": "tok",
 	}
 
-	assets, err := k.Discover(context.Background(), cfg)
+	machines, err := k.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
+	require.Len(t, machines, 2)
 
-	mac := findAsset(assets, "macbook-air-jane")
+	mac := findMachine(machines, "macbook-air-jane")
 	require.NotNil(t, mac)
-	assert.Equal(t, model.AssetTypeWorkstation, mac.AssetType)
+	assert.Equal(t, model.MachineTypeWorkstation, mac.MachineType)
 	assert.Equal(t, "darwin", mac.OSFamily)
 	assert.Equal(t, "14.4.1", mac.OSVersion)
 	assert.Equal(t, "kandji", mac.DiscoverySource)
@@ -91,7 +91,7 @@ func TestKandji_Discover_Success(t *testing.T) {
 	assert.Equal(t, "Corporate Macs", macTags["blueprint"])
 	assert.Equal(t, "MacBook Air", macTags["model"])
 
-	phone := findAsset(assets, "iphone-bob")
+	phone := findMachine(machines, "iphone-bob")
 	require.NotNil(t, phone)
 	assert.Equal(t, "ios", phone.OSFamily)
 	assert.Equal(t, "kandji-dev-2", phone.MDMEnrollmentID)
@@ -127,10 +127,10 @@ func TestKandji_Discover_Pagination(t *testing.T) {
 	k := &Kandji{baseURL: srv.URL}
 	cfg := map[string]any{"enabled": true, "api_key": "anything"}
 
-	assets, err := k.Discover(context.Background(), cfg)
+	machines, err := k.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, kandjiPageSize+1)
-	ipad := findAsset(assets, "p1-host")
+	assert.Len(t, machines, kandjiPageSize+1)
+	ipad := findMachine(machines, "p1-host")
 	require.NotNil(t, ipad)
 	assert.Equal(t, "ios", ipad.OSFamily)
 }
@@ -143,9 +143,9 @@ func TestKandji_Discover_MissingCredentials(t *testing.T) {
 		"enabled": true,
 		"api_url": "https://sub.api.kandji.io",
 	}
-	assets, err := k.Discover(context.Background(), cfg)
+	machines, err := k.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestKandji_Discover_DisabledWithCredentials(t *testing.T) {
@@ -158,9 +158,9 @@ func TestKandji_Discover_DisabledWithCredentials(t *testing.T) {
 		"api_key": "tok",
 	}
 
-	assets, err := k.Discover(context.Background(), cfg)
+	machines, err := k.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestKandji_Discover_AuthFailure(t *testing.T) {

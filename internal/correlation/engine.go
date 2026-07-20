@@ -50,16 +50,16 @@ func (e *Engine) Correlate(response *Response, hostSoftware map[string][]string)
 }
 
 // Aggregate computes fleet-level statistics from per-host correlations.
-// totalAssets is the full asset count (including those with no CVEs).
+// totalMachines is the full machine count (including those with no CVEs).
 // Only these aggregate numbers are safe to send to the SaaS.
-func (e *Engine) Aggregate(correlations []LocalCorrelation, totalAssets int) AggregateStats {
-	stats := AggregateStats{TotalAssets: totalAssets}
+func (e *Engine) Aggregate(correlations []LocalCorrelation, totalMachines int) AggregateStats {
+	stats := AggregateStats{TotalMachines: totalMachines}
 	globalSeen := make(map[string]bool)
 	var maxScore float64
 
 	for _, lc := range correlations {
 		if len(lc.Matches) > 0 {
-			stats.AffectedAssets++
+			stats.AffectedMachines++
 		}
 		for _, m := range lc.Matches {
 			if m.KEVFlagged {

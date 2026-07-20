@@ -25,7 +25,7 @@ type Auditor interface {
 	// Audit inspects the system and returns configuration findings.
 	// It must gracefully handle permission denied errors and return
 	// partial results rather than failing entirely.
-	Audit(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error)
+	Audit(ctx context.Context, machine model.Machine) ([]model.ConfigFinding, error)
 }
 
 // Registry manages a set of auditors and orchestrates parallel execution.
@@ -59,7 +59,7 @@ func (r *Registry) Register(a Auditor) {
 // AuditAll runs all registered auditors in parallel and collects their
 // findings. Individual auditor failures are logged as warnings but do not
 // prevent other auditors from completing (partial results).
-func (r *Registry) AuditAll(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
+func (r *Registry) AuditAll(ctx context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
 	r.mu.RLock()
 	auditors := make([]Auditor, 0, len(r.auditors))
 	for _, a := range r.auditors {
@@ -87,7 +87,7 @@ func (r *Registry) AuditAll(ctx context.Context, asset model.Asset) ([]model.Con
 				}
 				ch <- res
 			}()
-			res.findings, res.err = aud.Audit(ctx, asset)
+			res.findings, res.err = aud.Audit(ctx, machine)
 		}(a)
 	}
 

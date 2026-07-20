@@ -24,7 +24,7 @@ type indexPageView struct {
 // top header (title + global controls), a left sidebar (views + tables list),
 // and a central content pane that HTMX swaps fragments into.
 //
-// Each sidebar link uses canonical pretty URLs (e.g. /assets) for both
+// Each sidebar link uses canonical pretty URLs (e.g. /machines) for both
 // `hx-get` and `href`:
 //   - hx-get drives in-app HTMX swaps (HX-Request header → fragment-only)
 //   - href is the no-JS / right-click / accessibility fallback
@@ -55,7 +55,7 @@ const indexPageTemplate = `<!DOCTYPE html>
          src="/static/img/vulnertrack_banner_dark.png"
          alt="Vulnertrack"
          width="160" height="40">
-    <span class="brand-sub">kite-collector &middot; Cybersecurity Asset Discovery Agent</span>
+    <span class="brand-sub">kite-collector &middot; Cybersecurity Machine Discovery Agent</span>
   </a>
   <div class="topbar-nav">
     <a href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true"
@@ -85,8 +85,8 @@ const indexPageTemplate = `<!DOCTYPE html>
   <nav>
     <div class="sidenav-section">
       <h4>Views</h4>
-      <a href="/assets" hx-get="/assets" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "assets" }}active{{ end }}"
-         onclick="setActive(this)">Assets</a>
+      <a href="/machines" hx-get="/machines" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "machines" }}active{{ end }}"
+         onclick="setActive(this)">Machines</a>
       <a href="/software" hx-get="/software" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "software" }}active{{ end }}"
          onclick="setActive(this)">Software</a>
       <a href="/findings" hx-get="/findings" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "findings" }}active{{ end }}"
@@ -237,7 +237,7 @@ func renderIndexPage(w io.Writer, activeTab string, initialFragment func(io.Writ
 		return fmt.Errorf("render initial fragment for %q: %w", activeTab, err)
 	}
 	// fragment HTML is produced by trusted in-process html/template renders
-	// (renderAssetsFragment, renderTableFragment, etc.) that already escape
+	// (renderMachinesFragment, renderTableFragment, etc.) that already escape
 	// every user-controlled value via {{ .Field }} interpolation. We hand it
 	// to the shell as template.HTML to avoid double-escaping the inner
 	// <table>/<tr>/<td> markup into &lt;table&gt; soup.

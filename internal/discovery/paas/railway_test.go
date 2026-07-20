@@ -77,14 +77,14 @@ func TestRailway_Discover_Success(t *testing.T) {
 
 	ry := NewRailway()
 	ry.baseURL = srv.URL
-	assets, err := ry.Discover(context.Background(), map[string]any{})
+	machines, err := ry.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
 	// 2 services from my-project + 1 empty-project = 3
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	web := findAssetByHostname(assets, "web")
+	web := findMachineByHostname(machines, "web")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeContainer, web.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, web.MachineType)
 	assert.Equal(t, "railway", web.DiscoverySource)
 	assert.NotEmpty(t, web.NaturalKey)
 
@@ -95,7 +95,7 @@ func TestRailway_Discover_Success(t *testing.T) {
 	assert.Equal(t, "globe", webTags["icon"])
 
 	// Empty project gets a warning tag.
-	empty := findAssetByHostname(assets, "empty-project")
+	empty := findMachineByHostname(machines, "empty-project")
 	require.NotNil(t, empty)
 	var emptyTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(empty.Tags), &emptyTags))
@@ -111,9 +111,9 @@ func TestRailway_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_RAILWAY_TOKEN")
 
-	assets, err := ry.Discover(context.Background(), nil)
+	machines, err := ry.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestRailway_Discover_AuthFailure(t *testing.T) {

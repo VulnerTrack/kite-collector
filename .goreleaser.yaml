@@ -60,7 +60,7 @@ nfpms:
     vendor: VulnerTrack
     homepage: https://github.com/VulnerTrack/kite-collector
     maintainer: VulnerTrack <hello@vulnertrack.dev>
-    description: Cybersecurity asset discovery, configuration audit, and posture analysis agent.
+    description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
     license: MIT
     formats:
       - deb
@@ -83,7 +83,7 @@ homebrew_casks:
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/VulnerTrack/kite-collector
-    description: "Cybersecurity asset discovery, configuration audit, and posture analysis agent"
+    description: "Cybersecurity machine discovery, configuration audit, and posture analysis agent"
     hooks:
       post:
         install: |
@@ -95,9 +95,9 @@ homebrew_casks:
 snapcrafts:
   - id: default
     name: kite-collector
-    summary: Cybersecurity asset discovery and posture analysis agent.
+    summary: Cybersecurity machine discovery and posture analysis agent.
     description: |
-      Kite Collector is a cybersecurity asset discovery, configuration audit, 
+      Kite Collector is a cybersecurity machine discovery, configuration audit, 
       and posture analysis agent developed by VulnerTrack.
     publish: true
     grade: stable
@@ -116,7 +116,7 @@ scoops:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: scoop
     homepage: https://github.com/VulnerTrack/kite-collector
-    description: "Cybersecurity asset discovery, configuration audit, and posture analysis agent"
+    description: "Cybersecurity machine discovery, configuration audit, and posture analysis agent"
     license: MIT
 
 changelog:

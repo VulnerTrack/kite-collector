@@ -32,7 +32,7 @@ func NewJamf() *Jamf {
 // Name returns the stable identifier for this source.
 func (j *Jamf) Name() string { return "jamf" }
 
-// Discover lists managed computers from Jamf Pro and returns them as assets.
+// Discover lists managed computers from Jamf Pro and returns them as machines.
 // It honours cfg["enabled"] first (F3), loads credentials via connectorkit and
 // zeroes them on return (R1), and validates the operator URL via SafeClient
 // (SaaS: private targets rejected). If credentials are absent the method logs a
@@ -43,7 +43,7 @@ func (j *Jamf) Name() string { return "jamf" }
 //	api_url  – string base URL of the Jamf Pro instance (e.g. "https://myorg.jamfcloud.com")
 //	username – string API account username
 //	password – string API account password
-func (j *Jamf) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (j *Jamf) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2: honour enabled:false even with creds present (F3)
 	}
@@ -77,16 +77,16 @@ func (j *Jamf) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 	slog.Info("jamf: fetched computer list", "count", len(computers))
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(computers))
+	machines := make([]model.Machine, 0, len(computers))
 	guard := connectorkit.NewGuard("jamf")
 
 	for _, comp := range computers {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("jamf discovery cancelled: %w", err)
+			return machines, fmt.Errorf("jamf discovery cancelled: %w", err)
 		}
 		// N+1 detail fetch: bound the per-computer loop with the guard.
 		if err := guard.Next(); err != nil {
-			return assets, fmt.Errorf("jamf pagination guard: %w", err)
+			return machines, fmt.Errorf("jamf pagination guard: %w", err)
 		}
 
 		detail, err := j.getComputerDetail(ctx, client, baseStr, creds.Username, creds.Password, comp.ID)
@@ -105,9 +105,9 @@ func (j *Jamf) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 			hostname = comp.Name
 		}
 
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:              uuid.Must(uuid.NewV7()),
-			AssetType:       model.AssetTypeWorkstation,
+			MachineType:     model.MachineTypeWorkstation,
 			Hostname:        hostname,
 			OSFamily:        deriveJamfOSFamily(detail.Hardware.OSName),
 			OSVersion:       detail.Hardware.OSVersion,
@@ -122,14 +122,14 @@ func (j *Jamf) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 		}
 		if detail.General.SerialNumber != "" {
 			tagsJSON, _ := json.Marshal(map[string]any{"serial_number": detail.General.SerialNumber})
-			asset.Tags = string(tagsJSON)
+			machine.Tags = string(tagsJSON)
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
 
-	slog.Info("jamf: discovery complete", "total_assets", len(assets))
-	return assets, nil
+	slog.Info("jamf: discovery complete", "total_machines", len(machines))
+	return machines, nil
 }
 
 // httpClient returns the validated client + base URL for this source. In tests
@@ -268,5 +268,5 @@ func deriveJamfOSFamily(osName string) string {
 // ensure Jamf satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Jamf)(nil)

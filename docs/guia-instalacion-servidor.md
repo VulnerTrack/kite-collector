@@ -260,7 +260,7 @@ Proveedores soportados: Hetzner, DigitalOcean, Vultr, Hostinger, Linode, Scalewa
 ```yaml
 classification:
   authorization:
-    allowlist_file: /etc/kite/authorized-assets.yaml
+    allowlist_file: /etc/kite/authorized-machines.yaml
     match_fields: [hostname, mac_address]
 
   managed:

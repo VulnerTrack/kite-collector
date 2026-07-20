@@ -1,0 +1,3 @@
+# Authorized machines allowlist
+# Machines matching entries here are marked as "authorized"
+machines: []

@@ -7,22 +7,22 @@ import (
 )
 
 // CMDBFingerprinter trusts an upstream system of record (Netbox,
-// ServiceNow, Intune, Jamf, SCCM, …) as the authority for asset
+// ServiceNow, Intune, Jamf, SCCM, …) as the authority for machine
 // identity. It composes (upstream_source, upstream_id) without
 // re-deriving identity from hardware or hostname signals — those
-// fingerprinters can still match the same physical asset later via
+// fingerprinters can still match the same physical machine later via
 // alias-graph promotion.
 //
-// CMDBFingerprinter does not bind to a single AssetType because the
+// CMDBFingerprinter does not bind to a single MachineType because the
 // upstream may emit servers, workstations, network devices, or
-// appliances. Callers register one instance per AssetType the upstream
+// appliances. Callers register one instance per MachineType the upstream
 // produces; the Type field selects which the instance handles.
 type CMDBFingerprinter struct {
-	Type model.AssetType
+	Type model.MachineType
 }
 
-// AssetType returns the asset type this fingerprinter handles.
-func (f CMDBFingerprinter) AssetType() model.AssetType { return f.Type }
+// MachineType returns the machine type this fingerprinter handles.
+func (f CMDBFingerprinter) MachineType() model.MachineType { return f.Type }
 
 // Identity requires both UpstreamSource and UpstreamID. Without those
 // it declines — there is no fallback because the whole point of the

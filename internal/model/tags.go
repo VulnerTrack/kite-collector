@@ -9,7 +9,7 @@ import (
 // MarshalTags serializes a tag map into a canonical JSON string. Keys are
 // sorted ascending so the byte output is deterministic regardless of Go's
 // map iteration order. The result is suitable for inclusion in any
-// content-addressable digest (Asset.MaterialFingerprint relies on this).
+// content-addressable digest (Machine.MaterialFingerprint relies on this).
 //
 // The encoded shape is `[[key, value], …]` — a sorted array of pairs
 // rather than a JSON object — because the JSON spec does not require

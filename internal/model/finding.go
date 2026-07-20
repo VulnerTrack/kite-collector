@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ConfigFinding represents a single configuration weakness discovered on an asset.
+// ConfigFinding represents a single configuration weakness discovered on an machine.
 type ConfigFinding struct {
 	// FirstSeenAt records when this finding was first observed. It is
 	// preserved across scans so that mean-time-to-remediate can be computed.
@@ -29,6 +29,6 @@ type ConfigFinding struct {
 	CWEID     string    `json:"cwe_id,omitempty"`
 	CWEName   string    `json:"cwe_name,omitempty"`
 	ID        uuid.UUID `json:"id"`
-	AssetID   uuid.UUID `json:"asset_id"`
+	MachineID uuid.UUID `json:"machine_id"`
 	ScanRunID uuid.UUID `json:"scan_run_id"`
 }

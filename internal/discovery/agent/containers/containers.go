@@ -1,6 +1,6 @@
 // Package containers enumerates per-host container inventory from any
 // installed runtime (Docker, Podman, containerd, CRI-O, LXC). Distinct
-// from internal/discovery/docker which emits assets at the *cross-host*
+// from internal/discovery/docker which emits machines at the *cross-host*
 // inventory level — this package emits the per-host child records that
 // feed CWE-732 / CWE-269 / CWE-668 audit rules.
 //

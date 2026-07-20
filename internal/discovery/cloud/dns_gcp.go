@@ -3,7 +3,7 @@
 // enumerates managedZones and resourceRecordSets via the Cloud DNS REST API
 // (https://dns.googleapis.com/dns/v1). Results land on the in-memory
 // DNSSnapshot so the engine can persist them via store.UpsertCloudDNSSnapshot.
-// Discover never returns assets.
+// Discover never returns machines.
 package cloud
 
 import (
@@ -58,13 +58,13 @@ func (g *GCPDNS) Snapshot() *DNSSnapshot {
 }
 
 // Discover enumerates every Cloud DNS managed zone and its resource record
-// sets in the configured project. Discover never returns assets.
+// sets in the configured project. Discover never returns machines.
 //
 // Supported config keys:
 //
 //	enabled    – bool   (default: true)
 //	project_id – string GCP project ID to enumerate zones from (required)
-func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if cfg != nil {
 		if enabled, ok := cfg["enabled"].(bool); ok && !enabled {
 			slog.Debug("GCP DNS discovery disabled by configuration",
@@ -389,5 +389,5 @@ type gcpResourceRecordSet struct {
 // Compile-time assertion that GCPDNS satisfies discovery.Source.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*GCPDNS)(nil)

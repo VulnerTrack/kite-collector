@@ -10,6 +10,6 @@
   "security.finding.capec.uid": "CAPEC-49",
   "security.finding.likelihood": "high",
   "security.finding.mitigation": "Enable account lockout, require MFA, enforce key-based SSH auth",
-  "security.asset.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
-  "security.asset.name": "db-primary-01.prod"
+  "security.machine.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
+  "security.machine.name": "db-primary-01.prod"
 }

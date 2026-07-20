@@ -11,18 +11,18 @@ import (
 
 func TestNoopEmitter_Emit_ReturnsNil(t *testing.T) {
 	n := NewNoop()
-	err := n.Emit(context.Background(), model.AssetEvent{
+	err := n.Emit(context.Background(), model.MachineEvent{
 		ID:        uuid.Must(uuid.NewV7()),
-		EventType: model.EventAssetDiscovered,
+		EventType: model.EventMachineDiscovered,
 	})
 	assert.NoError(t, err)
 }
 
 func TestNoopEmitter_EmitBatch_ReturnsNil(t *testing.T) {
 	n := NewNoop()
-	events := []model.AssetEvent{
-		{ID: uuid.Must(uuid.NewV7()), EventType: model.EventAssetDiscovered},
-		{ID: uuid.Must(uuid.NewV7()), EventType: model.EventAssetUpdated},
+	events := []model.MachineEvent{
+		{ID: uuid.Must(uuid.NewV7()), EventType: model.EventMachineDiscovered},
+		{ID: uuid.Must(uuid.NewV7()), EventType: model.EventMachineUpdated},
 	}
 	err := n.EmitBatch(context.Background(), events)
 	assert.NoError(t, err)

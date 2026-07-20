@@ -12,8 +12,8 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/driver"
 )
 
-// WriteLoadedDrivers persists a batch of LoadedDriver records under assetID
-// inside a single transaction. Each row is upserted on (asset_id, name,
+// WriteLoadedDrivers persists a batch of LoadedDriver records under machineID
+// inside a single transaction. Each row is upserted on (machine_id, name,
 // version) so re-running the collector replaces stale state in place. An
 // empty slice is a no-op.
 //
@@ -21,10 +21,10 @@ import (
 // existing ID on the input is preserved. Loaded drivers stamped this way
 // can subsequently be referenced by device_bindings via the returned IDs.
 func (s *SQLiteStore) WriteLoadedDrivers(
-	ctx context.Context, assetID uuid.UUID, drivers []driver.LoadedDriver,
+	ctx context.Context, machineID uuid.UUID, drivers []driver.LoadedDriver,
 ) ([]uuid.UUID, error) {
-	if assetID == uuid.Nil {
-		return nil, fmt.Errorf("loaded drivers: asset_id is required")
+	if machineID == uuid.Nil {
+		return nil, fmt.Errorf("loaded drivers: machine_id is required")
 	}
 	if len(drivers) == 0 {
 		return nil, nil
@@ -37,7 +37,7 @@ func (s *SQLiteStore) WriteLoadedDrivers(
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO loaded_drivers (
-			id, asset_id, name, display_name, path, version, vendor,
+			id, machine_id, name, display_name, path, version, vendor,
 			signer, signature_state, signature_algo, driver_framework,
 			start_mode, state, architecture,
 			on_disk_sha256, authentihash, import_hash, cpe23, description,
@@ -51,7 +51,7 @@ func (s *SQLiteStore) WriteLoadedDrivers(
 			?, ?,
 			?, ?
 		)
-		ON CONFLICT(asset_id, name, version) DO UPDATE SET
+		ON CONFLICT(machine_id, name, version) DO UPDATE SET
 			display_name      = excluded.display_name,
 			path              = excluded.path,
 			vendor            = excluded.vendor,
@@ -109,7 +109,7 @@ func (s *SQLiteStore) WriteLoadedDrivers(
 
 		if _, execErr := stmt.ExecContext(
 			ctx,
-			id.String(), assetID.String(), d.Name,
+			id.String(), machineID.String(), d.Name,
 			nullStr(d.DisplayName), nullStr(d.Path),
 			nullStr(d.Version), nullStr(d.Vendor),
 			nullStr(d.Signer), d.SignatureState, nullStr(d.SignatureAlgo),
@@ -130,16 +130,16 @@ func (s *SQLiteStore) WriteLoadedDrivers(
 }
 
 // WriteDeviceBindings persists a batch of DeviceBinding records under
-// assetID inside a single transaction. Each row is upserted on (asset_id,
+// machineID inside a single transaction. Each row is upserted on (machine_id,
 // bus, address). An empty slice is a no-op.
 //
 // driverID may be the zero UUID, in which case the binding's driver_id
 // column is left NULL — useful for PCI/USB devices with no bound driver.
 func (s *SQLiteStore) WriteDeviceBindings(
-	ctx context.Context, assetID uuid.UUID, bindings []driver.DeviceBinding,
+	ctx context.Context, machineID uuid.UUID, bindings []driver.DeviceBinding,
 ) error {
-	if assetID == uuid.Nil {
-		return fmt.Errorf("device bindings: asset_id is required")
+	if machineID == uuid.Nil {
+		return fmt.Errorf("device bindings: machine_id is required")
 	}
 	if len(bindings) == 0 {
 		return nil
@@ -152,12 +152,12 @@ func (s *SQLiteStore) WriteDeviceBindings(
 
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO device_bindings (
-			id, asset_id, driver_id,
+			id, machine_id, driver_id,
 			bus, address, vendor_id, device_id,
 			subsystem_vid, subsystem_did, class,
 			driver_name, hardware_id, collected_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(asset_id, bus, address) DO UPDATE SET
+		ON CONFLICT(machine_id, bus, address) DO UPDATE SET
 			driver_id     = excluded.driver_id,
 			vendor_id     = excluded.vendor_id,
 			device_id     = excluded.device_id,
@@ -186,7 +186,7 @@ func (s *SQLiteStore) WriteDeviceBindings(
 		}
 		if _, execErr := stmt.ExecContext(
 			ctx,
-			id.String(), assetID.String(), driverID,
+			id.String(), machineID.String(), driverID,
 			b.Bus, b.Address,
 			nullStr(b.VendorID), nullStr(b.DeviceID),
 			nullStr(b.SubsystemVID), nullStr(b.SubsystemDID), nullStr(b.Class),
@@ -221,7 +221,7 @@ type LoadedDriverRow struct {
 	CPE23           *string `json:"cpe23,omitempty"`
 	Description     *string `json:"description,omitempty"`
 	ID              string  `json:"id"`
-	AssetID         string  `json:"asset_id"`
+	MachineID       string  `json:"machine_id"`
 	Name            string  `json:"name"`
 	SignatureState  string  `json:"signature_state"`
 	DriverFramework string  `json:"driver_framework"`
@@ -241,7 +241,7 @@ type DeviceBindingRow struct {
 	DriverName   *string `json:"driver_name,omitempty"`
 	HardwareID   *string `json:"hardware_id,omitempty"`
 	ID           string  `json:"id"`
-	AssetID      string  `json:"asset_id"`
+	MachineID    string  `json:"machine_id"`
 	Bus          string  `json:"bus"`
 	Address      string  `json:"address"`
 	CollectedAt  string  `json:"collected_at"`
@@ -249,19 +249,19 @@ type DeviceBindingRow struct {
 
 // LoadedDriverFilter constrains ListLoadedDrivers.
 type LoadedDriverFilter struct {
-	AssetID string
-	Limit   int
-	Offset  int
+	MachineID string
+	Limit     int
+	Offset    int
 }
 
 // ListLoadedDrivers returns loaded driver rows in collected_at DESC order,
-// optionally scoped to a single asset. Returns an empty slice (not error)
+// optionally scoped to a single machine. Returns an empty slice (not error)
 // when the table is missing — convenient on a freshly migrated DB.
 func (s *SQLiteStore) ListLoadedDrivers(
 	ctx context.Context, f LoadedDriverFilter,
 ) ([]LoadedDriverRow, error) {
 	q := `
-		SELECT id, asset_id, name, display_name, path, version, vendor,
+		SELECT id, machine_id, name, display_name, path, version, vendor,
 		       signer, signature_state, signature_algo, driver_framework,
 		       start_mode, state, architecture,
 		       on_disk_sha256, authentihash, import_hash, cpe23, description,
@@ -270,9 +270,9 @@ func (s *SQLiteStore) ListLoadedDrivers(
 		FROM loaded_drivers
 	`
 	args := []any{}
-	if f.AssetID != "" {
-		q += " WHERE asset_id = ?"
-		args = append(args, f.AssetID)
+	if f.MachineID != "" {
+		q += " WHERE machine_id = ?"
+		args = append(args, f.MachineID)
 	}
 	q += " ORDER BY collected_at DESC, name ASC"
 	if f.Limit > 0 {
@@ -297,7 +297,7 @@ func (s *SQLiteStore) ListLoadedDrivers(
 	for rows.Next() {
 		var r LoadedDriverRow
 		if scanErr := rows.Scan(
-			&r.ID, &r.AssetID, &r.Name,
+			&r.ID, &r.MachineID, &r.Name,
 			&r.DisplayName, &r.Path, &r.Version, &r.Vendor,
 			&r.Signer, &r.SignatureState, &r.SignatureAlgo,
 			&r.DriverFramework, &r.StartMode, &r.State, &r.Architecture,
@@ -318,26 +318,26 @@ func (s *SQLiteStore) ListLoadedDrivers(
 
 // DeviceBindingFilter constrains ListDeviceBindings.
 type DeviceBindingFilter struct {
-	AssetID string
-	Limit   int
-	Offset  int
+	MachineID string
+	Limit     int
+	Offset    int
 }
 
 // ListDeviceBindings returns device binding rows in collected_at DESC order,
-// optionally scoped to a single asset.
+// optionally scoped to a single machine.
 func (s *SQLiteStore) ListDeviceBindings(
 	ctx context.Context, f DeviceBindingFilter,
 ) ([]DeviceBindingRow, error) {
 	q := `
-		SELECT id, asset_id, driver_id, bus, address,
+		SELECT id, machine_id, driver_id, bus, address,
 		       vendor_id, device_id, subsystem_vid, subsystem_did,
 		       class, driver_name, hardware_id, collected_at
 		FROM device_bindings
 	`
 	args := []any{}
-	if f.AssetID != "" {
-		q += " WHERE asset_id = ?"
-		args = append(args, f.AssetID)
+	if f.MachineID != "" {
+		q += " WHERE machine_id = ?"
+		args = append(args, f.MachineID)
 	}
 	q += " ORDER BY collected_at DESC, bus ASC, address ASC"
 	if f.Limit > 0 {
@@ -362,7 +362,7 @@ func (s *SQLiteStore) ListDeviceBindings(
 	for rows.Next() {
 		var r DeviceBindingRow
 		if scanErr := rows.Scan(
-			&r.ID, &r.AssetID, &r.DriverID, &r.Bus, &r.Address,
+			&r.ID, &r.MachineID, &r.DriverID, &r.Bus, &r.Address,
 			&r.VendorID, &r.DeviceID, &r.SubsystemVID, &r.SubsystemDID,
 			&r.Class, &r.DriverName, &r.HardwareID, &r.CollectedAt,
 		); scanErr != nil {

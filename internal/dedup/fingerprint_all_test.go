@@ -8,7 +8,7 @@ import (
 )
 
 func TestAgentEnrolledHost_HardwareWhenTPMPresent(t *testing.T) {
-	fp := AgentEnrolledHostFingerprinter{Type: model.AssetTypeServer}
+	fp := AgentEnrolledHostFingerprinter{Type: model.MachineTypeServer}
 	rec := DiscoveryRecord{
 		TenantID:       "t",
 		TPMEKPubSHA256: strings.Repeat("a", 64),
@@ -21,7 +21,7 @@ func TestAgentEnrolledHost_HardwareWhenTPMPresent(t *testing.T) {
 }
 
 func TestAgentEnrolledHost_NetworkWhenOnlyMACs(t *testing.T) {
-	fp := AgentEnrolledHostFingerprinter{Type: model.AssetTypeServer}
+	fp := AgentEnrolledHostFingerprinter{Type: model.MachineTypeServer}
 	_, _, conf, ok := fp.Identity(DiscoveryRecord{
 		MACAddresses: []string{"aa:bb:cc:dd:ee:01"},
 	})
@@ -31,14 +31,14 @@ func TestAgentEnrolledHost_NetworkWhenOnlyMACs(t *testing.T) {
 }
 
 func TestAgentEnrolledHost_DeclinesWithoutSignals(t *testing.T) {
-	fp := AgentEnrolledHostFingerprinter{Type: model.AssetTypeServer}
+	fp := AgentEnrolledHostFingerprinter{Type: model.MachineTypeServer}
 	if _, _, _, ok := fp.Identity(DiscoveryRecord{Hostname: "h"}); ok {
 		t.Error("must decline with no hardware/network signals")
 	}
 }
 
 func TestAgentEnrolledHost_MACOrderIndependence(t *testing.T) {
-	fp := AgentEnrolledHostFingerprinter{Type: model.AssetTypeServer}
+	fp := AgentEnrolledHostFingerprinter{Type: model.MachineTypeServer}
 	a, _, _, _ := fp.Identity(DiscoveryRecord{
 		MACAddresses: []string{"aa:bb:cc:dd:ee:01", "AA:BB:CC:DD:EE:02"},
 	})
@@ -86,7 +86,7 @@ func TestContainer_RejectsTagOnlyImage(t *testing.T) {
 }
 
 func TestVCS_RootCommitUpgradesConfidence(t *testing.T) {
-	fp := VCSRepositoryFingerprinter{Type: model.AssetTypeRepository}
+	fp := VCSRepositoryFingerprinter{Type: model.MachineTypeRepository}
 	_, _, conf, ok := fp.Identity(DiscoveryRecord{VCSURL: "https://github.com/org/repo"})
 	if !ok || conf != ConfidenceNetwork {
 		t.Fatalf("ok=%v conf=%v, want Network", ok, conf)
@@ -101,7 +101,7 @@ func TestVCS_RootCommitUpgradesConfidence(t *testing.T) {
 }
 
 func TestVCS_URLNormalization(t *testing.T) {
-	fp := VCSRepositoryFingerprinter{Type: model.AssetTypeRepository}
+	fp := VCSRepositoryFingerprinter{Type: model.MachineTypeRepository}
 	a, _, _, _ := fp.Identity(DiscoveryRecord{VCSURL: "https://github.com/org/repo.git"})
 	b, _, _, _ := fp.Identity(DiscoveryRecord{VCSURL: "git@github.com:org/repo"})
 	if a != b {
@@ -110,7 +110,7 @@ func TestVCS_URLNormalization(t *testing.T) {
 }
 
 func TestCMDB_RequiresBothFields(t *testing.T) {
-	fp := CMDBFingerprinter{Type: model.AssetTypeServer}
+	fp := CMDBFingerprinter{Type: model.MachineTypeServer}
 	if _, _, _, ok := fp.Identity(DiscoveryRecord{UpstreamSource: "netbox"}); ok {
 		t.Error("missing UpstreamID must decline")
 	}
@@ -120,7 +120,7 @@ func TestCMDB_RequiresBothFields(t *testing.T) {
 }
 
 func TestCMDB_HappyPath(t *testing.T) {
-	fp := CMDBFingerprinter{Type: model.AssetTypeServer}
+	fp := CMDBFingerprinter{Type: model.MachineTypeServer}
 	_, sigs, conf, ok := fp.Identity(DiscoveryRecord{
 		UpstreamSource: "Netbox",
 		UpstreamID:     "device-42",
@@ -186,20 +186,20 @@ func TestIOT_HostnameFallbackIsNominal(t *testing.T) {
 	}
 }
 
-func TestRegistry_DispatchByAssetType(t *testing.T) {
+func TestRegistry_DispatchByMachineType(t *testing.T) {
 	r := DefaultRegistry()
 	for _, tc := range []struct {
-		t    model.AssetType
+		t    model.MachineType
 		want bool
 	}{
-		{model.AssetTypeCloudInstance, true},
-		{model.AssetTypeServer, true},
-		{model.AssetTypeWorkstation, true},
-		{model.AssetTypeContainer, true},
-		{model.AssetTypeNetworkDevice, true},
-		{model.AssetTypeIOTDevice, true},
-		{model.AssetTypeRepository, true},
-		{model.AssetTypeSoftwareProject, true},
+		{model.MachineTypeCloudInstance, true},
+		{model.MachineTypeServer, true},
+		{model.MachineTypeWorkstation, true},
+		{model.MachineTypeContainer, true},
+		{model.MachineTypeNetworkDevice, true},
+		{model.MachineTypeIOTDevice, true},
+		{model.MachineTypeRepository, true},
+		{model.MachineTypeSoftwareProject, true},
 	} {
 		_, ok := r.Get(tc.t)
 		if ok != tc.want {
@@ -212,7 +212,7 @@ func TestRegistry_OverrideWins(t *testing.T) {
 	r := NewRegistry()
 	r.Register(CloudInstanceFingerprinter{})
 	r.Register(stubFP{})
-	got, _ := r.Get(model.AssetTypeCloudInstance)
+	got, _ := r.Get(model.MachineTypeCloudInstance)
 	if _, isStub := got.(stubFP); !isStub {
 		t.Error("second Register must overwrite first")
 	}
@@ -220,7 +220,7 @@ func TestRegistry_OverrideWins(t *testing.T) {
 
 type stubFP struct{}
 
-func (stubFP) AssetType() model.AssetType { return model.AssetTypeCloudInstance }
+func (stubFP) MachineType() model.MachineType { return model.MachineTypeCloudInstance }
 func (stubFP) Identity(DiscoveryRecord) ([32]byte, []Signal, Confidence, bool) {
 	return [32]byte{}, nil, ConfidenceUnknown, false
 }

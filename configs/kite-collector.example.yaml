@@ -174,9 +174,9 @@ discovery:
 # Classification
 classification:
   authorization:
-    # Assets matching any allowlist entry are marked "authorized"
+    # Machines matching any allowlist entry are marked "authorized"
     # Everything else is "unknown" (never defaults to "authorized")
-    allowlist_file: ./configs/authorized-assets.yaml
+    allowlist_file: ./configs/authorized-machines.yaml
     # Match strategy: hostname, mac_address, ip_address, cloud_instance_id
     match_fields: [hostname]
 

@@ -102,9 +102,9 @@ func (d *Docker) ListContainerEnvs(ctx context.Context, cfg map[string]any) ([]C
 func (d *Docker) Name() string { return "docker" }
 
 // Discover enumerates containers via the Docker/Podman Engine API and returns
-// them as assets.  The host is resolved from (in order): cfg["host"],
+// them as machines.  The host is resolved from (in order): cfg["host"],
 // KITE_DOCKER_HOST env, or auto-detected socket paths.
-func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	host := toString(cfg["host"])
 	if host == "" {
 		host = os.Getenv("KITE_DOCKER_HOST")
@@ -126,14 +126,14 @@ func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(containers))
+	machines := make([]model.Machine, 0, len(containers))
 
 	for _, c := range containers {
 		detail, inspErr := client.inspectContainer(ctx, c.ID)
 		if inspErr != nil {
 			slog.Warn("docker: inspect failed", "code", string(LogCodeEnumerateInspectFailed), "container", c.ID[:12], "error", inspErr)
 		}
-		assets = append(assets, containerToAsset(c, detail, now))
+		machines = append(machines, containerToMachine(c, detail, now))
 	}
 
 	images, imgErr := client.listImages(ctx)
@@ -143,8 +143,8 @@ func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		slog.Info("docker: images discovered", "count", len(images)) //#nosec G706 -- structured slog
 	}
 
-	slog.Info("docker: discovery complete", "containers", len(assets)) //#nosec G706 -- structured slog
-	return assets, nil
+	slog.Info("docker: discovery complete", "containers", len(machines)) //#nosec G706 -- structured slog
+	return machines, nil
 }
 
 // -------------------------------------------------------------------------
@@ -302,10 +302,10 @@ func (c *dockerClient) listImages(ctx context.Context) ([]imageSummary, error) {
 }
 
 // -------------------------------------------------------------------------
-// Asset mapping
+// Machine mapping
 // -------------------------------------------------------------------------
 
-func containerToAsset(c containerSummary, detail *containerDetail, now time.Time) model.Asset {
+func containerToMachine(c containerSummary, detail *containerDetail, now time.Time) model.Machine {
 	name := ""
 	if len(c.Names) > 0 {
 		name = strings.TrimPrefix(c.Names[0], "/")
@@ -316,10 +316,10 @@ func containerToAsset(c containerSummary, detail *containerDetail, now time.Time
 
 	created := time.Unix(c.Created, 0).UTC()
 
-	return model.Asset{
+	return model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        name,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		OSFamily:        "linux",
 		OSVersion:       c.Image,
 		DiscoverySource: "docker",

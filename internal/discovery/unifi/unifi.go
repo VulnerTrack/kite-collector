@@ -53,7 +53,7 @@ func (u *UniFi) Name() string { return "unifi" }
 // Authentication priority:
 //  1. KITE_UNIFI_API_KEY → cloud API (api.ui.com)
 //  2. KITE_UNIFI_USERNAME + PASSWORD → local session auth
-func (u *UniFi) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (u *UniFi) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	apiKey := os.Getenv("KITE_UNIFI_API_KEY")
 	if apiKey != "" {
 		return u.discoverCloud(ctx, apiKey)
@@ -65,7 +65,7 @@ func (u *UniFi) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 // Cloud API (api.ui.com with X-API-KEY)
 // -------------------------------------------------------------------------
 
-func (u *UniFi) discoverCloud(ctx context.Context, apiKey string) ([]model.Asset, error) {
+func (u *UniFi) discoverCloud(ctx context.Context, apiKey string) ([]model.Machine, error) {
 	slog.Info("unifi: using cloud API (api.ui.com)")
 
 	client := &cloudClient{
@@ -74,7 +74,7 @@ func (u *UniFi) discoverCloud(ctx context.Context, apiKey string) ([]model.Asset
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 
 	// List hosts (consoles/controllers).
 	hosts, err := client.listHosts(ctx)
@@ -89,17 +89,17 @@ func (u *UniFi) discoverCloud(ctx context.Context, apiKey string) ([]model.Asset
 		slog.Warn("unifi cloud: failed to list devices", "code", string(LogCodeCloudListDevicesFailed), "error", err)
 	} else {
 		for _, d := range devices {
-			assets = append(assets, cloudDeviceToAsset(d, now))
+			machines = append(machines, cloudDeviceToMachine(d, now))
 		}
 	}
 
-	// Add hosts as assets.
+	// Add hosts as machines.
 	for _, h := range hosts {
-		assets = append(assets, cloudHostToAsset(h, now))
+		machines = append(machines, cloudHostToMachine(h, now))
 	}
 
-	slog.Info("unifi: cloud discovery complete", "assets", len(assets))
-	return assets, nil
+	slog.Info("unifi: cloud discovery complete", "machines", len(machines))
+	return machines, nil
 }
 
 type cloudClient struct {
@@ -197,7 +197,7 @@ func (c *cloudClient) listDevices(ctx context.Context) ([]cloudDevice, error) {
 	return resp.Data, nil
 }
 
-func cloudHostToAsset(h cloudHost, now time.Time) model.Asset {
+func cloudHostToMachine(h cloudHost, now time.Time) model.Machine {
 	hostname := h.Hostname
 	if hostname == "" {
 		hostname = h.HardwareID
@@ -213,10 +213,10 @@ func cloudHostToAsset(h cloudHost, now time.Time) model.Asset {
 	}
 	tagsJSON, _ := json.Marshal(tags)
 
-	return model.Asset{
+	return model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       model.AssetTypeAppliance,
+		MachineType:     model.MachineTypeAppliance,
 		OSFamily:        "ubiquiti",
 		OSVersion:       h.FirmwareVer,
 		DiscoverySource: "unifi",
@@ -227,7 +227,7 @@ func cloudHostToAsset(h cloudHost, now time.Time) model.Asset {
 	}
 }
 
-func cloudDeviceToAsset(d cloudDevice, now time.Time) model.Asset {
+func cloudDeviceToMachine(d cloudDevice, now time.Time) model.Machine {
 	hostname := d.Name
 	if hostname == "" {
 		hostname = d.MAC
@@ -244,10 +244,10 @@ func cloudDeviceToAsset(d cloudDevice, now time.Time) model.Asset {
 	}
 	tagsJSON, _ := json.Marshal(tags)
 
-	return model.Asset{
+	return model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       model.AssetTypeNetworkDevice,
+		MachineType:     model.MachineTypeNetworkDevice,
 		OSFamily:        "ubiquiti",
 		OSVersion:       d.Firmware,
 		DiscoverySource: "unifi",
@@ -262,7 +262,7 @@ func cloudDeviceToAsset(d cloudDevice, now time.Time) model.Asset {
 // Local API (session auth to controller on LAN)
 // -------------------------------------------------------------------------
 
-func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	endpoint := toString(cfg["endpoint"])
 	if endpoint == "" {
 		endpoint = os.Getenv("KITE_UNIFI_ENDPOINT")
@@ -300,7 +300,7 @@ func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.
 	defer client.logout(ctx)
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 
 	// Enumerate clients (connected devices).
 	clients, err := client.listClients(ctx, site)
@@ -308,7 +308,7 @@ func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.
 		slog.Warn("unifi: failed to list clients", "code", string(LogCodeLocalListClientsFailed), "error", err)
 	} else {
 		for _, c := range clients {
-			assets = append(assets, clientToAsset(c, now))
+			machines = append(machines, clientToMachine(c, now))
 		}
 	}
 
@@ -318,12 +318,12 @@ func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.
 		slog.Warn("unifi: failed to list devices", "code", string(LogCodeLocalListDevicesFailed), "error", err)
 	} else {
 		for _, d := range devices {
-			assets = append(assets, deviceToAsset(d, now))
+			machines = append(machines, deviceToMachine(d, now))
 		}
 	}
 
-	slog.Info("unifi: local discovery complete", "assets", len(assets)) //#nosec G706 -- integer count, no injection vector
-	return assets, nil
+	slog.Info("unifi: local discovery complete", "machines", len(machines)) //#nosec G706 -- integer count, no injection vector
+	return machines, nil
 }
 
 // -------------------------------------------------------------------------
@@ -554,13 +554,13 @@ func (c *localClient) listDevices(ctx context.Context, site string) ([]unifiDevi
 }
 
 // -------------------------------------------------------------------------
-// Asset mapping
+// Machine mapping
 // -------------------------------------------------------------------------
 
-func clientToAsset(c unifiClientEntry, now time.Time) model.Asset {
-	assetType := model.AssetTypeWorkstation
+func clientToMachine(c unifiClientEntry, now time.Time) model.Machine {
+	machineType := model.MachineTypeWorkstation
 	if c.DevCat == 15 {
-		assetType = model.AssetTypeIOTDevice
+		machineType = model.MachineTypeIOTDevice
 	}
 
 	hostname := c.Hostname
@@ -595,10 +595,10 @@ func clientToAsset(c unifiClientEntry, now time.Time) model.Asset {
 
 	tagsJSON, _ := json.Marshal(tags)
 
-	return model.Asset{
+	return model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       assetType,
+		MachineType:     machineType,
 		OSFamily:        c.OsName,
 		DiscoverySource: "unifi",
 		IsAuthorized:    model.AuthorizationUnknown,
@@ -608,7 +608,7 @@ func clientToAsset(c unifiClientEntry, now time.Time) model.Asset {
 	}
 }
 
-func deviceToAsset(d unifiDevice, now time.Time) model.Asset {
+func deviceToMachine(d unifiDevice, now time.Time) model.Machine {
 	hostname := d.Name
 	if hostname == "" {
 		hostname = d.MAC
@@ -631,10 +631,10 @@ func deviceToAsset(d unifiDevice, now time.Time) model.Asset {
 
 	tagsJSON, _ := json.Marshal(tags)
 
-	return model.Asset{
+	return model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       model.AssetTypeNetworkDevice,
+		MachineType:     model.MachineTypeNetworkDevice,
 		OSFamily:        "ubiquiti",
 		OSVersion:       d.Version,
 		DiscoverySource: "unifi",

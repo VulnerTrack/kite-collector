@@ -61,7 +61,7 @@ type LoadedDriver struct {
 	TaintFlags      []string  `json:"taint_flags,omitempty"`
 	Dependencies    []string  `json:"dependencies,omitempty"`
 	ID              uuid.UUID `json:"id"`
-	AssetID         uuid.UUID `json:"asset_id,omitempty"`
+	MachineID       uuid.UUID `json:"machine_id,omitempty"`
 }
 
 // DeviceBinding captures a hardware-to-driver binding (PCI/USB/PnP).
@@ -76,7 +76,7 @@ type DeviceBinding struct {
 	DriverName   string    `json:"driver_name,omitempty"`
 	HardwareID   string    `json:"hardware_id,omitempty"`
 	ID           uuid.UUID `json:"id"`
-	AssetID      uuid.UUID `json:"asset_id,omitempty"`
+	MachineID    uuid.UUID `json:"machine_id,omitempty"`
 	DriverID     uuid.UUID `json:"driver_id,omitempty"`
 }
 

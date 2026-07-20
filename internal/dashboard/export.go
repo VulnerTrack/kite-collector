@@ -22,28 +22,28 @@ func writeCSVHeader(w io.Writer, rc ReportContext) {
 	_, _ = fmt.Fprintf(w, "# Database: %s\n", rc.DBPath)
 }
 
-// exportAssetsCSV writes all assets as CSV with report headers.
-func exportAssetsCSV(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
+// exportMachinesCSV writes all machines as CSV with report headers.
+func exportMachinesCSV(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
 	writeCSVHeader(w, rc)
 
 	cw := csv.NewWriter(w)
 	defer cw.Flush()
 
 	_ = cw.Write([]string{
-		"hostname", "asset_type", "os_family", "os_version",
+		"hostname", "machine_type", "os_family", "os_version",
 		"is_authorized", "is_managed", "environment", "owner",
 		"discovery_source", "first_seen_at", "last_seen_at",
 	})
 
-	assets, err := st.ListAssets(ctx, store.AssetFilter{})
+	machines, err := st.ListMachines(ctx, store.MachineFilter{})
 	if err != nil {
-		return fmt.Errorf("list assets: %w", err)
+		return fmt.Errorf("list machines: %w", err)
 	}
 
-	for _, a := range assets {
+	for _, a := range machines {
 		_ = cw.Write([]string{
 			a.Hostname,
-			string(a.AssetType),
+			string(a.MachineType),
 			a.OSFamily,
 			a.OSVersion,
 			string(a.IsAuthorized),
@@ -71,12 +71,12 @@ func exportSoftwareCSV(w io.Writer, ctx context.Context, st store.Store, rc Repo
 		"cpe23", "package_manager",
 	})
 
-	assets, err := st.ListAssets(ctx, store.AssetFilter{})
+	machines, err := st.ListMachines(ctx, store.MachineFilter{})
 	if err != nil {
-		return fmt.Errorf("list assets: %w", err)
+		return fmt.Errorf("list machines: %w", err)
 	}
 
-	for _, a := range assets {
+	for _, a := range machines {
 		sw, swErr := st.ListSoftware(ctx, a.ID)
 		if swErr != nil {
 			continue

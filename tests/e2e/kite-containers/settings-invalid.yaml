@@ -1,0 +1,11 @@
+# Intentionally invalid: log_level is not one of debug/info/warn/error, which
+# config.Validate() rejects. Proves kite parses and validates settings before
+# scanning (a bad settings file fails fast with a non-zero exit).
+log_level: not-a-real-level
+output_format: json
+
+discovery:
+  sources:
+    docker:
+      enabled: true
+      host: unix:///var/run/docker.sock

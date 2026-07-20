@@ -1,6 +1,6 @@
 // Package entra implements a discovery.Source that enumerates Microsoft Entra
 // ID users, service principals, security groups, and cloud-joined devices as
-// kite assets per RFC-0121. Findings are produced separately in audit/entra.go
+// kite machines per RFC-0121. Findings are produced separately in audit/entra.go
 // (Phase 2).
 //
 // Authentication uses OAuth2 client credentials (service principal) via the
@@ -29,7 +29,7 @@ import (
 )
 
 // SourceName is the stable identifier emitted on the
-// security.asset.discovery.source attribute and the discover.<source>
+// security.machine.discovery.source attribute and the discover.<source>
 // span suffix per RFC-0115.
 const SourceName = "entra"
 
@@ -95,9 +95,9 @@ func New() *EntraID {
 func (e *EntraID) Name() string { return SourceName }
 
 // Discover enumerates users, service principals, groups, and devices from
-// the configured Entra ID tenant and returns the device set as kite assets.
+// the configured Entra ID tenant and returns the device set as kite machines.
 // Users / service principals / groups are stored separately by the SQLite
-// store (Phase 2 wiring); this method emits only the asset set so the
+// store (Phase 2 wiring); this method emits only the machine set so the
 // existing discovery.Registry contract keeps working.
 //
 // Returns nil, nil when:
@@ -119,7 +119,7 @@ func (e *EntraID) Name() string { return SourceName }
 //	max_devices              – int    circuit-breaker (default: 50000)
 //	request_timeout_seconds  – int    per-call HTTP timeout (default: 60)
 //	page_size                – int    Graph $top page size (default: 999)
-func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	conf, err := parseConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("entra: %w", err)
@@ -195,7 +195,7 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	}
 
 	// Phase 2 enrichment: directory roles + MFA registration. Failures
-	// here degrade gracefully — discovery still returns the device asset
+	// here degrade gracefully — discovery still returns the device machine
 	// set even when the audit-grade snapshot is incomplete.
 	roleAssignments, principalRoles, err := e.collectPrivilegedRoleAssignments(ctx, token)
 	if err != nil {
@@ -237,7 +237,7 @@ func (e *EntraID) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		"mfa_records", len(mfa),
 		"tenant_id", conf.tenantID,
 	)
-	return e.buildDeviceAssets(devices, conf), nil
+	return e.buildDeviceMachines(devices, conf), nil
 }
 
 // Snapshot returns the most recent Discover() result for use by the
@@ -722,13 +722,13 @@ func parseGraphTimestamp(s string) *time.Time {
 	return &utc
 }
 
-// buildDeviceAssets converts discovered Entra devices to model.Asset records
+// buildDeviceMachines converts discovered Entra devices to model.Machine records
 // tagged with the entra.* attribute set declared in convert.go. Devices
 // without a display name fall back to the device GUID so the natural-key
 // computation has stable input.
-func (e *EntraID) buildDeviceAssets(devices []entraDevice, conf *entraConfig) []model.Asset {
+func (e *EntraID) buildDeviceMachines(devices []entraDevice, conf *entraConfig) []model.Machine {
 	now := e.now()
-	assets := make([]model.Asset, 0, len(devices))
+	machines := make([]model.Machine, 0, len(devices))
 	for _, d := range devices {
 		hostname := d.DisplayName
 		if hostname == "" {
@@ -740,9 +740,9 @@ func (e *EntraID) buildDeviceAssets(devices []entraDevice, conf *entraConfig) []
 
 		tags, _ := json.Marshal(deviceTags(d, conf.tenantID))
 
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:              uuid.Must(uuid.NewV7()),
-			AssetType:       classifyEntraDevice(d.OperatingSystem),
+			MachineType:     classifyEntraDevice(d.OperatingSystem),
 			Hostname:        hostname,
 			OSFamily:        normalizeOS(d.OperatingSystem),
 			OSVersion:       d.OperatingSystemVersion,
@@ -754,10 +754,10 @@ func (e *EntraID) buildDeviceAssets(devices []entraDevice, conf *entraConfig) []
 			IsManaged:       managedStateFromEntraDevice(d),
 			Tags:            string(tags),
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
-	return assets
+	return machines
 }
 
 // fetchAllPages walks @odata.nextLink pages until exhaustion, the pagination
@@ -851,5 +851,5 @@ func truncateBytes(data []byte, maxLen int) string {
 // ensure EntraID satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*EntraID)(nil)

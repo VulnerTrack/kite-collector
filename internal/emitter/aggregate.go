@@ -14,7 +14,7 @@ import (
 // Compile-time interface check.
 var _ Emitter = (*AggregateOTLPEmitter)(nil)
 
-// AggregateOTLPEmitter collects asset events during a scan and emits
+// AggregateOTLPEmitter collects machine events during a scan and emits
 // only aggregate counts and severity signals via OTLP. No hostnames,
 // IPs, MACs, or software details leave the agent.
 //
@@ -28,16 +28,16 @@ type AggregateOTLPEmitter struct {
 
 // aggregateState tracks running counts across a scan.
 type aggregateState struct {
-	scanRunID          string
-	totalAssets        int
-	newAssets          int
-	unauthorizedAssets int
-	unmanagedAssets    int
-	staleAssets        int
-	criticalCVEs       int
-	highCVEs           int
-	findingsCount      int
-	coveragePercent    float64
+	scanRunID            string
+	totalMachines        int
+	newMachines          int
+	unauthorizedMachines int
+	unmanagedMachines    int
+	staleMachines        int
+	criticalCVEs         int
+	highCVEs             int
+	findingsCount        int
+	coveragePercent      float64
 }
 
 // NewAggregate creates an AggregateOTLPEmitter that wraps an existing
@@ -48,7 +48,7 @@ func NewAggregate(otlp *OTLPEmitter) *AggregateOTLPEmitter {
 
 // Emit records an event in the aggregate counters. No data is sent
 // to the collector until Flush is called.
-func (a *AggregateOTLPEmitter) Emit(_ context.Context, event model.AssetEvent) error {
+func (a *AggregateOTLPEmitter) Emit(_ context.Context, event model.MachineEvent) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -57,23 +57,23 @@ func (a *AggregateOTLPEmitter) Emit(_ context.Context, event model.AssetEvent) e
 	}
 
 	switch event.EventType {
-	case model.EventAssetDiscovered:
-		a.agg.totalAssets++
-		a.agg.newAssets++
-	case model.EventAssetUpdated:
-		a.agg.totalAssets++
-	case model.EventAssetAnalyzed:
-		// AssetAnalyzed is a no-material-change rescan tick. Count it
-		// toward totalAssets (the asset is still present and analyzed)
-		// but do NOT bump newAssets — it is not a fresh sighting.
-		a.agg.totalAssets++
-	case model.EventUnauthorizedAssetDetected:
-		a.agg.unauthorizedAssets++
-	case model.EventUnmanagedAssetDetected:
-		a.agg.unmanagedAssets++
-	case model.EventAssetNotSeen:
-		a.agg.staleAssets++
-	case model.EventAssetRemoved:
+	case model.EventMachineDiscovered:
+		a.agg.totalMachines++
+		a.agg.newMachines++
+	case model.EventMachineUpdated:
+		a.agg.totalMachines++
+	case model.EventMachineAnalyzed:
+		// MachineAnalyzed is a no-material-change rescan tick. Count it
+		// toward totalMachines (the machine is still present and analyzed)
+		// but do NOT bump newMachines — it is not a fresh sighting.
+		a.agg.totalMachines++
+	case model.EventUnauthorizedMachineDetected:
+		a.agg.unauthorizedMachines++
+	case model.EventUnmanagedMachineDetected:
+		a.agg.unmanagedMachines++
+	case model.EventMachineNotSeen:
+		a.agg.staleMachines++
+	case model.EventMachineRemoved:
 		a.agg.findingsCount++
 	default:
 		a.agg.findingsCount++
@@ -83,7 +83,7 @@ func (a *AggregateOTLPEmitter) Emit(_ context.Context, event model.AssetEvent) e
 }
 
 // EmitBatch records a batch of events in the aggregate counters.
-func (a *AggregateOTLPEmitter) EmitBatch(ctx context.Context, events []model.AssetEvent) error {
+func (a *AggregateOTLPEmitter) EmitBatch(ctx context.Context, events []model.MachineEvent) error {
 	for i := range events {
 		if err := a.Emit(ctx, events[i]); err != nil {
 			return err
@@ -139,11 +139,11 @@ func (a *AggregateOTLPEmitter) buildAggregatePayload(state aggregateState) otlpL
 
 	attrs := []otlpKeyValue{
 		stringKV("scan_run_id", state.scanRunID),
-		intKV("total_assets", state.totalAssets),
-		intKV("new_assets", state.newAssets),
-		intKV("unauthorized_assets", state.unauthorizedAssets),
-		intKV("unmanaged_assets", state.unmanagedAssets),
-		intKV("stale_assets", state.staleAssets),
+		intKV("total_machines", state.totalMachines),
+		intKV("new_machines", state.newMachines),
+		intKV("unauthorized_machines", state.unauthorizedMachines),
+		intKV("unmanaged_machines", state.unmanagedMachines),
+		intKV("stale_machines", state.staleMachines),
 		intKV("critical_cves", state.criticalCVEs),
 		intKV("high_cves", state.highCVEs),
 		intKV("findings_count", state.findingsCount),

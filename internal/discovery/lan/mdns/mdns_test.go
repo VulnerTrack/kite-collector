@@ -58,7 +58,7 @@ func TestAbsorbAndClassifyPrinter(t *testing.T) {
 	if r.hostname != "office-printer.local" {
 		t.Fatalf("want hostname office-printer.local, got %q", r.hostname)
 	}
-	if got := classify(r.services); got != model.AssetTypeAppliance {
+	if got := classify(r.services); got != model.MachineTypeAppliance {
 		t.Fatalf("printer must classify as appliance, got %v", got)
 	}
 	if _, ok := r.instances["Office Printer._ipp._tcp.local"]; !ok {
@@ -72,14 +72,14 @@ func TestAbsorbAndClassifyPrinter(t *testing.T) {
 func TestClassifyPrecedence(t *testing.T) {
 	cases := []struct {
 		name     string
-		want     model.AssetType
+		want     model.MachineType
 		services []string
 	}{
-		{"appliance beats workstation", model.AssetTypeAppliance, []string{"_workstation._tcp.local", "_ipp._tcp.local"}},
-		{"iot beats server", model.AssetTypeIOTDevice, []string{"_http._tcp.local", "_airplay._tcp.local"}},
-		{"workstation", model.AssetTypeWorkstation, []string{"_workstation._tcp.local"}},
-		{"server fallback", model.AssetTypeServer, []string{"_ssh._tcp.local"}},
-		{"unknown becomes iot", model.AssetTypeIOTDevice, []string{"_weird._tcp.local"}},
+		{"appliance beats workstation", model.MachineTypeAppliance, []string{"_workstation._tcp.local", "_ipp._tcp.local"}},
+		{"iot beats server", model.MachineTypeIOTDevice, []string{"_http._tcp.local", "_airplay._tcp.local"}},
+		{"workstation", model.MachineTypeWorkstation, []string{"_workstation._tcp.local"}},
+		{"server fallback", model.MachineTypeServer, []string{"_ssh._tcp.local"}},
+		{"unknown becomes iot", model.MachineTypeIOTDevice, []string{"_weird._tcp.local"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -94,7 +94,7 @@ func TestClassifyPrecedence(t *testing.T) {
 	}
 }
 
-func TestAssetsFromResponders_DeterministicAndKeyed(t *testing.T) {
+func TestMachinesFromResponders_DeterministicAndKeyed(t *testing.T) {
 	in := map[string]*responder{
 		"192.168.1.50": {
 			addr:      net.IPv4(192, 168, 1, 50),
@@ -109,22 +109,22 @@ func TestAssetsFromResponders_DeterministicAndKeyed(t *testing.T) {
 			instances: map[string]struct{}{},
 		},
 	}
-	got := assetsFromResponders(in)
+	got := machinesFromResponders(in)
 	if len(got) != 2 {
-		t.Fatalf("want 2 assets, got %d", len(got))
+		t.Fatalf("want 2 machines, got %d", len(got))
 	}
 	// Sorted by ip-key — 192.168.1.10 comes first.
 	if got[0].Hostname != "192.168.1.10" {
-		t.Fatalf("first asset hostname=%q (no SRV → fall back to addr)", got[0].Hostname)
+		t.Fatalf("first machine hostname=%q (no SRV → fall back to addr)", got[0].Hostname)
 	}
-	if got[0].AssetType != model.AssetTypeWorkstation {
-		t.Fatalf("want workstation, got %v", got[0].AssetType)
+	if got[0].MachineType != model.MachineTypeWorkstation {
+		t.Fatalf("want workstation, got %v", got[0].MachineType)
 	}
 	if got[1].Hostname != "office-printer.local" {
 		t.Fatalf("want office-printer.local, got %q", got[1].Hostname)
 	}
-	if got[1].AssetType != model.AssetTypeAppliance {
-		t.Fatalf("want appliance, got %v", got[1].AssetType)
+	if got[1].MachineType != model.MachineTypeAppliance {
+		t.Fatalf("want appliance, got %v", got[1].MachineType)
 	}
 	if got[1].DiscoverySource != "mdns" {
 		t.Fatalf("source not stamped: %q", got[1].DiscoverySource)

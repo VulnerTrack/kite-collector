@@ -34,7 +34,7 @@ func NewSCCM() *SCCM {
 func (s *SCCM) Name() string { return "sccm" }
 
 // Discover lists devices from SCCM AdminService REST API and returns them
-// as assets. It honours cfg["enabled"] first (F3), loads credentials via
+// as machines. It honours cfg["enabled"] first (F3), loads credentials via
 // connectorkit and zeroes them on return (R1), and validates the operator URL
 // via SafeClient with allowPrivate=true because ConfigMgr is self-hosted.
 // Authentication uses HTTP Basic auth. If credentials are absent the method
@@ -45,7 +45,7 @@ func (s *SCCM) Name() string { return "sccm" }
 //	api_url  – string base URL of the SCCM AdminService (e.g. "https://sccm.corp.local")
 //	username – string account username
 //	password – string account password
-func (s *SCCM) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *SCCM) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2: honour enabled:false even with creds present (F3)
 	}
@@ -77,7 +77,7 @@ func (s *SCCM) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(devices))
+	machines := make([]model.Machine, 0, len(devices))
 
 	for _, dev := range devices {
 		managed := model.ManagedUnknown
@@ -85,9 +85,9 @@ func (s *SCCM) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 			managed = model.ManagedManaged
 		}
 
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:              uuid.Must(uuid.NewV7()),
-			AssetType:       classifySCCMDevice(dev.osNameAndVersion),
+			MachineType:     classifySCCMDevice(dev.osNameAndVersion),
 			Hostname:        dev.name,
 			OSFamily:        deriveSCCMOSFamily(dev.osNameAndVersion),
 			OSVersion:       dev.osNameAndVersion,
@@ -98,14 +98,14 @@ func (s *SCCM) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 			IsManaged:       managed,
 		}
 		if dev.resourceID != 0 {
-			asset.MDMEnrollmentID = strconv.FormatInt(dev.resourceID, 10)
+			machine.MDMEnrollmentID = strconv.FormatInt(dev.resourceID, 10)
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
 
-	slog.Info("sccm: discovery complete", "total_assets", len(assets))
-	return assets, nil
+	slog.Info("sccm: discovery complete", "total_machines", len(machines))
+	return machines, nil
 }
 
 // httpClient returns the validated client + base URL for this source. In tests
@@ -236,17 +236,17 @@ func deriveSCCMOSFamily(osNameAndVersion string) string {
 	}
 }
 
-// classifySCCMDevice maps the SCCM OS name to an asset type.
-func classifySCCMDevice(osNameAndVersion string) model.AssetType {
+// classifySCCMDevice maps the SCCM OS name to an machine type.
+func classifySCCMDevice(osNameAndVersion string) model.MachineType {
 	lower := strings.ToLower(osNameAndVersion)
 	if strings.Contains(lower, "server") {
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
-	return model.AssetTypeWorkstation
+	return model.MachineTypeWorkstation
 }
 
 // ensure SCCM satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*SCCM)(nil)

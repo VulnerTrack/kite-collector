@@ -163,20 +163,20 @@ func networkScanner(st store.Store, identityDir string) *network.Scanner {
 // Diff types
 // ---------------------------------------------------------------------------
 
-// DiffResult holds the outcome of comparing two asset databases.
+// DiffResult holds the outcome of comparing two machine databases.
 type DiffResult struct {
-	New       []model.Asset
-	Removed   []model.Asset
-	Changed   []ChangedAsset
-	Unchanged []model.Asset
+	New       []model.Machine
+	Removed   []model.Machine
+	Changed   []ChangedMachine
+	Unchanged []model.Machine
 }
 
-// ChangedAsset pairs the before and after state of a modified asset along
+// ChangedMachine pairs the before and after state of a modified machine along
 // with a list of field names that differ.
-type ChangedAsset struct {
+type ChangedMachine struct {
 	Fields []string // changed field names
-	Before model.Asset
-	After  model.Asset
+	Before model.Machine
+	After  model.Machine
 }
 
 // ---------------------------------------------------------------------------
@@ -186,8 +186,8 @@ type ChangedAsset struct {
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "kite-collector",
-		Short: "Cybersecurity asset discovery and classification agent",
-		Long: `kite-collector discovers, deduplicates, classifies, and tracks IT assets
+		Short: "Cybersecurity machine discovery and classification agent",
+		Long: `kite-collector discovers, deduplicates, classifies, and tracks IT machines
 on your network. It stores results in a local SQLite database and can emit
 lifecycle events for downstream consumption.`,
 		SilenceUsage:  true,
@@ -239,8 +239,8 @@ func newScanCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "scan",
-		Short: "Run an asset discovery scan",
-		Long: `Execute a full scan cycle: discover assets from enabled sources, deduplicate
+		Short: "Run an machine discovery scan",
+		Long: `Execute a full scan cycle: discover machines from enabled sources, deduplicate
 against the local database, classify authorization and managed state, evaluate
 policy rules, persist results, and emit lifecycle events.
 
@@ -492,24 +492,24 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 
 	// Print scan summary to stderr.
 	_, _ = fmt.Fprintf(os.Stderr, "\nScan complete: %d total, %d new, %d updated, %d stale, %d events, %d software (%d errors)\n",
-		result.TotalAssets, result.NewAssets, result.UpdatedAssets,
-		result.StaleAssets, result.EventsEmitted,
+		result.TotalMachines, result.NewMachines, result.UpdatedMachines,
+		result.StaleMachines, result.EventsEmitted,
 		result.SoftwareCount, result.SoftwareErrors)
 
-	// Output asset list with software.
-	assets, err := st.ListAssets(ctx, store.AssetFilter{})
+	// Output machine list with software.
+	machines, err := st.ListMachines(ctx, store.MachineFilter{})
 	if err != nil {
-		return fmt.Errorf("list assets: %w", err)
+		return fmt.Errorf("list machines: %w", err)
 	}
 
-	type assetWithSoftware struct {
+	type machineWithSoftware struct {
 		Software []model.InstalledSoftware `json:"software,omitempty"`
-		model.Asset
+		model.Machine
 	}
 
-	enriched := make([]assetWithSoftware, 0, len(assets))
-	for _, a := range assets {
-		entry := assetWithSoftware{Asset: a}
+	enriched := make([]machineWithSoftware, 0, len(machines))
+	for _, a := range machines {
+		entry := machineWithSoftware{Machine: a}
 		sw, swErr := st.ListSoftware(ctx, a.ID)
 		if swErr == nil && len(sw) > 0 {
 			entry.Software = sw
@@ -521,9 +521,9 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	case "json":
 		return formatJSON(enriched)
 	case "csv":
-		formatCSV(assets)
+		formatCSV(machines)
 	default:
-		formatTable(assets)
+		formatTable(machines)
 	}
 
 	return nil
@@ -543,8 +543,8 @@ func newDiffCmd() *cobra.Command {
 		Use:   "diff <db1> <db2>",
 		Short: "Compare two scan databases",
 		Long: `Open two SQLite databases produced by previous scans and compare their
-asset inventories. Assets are matched by their natural key (hostname + asset_type).
-The output shows new, removed, changed, and optionally unchanged assets.`,
+machine inventories. Machines are matched by their natural key (hostname + machine_type).
+The output shows new, removed, changed, and optionally unchanged machines.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDiff(args[0], args[1], output, showUnchanged)
@@ -552,7 +552,7 @@ The output shows new, removed, changed, and optionally unchanged assets.`,
 	}
 
 	cmd.Flags().StringVar(&output, "output", "table", "output format: json, csv, table")
-	cmd.Flags().BoolVar(&showUnchanged, "show-unchanged", false, "include unchanged assets in output")
+	cmd.Flags().BoolVar(&showUnchanged, "show-unchanged", false, "include unchanged machines in output")
 
 	return cmd
 }
@@ -573,17 +573,17 @@ func runDiff(db1Path, db2Path, output string, showUnchanged bool) error {
 	}
 	defer func() { _ = enc2.Close() }()
 
-	assets1, err := enc1.ListAssets(ctx, store.AssetFilter{})
+	machines1, err := enc1.ListMachines(ctx, store.MachineFilter{})
 	if err != nil {
-		return fmt.Errorf("list assets db1: %w", err)
+		return fmt.Errorf("list machines db1: %w", err)
 	}
 
-	assets2, err := enc2.ListAssets(ctx, store.AssetFilter{})
+	machines2, err := enc2.ListMachines(ctx, store.MachineFilter{})
 	if err != nil {
-		return fmt.Errorf("list assets db2: %w", err)
+		return fmt.Errorf("list machines db2: %w", err)
 	}
 
-	result := computeDiff(assets1, assets2)
+	result := computeDiff(machines1, machines2)
 
 	switch strings.ToLower(output) {
 	case "json":
@@ -597,35 +597,35 @@ func runDiff(db1Path, db2Path, output string, showUnchanged bool) error {
 	return nil
 }
 
-// naturalKey builds a comparison key from hostname and asset type.
-func naturalKey(a model.Asset) string {
-	return a.Hostname + "|" + string(a.AssetType)
+// naturalKey builds a comparison key from hostname and machine type.
+func naturalKey(a model.Machine) string {
+	return a.Hostname + "|" + string(a.MachineType)
 }
 
-// computeDiff compares two asset slices by natural key.
-func computeDiff(before, after []model.Asset) DiffResult {
-	beforeMap := make(map[string]model.Asset, len(before))
+// computeDiff compares two machine slices by natural key.
+func computeDiff(before, after []model.Machine) DiffResult {
+	beforeMap := make(map[string]model.Machine, len(before))
 	for _, a := range before {
 		beforeMap[naturalKey(a)] = a
 	}
 
-	afterMap := make(map[string]model.Asset, len(after))
+	afterMap := make(map[string]model.Machine, len(after))
 	for _, a := range after {
 		afterMap[naturalKey(a)] = a
 	}
 
 	var result DiffResult
 
-	// Check for new and changed assets.
+	// Check for new and changed machines.
 	for key, a2 := range afterMap {
 		a1, exists := beforeMap[key]
 		if !exists {
 			result.New = append(result.New, a2)
 			continue
 		}
-		fields := compareAssets(a1, a2)
+		fields := compareMachines(a1, a2)
 		if len(fields) > 0 {
-			result.Changed = append(result.Changed, ChangedAsset{
+			result.Changed = append(result.Changed, ChangedMachine{
 				Before: a1,
 				After:  a2,
 				Fields: fields,
@@ -635,7 +635,7 @@ func computeDiff(before, after []model.Asset) DiffResult {
 		}
 	}
 
-	// Check for removed assets.
+	// Check for removed machines.
 	for key, a1 := range beforeMap {
 		if _, exists := afterMap[key]; !exists {
 			result.Removed = append(result.Removed, a1)
@@ -645,8 +645,8 @@ func computeDiff(before, after []model.Asset) DiffResult {
 	return result
 }
 
-// compareAssets returns the names of fields that differ between two assets.
-func compareAssets(a, b model.Asset) []string {
+// compareMachines returns the names of fields that differ between two machines.
+func compareMachines(a, b model.Machine) []string {
 	var fields []string
 	if !a.LastSeenAt.Equal(b.LastSeenAt) {
 		fields = append(fields, "LastSeenAt")
@@ -710,26 +710,26 @@ func formatDiffTable(result DiffResult, showUnchanged bool) {
 	fmt.Printf("  Unchanged: %d\n\n", len(result.Unchanged))
 
 	if len(result.New) > 0 {
-		fmt.Println("--- New Assets ---")
+		fmt.Println("--- New Machines ---")
 		formatTable(result.New)
 		fmt.Println()
 	}
 
 	if len(result.Removed) > 0 {
-		fmt.Println("--- Removed Assets ---")
+		fmt.Println("--- Removed Machines ---")
 		formatTable(result.Removed)
 		fmt.Println()
 	}
 
 	if len(result.Changed) > 0 {
-		fmt.Println("--- Changed Assets ---")
+		fmt.Println("--- Changed Machines ---")
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 		_, _ = fmt.Fprintln(w, "HOSTNAME\tTYPE\tCHANGED FIELDS")
 		for _, c := range result.Changed {
 			_, _ = fmt.Fprintf(
 				w, "%s\t%s\t%s\n",
 				c.After.Hostname,
-				c.After.AssetType,
+				c.After.MachineType,
 				strings.Join(c.Fields, ", "),
 			)
 		}
@@ -738,7 +738,7 @@ func formatDiffTable(result DiffResult, showUnchanged bool) {
 	}
 
 	if showUnchanged && len(result.Unchanged) > 0 {
-		fmt.Println("--- Unchanged Assets ---")
+		fmt.Println("--- Unchanged Machines ---")
 		formatTable(result.Unchanged)
 		fmt.Println()
 	}
@@ -748,20 +748,20 @@ func formatDiffCSV(result DiffResult, showUnchanged bool) {
 	w := csv.NewWriter(os.Stdout)
 	defer w.Flush()
 
-	_ = w.Write([]string{"status", "hostname", "asset_type", "is_authorized", "is_managed", "os_version", "changed_fields"})
+	_ = w.Write([]string{"status", "hostname", "machine_type", "is_authorized", "is_managed", "os_version", "changed_fields"})
 
 	for _, a := range result.New {
-		_ = w.Write([]string{"new", a.Hostname, string(a.AssetType), string(a.IsAuthorized), string(a.IsManaged), a.OSVersion, ""})
+		_ = w.Write([]string{"new", a.Hostname, string(a.MachineType), string(a.IsAuthorized), string(a.IsManaged), a.OSVersion, ""})
 	}
 	for _, a := range result.Removed {
-		_ = w.Write([]string{"removed", a.Hostname, string(a.AssetType), string(a.IsAuthorized), string(a.IsManaged), a.OSVersion, ""})
+		_ = w.Write([]string{"removed", a.Hostname, string(a.MachineType), string(a.IsAuthorized), string(a.IsManaged), a.OSVersion, ""})
 	}
 	for _, c := range result.Changed {
-		_ = w.Write([]string{"changed", c.After.Hostname, string(c.After.AssetType), string(c.After.IsAuthorized), string(c.After.IsManaged), c.After.OSVersion, strings.Join(c.Fields, ";")})
+		_ = w.Write([]string{"changed", c.After.Hostname, string(c.After.MachineType), string(c.After.IsAuthorized), string(c.After.IsManaged), c.After.OSVersion, strings.Join(c.Fields, ";")})
 	}
 	if showUnchanged {
 		for _, a := range result.Unchanged {
-			_ = w.Write([]string{"unchanged", a.Hostname, string(a.AssetType), string(a.IsAuthorized), string(a.IsManaged), a.OSVersion, ""})
+			_ = w.Write([]string{"unchanged", a.Hostname, string(a.MachineType), string(a.IsAuthorized), string(a.IsManaged), a.OSVersion, ""})
 		}
 	}
 }
@@ -892,7 +892,7 @@ func newAgentCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "agent",
-		Short: "Run continuous asset discovery agent",
+		Short: "Run continuous machine discovery agent",
 		Long: `Start a long-running agent that performs periodic scan cycles and emits
 OTLP events to the configured collector endpoint. Use --stream to enable
 continuous mode with a configurable scan interval.
@@ -938,10 +938,10 @@ func newStreamCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "stream",
-		Short: "Start continuous asset discovery (streaming mode)",
+		Short: "Start continuous machine discovery (streaming mode)",
 		Long: `Start the agent in continuous streaming mode.
 
-Equivalent to 'agent --stream'. All discovered assets are emitted as OTLP
+Equivalent to 'agent --stream'. All discovered machines are emitted as OTLP
 log records to the configured collector on every scan cycle.
 
 When --certs-dir points at enrolled certificates, mTLS is enabled
@@ -1337,7 +1337,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			return fmt.Errorf("agent scan failed: %w", scanErr)
 		}
 		_, _ = fmt.Fprintf(os.Stderr, "Agent scan complete: %d total, %d new, %d updated, %d stale\n",
-			result.TotalAssets, result.NewAssets, result.UpdatedAssets, result.StaleAssets)
+			result.TotalMachines, result.NewMachines, result.UpdatedMachines, result.StaleMachines)
 		return nil
 	}
 
@@ -1363,9 +1363,9 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		slog.Info(
 			"initial scan complete",
 			"code", string(LogCodeScanInitialComplete),
-			"total", result.TotalAssets,
-			"new", result.NewAssets,
-			"updated", result.UpdatedAssets,
+			"total", result.TotalMachines,
+			"new", result.NewMachines,
+			"updated", result.UpdatedMachines,
 			"events_emitted", result.EventsEmitted,
 		)
 	}
@@ -1403,10 +1403,10 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				slog.Info(
 					"periodic scan complete",
 					"code", string(LogCodeScanPeriodicComplete),
-					"total", result.TotalAssets,
-					"new", result.NewAssets,
-					"updated", result.UpdatedAssets,
-					"stale", result.StaleAssets,
+					"total", result.TotalMachines,
+					"new", result.NewMachines,
+					"updated", result.UpdatedMachines,
+					"stale", result.StaleMachines,
 					"events_emitted", result.EventsEmitted,
 				)
 			}
@@ -1427,7 +1427,7 @@ func newReportCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "report",
-		Short: "Generate asset inventory report",
+		Short: "Generate machine inventory report",
 		Long: `Read the SQLite database and produce a report in the requested format.
 Supported formats: json, csv, table, html.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1452,9 +1452,9 @@ func runReport(dbPath, format, outputPath string) error {
 	defer func() { _ = encStore.Close() }()
 	st := encStore.Store
 
-	assets, err := st.ListAssets(ctx, store.AssetFilter{})
+	machines, err := st.ListMachines(ctx, store.MachineFilter{})
 	if err != nil {
-		return fmt.Errorf("list assets: %w", err)
+		return fmt.Errorf("list machines: %w", err)
 	}
 
 	latestRun, _ := st.GetLatestScanRun(ctx)
@@ -1475,9 +1475,9 @@ func runReport(dbPath, format, outputPath string) error {
 	switch strings.ToLower(format) {
 	case "json":
 		report := map[string]any{
-			"generated_at": time.Now().UTC().Format(time.RFC3339),
-			"total_assets": len(assets),
-			"assets":       assets,
+			"generated_at":   time.Now().UTC().Format(time.RFC3339),
+			"total_machines": len(machines),
+			"machines":       machines,
 		}
 		if latestRun != nil {
 			report["latest_scan"] = latestRun
@@ -1488,20 +1488,20 @@ func runReport(dbPath, format, outputPath string) error {
 		}
 		return formatJSON(report)
 	case "csv":
-		formatCSV(assets)
+		formatCSV(machines)
 	case "html":
-		return formatHTMLReport(ctx, st, assets, latestRun)
+		return formatHTMLReport(ctx, st, machines, latestRun)
 	default:
 		if latestRun != nil {
 			fmt.Printf(
 				"Latest scan: %s (total: %d, new: %d, stale: %d)\n\n",
 				latestRun.StartedAt.Format(time.RFC3339),
-				latestRun.TotalAssets,
-				latestRun.NewAssets,
-				latestRun.StaleAssets,
+				latestRun.TotalMachines,
+				latestRun.NewMachines,
+				latestRun.StaleMachines,
 			)
 		}
-		formatTable(assets)
+		formatTable(machines)
 	}
 
 	return nil
@@ -1524,12 +1524,12 @@ func newQueryCmd() *cobra.Command {
 		Long: `Run a human-friendly query against the kite-collector SQLite database.
 
 Targets:
-  assets     List discovered assets
+  machines     List discovered machines
   software   List installed software packages
   findings   List configuration findings
   scans      List scan history`,
 		Args:      cobra.ExactArgs(1),
-		ValidArgs: []string{"assets", "software", "findings", "scans"},
+		ValidArgs: []string{"machines", "software", "findings", "scans"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runQuery(args[0], dbPath, limit, severity)
 		},
@@ -1544,15 +1544,15 @@ Targets:
 
 func runQuery(target, dbPath string, limit int, severity string) error {
 	queries := map[string]string{
-		"assets":   "SELECT hostname, asset_type, os_family, is_authorized, discovery_source, last_seen_at FROM assets ORDER BY last_seen_at DESC",
+		"machines": "SELECT hostname, machine_type, os_family, is_authorized, discovery_source, last_seen_at FROM machines ORDER BY last_seen_at DESC",
 		"software": "SELECT software_name, version, package_manager, cpe23 FROM installed_software ORDER BY software_name",
 		"findings": "SELECT check_id, severity, cwe_id, title FROM config_findings ORDER BY severity",
-		"scans":    "SELECT started_at, status, total_assets, new_assets, stale_assets FROM scan_runs ORDER BY started_at DESC",
+		"scans":    "SELECT started_at, status, total_machines, new_machines, stale_machines FROM scan_runs ORDER BY started_at DESC",
 	}
 
 	q, ok := queries[target]
 	if !ok {
-		return fmt.Errorf("unknown query target: %s (use: assets, software, findings, scans)", target)
+		return fmt.Errorf("unknown query target: %s (use: machines, software, findings, scans)", target)
 	}
 
 	if severity != "" && target == "findings" {
@@ -1660,7 +1660,7 @@ func runDB(dbPath string) error {
 		fmt.Println()
 		fmt.Println("Use the built-in query command instead:")
 		fmt.Println()
-		fmt.Println("  kite-collector query assets")
+		fmt.Println("  kite-collector query machines")
 		fmt.Println("  kite-collector query software")
 		fmt.Println("  kite-collector query findings")
 		fmt.Println("  kite-collector query scans")
@@ -1686,7 +1686,7 @@ func runDB(dbPath string) error {
 			fmt.Println("  Download from: https://www.sqlite.org/download.html")
 		}
 		fmt.Println()
-		fmt.Println("  Or use: kite-collector query assets")
+		fmt.Println("  Or use: kite-collector query machines")
 		return nil
 	}
 
@@ -1916,11 +1916,11 @@ func formatJSON(v any) error {
 	return nil
 }
 
-// formatTable renders assets as a human-readable table.
-func formatTable(assets []model.Asset) {
+// formatTable renders machines as a human-readable table.
+func formatTable(machines []model.Machine) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "HOSTNAME\tTYPE\tOS\tAUTHORIZED\tMANAGED\tSOURCE\tLAST SEEN")
-	for _, a := range assets {
+	for _, a := range machines {
 		osInfo := a.OSFamily
 		if a.OSVersion != "" {
 			osInfo = a.OSVersion
@@ -1928,7 +1928,7 @@ func formatTable(assets []model.Asset) {
 		_, _ = fmt.Fprintf(
 			w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			a.Hostname,
-			a.AssetType,
+			a.MachineType,
 			osInfo,
 			a.IsAuthorized,
 			a.IsManaged,
@@ -1939,22 +1939,22 @@ func formatTable(assets []model.Asset) {
 	_ = w.Flush()
 }
 
-// formatCSV writes assets as CSV to stdout.
-func formatCSV(assets []model.Asset) {
+// formatCSV writes machines as CSV to stdout.
+func formatCSV(machines []model.Machine) {
 	w := csv.NewWriter(os.Stdout)
 	defer w.Flush()
 
 	_ = w.Write([]string{
-		"id", "hostname", "asset_type", "os_family", "os_version",
+		"id", "hostname", "machine_type", "os_family", "os_version",
 		"is_authorized", "is_managed", "environment", "owner",
 		"discovery_source", "first_seen_at", "last_seen_at",
 	})
 
-	for _, a := range assets {
+	for _, a := range machines {
 		_ = w.Write([]string{
 			a.ID.String(),
 			a.Hostname,
-			string(a.AssetType),
+			string(a.MachineType),
 			a.OSFamily,
 			a.OSVersion,
 			string(a.IsAuthorized),
@@ -1978,12 +1978,12 @@ type htmlReportData struct {
 	LatestScan        *model.ScanRun
 	GeneratedAt       string
 	Version           string
-	Assets            []model.Asset
+	Machines          []model.Machine
 	Frameworks        []complianceFramework
-	TotalAssets       int
-	NewAssets         int
-	UpdatedAssets     int
-	StaleAssets       int
+	TotalMachines     int
+	NewMachines       int
+	UpdatedMachines   int
+	StaleMachines     int
 	AuthorizedCount   int
 	UnauthorizedCount int
 	AuthUnknownCount  int
@@ -2000,12 +2000,12 @@ type complianceFramework struct {
 	Status      string // "Aligned", "Partial", "Not Aligned"
 }
 
-// assessCompliance evaluates compliance alignment based on the current asset
+// assessCompliance evaluates compliance alignment based on the current machine
 // inventory state. A framework is "Aligned" when the inventory has full
 // coverage of classification and management data, "Partial" when some data
 // is missing, and "Not Aligned" when the inventory is empty.
 func assessCompliance(data *htmlReportData) []complianceFramework {
-	// Compute a simple coverage score: fraction of assets that are both
+	// Compute a simple coverage score: fraction of machines that are both
 	// classified (authorized/unauthorized) and managed/unmanaged.
 	classifiedCount := data.AuthorizedCount + data.UnauthorizedCount
 	managedClassified := data.ManagedCount + data.UnmanagedCount
@@ -2014,9 +2014,9 @@ func assessCompliance(data *htmlReportData) []complianceFramework {
 	nistStatus := "Not Aligned"
 	isoStatus := "Not Aligned"
 
-	if data.TotalAssets > 0 {
-		classifiedRatio := float64(classifiedCount) / float64(data.TotalAssets)
-		managedRatio := float64(managedClassified) / float64(data.TotalAssets)
+	if data.TotalMachines > 0 {
+		classifiedRatio := float64(classifiedCount) / float64(data.TotalMachines)
+		managedRatio := float64(managedClassified) / float64(data.TotalMachines)
 
 		if classifiedRatio >= 0.9 {
 			cisStatus = "Aligned"
@@ -2060,7 +2060,7 @@ func assessCompliance(data *htmlReportData) []complianceFramework {
 }
 
 // formatHTMLReport generates a self-contained HTML compliance report.
-func formatHTMLReport(ctx context.Context, st store.Store, assets []model.Asset, latestRun *model.ScanRun) error {
+func formatHTMLReport(ctx context.Context, st store.Store, machines []model.Machine, latestRun *model.ScanRun) error {
 	// Query events for the event summary breakdown.
 	events, err := st.ListEvents(ctx, store.EventFilter{Limit: 10000})
 	if err != nil {
@@ -2070,7 +2070,7 @@ func formatHTMLReport(ctx context.Context, st store.Store, assets []model.Asset,
 	// Build classification counts.
 	var authCount, unauthCount, authUnk int
 	var mgdCount, unmgdCount, mgdUnk int
-	for _, a := range assets {
+	for _, a := range machines {
 		switch a.IsAuthorized {
 		case model.AuthorizationAuthorized:
 			authCount++
@@ -2098,22 +2098,22 @@ func formatHTMLReport(ctx context.Context, st store.Store, assets []model.Asset,
 	data := htmlReportData{
 		GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
 		Version:           version,
-		TotalAssets:       len(assets),
+		TotalMachines:     len(machines),
 		AuthorizedCount:   authCount,
 		UnauthorizedCount: unauthCount,
 		AuthUnknownCount:  authUnk,
 		ManagedCount:      mgdCount,
 		UnmanagedCount:    unmgdCount,
 		MgmtUnknownCount:  mgdUnk,
-		Assets:            assets,
+		Machines:          machines,
 		EventSummary:      eventSummary,
 		LatestScan:        latestRun,
 	}
 
 	if latestRun != nil {
-		data.NewAssets = latestRun.NewAssets
-		data.UpdatedAssets = latestRun.UpdatedAssets
-		data.StaleAssets = latestRun.StaleAssets
+		data.NewMachines = latestRun.NewMachines
+		data.UpdatedMachines = latestRun.UpdatedMachines
+		data.StaleMachines = latestRun.StaleMachines
 	}
 
 	data.Frameworks = assessCompliance(&data)
@@ -2136,7 +2136,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kite Collector - Asset Compliance Report</title>
+<title>Kite Collector - Machine Compliance Report</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body {
@@ -2202,8 +2202,8 @@ const htmlReportTemplate = `<!DOCTYPE html>
 <div class="container">
 
 <header>
-  <h1>Asset Compliance Report</h1>
-  <p>Kite Collector - Enterprise Asset Inventory and Compliance Assessment</p>
+  <h1>Machine Compliance Report</h1>
+  <p>Kite Collector - Enterprise Machine Inventory and Compliance Assessment</p>
   <div class="meta-row">
     <span class="meta-item">Generated: {{.GeneratedAt}}</span>
     <span class="meta-item">Version: {{.Version}}</span>
@@ -2215,20 +2215,20 @@ const htmlReportTemplate = `<!DOCTYPE html>
 
 <div class="summary-grid">
   <div class="stat-card">
-    <div class="value">{{.TotalAssets}}</div>
-    <div class="label">Total Assets</div>
+    <div class="value">{{.TotalMachines}}</div>
+    <div class="label">Total Machines</div>
   </div>
   <div class="stat-card">
-    <div class="value">{{.NewAssets}}</div>
-    <div class="label">New Assets</div>
+    <div class="value">{{.NewMachines}}</div>
+    <div class="label">New Machines</div>
   </div>
   <div class="stat-card">
-    <div class="value">{{.UpdatedAssets}}</div>
-    <div class="label">Updated Assets</div>
+    <div class="value">{{.UpdatedMachines}}</div>
+    <div class="label">Updated Machines</div>
   </div>
   <div class="stat-card">
-    <div class="value">{{.StaleAssets}}</div>
-    <div class="label">Stale Assets</div>
+    <div class="value">{{.StaleMachines}}</div>
+    <div class="label">Stale Machines</div>
   </div>
   <div class="stat-card">
     <div class="value">{{.AuthorizedCount}}</div>
@@ -2274,7 +2274,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
   <div class="classification-grid">
     <div>
       <h3>Authorization State</h3>
-      {{if gt .TotalAssets 0}}
+      {{if gt .TotalMachines 0}}
       <div class="bar-container">
         {{if gt .AuthorizedCount 0}}<div class="bar-segment bar-green" style="flex:{{.AuthorizedCount}}">{{.AuthorizedCount}}</div>{{end}}
         {{if gt .UnauthorizedCount 0}}<div class="bar-segment bar-red" style="flex:{{.UnauthorizedCount}}">{{.UnauthorizedCount}}</div>{{end}}
@@ -2289,7 +2289,7 @@ const htmlReportTemplate = `<!DOCTYPE html>
     </div>
     <div>
       <h3>Managed State</h3>
-      {{if gt .TotalAssets 0}}
+      {{if gt .TotalMachines 0}}
       <div class="bar-container">
         {{if gt .ManagedCount 0}}<div class="bar-segment bar-green" style="flex:{{.ManagedCount}}">{{.ManagedCount}}</div>{{end}}
         {{if gt .UnmanagedCount 0}}<div class="bar-segment bar-red" style="flex:{{.UnmanagedCount}}">{{.UnmanagedCount}}</div>{{end}}
@@ -2325,8 +2325,8 @@ const htmlReportTemplate = `<!DOCTYPE html>
 {{end}}
 
 <section>
-  <h2>Asset Inventory</h2>
-  <p>Total: {{.TotalAssets}} assets</p>
+  <h2>Machine Inventory</h2>
+  <p>Total: {{.TotalMachines}} machines</p>
   <table>
     <thead>
       <tr>
@@ -2341,10 +2341,10 @@ const htmlReportTemplate = `<!DOCTYPE html>
       </tr>
     </thead>
     <tbody>
-    {{range .Assets}}
+    {{range .Machines}}
       <tr>
         <td>{{.Hostname}}</td>
-        <td>{{.AssetType}}</td>
+        <td>{{.MachineType}}</td>
         <td>{{if .OSVersion}}{{.OSVersion}}{{else}}{{.OSFamily}}{{end}}</td>
         <td>
           {{if eq (printf "%s" .IsAuthorized) "authorized"}}<span class="badge badge-green">Authorized</span>

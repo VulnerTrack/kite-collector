@@ -16,7 +16,7 @@ func TestWriteLoadedDrivers_InsertAndUpdate(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
-	asset := uuid.Must(uuid.NewV7())
+	machine := uuid.Must(uuid.NewV7())
 
 	drv := driver.LoadedDriver{
 		Name:            "rwdrv",
@@ -30,12 +30,12 @@ func TestWriteLoadedDrivers_InsertAndUpdate(t *testing.T) {
 		Dependencies:    []string{"libcrc32c"},
 		CollectedAt:     time.Now().UTC(),
 	}
-	ids, err := s.WriteLoadedDrivers(ctx, asset, []driver.LoadedDriver{drv})
+	ids, err := s.WriteLoadedDrivers(ctx, machine, []driver.LoadedDriver{drv})
 	require.NoError(t, err)
 	require.Len(t, ids, 1)
 	assert.NotEqual(t, uuid.Nil, ids[0])
 
-	rows, err := s.ListLoadedDrivers(ctx, LoadedDriverFilter{AssetID: asset.String()})
+	rows, err := s.ListLoadedDrivers(ctx, LoadedDriverFilter{MachineID: machine.String()})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "rwdrv", rows[0].Name)
@@ -44,12 +44,12 @@ func TestWriteLoadedDrivers_InsertAndUpdate(t *testing.T) {
 	require.NotNil(t, rows[0].OnDiskSHA256)
 	assert.Equal(t, "abcd", *rows[0].OnDiskSHA256)
 
-	// Re-write with same (asset, name, version) -> upsert.
+	// Re-write with same (machine, name, version) -> upsert.
 	drv.Vendor = "Acme Inc"
-	_, err = s.WriteLoadedDrivers(ctx, asset, []driver.LoadedDriver{drv})
+	_, err = s.WriteLoadedDrivers(ctx, machine, []driver.LoadedDriver{drv})
 	require.NoError(t, err)
 
-	rows, err = s.ListLoadedDrivers(ctx, LoadedDriverFilter{AssetID: asset.String()})
+	rows, err = s.ListLoadedDrivers(ctx, LoadedDriverFilter{MachineID: machine.String()})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].Vendor)
@@ -60,7 +60,7 @@ func TestWriteLoadedDrivers_PreservesProvidedID(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
-	asset := uuid.Must(uuid.NewV7())
+	machine := uuid.Must(uuid.NewV7())
 	preset := uuid.Must(uuid.NewV7())
 
 	drv := driver.LoadedDriver{
@@ -71,7 +71,7 @@ func TestWriteLoadedDrivers_PreservesProvidedID(t *testing.T) {
 		DriverFramework: driver.FrameworkLinuxModule,
 		CollectedAt:     time.Now().UTC(),
 	}
-	ids, err := s.WriteLoadedDrivers(ctx, asset, []driver.LoadedDriver{drv})
+	ids, err := s.WriteLoadedDrivers(ctx, machine, []driver.LoadedDriver{drv})
 	require.NoError(t, err)
 	assert.Equal(t, preset, ids[0])
 }
@@ -86,7 +86,7 @@ func TestWriteLoadedDrivers_EmptyIsNoop(t *testing.T) {
 	assert.Empty(t, ids)
 }
 
-func TestWriteLoadedDrivers_RejectsNilAssetID(t *testing.T) {
+func TestWriteLoadedDrivers_RejectsNilMachineID(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	_, err := s.WriteLoadedDrivers(context.Background(), uuid.Nil,
@@ -98,7 +98,7 @@ func TestWriteDeviceBindings_InsertAndUpdate(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
-	asset := uuid.Must(uuid.NewV7())
+	machine := uuid.Must(uuid.NewV7())
 
 	// First persist a driver so we can FK from the binding.
 	drv := driver.LoadedDriver{
@@ -108,7 +108,7 @@ func TestWriteDeviceBindings_InsertAndUpdate(t *testing.T) {
 		DriverFramework: driver.FrameworkLinuxModule,
 		CollectedAt:     time.Now().UTC(),
 	}
-	driverIDs, err := s.WriteLoadedDrivers(ctx, asset, []driver.LoadedDriver{drv})
+	driverIDs, err := s.WriteLoadedDrivers(ctx, machine, []driver.LoadedDriver{drv})
 	require.NoError(t, err)
 	require.Len(t, driverIDs, 1)
 
@@ -122,19 +122,19 @@ func TestWriteDeviceBindings_InsertAndUpdate(t *testing.T) {
 		HardwareID: "PCI\\VEN_10DE&DEV_2204",
 		DriverID:   driverIDs[0],
 	}
-	require.NoError(t, s.WriteDeviceBindings(ctx, asset, []driver.DeviceBinding{bind}))
+	require.NoError(t, s.WriteDeviceBindings(ctx, machine, []driver.DeviceBinding{bind}))
 
-	rows, err := s.ListDeviceBindings(ctx, DeviceBindingFilter{AssetID: asset.String()})
+	rows, err := s.ListDeviceBindings(ctx, DeviceBindingFilter{MachineID: machine.String()})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "pci", rows[0].Bus)
 	require.NotNil(t, rows[0].DriverID)
 	assert.Equal(t, driverIDs[0].String(), *rows[0].DriverID)
 
-	// Upsert: same (asset, bus, address) replaces the row.
+	// Upsert: same (machine, bus, address) replaces the row.
 	bind.Class = "030200"
-	require.NoError(t, s.WriteDeviceBindings(ctx, asset, []driver.DeviceBinding{bind}))
-	rows, err = s.ListDeviceBindings(ctx, DeviceBindingFilter{AssetID: asset.String()})
+	require.NoError(t, s.WriteDeviceBindings(ctx, machine, []driver.DeviceBinding{bind}))
+	rows, err = s.ListDeviceBindings(ctx, DeviceBindingFilter{MachineID: machine.String()})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].Class)
@@ -145,12 +145,12 @@ func TestWriteDeviceBindings_NilDriverIDStoredAsNull(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
-	asset := uuid.Must(uuid.NewV7())
+	machine := uuid.Must(uuid.NewV7())
 
 	bind := driver.DeviceBinding{Bus: "usb", Address: "1-1", VendorID: "abcd"}
-	require.NoError(t, s.WriteDeviceBindings(ctx, asset, []driver.DeviceBinding{bind}))
+	require.NoError(t, s.WriteDeviceBindings(ctx, machine, []driver.DeviceBinding{bind}))
 
-	rows, err := s.ListDeviceBindings(ctx, DeviceBindingFilter{AssetID: asset.String()})
+	rows, err := s.ListDeviceBindings(ctx, DeviceBindingFilter{MachineID: machine.String()})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Nil(t, rows[0].DriverID)
@@ -160,7 +160,7 @@ func TestMarkLoadedDriversSynced_StampsTimestamp(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
-	asset := uuid.Must(uuid.NewV7())
+	machine := uuid.Must(uuid.NewV7())
 
 	drv := driver.LoadedDriver{
 		Name:            "syncme",
@@ -168,7 +168,7 @@ func TestMarkLoadedDriversSynced_StampsTimestamp(t *testing.T) {
 		DriverFramework: driver.FrameworkLinuxModule,
 		CollectedAt:     time.Now().UTC(),
 	}
-	ids, err := s.WriteLoadedDrivers(ctx, asset, []driver.LoadedDriver{drv})
+	ids, err := s.WriteLoadedDrivers(ctx, machine, []driver.LoadedDriver{drv})
 	require.NoError(t, err)
 	require.Len(t, ids, 1)
 
@@ -200,7 +200,7 @@ func TestEncodeStringArray_EmptyAndPopulated(t *testing.T) {
 	assert.Equal(t, `["a","b"]`, got)
 }
 
-func TestListLoadedDrivers_FilterByAssetIDIsolatesRows(t *testing.T) {
+func TestListLoadedDrivers_FilterByMachineIDIsolatesRows(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -220,7 +220,7 @@ func TestListLoadedDrivers_FilterByAssetIDIsolatesRows(t *testing.T) {
 	_, err = s.WriteLoadedDrivers(ctx, b, []driver.LoadedDriver{mk("d-b")})
 	require.NoError(t, err)
 
-	rowsA, err := s.ListLoadedDrivers(ctx, LoadedDriverFilter{AssetID: a.String()})
+	rowsA, err := s.ListLoadedDrivers(ctx, LoadedDriverFilter{MachineID: a.String()})
 	require.NoError(t, err)
 	require.Len(t, rowsA, 1)
 	assert.Equal(t, "d-a", rowsA[0].Name)

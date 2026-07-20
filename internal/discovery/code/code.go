@@ -1,5 +1,5 @@
 // Package code provides a discovery source that finds code repositories on
-// the local filesystem and surfaces them as repository assets.
+// the local filesystem and surfaces them as repository machines.
 package code
 
 import (
@@ -17,7 +17,7 @@ import (
 )
 
 // Source discovers git repositories rooted at one or more configured paths
-// and returns each repository as a model.AssetTypeRepository asset.
+// and returns each repository as a model.MachineTypeRepository machine.
 type Source struct{}
 
 // New returns a new code discovery source.
@@ -26,7 +26,7 @@ func New() *Source { return &Source{} }
 // Name returns the stable source identifier used in configuration and metrics.
 func (s *Source) Name() string { return "code" }
 
-// Discover walks each path listed in cfg["paths"] and returns one asset per
+// Discover walks each path listed in cfg["paths"] and returns one machine per
 // git repository found. A git repository is any directory that contains a
 // ".git" sub-entry.
 //
@@ -34,7 +34,7 @@ func (s *Source) Name() string { return "code" }
 //
 //	paths      []string  directories to search (required)
 //	max_depth  int       how many directory levels to descend (default: 3)
-func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	paths := extractPaths(cfg)
 	if len(paths) == 0 {
 		slog.Debug("code source: no paths configured, skipping")
@@ -52,7 +52,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 	seen := make(map[string]bool) // deduplicate by absolute path
 
 	for _, root := range paths {
@@ -79,9 +79,9 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				"vcs":  "git",
 			})
 
-			a := model.Asset{
+			a := model.Machine{
 				ID:              uuid.Must(uuid.NewV7()),
-				AssetType:       model.AssetTypeRepository,
+				MachineType:     model.MachineTypeRepository,
 				Hostname:        filepath.Base(repoPath),
 				DiscoverySource: "code",
 				FirstSeenAt:     now,
@@ -89,12 +89,12 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				Tags:            string(tags),
 			}
 			a.ComputeNaturalKey()
-			assets = append(assets, a)
+			machines = append(machines, a)
 		}
 	}
 
-	slog.Info("code source: discovery complete", "repos", len(assets))
-	return assets, nil
+	slog.Info("code source: discovery complete", "repos", len(machines))
+	return machines, nil
 }
 
 // findRepos walks root up to maxDepth levels and collects directories that

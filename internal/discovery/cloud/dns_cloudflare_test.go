@@ -36,9 +36,9 @@ func cloudflareMockServer(t *testing.T, zonesJSON, recordsJSON string) (*httptes
 
 func TestCloudflareDiscover_DisabledByConfig(t *testing.T) {
 	c := NewDNSCloudflare()
-	assets, err := c.Discover(context.Background(), map[string]any{"enabled": false})
+	machines, err := c.Discover(context.Background(), map[string]any{"enabled": false})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 	assert.Nil(t, c.Snapshot())
 }
 
@@ -53,9 +53,9 @@ func TestCloudflareDiscover_NoTokenErrorsWhenConfigured(t *testing.T) {
 func TestCloudflareDiscover_NoTokenSkipsWhenUnconfigured(t *testing.T) {
 	t.Setenv("CF_API_TOKEN", "")
 	c := NewDNSCloudflare()
-	assets, err := c.Discover(context.Background(), nil)
+	machines, err := c.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 	assert.Nil(t, c.Snapshot())
 }
 
@@ -119,9 +119,9 @@ func TestCloudflareDiscover_HappyPath(t *testing.T) {
 	c.baseURL = srv.URL
 	c.httpClient = srv.Client()
 
-	assets, err := c.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := c.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 
 	snap := c.Snapshot()
 	require.NotNil(t, snap)

@@ -34,7 +34,7 @@ func NewAWS() *AWS {
 func (a *AWS) Name() string { return "aws_ec2" }
 
 // Discover lists EC2 instances in the configured regions and returns them
-// as assets. Credentials are read from standard AWS environment variables.
+// as machines. Credentials are read from standard AWS environment variables.
 // If credentials are not available, the method logs a warning and returns nil
 // (graceful degradation).
 //
@@ -46,7 +46,7 @@ func (a *AWS) Name() string { return "aws_ec2" }
 //
 //	regions     – []any of AWS region strings (e.g. ["us-east-1", "eu-west-1"])
 //	assume_role – string ARN of the IAM role to assume for cross-account access
-func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	regions := toStringSlice(cfg["regions"])
 	role := toString(cfg["assume_role"])
 
@@ -107,11 +107,11 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 			"regions", regions)
 	}
 
-	var assets []model.Asset
+	var machines []model.Machine
 
 	for _, region := range regions {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("aws discovery cancelled: %w", err)
+			return machines, fmt.Errorf("aws discovery cancelled: %w", err)
 		}
 
 		slog.Info("AWS EC2 discovering instances in region",
@@ -141,9 +141,9 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 				osFamily = "windows"
 			}
 
-			asset := model.Asset{
+			machine := model.Machine{
 				ID:              uuid.Must(uuid.NewV7()),
-				AssetType:       model.AssetTypeCloudInstance,
+				MachineType:     model.MachineTypeCloudInstance,
 				Hostname:        hostname,
 				OSFamily:        osFamily,
 				DiscoverySource: "aws_ec2",
@@ -153,8 +153,8 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 				IsManaged:       model.ManagedUnknown,
 				Environment:     region,
 			}
-			asset.ComputeNaturalKey()
-			assets = append(assets, asset)
+			machine.ComputeNaturalKey()
+			machines = append(machines, machine)
 		}
 
 		slog.Info(
@@ -167,9 +167,9 @@ func (a *AWS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 
 	slog.Info("AWS EC2 discovery complete",
 		"code", string(LogCodeAWSEC2Complete),
-		"total_assets", len(assets),
+		"total_machines", len(machines),
 		"regions_scanned", len(regions))
-	return assets, nil
+	return machines, nil
 }
 
 // awsCredentials holds AWS authentication material read from the environment.
@@ -541,5 +541,5 @@ func truncate(s string, maxLen int) string {
 // ensure AWS satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*AWS)(nil)

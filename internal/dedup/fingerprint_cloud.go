@@ -8,9 +8,9 @@ import "github.com/vulnertrack/kite-collector/internal/model"
 // the account-id partitions across tenants of the same provider.
 type CloudInstanceFingerprinter struct{}
 
-// AssetType returns the asset type this fingerprinter handles.
-func (CloudInstanceFingerprinter) AssetType() model.AssetType {
-	return model.AssetTypeCloudInstance
+// MachineType returns the machine type this fingerprinter handles.
+func (CloudInstanceFingerprinter) MachineType() model.MachineType {
+	return model.MachineTypeCloudInstance
 }
 
 // Identity returns a Cryptographic-confidence digest when (provider,
@@ -37,6 +37,6 @@ func (CloudInstanceFingerprinter) Identity(r DiscoveryRecord) ([32]byte, []Signa
 			{Kind: "instance_id", Bytes: []byte(r.InstanceID)},
 		}
 	}
-	return Compose(FPVersion, r.TenantID, model.AssetTypeCloudInstance, sigs),
+	return Compose(FPVersion, r.TenantID, model.MachineTypeCloudInstance, sigs),
 		sigs, ConfidenceCryptographic, true
 }

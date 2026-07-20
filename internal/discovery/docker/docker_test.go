@@ -109,14 +109,14 @@ func TestDocker_Discover_Success(t *testing.T) {
 	d := New()
 	cfg := map[string]any{"host": srv.URL}
 
-	assets, err := d.Discover(context.Background(), cfg)
+	machines, err := d.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, 2)
+	assert.Len(t, machines, 2)
 
 	// Verify first container.
-	nginx := assets[0]
+	nginx := machines[0]
 	assert.Equal(t, "nginx-web", nginx.Hostname)
-	assert.Equal(t, model.AssetTypeContainer, nginx.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, nginx.MachineType)
 	assert.Equal(t, "linux", nginx.OSFamily)
 	assert.Equal(t, "nginx:1.25", nginx.OSVersion)
 	assert.Equal(t, "docker", nginx.DiscoverySource)
@@ -134,7 +134,7 @@ func TestDocker_Discover_Success(t *testing.T) {
 	assert.Equal(t, "80/tcp->8080", tags["ports"])
 
 	// Verify second container (non-privileged).
-	redis := assets[1]
+	redis := machines[1]
 	assert.Equal(t, "redis-cache", redis.Hostname)
 
 	var redisTags map[string]any
@@ -167,18 +167,18 @@ func TestDocker_Discover_APIError(t *testing.T) {
 	assert.Contains(t, err.Error(), "list containers")
 }
 
-func TestContainerToAsset_UUIDv7(t *testing.T) {
+func TestContainerToMachine_UUIDv7(t *testing.T) {
 	srv := newMockDockerAPI(t)
 	defer srv.Close()
 
 	d := New()
 	cfg := map[string]any{"host": srv.URL}
 
-	assets, err := d.Discover(context.Background(), cfg)
+	machines, err := d.Discover(context.Background(), cfg)
 	require.NoError(t, err)
 
-	for _, a := range assets {
-		assert.NotEmpty(t, a.ID, "asset must have a UUID")
+	for _, a := range machines {
+		assert.NotEmpty(t, a.ID, "machine must have a UUID")
 	}
 }
 

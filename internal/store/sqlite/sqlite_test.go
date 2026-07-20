@@ -25,12 +25,12 @@ func newTestStore(t *testing.T) *SQLiteStore {
 	return s
 }
 
-func makeAsset(hostname string, assetType model.AssetType) model.Asset {
+func makeMachine(hostname string, machineType model.MachineType) model.Machine {
 	now := time.Now().UTC().Truncate(time.Second)
-	a := model.Asset{
+	a := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       assetType,
+		MachineType:     machineType,
 		IsAuthorized:    model.AuthorizationUnknown,
 		IsManaged:       model.ManagedUnknown,
 		DiscoverySource: "test",
@@ -60,143 +60,143 @@ func TestMigrate_CreatesTablesSuccessfully(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// UpsertAsset + GetAssetByNaturalKey round-trip
+// UpsertMachine + GetMachineByNaturalKey round-trip
 // ---------------------------------------------------------------------------
 
-func TestUpsertAsset_AndGetByNaturalKey(t *testing.T) {
+func TestUpsertMachine_AndGetByNaturalKey(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("web-01", model.AssetTypeServer)
-	asset.OSFamily = "linux"
-	asset.Environment = "production"
+	machine := makeMachine("web-01", model.MachineTypeServer)
+	machine.OSFamily = "linux"
+	machine.Environment = "production"
 
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 
 	// Re-compute the key to look it up the same way the store does.
-	asset.ComputeNaturalKey()
-	got, err := s.GetAssetByNaturalKey(ctx, asset.NaturalKey)
+	machine.ComputeNaturalKey()
+	got, err := s.GetMachineByNaturalKey(ctx, machine.NaturalKey)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
-	assert.Equal(t, asset.ID, got.ID)
-	assert.Equal(t, asset.Hostname, got.Hostname)
-	assert.Equal(t, asset.AssetType, got.AssetType)
+	assert.Equal(t, machine.ID, got.ID)
+	assert.Equal(t, machine.Hostname, got.Hostname)
+	assert.Equal(t, machine.MachineType, got.MachineType)
 	assert.Equal(t, "linux", got.OSFamily)
 	assert.Equal(t, "production", got.Environment)
 }
 
-func TestGetAssetByNaturalKey_NotFound(t *testing.T) {
+func TestGetMachineByNaturalKey_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	got, err := s.GetAssetByNaturalKey(ctx, "nonexistent-key")
+	got, err := s.GetMachineByNaturalKey(ctx, "nonexistent-key")
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
 
 // ---------------------------------------------------------------------------
-// UpsertAssets (batch)
+// UpsertMachines (batch)
 // ---------------------------------------------------------------------------
 
-func TestUpsertAssets_MultipleBatch(t *testing.T) {
+func TestUpsertMachines_MultipleBatch(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	assets := []model.Asset{
-		makeAsset("batch-01", model.AssetTypeServer),
-		makeAsset("batch-02", model.AssetTypeWorkstation),
-		makeAsset("batch-03", model.AssetTypeContainer),
+	machines := []model.Machine{
+		makeMachine("batch-01", model.MachineTypeServer),
+		makeMachine("batch-02", model.MachineTypeWorkstation),
+		makeMachine("batch-03", model.MachineTypeContainer),
 	}
 
-	inserted, updated, err := s.UpsertAssets(ctx, assets)
+	inserted, updated, err := s.UpsertMachines(ctx, machines)
 	require.NoError(t, err)
 	assert.Equal(t, 3, inserted)
 	assert.Equal(t, 0, updated)
 
 	// Upserting the same batch again should count as updates.
-	inserted2, updated2, err := s.UpsertAssets(ctx, assets)
+	inserted2, updated2, err := s.UpsertMachines(ctx, machines)
 	require.NoError(t, err)
 	assert.Equal(t, 0, inserted2)
 	assert.Equal(t, 3, updated2)
 }
 
 // ---------------------------------------------------------------------------
-// ListAssets
+// ListMachines
 // ---------------------------------------------------------------------------
 
-func TestListAssets_NoFilter(t *testing.T) {
+func TestListMachines_NoFilter(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	require.NoError(t, s.UpsertAsset(ctx, makeAsset("a", model.AssetTypeServer)))
-	require.NoError(t, s.UpsertAsset(ctx, makeAsset("b", model.AssetTypeWorkstation)))
+	require.NoError(t, s.UpsertMachine(ctx, makeMachine("a", model.MachineTypeServer)))
+	require.NoError(t, s.UpsertMachine(ctx, makeMachine("b", model.MachineTypeWorkstation)))
 
-	all, err := s.ListAssets(ctx, store.AssetFilter{})
+	all, err := s.ListMachines(ctx, store.MachineFilter{})
 	require.NoError(t, err)
 	assert.Len(t, all, 2)
 }
 
-func TestListAssets_FilterByAssetType(t *testing.T) {
+func TestListMachines_FilterByMachineType(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	require.NoError(t, s.UpsertAsset(ctx, makeAsset("s1", model.AssetTypeServer)))
-	require.NoError(t, s.UpsertAsset(ctx, makeAsset("w1", model.AssetTypeWorkstation)))
+	require.NoError(t, s.UpsertMachine(ctx, makeMachine("s1", model.MachineTypeServer)))
+	require.NoError(t, s.UpsertMachine(ctx, makeMachine("w1", model.MachineTypeWorkstation)))
 
-	servers, err := s.ListAssets(ctx, store.AssetFilter{AssetType: string(model.AssetTypeServer)})
+	servers, err := s.ListMachines(ctx, store.MachineFilter{MachineType: string(model.MachineTypeServer)})
 	require.NoError(t, err)
 	assert.Len(t, servers, 1)
 	assert.Equal(t, "s1", servers[0].Hostname)
 }
 
-func TestListAssets_FilterByHostname(t *testing.T) {
+func TestListMachines_FilterByHostname(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	require.NoError(t, s.UpsertAsset(ctx, makeAsset("specific-host", model.AssetTypeServer)))
-	require.NoError(t, s.UpsertAsset(ctx, makeAsset("other-host", model.AssetTypeServer)))
+	require.NoError(t, s.UpsertMachine(ctx, makeMachine("specific-host", model.MachineTypeServer)))
+	require.NoError(t, s.UpsertMachine(ctx, makeMachine("other-host", model.MachineTypeServer)))
 
-	results, err := s.ListAssets(ctx, store.AssetFilter{Hostname: "specific-host"})
+	results, err := s.ListMachines(ctx, store.MachineFilter{Hostname: "specific-host"})
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "specific-host", results[0].Hostname)
 }
 
-func TestListAssets_LimitAndOffset(t *testing.T) {
+func TestListMachines_LimitAndOffset(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		a := makeAsset("host-"+string(rune('a'+i)), model.AssetTypeServer)
+		a := makeMachine("host-"+string(rune('a'+i)), model.MachineTypeServer)
 		// Stagger last_seen_at so ORDER BY is predictable
 		a.LastSeenAt = a.LastSeenAt.Add(time.Duration(i) * time.Minute)
-		require.NoError(t, s.UpsertAsset(ctx, a))
+		require.NoError(t, s.UpsertMachine(ctx, a))
 	}
 
-	page, err := s.ListAssets(ctx, store.AssetFilter{Limit: 2})
+	page, err := s.ListMachines(ctx, store.MachineFilter{Limit: 2})
 	require.NoError(t, err)
 	assert.Len(t, page, 2)
 }
 
 // ---------------------------------------------------------------------------
-// GetStaleAssets
+// GetStaleMachines
 // ---------------------------------------------------------------------------
 
-func TestGetStaleAssets(t *testing.T) {
+func TestGetStaleMachines(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	fresh := makeAsset("fresh", model.AssetTypeServer)
+	fresh := makeMachine("fresh", model.MachineTypeServer)
 	fresh.LastSeenAt = time.Now().UTC().Truncate(time.Second)
 
-	stale := makeAsset("stale", model.AssetTypeServer)
+	stale := makeMachine("stale", model.MachineTypeServer)
 	stale.LastSeenAt = time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
 
-	require.NoError(t, s.UpsertAsset(ctx, fresh))
-	require.NoError(t, s.UpsertAsset(ctx, stale))
+	require.NoError(t, s.UpsertMachine(ctx, fresh))
+	require.NoError(t, s.UpsertMachine(ctx, stale))
 
-	got, err := s.GetStaleAssets(ctx, 24*time.Hour)
+	got, err := s.GetStaleMachines(ctx, 24*time.Hour)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "stale", got[0].Hostname)
@@ -221,14 +221,14 @@ func TestInsertEvent_AndListEvents(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("ev-host", model.AssetTypeServer)
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("ev-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 	run := makeScanRun(t, s)
 
-	evt := model.AssetEvent{
+	evt := model.MachineEvent{
 		ID:        uuid.Must(uuid.NewV7()),
-		EventType: model.EventAssetDiscovered,
-		AssetID:   asset.ID,
+		EventType: model.EventMachineDiscovered,
+		MachineID: machine.ID,
 		ScanRunID: run.ID,
 		Severity:  model.SeverityLow,
 		Details:   `{"info":"test"}`,
@@ -241,23 +241,23 @@ func TestInsertEvent_AndListEvents(t *testing.T) {
 	require.Len(t, events, 1)
 
 	assert.Equal(t, evt.ID, events[0].ID)
-	assert.Equal(t, model.EventAssetDiscovered, events[0].EventType)
-	assert.Equal(t, asset.ID, events[0].AssetID)
+	assert.Equal(t, model.EventMachineDiscovered, events[0].EventType)
+	assert.Equal(t, machine.ID, events[0].MachineID)
 }
 
 func TestListEvents_FilterByEventType(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("ev-filter-host", model.AssetTypeServer)
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("ev-filter-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 	run := makeScanRun(t, s)
 
-	for _, et := range []model.EventType{model.EventAssetDiscovered, model.EventAssetUpdated} {
-		evt := model.AssetEvent{
+	for _, et := range []model.EventType{model.EventMachineDiscovered, model.EventMachineUpdated} {
+		evt := model.MachineEvent{
 			ID:        uuid.Must(uuid.NewV7()),
 			EventType: et,
-			AssetID:   asset.ID,
+			MachineID: machine.ID,
 			ScanRunID: run.ID,
 			Severity:  model.SeverityLow,
 			Timestamp: time.Now().UTC().Truncate(time.Second),
@@ -265,26 +265,26 @@ func TestListEvents_FilterByEventType(t *testing.T) {
 		require.NoError(t, s.InsertEvent(ctx, evt))
 	}
 
-	discovered, err := s.ListEvents(ctx, store.EventFilter{EventType: string(model.EventAssetDiscovered)})
+	discovered, err := s.ListEvents(ctx, store.EventFilter{EventType: string(model.EventMachineDiscovered)})
 	require.NoError(t, err)
 	assert.Len(t, discovered, 1)
 }
 
-func TestListEvents_FilterByAssetID(t *testing.T) {
+func TestListEvents_FilterByMachineID(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	a1 := makeAsset("ev-a1", model.AssetTypeServer)
-	a2 := makeAsset("ev-a2", model.AssetTypeWorkstation)
-	require.NoError(t, s.UpsertAsset(ctx, a1))
-	require.NoError(t, s.UpsertAsset(ctx, a2))
+	a1 := makeMachine("ev-a1", model.MachineTypeServer)
+	a2 := makeMachine("ev-a2", model.MachineTypeWorkstation)
+	require.NoError(t, s.UpsertMachine(ctx, a1))
+	require.NoError(t, s.UpsertMachine(ctx, a2))
 	run := makeScanRun(t, s)
 
-	for _, a := range []model.Asset{a1, a2} {
-		evt := model.AssetEvent{
+	for _, a := range []model.Machine{a1, a2} {
+		evt := model.MachineEvent{
 			ID:        uuid.Must(uuid.NewV7()),
-			EventType: model.EventAssetDiscovered,
-			AssetID:   a.ID,
+			EventType: model.EventMachineDiscovered,
+			MachineID: a.ID,
 			ScanRunID: run.ID,
 			Severity:  model.SeverityLow,
 			Timestamp: time.Now().UTC().Truncate(time.Second),
@@ -292,10 +292,10 @@ func TestListEvents_FilterByAssetID(t *testing.T) {
 		require.NoError(t, s.InsertEvent(ctx, evt))
 	}
 
-	events, err := s.ListEvents(ctx, store.EventFilter{AssetID: &a1.ID})
+	events, err := s.ListEvents(ctx, store.EventFilter{MachineID: &a1.ID})
 	require.NoError(t, err)
 	assert.Len(t, events, 1)
-	assert.Equal(t, a1.ID, events[0].AssetID)
+	assert.Equal(t, a1.ID, events[0].MachineID)
 }
 
 // ---------------------------------------------------------------------------
@@ -335,10 +335,10 @@ func TestCompleteScanRun(t *testing.T) {
 	require.NoError(t, s.CreateScanRun(ctx, run))
 
 	result := model.ScanResult{
-		TotalAssets:     10,
-		NewAssets:       3,
-		UpdatedAssets:   7,
-		StaleAssets:     1,
+		TotalMachines:   10,
+		NewMachines:     3,
+		UpdatedMachines: 7,
+		StaleMachines:   1,
 		CoveragePercent: 95.5,
 	}
 	require.NoError(t, s.CompleteScanRun(ctx, run.ID, result))
@@ -349,10 +349,10 @@ func TestCompleteScanRun(t *testing.T) {
 
 	assert.Equal(t, model.ScanStatusCompleted, latest.Status)
 	assert.NotNil(t, latest.CompletedAt)
-	assert.Equal(t, 10, latest.TotalAssets)
-	assert.Equal(t, 3, latest.NewAssets)
-	assert.Equal(t, 7, latest.UpdatedAssets)
-	assert.Equal(t, 1, latest.StaleAssets)
+	assert.Equal(t, 10, latest.TotalMachines)
+	assert.Equal(t, 3, latest.NewMachines)
+	assert.Equal(t, 7, latest.UpdatedMachines)
+	assert.Equal(t, 1, latest.StaleMachines)
 	assert.InDelta(t, 95.5, latest.CoveragePercent, 0.01)
 }
 
@@ -522,10 +522,10 @@ func TestScanRun_TriggerSourceIndex(t *testing.T) {
 // Installed Software
 // ---------------------------------------------------------------------------
 
-func makeSoftware(assetID uuid.UUID, name, version, pkgMgr string) model.InstalledSoftware {
+func makeSoftware(machineID uuid.UUID, name, version, pkgMgr string) model.InstalledSoftware {
 	return model.InstalledSoftware{
 		ID:             uuid.Must(uuid.NewV7()),
-		AssetID:        assetID,
+		MachineID:      machineID,
 		SoftwareName:   name,
 		Version:        version,
 		PackageManager: pkgMgr,
@@ -536,48 +536,48 @@ func TestUpsertSoftware_InsertAndList(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("sw-host", model.AssetTypeServer)
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("sw-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 
 	sw := []model.InstalledSoftware{
-		makeSoftware(asset.ID, "curl", "7.88.1", "dpkg"),
-		makeSoftware(asset.ID, "wget", "1.21.3", "dpkg"),
-		makeSoftware(asset.ID, "vim", "9.0", "dpkg"),
+		makeSoftware(machine.ID, "curl", "7.88.1", "dpkg"),
+		makeSoftware(machine.ID, "wget", "1.21.3", "dpkg"),
+		makeSoftware(machine.ID, "vim", "9.0", "dpkg"),
 	}
-	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw))
+	require.NoError(t, s.UpsertSoftware(ctx, machine.ID, sw))
 
-	got, err := s.ListSoftware(ctx, asset.ID)
+	got, err := s.ListSoftware(ctx, machine.ID)
 	require.NoError(t, err)
 	require.Len(t, got, 3)
 	assert.Equal(t, "curl", got[0].SoftwareName)
 	assert.Equal(t, "7.88.1", got[0].Version)
 	assert.Equal(t, "dpkg", got[0].PackageManager)
-	assert.Equal(t, asset.ID, got[0].AssetID)
+	assert.Equal(t, machine.ID, got[0].MachineID)
 }
 
 func TestUpsertSoftware_ReplacesExisting(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("replace-host", model.AssetTypeServer)
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("replace-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 
 	// First batch
 	sw1 := []model.InstalledSoftware{
-		makeSoftware(asset.ID, "old-pkg1", "1.0", "pacman"),
-		makeSoftware(asset.ID, "old-pkg2", "2.0", "pacman"),
+		makeSoftware(machine.ID, "old-pkg1", "1.0", "pacman"),
+		makeSoftware(machine.ID, "old-pkg2", "2.0", "pacman"),
 	}
-	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw1))
+	require.NoError(t, s.UpsertSoftware(ctx, machine.ID, sw1))
 
 	// Second batch replaces first
 	sw2 := []model.InstalledSoftware{
-		makeSoftware(asset.ID, "new-pkg1", "3.0", "pacman"),
-		makeSoftware(asset.ID, "new-pkg2", "4.0", "pacman"),
-		makeSoftware(asset.ID, "new-pkg3", "5.0", "pacman"),
+		makeSoftware(machine.ID, "new-pkg1", "3.0", "pacman"),
+		makeSoftware(machine.ID, "new-pkg2", "4.0", "pacman"),
+		makeSoftware(machine.ID, "new-pkg3", "5.0", "pacman"),
 	}
-	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw2))
+	require.NoError(t, s.UpsertSoftware(ctx, machine.ID, sw2))
 
-	got, err := s.ListSoftware(ctx, asset.ID)
+	got, err := s.ListSoftware(ctx, machine.ID)
 	require.NoError(t, err)
 	require.Len(t, got, 3)
 	assert.Equal(t, "new-pkg1", got[0].SoftwareName)
@@ -587,18 +587,18 @@ func TestUpsertSoftware_EmptySlice_DeletesAll(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("empty-sw-host", model.AssetTypeServer)
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("empty-sw-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 
 	sw := []model.InstalledSoftware{
-		makeSoftware(asset.ID, "pkg", "1.0", "dpkg"),
+		makeSoftware(machine.ID, "pkg", "1.0", "dpkg"),
 	}
-	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw))
+	require.NoError(t, s.UpsertSoftware(ctx, machine.ID, sw))
 
 	// Replace with empty
-	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, nil))
+	require.NoError(t, s.UpsertSoftware(ctx, machine.ID, nil))
 
-	got, err := s.ListSoftware(ctx, asset.ID)
+	got, err := s.ListSoftware(ctx, machine.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
@@ -607,10 +607,10 @@ func TestListSoftware_NoResults(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("no-sw-host", model.AssetTypeServer)
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("no-sw-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 
-	got, err := s.ListSoftware(ctx, asset.ID)
+	got, err := s.ListSoftware(ctx, machine.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
@@ -619,17 +619,17 @@ func TestListSoftware_OrderedByName(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("ordered-host", model.AssetTypeServer)
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("ordered-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 
 	sw := []model.InstalledSoftware{
-		makeSoftware(asset.ID, "zlib", "1.2", "pacman"),
-		makeSoftware(asset.ID, "bash", "5.2", "pacman"),
-		makeSoftware(asset.ID, "curl", "8.0", "pacman"),
+		makeSoftware(machine.ID, "zlib", "1.2", "pacman"),
+		makeSoftware(machine.ID, "bash", "5.2", "pacman"),
+		makeSoftware(machine.ID, "curl", "8.0", "pacman"),
 	}
-	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw))
+	require.NoError(t, s.UpsertSoftware(ctx, machine.ID, sw))
 
-	got, err := s.ListSoftware(ctx, asset.ID)
+	got, err := s.ListSoftware(ctx, machine.ID)
 	require.NoError(t, err)
 	require.Len(t, got, 3)
 	assert.Equal(t, "bash", got[0].SoftwareName)
@@ -641,13 +641,13 @@ func TestUpsertSoftware_WithCPE(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := makeAsset("cpe-host", model.AssetTypeServer)
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("cpe-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 
 	sw := []model.InstalledSoftware{
 		{
 			ID:             uuid.Must(uuid.NewV7()),
-			AssetID:        asset.ID,
+			MachineID:      machine.ID,
 			SoftwareName:   "openssl",
 			Version:        "3.1.4",
 			Vendor:         "OpenSSL Project",
@@ -655,9 +655,9 @@ func TestUpsertSoftware_WithCPE(t *testing.T) {
 			PackageManager: "rpm",
 		},
 	}
-	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, sw))
+	require.NoError(t, s.UpsertSoftware(ctx, machine.ID, sw))
 
-	got, err := s.ListSoftware(ctx, asset.ID)
+	got, err := s.ListSoftware(ctx, machine.ID)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "openssl", got[0].SoftwareName)
@@ -670,40 +670,40 @@ func TestUpsertSoftware_WithCPE(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// ListAssets — additional filters
+// ListMachines — additional filters
 // ---------------------------------------------------------------------------
 
-func TestListAssets_FilterByIsAuthorized(t *testing.T) {
+func TestListMachines_FilterByIsAuthorized(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	auth := makeAsset("auth-host", model.AssetTypeServer)
+	auth := makeMachine("auth-host", model.MachineTypeServer)
 	auth.IsAuthorized = model.AuthorizationAuthorized
-	require.NoError(t, s.UpsertAsset(ctx, auth))
+	require.NoError(t, s.UpsertMachine(ctx, auth))
 
-	unauth := makeAsset("unauth-host", model.AssetTypeServer)
+	unauth := makeMachine("unauth-host", model.MachineTypeServer)
 	unauth.IsAuthorized = model.AuthorizationUnauthorized
-	require.NoError(t, s.UpsertAsset(ctx, unauth))
+	require.NoError(t, s.UpsertMachine(ctx, unauth))
 
-	results, err := s.ListAssets(ctx, store.AssetFilter{IsAuthorized: string(model.AuthorizationAuthorized)})
+	results, err := s.ListMachines(ctx, store.MachineFilter{IsAuthorized: string(model.AuthorizationAuthorized)})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "auth-host", results[0].Hostname)
 }
 
-func TestListAssets_FilterByIsManaged(t *testing.T) {
+func TestListMachines_FilterByIsManaged(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	managed := makeAsset("managed-host", model.AssetTypeServer)
+	managed := makeMachine("managed-host", model.MachineTypeServer)
 	managed.IsManaged = model.ManagedManaged
-	require.NoError(t, s.UpsertAsset(ctx, managed))
+	require.NoError(t, s.UpsertMachine(ctx, managed))
 
-	unmanaged := makeAsset("unmanaged-host", model.AssetTypeServer)
+	unmanaged := makeMachine("unmanaged-host", model.MachineTypeServer)
 	unmanaged.IsManaged = model.ManagedUnmanaged
-	require.NoError(t, s.UpsertAsset(ctx, unmanaged))
+	require.NoError(t, s.UpsertMachine(ctx, unmanaged))
 
-	results, err := s.ListAssets(ctx, store.AssetFilter{IsManaged: string(model.ManagedManaged)})
+	results, err := s.ListMachines(ctx, store.MachineFilter{IsManaged: string(model.ManagedManaged)})
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "managed-host", results[0].Hostname)
@@ -717,12 +717,12 @@ func TestConcurrentAccess(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	// Insert assets sequentially to avoid SQLite BUSY contention.
-	const numAssets = 10
-	for i := 0; i < numAssets; i++ {
+	// Insert machines sequentially to avoid SQLite BUSY contention.
+	const numMachines = 10
+	for i := 0; i < numMachines; i++ {
 		hostname := fmt.Sprintf("concurrent-host-%d", i)
-		asset := makeAsset(hostname, model.AssetTypeServer)
-		require.NoError(t, s.UpsertAsset(ctx, asset))
+		machine := makeMachine(hostname, model.MachineTypeServer)
+		require.NoError(t, s.UpsertMachine(ctx, machine))
 	}
 
 	// Concurrent reads should be safe (WAL mode allows this).
@@ -731,19 +731,19 @@ func TestConcurrentAccess(t *testing.T) {
 
 	for i := 0; i < numReaders; i++ {
 		go func() {
-			_, err := s.ListAssets(ctx, store.AssetFilter{})
+			_, err := s.ListMachines(ctx, store.MachineFilter{})
 			errs <- err
 		}()
 	}
 
 	for i := 0; i < numReaders; i++ {
 		err := <-errs
-		assert.NoError(t, err, "concurrent ListAssets should not error")
+		assert.NoError(t, err, "concurrent ListMachines should not error")
 	}
 
-	all, err := s.ListAssets(ctx, store.AssetFilter{})
+	all, err := s.ListMachines(ctx, store.MachineFilter{})
 	require.NoError(t, err)
-	assert.Len(t, all, numAssets)
+	assert.Len(t, all, numMachines)
 }
 
 // TestDashboardReads_UnmigratedDB reproduces the production log spam reported
@@ -751,8 +751,8 @@ func TestConcurrentAccess(t *testing.T) {
 //
 //	ERROR dashboard: render scan-status error="get latest scan run: ...
 //	    SQL logic error: no such table: scan_runs (1)"
-//	ERROR dashboard: render assets error="list assets: ...
-//	    SQL logic error: no such table: assets (1)"
+//	ERROR dashboard: render machines error="list machines: ...
+//	    SQL logic error: no such table: machines (1)"
 //	ERROR dashboard: render findings error="list findings: ...
 //	    SQL logic error: no such table: config_findings (1)"
 //
@@ -765,7 +765,7 @@ func TestConcurrentAccess(t *testing.T) {
 // treat "no such table" the same way it already treats sql.ErrNoRows /
 // empty result — a non-error empty response. GetLatestScanRun already
 // returns (nil, nil) on ErrNoRows; it should do the same when the
-// scan_runs table is absent. ListAssets / ListSoftware / ListFindings
+// scan_runs table is absent. ListMachines / ListSoftware / ListFindings
 // should return ([]T{}, nil) instead of bubbling the driver error. This
 // matches the UX the template already handles ("No scans yet", empty grid)
 // and collapses the log spam into silence on an un-migrated DB.
@@ -792,12 +792,12 @@ func TestDashboardReads_UnmigratedDB(t *testing.T) {
 		assert.Nil(t, latest)
 	})
 
-	t.Run("ListAssets", func(t *testing.T) {
-		assets, err := s.ListAssets(ctx, store.AssetFilter{})
+	t.Run("ListMachines", func(t *testing.T) {
+		machines, err := s.ListMachines(ctx, store.MachineFilter{})
 		assert.NoError(t, err,
 			"un-migrated DB must not surface a raw driver error — "+
-				"ListAssets should return an empty slice")
-		assert.Empty(t, assets)
+				"ListMachines should return an empty slice")
+		assert.Empty(t, machines)
 	})
 
 	t.Run("ListSoftware", func(t *testing.T) {
@@ -837,28 +837,28 @@ func TestStorePathAccessor(t *testing.T) {
 			"so transient-error logs can include it")
 }
 
-// TestUpsertAssets_TransientRetryRoundtrip is the happy-path smoke
+// TestUpsertMachines_TransientRetryRoundtrip is the happy-path smoke
 // test that proves the withTransientRetry wrapper does not break the
-// normal UpsertAssets flow. Simulating SQLITE_IOERR_DELETE_NOENT
+// normal UpsertMachines flow. Simulating SQLITE_IOERR_DELETE_NOENT
 // against a real DB would require racing the OS, so the unit tests on
 // withTransientRetry cover the retry logic itself.
-func TestUpsertAssets_TransientRetryRoundtrip(t *testing.T) {
+func TestUpsertMachines_TransientRetryRoundtrip(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	assets := []model.Asset{
-		makeAsset("retry-01", model.AssetTypeServer),
-		makeAsset("retry-02", model.AssetTypeWorkstation),
+	machines := []model.Machine{
+		makeMachine("retry-01", model.MachineTypeServer),
+		makeMachine("retry-02", model.MachineTypeWorkstation),
 	}
 
-	inserted, updated, err := s.UpsertAssets(ctx, assets)
+	inserted, updated, err := s.UpsertMachines(ctx, machines)
 	require.NoError(t, err)
 	assert.Equal(t, 2, inserted)
 	assert.Equal(t, 0, updated)
 
 	// Repeat to exercise the existing-key code path under the retry
 	// wrapper.
-	inserted2, updated2, err := s.UpsertAssets(ctx, assets)
+	inserted2, updated2, err := s.UpsertMachines(ctx, machines)
 	require.NoError(t, err)
 	assert.Equal(t, 0, inserted2)
 	assert.Equal(t, 2, updated2)

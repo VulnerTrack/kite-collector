@@ -47,14 +47,14 @@
       "type": "object",
       "description": "Closed set of log event records (RFC-0115 §4.4).",
       "properties": {
-        "asset.discovered":      { "$ref": "#/$defs/EventAssetDiscovered" },
-        "asset.changed":         { "$ref": "#/$defs/EventAssetChanged" },
+        "machine.discovered":      { "$ref": "#/$defs/EventMachineDiscovered" },
+        "machine.changed":         { "$ref": "#/$defs/EventMachineChanged" },
         "finding.configuration": { "$ref": "#/$defs/EventFindingConfiguration" },
         "finding.posture":       { "$ref": "#/$defs/EventFindingPosture" },
         "scan.lifecycle":        { "$ref": "#/$defs/EventScanLifecycle" },
         "probe.heartbeat":       { "$ref": "#/$defs/EventProbeHeartbeat" }
       },
-      "required": ["asset.discovered", "asset.changed", "finding.configuration", "finding.posture", "scan.lifecycle", "probe.heartbeat"],
+      "required": ["machine.discovered", "machine.changed", "finding.configuration", "finding.posture", "scan.lifecycle", "probe.heartbeat"],
       "additionalProperties": false
     },
     "EventCommon": {
@@ -66,22 +66,22 @@
       },
       "required": ["event.domain", "event.name", "security.scan.uid"]
     },
-    "AssetCommon": {
+    "MachineCommon": {
       "type": "object",
       "properties": {
-        "security.asset.uid":  { "type": "string", "format": "uuid" },
-        "security.asset.type": { "type": "string", "enum": ["server", "workstation", "container", "vm", "network-device", "iot", "unknown"] },
-        "security.asset.name": { "type": "string" },
-        "security.asset.os.name":    { "type": "string" },
-        "security.asset.os.version": { "type": "string" },
-        "security.asset.ip.v4":      { "type": "string" },
-        "security.asset.ip.v6":      { "type": "string" },
-        "security.asset.mac":        { "type": "string" },
-        "security.asset.fqdn":       { "type": "string" },
-        "security.asset.authorization":  { "type": "string", "enum": ["authorized", "unauthorized", "unknown"] },
-        "security.asset.managed_status": { "type": "string", "enum": ["managed", "unmanaged", "unknown"] },
-        "security.asset.first_seen":     { "type": "string", "format": "date-time" },
-        "security.asset.discovery.source": {
+        "security.machine.uid":  { "type": "string", "format": "uuid" },
+        "security.machine.type": { "type": "string", "enum": ["server", "workstation", "container", "vm", "network-device", "iot", "unknown"] },
+        "security.machine.name": { "type": "string" },
+        "security.machine.os.name":    { "type": "string" },
+        "security.machine.os.version": { "type": "string" },
+        "security.machine.ip.v4":      { "type": "string" },
+        "security.machine.ip.v6":      { "type": "string" },
+        "security.machine.mac":        { "type": "string" },
+        "security.machine.fqdn":       { "type": "string" },
+        "security.machine.authorization":  { "type": "string", "enum": ["authorized", "unauthorized", "unknown"] },
+        "security.machine.managed_status": { "type": "string", "enum": ["managed", "unmanaged", "unknown"] },
+        "security.machine.first_seen":     { "type": "string", "format": "date-time" },
+        "security.machine.discovery.source": {
           "type": "string",
           "enum": [
             "agent", "arp", "icmp", "tcp_syn", "docker",
@@ -92,38 +92,38 @@
         }
       }
     },
-    "EventAssetDiscovered": {
+    "EventMachineDiscovered": {
       "allOf": [
         { "$ref": "#/$defs/EventCommon" },
-        { "$ref": "#/$defs/AssetCommon" }
+        { "$ref": "#/$defs/MachineCommon" }
       ],
       "properties": {
-        "event.name": { "const": "asset.discovered" }
+        "event.name": { "const": "machine.discovered" }
       },
       "required": [
         "event.domain", "event.name", "security.scan.uid",
-        "security.asset.uid", "security.asset.type", "security.asset.name",
-        "security.asset.authorization", "security.asset.managed_status",
-        "security.asset.first_seen", "security.asset.discovery.source"
+        "security.machine.uid", "security.machine.type", "security.machine.name",
+        "security.machine.authorization", "security.machine.managed_status",
+        "security.machine.first_seen", "security.machine.discovery.source"
       ],
       "unevaluatedProperties": false
     },
-    "EventAssetChanged": {
+    "EventMachineChanged": {
       "allOf": [
         { "$ref": "#/$defs/EventCommon" },
-        { "$ref": "#/$defs/AssetCommon" }
+        { "$ref": "#/$defs/MachineCommon" }
       ],
       "properties": {
-        "event.name": { "const": "asset.changed" },
-        "security.asset.change.field":  { "type": "string" },
-        "security.asset.change.before": { "type": "string" },
-        "security.asset.change.after":  { "type": "string" }
+        "event.name": { "const": "machine.changed" },
+        "security.machine.change.field":  { "type": "string" },
+        "security.machine.change.before": { "type": "string" },
+        "security.machine.change.after":  { "type": "string" }
       },
       "required": [
         "event.domain", "event.name", "security.scan.uid",
-        "security.asset.uid", "security.asset.type", "security.asset.name",
-        "security.asset.authorization", "security.asset.managed_status",
-        "security.asset.change.field"
+        "security.machine.uid", "security.machine.type", "security.machine.name",
+        "security.machine.authorization", "security.machine.managed_status",
+        "security.machine.change.field"
       ],
       "unevaluatedProperties": false
     },
@@ -140,8 +140,8 @@
         "security.finding.capec.uid":        { "type": "string", "pattern": "^CAPEC-\\d+$" },
         "security.finding.cis_control":      { "type": "string", "pattern": "^\\d+(\\.\\d+){0,3}$" },
         "security.finding.remediation.desc": { "type": "string", "maxLength": 512 },
-        "security.asset.uid":                { "type": "string", "format": "uuid" },
-        "security.asset.name":               { "type": "string" }
+        "security.machine.uid":                { "type": "string", "format": "uuid" },
+        "security.machine.name":               { "type": "string" }
       }
     },
     "EventFindingConfiguration": {
@@ -158,7 +158,7 @@
         "event.domain", "event.name", "security.scan.uid",
         "security.finding.uid", "security.finding.type", "security.finding.title",
         "security.finding.severity", "security.finding.severity_id",
-        "security.asset.uid", "security.asset.name"
+        "security.machine.uid", "security.machine.name"
       ],
       "unevaluatedProperties": false
     },
@@ -177,7 +177,7 @@
         "security.finding.uid", "security.finding.type", "security.finding.title",
         "security.finding.severity", "security.finding.severity_id",
         "security.finding.likelihood",
-        "security.asset.uid", "security.asset.name"
+        "security.machine.uid", "security.machine.name"
       ],
       "unevaluatedProperties": false
     },

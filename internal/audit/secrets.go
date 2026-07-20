@@ -19,7 +19,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
-// extractRepoPath reads the "path" key from an asset's JSON tags field.
+// extractRepoPath reads the "path" key from an machine's JSON tags field.
 // Moved here from the deleted internal/audit/sca.go (SCA was removed when
 // kite-collector pivoted from "vulnerability scanner" to "CMDB"). secrets.go
 // is the only remaining caller.
@@ -109,7 +109,7 @@ var skippedExtensions = map[string]bool{
 }
 
 // Secrets scans repository source files for hard-coded credentials.
-// It is a no-op for non-repository assets.
+// It is a no-op for non-repository machines.
 type Secrets struct{}
 
 // NewSecrets creates a Secrets auditor.
@@ -119,16 +119,16 @@ func NewSecrets() *Secrets { return &Secrets{} }
 func (s *Secrets) Name() string { return secretsAuditorName }
 
 // Audit scans all eligible text files in the repository for secret patterns.
-func (s *Secrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
-	if asset.AssetType != model.AssetTypeRepository {
+func (s *Secrets) Audit(ctx context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
+	if machine.MachineType != model.MachineTypeRepository {
 		return nil, nil
 	}
 
-	repoPath := extractRepoPath(asset.Tags)
+	repoPath := extractRepoPath(machine.Tags)
 	if repoPath == "" {
-		slog.Warn("secrets: repository asset has no path tag, skipping",
+		slog.Warn("secrets: repository machine has no path tag, skipping",
 			"code", string(LogCodeSecretsMissingPathTag),
-			"asset_id", asset.ID)
+			"machine_id", machine.ID)
 		return nil, nil
 	}
 
@@ -173,7 +173,7 @@ func (s *Secrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigF
 		}
 
 		filesScanned++
-		fileFindings := s.scanFile(asset, path, now)
+		fileFindings := s.scanFile(machine, path, now)
 		findings = append(findings, fileFindings...)
 		return nil
 	})
@@ -181,13 +181,13 @@ func (s *Secrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigF
 	if err != nil && !errors.Is(err, filepath.SkipAll) {
 		slog.Warn("secrets: walk error",
 			"code", string(LogCodeSecretsWalkError),
-			"asset_id", asset.ID, "error", err)
+			"machine_id", machine.ID, "error", err)
 	}
 
 	if len(findings) > 0 {
 		slog.Info(
 			"secrets: findings detected",
-			"asset_id", asset.ID,
+			"machine_id", machine.ID,
 			"path", repoPath,
 			"count", len(findings),
 			"files_scanned", filesScanned,
@@ -200,7 +200,7 @@ func (s *Secrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigF
 // scanFile checks a single file for all secret patterns and returns findings.
 // The evidence field contains file path + line number but NOT the matched text,
 // to avoid secrets appearing in the database.
-func (s *Secrets) scanFile(asset model.Asset, filePath string, now time.Time) []model.ConfigFinding {
+func (s *Secrets) scanFile(machine model.Machine, filePath string, now time.Time) []model.ConfigFinding {
 	f, err := os.Open(filePath) //#nosec G304 -- path is from trusted repo walk
 	if err != nil {
 		return nil
@@ -229,16 +229,16 @@ func (s *Secrets) scanFile(asset model.Asset, filePath string, now time.Time) []
 
 			// Build a stable finding ID so first_seen_at is preserved across scans.
 			matchHash := fmt.Sprintf("%x", sha256.Sum256([]byte(pat.ID+filePath)))[:16]
-			seed := fmt.Sprintf("secrets:%s:%s:%s", asset.ID, pat.ID, matchHash)
+			seed := fmt.Sprintf("secrets:%s:%s:%s", machine.ID, pat.ID, matchHash)
 			findingID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(seed))
 
 			// Evidence: path+line only — no matched text.
-			relPath, _ := filepath.Rel(extractRepoPath(asset.Tags), filePath)
+			relPath, _ := filepath.Rel(extractRepoPath(machine.Tags), filePath)
 			evidence := fmt.Sprintf("%s (line %d) — %s detected", relPath, lineNum, pat.Name)
 
 			findings = append(findings, model.ConfigFinding{
 				ID:          findingID,
-				AssetID:     asset.ID,
+				MachineID:   machine.ID,
 				Auditor:     secretsAuditorName,
 				CheckID:     pat.ID,
 				Title:       fmt.Sprintf("Hard-coded secret: %s", pat.Name),

@@ -2,8 +2,6 @@ package winafipwsaa
 
 import (
 	"context"
-	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -174,9 +172,6 @@ func (c *fileCollector) consider(path, user string, out *[]Artifact) {
 	}
 	body, err := c.readFile(path)
 	if err != nil {
-		if !isNotExist(err) {
-			return
-		}
 		return
 	}
 	hash := HashContents(body)
@@ -258,21 +253,6 @@ func isSystemPseudoProfile(name string) bool {
 		if strings.EqualFold(name, p) {
 			return true
 		}
-	}
-	return false
-}
-
-func isNotExist(err error) bool {
-	return err != nil && (os.IsNotExist(err) || isFsNotExist(err))
-}
-
-func isFsNotExist(err error) bool {
-	if err == nil {
-		return false
-	}
-	var e *fs.PathError
-	if errors.As(err, &e) {
-		return os.IsNotExist(e.Err)
 	}
 	return false
 }

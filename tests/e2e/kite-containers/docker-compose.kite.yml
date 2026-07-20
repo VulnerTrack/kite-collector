@@ -1,0 +1,48 @@
+# End-to-end kite container + settings smoke stack.
+#
+# Fixture containers with known properties + a `kite` runner that builds the
+# real kite-collector binary and drives it (via smoke.sh) against the mounted
+# Docker socket, asserting on the JSON `scan` output.
+#
+#   docker compose -f docker-compose.kite.yml up -d smoke-web smoke-privileged
+#   docker compose -f docker-compose.kite.yml run --rm --build kite
+#   docker compose -f docker-compose.kite.yml down -v
+#
+# (./run.sh wraps all three.) The compose project name is fixed so the docker
+# source's compose_project tag is deterministic and assertable.
+name: kite-containers-e2e
+
+services:
+  # Running container: published port + read-only bind mount + labels.
+  smoke-web:
+    image: nginx:1.27-alpine
+    labels:
+      com.vulnertrack.role: "web"
+    ports:
+      - "18081:80"
+    volumes:
+      - ./fixtures/index.html:/usr/share/nginx/html/index.html:ro
+    restart: "no"
+
+  # --privileged → the docker source's tags.privileged must be true.
+  smoke-privileged:
+    image: alpine:3.20
+    labels:
+      com.vulnertrack.role: "privileged"
+    privileged: true
+    command: ["sleep", "3600"]
+    restart: "no"
+
+  # The binary under test. Talks to the host Docker socket read-only (the docker
+  # source only issues GETs).
+  kite:
+    build:
+      # Repo root is three levels up from tests/e2e/kite-containers/.
+      context: ../../..
+      dockerfile: tests/e2e/kite-containers/Dockerfile.kite-smoke
+    depends_on:
+      - smoke-web
+      - smoke-privileged
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: "no"

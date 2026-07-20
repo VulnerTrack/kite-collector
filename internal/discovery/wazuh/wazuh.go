@@ -39,7 +39,7 @@ func (w *Wazuh) Name() string { return "wazuh" }
 
 // Discover enumerates all Wazuh agents and enriches them with package,
 // vulnerability, SCA, port, and network interface data.
-func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	endpoint := w.baseURL
 	if endpoint == "" {
 		endpoint = toString(cfg["endpoint"])
@@ -210,18 +210,18 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 	}
 	wg.Wait()
 
-	// 3. Convert to assets.
+	// 3. Convert to machines.
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(results))
+	machines := make([]model.Machine, 0, len(results))
 
 	for _, e := range results {
-		asset := agentToAsset(e.agent, e.pkgs, e.vulns, e.sca, e.checks,
+		machine := agentToMachine(e.agent, e.pkgs, e.vulns, e.sca, e.checks,
 			e.ports, e.ifaces, e.addrs, e.defCred, now)
-		assets = append(assets, asset)
+		machines = append(machines, machine)
 	}
 
-	slog.Info("wazuh: discovery complete", "assets", len(assets))
-	return assets, nil
+	slog.Info("wazuh: discovery complete", "machines", len(machines))
+	return machines, nil
 }
 
 // -------------------------------------------------------------------------
@@ -620,10 +620,10 @@ func (c *wazuhClient) listNetAddresses(ctx context.Context, agentID string) ([]w
 }
 
 // -------------------------------------------------------------------------
-// Asset mapping
+// Machine mapping
 // -------------------------------------------------------------------------
 
-func agentToAsset(
+func agentToMachine(
 	ag wazuhAgent,
 	pkgs []wazuhPackage,
 	vulns []wazuhVulnerability,
@@ -634,15 +634,15 @@ func agentToAsset(
 	addrs []wazuhNetAddr,
 	defaultCreds bool,
 	now time.Time,
-) model.Asset {
+) model.Machine {
 	hostname := ag.Name
 	if hostname == "" {
 		hostname = ag.ID
 	}
 
-	assetType := model.AssetTypeServer
+	machineType := model.MachineTypeServer
 	if isDesktopOS(ag.OS.Platform, ag.OS.Name) {
-		assetType = model.AssetTypeWorkstation
+		machineType = model.MachineTypeWorkstation
 	}
 
 	tags := map[string]any{
@@ -664,7 +664,7 @@ func agentToAsset(
 	// Flag disconnected agents (R9).
 	if ag.Status == "disconnected" || ag.Status == "never_connected" {
 		tags["stale"] = true
-		tags["warning"] = fmt.Sprintf("agent %s — asset data may be outdated", ag.Status)
+		tags["warning"] = fmt.Sprintf("agent %s — machine data may be outdated", ag.Status)
 	}
 
 	// Default credential warning (R3).
@@ -821,10 +821,10 @@ func agentToAsset(
 		osVersion = ag.OS.Name + " " + ag.OS.Version
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       assetType,
+		MachineType:     machineType,
 		OSFamily:        ag.OS.Platform,
 		OSVersion:       osVersion,
 		Architecture:    ag.OS.Arch,
@@ -835,8 +835,8 @@ func agentToAsset(
 		IsManaged:       model.ManagedManaged, // Wazuh agent present = managed
 		Tags:            string(tagsJSON),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }
 
 // -------------------------------------------------------------------------
@@ -912,5 +912,5 @@ func sanitizeLogValue(s string) string {
 // Compile-time interface check.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Wazuh)(nil)

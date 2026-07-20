@@ -39,7 +39,7 @@ func (d *Device42) Name() string { return "device42" }
 
 const device42PageSize = 100
 
-// Discover lists devices from Device42 and returns them as assets. If
+// Discover lists devices from Device42 and returns them as machines. If
 // discovery is not enabled, or credentials are not available, the method
 // returns nil (graceful degradation).
 //
@@ -49,7 +49,7 @@ const device42PageSize = 100
 //	api_url  – string base URL of the Device42 instance (e.g. "https://device42.corp.local")
 //	username – string API account username
 //	password – string API account password
-func (d *Device42) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (d *Device42) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2/F3: honour enabled:false even when creds are present.
 	}
@@ -88,7 +88,7 @@ func (d *Device42) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(devices))
+	machines := make([]model.Machine, 0, len(devices))
 
 	for _, dev := range devices {
 		osFamily := deriveDevice42OSFamily(dev.OS)
@@ -114,13 +114,13 @@ func (d *Device42) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 			tags["uuid"] = dev.UUID
 		}
 
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:                uuid.Must(uuid.NewV7()),
-			AssetType:         classifyDevice42(dev.Type),
+			MachineType:       classifyDevice42(dev.Type),
 			Hostname:          dev.Name,
 			OSFamily:          osFamily,
 			OSVersion:         dev.OSVer,
-			AssetTag:          dev.AssetNo,
+			MachineTag:        dev.MachineNo,
 			OperationalStatus: opStatus,
 			DiscoverySource:   "device42",
 			FirstSeenAt:       now,
@@ -129,18 +129,18 @@ func (d *Device42) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 			IsManaged:         model.ManagedUnknown,
 		}
 		if dev.DeviceID != 0 {
-			asset.CMDBSysID = strconv.Itoa(dev.DeviceID)
+			machine.CMDBSysID = strconv.Itoa(dev.DeviceID)
 		}
 		if len(tags) > 0 {
 			b, _ := json.Marshal(tags)
-			asset.Tags = string(b)
+			machine.Tags = string(b)
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
 
-	slog.Info("device42: discovery complete", "code", string(LogCodeDevice42Complete), "total_assets", len(assets))
-	return assets, nil
+	slog.Info("device42: discovery complete", "code", string(LogCodeDevice42Complete), "total_machines", len(machines))
+	return machines, nil
 }
 
 // httpClient returns the outbound client and validated base URL. When baseURL
@@ -183,7 +183,7 @@ type device42Device struct {
 	OSVer        string `json:"osver"`
 	SerialNo     string `json:"serial_no"`
 	ServiceLevel string `json:"service_level"`
-	AssetNo      string `json:"asset_no"`
+	MachineNo    string `json:"asset_no"`
 	UUID         string `json:"uuid"`
 	DeviceID     int    `json:"device_id"`
 	InService    bool   `json:"in_service"`
@@ -269,15 +269,15 @@ func (d *Device42) fetchDevicePage(ctx context.Context, client *http.Client, bas
 // Helpers
 // ---------------------------------------------------------------------------
 
-// classifyDevice42 maps the Device42 device type to an asset type.
-func classifyDevice42(deviceType string) model.AssetType {
+// classifyDevice42 maps the Device42 device type to an machine type.
+func classifyDevice42(deviceType string) model.MachineType {
 	switch strings.ToLower(deviceType) {
 	case "virtual":
-		return model.AssetTypeVirtualMachine
+		return model.MachineTypeVirtualMachine
 	case "cluster":
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	default:
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
 }
 
@@ -312,5 +312,5 @@ func deriveDevice42OSFamily(os string) string {
 // ensure Device42 satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Device42)(nil)

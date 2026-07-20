@@ -13,11 +13,11 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
-// findAssetByHostname returns the first asset matching hostname, or nil.
-func findAssetByHostname(assets []model.Asset, hostname string) *model.Asset {
-	for i := range assets {
-		if assets[i].Hostname == hostname {
-			return &assets[i]
+// findMachineByHostname returns the first machine matching hostname, or nil.
+func findMachineByHostname(machines []model.Machine, hostname string) *model.Machine {
+	for i := range machines {
+		if machines[i].Hostname == hostname {
+			return &machines[i]
 		}
 	}
 	return nil
@@ -89,13 +89,13 @@ func TestHeroku_Discover_Success(t *testing.T) {
 
 	h := NewHeroku()
 	h.baseURL = srv.URL
-	assets, err := h.Discover(context.Background(), map[string]any{})
+	machines, err := h.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	web := findAssetByHostname(assets, "web-app")
+	web := findMachineByHostname(machines, "web-app")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeContainer, web.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, web.MachineType)
 	assert.Equal(t, "heroku", web.DiscoverySource)
 	assert.Equal(t, "us", web.Environment)
 	assert.NotEmpty(t, web.NaturalKey)
@@ -108,7 +108,7 @@ func TestHeroku_Discover_Success(t *testing.T) {
 	assert.NotContains(t, webTags, "warning")
 
 	// Maintenance app gets warning.
-	api := findAssetByHostname(assets, "api-app")
+	api := findMachineByHostname(machines, "api-app")
 	require.NotNil(t, api)
 	var apiTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(api.Tags), &apiTags))
@@ -125,9 +125,9 @@ func TestHeroku_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_HEROKU_TOKEN")
 
-	assets, err := h.Discover(context.Background(), nil)
+	machines, err := h.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestHeroku_Discover_AuthFailure(t *testing.T) {

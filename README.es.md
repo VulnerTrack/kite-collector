@@ -194,7 +194,7 @@ discovery:
 
 classification:
   authorization:
-    allowlist_file: ./configs/authorized-assets.yaml
+    allowlist_file: ./configs/authorized-machines.yaml
     match_fields: [hostname]
 
 audit:

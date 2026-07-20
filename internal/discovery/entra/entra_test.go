@@ -18,7 +18,7 @@ import (
 // endpoint plus the four Graph list endpoints (users, servicePrincipals,
 // groups, devices). All endpoints succeed; the device list returns two
 // records — one Windows workstation and one macOS device — so callers can
-// assert on the asset slice produced by buildDeviceAssets.
+// assert on the machine slice produced by buildDeviceMachines.
 func newMockEntraAPI(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -170,13 +170,13 @@ func TestEntraID_Discover_Success(t *testing.T) {
 		"client_secret": "test-secret",
 	}
 
-	assets, err := e.Discover(context.Background(), cfg)
+	machines, err := e.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
+	require.Len(t, machines, 2)
 
-	laptop := findEntraAsset(assets, "LAPTOP-001")
+	laptop := findEntraMachine(machines, "LAPTOP-001")
 	require.NotNil(t, laptop)
-	assert.Equal(t, model.AssetTypeWorkstation, laptop.AssetType)
+	assert.Equal(t, model.MachineTypeWorkstation, laptop.MachineType)
 	assert.Equal(t, "windows", laptop.OSFamily)
 	assert.Equal(t, "10.0.22631", laptop.OSVersion)
 	assert.Equal(t, "entra", laptop.DiscoverySource)
@@ -185,7 +185,7 @@ func TestEntraID_Discover_Success(t *testing.T) {
 	assert.Equal(t, model.ManagedManaged, laptop.IsManaged)
 	assert.NotEmpty(t, laptop.NaturalKey)
 
-	mac := findEntraAsset(assets, "MAC-002")
+	mac := findEntraMachine(machines, "MAC-002")
 	require.NotNil(t, mac)
 	assert.Equal(t, "darwin", mac.OSFamily)
 	assert.Equal(t, model.ManagedUnknown, mac.IsManaged) // isManaged absent in payload
@@ -199,16 +199,16 @@ func TestEntraID_Discover_DisabledReturnsNil(t *testing.T) {
 		"client_id":     "client",
 		"client_secret": "secret",
 	}
-	assets, err := e.Discover(context.Background(), cfg)
+	machines, err := e.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestEntraID_Discover_MissingCredentials(t *testing.T) {
 	e := New()
-	assets, err := e.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := e.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestEntraID_Discover_TokenFailure(t *testing.T) {
@@ -226,9 +226,9 @@ func TestEntraID_Discover_TokenFailure(t *testing.T) {
 		"client_secret": "wrong-secret",
 	}
 
-	assets, err := e.Discover(context.Background(), cfg)
+	machines, err := e.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestEntraID_Discover_Pagination(t *testing.T) {
@@ -246,11 +246,11 @@ func TestEntraID_Discover_Pagination(t *testing.T) {
 		"client_secret": "test-secret",
 	}
 
-	assets, err := e.Discover(context.Background(), cfg)
+	machines, err := e.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
-	assert.NotNil(t, findEntraAsset(assets, "DEV-A"))
-	assert.NotNil(t, findEntraAsset(assets, "DEV-B"))
+	require.Len(t, machines, 2)
+	assert.NotNil(t, findEntraMachine(machines, "DEV-A"))
+	assert.NotNil(t, findEntraMachine(machines, "DEV-B"))
 }
 
 func TestEntraID_Discover_InvalidConfigReturnsError(t *testing.T) {
@@ -285,9 +285,9 @@ func TestEntraID_Discover_SSRFBlocked(t *testing.T) {
 		"client_secret":  "secret",
 		"token_base_url": "https://169.254.169.254", // link-local metadata endpoint
 	}
-	assets, err := e.Discover(context.Background(), cfg)
+	machines, err := e.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets, "SSRF-blocked base URL must skip discovery, not proceed")
+	assert.Nil(t, machines, "SSRF-blocked base URL must skip discovery, not proceed")
 }
 
 func TestEntraID_Discover_SSRFBlocked_PrivateGraphURL(t *testing.T) {
@@ -301,9 +301,9 @@ func TestEntraID_Discover_SSRFBlocked_PrivateGraphURL(t *testing.T) {
 		"client_secret":  "secret",
 		"graph_base_url": "https://10.0.0.5",
 	}
-	assets, err := e.Discover(context.Background(), cfg)
+	machines, err := e.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestEntraID_ListRoleMembers_RejectsPathTraversal(t *testing.T) {
@@ -403,13 +403,13 @@ func TestPrivilegedRoleTemplateIDs_Stable(t *testing.T) {
 func TestClassifyEntraDevice(t *testing.T) {
 	tests := []struct {
 		os   string
-		want model.AssetType
+		want model.MachineType
 	}{
-		{"Windows", model.AssetTypeWorkstation},
-		{"macOS", model.AssetTypeWorkstation},
-		{"Windows Server 2022", model.AssetTypeServer},
-		{"Linux Server", model.AssetTypeServer},
-		{"", model.AssetTypeWorkstation},
+		{"Windows", model.MachineTypeWorkstation},
+		{"macOS", model.MachineTypeWorkstation},
+		{"Windows Server 2022", model.MachineTypeServer},
+		{"Linux Server", model.MachineTypeServer},
+		{"", model.MachineTypeWorkstation},
 	}
 	for _, tc := range tests {
 		t.Run(tc.os, func(t *testing.T) {
@@ -475,11 +475,11 @@ func TestDeviceTags_OmitsAbsentBooleans(t *testing.T) {
 	assert.Equal(t, "obj-1", tags[tagObjectID])
 }
 
-// findEntraAsset returns the first asset matching hostname, or nil.
-func findEntraAsset(assets []model.Asset, hostname string) *model.Asset {
-	for i := range assets {
-		if assets[i].Hostname == hostname {
-			return &assets[i]
+// findEntraMachine returns the first machine matching hostname, or nil.
+func findEntraMachine(machines []model.Machine, hostname string) *model.Machine {
+	for i := range machines {
+		if machines[i].Hostname == hostname {
+			return &machines[i]
 		}
 	}
 	return nil

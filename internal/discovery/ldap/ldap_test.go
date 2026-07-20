@@ -75,7 +75,7 @@ func TestLDAP_Discover_Disabled(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 0 {
-		t.Fatalf("disabled source returned %d assets", len(got))
+		t.Fatalf("disabled source returned %d machines", len(got))
 	}
 }
 
@@ -144,14 +144,14 @@ func TestLDAP_Discover_HappyPath(t *testing.T) {
 		"bind_dn":            "CN=svc,OU=Users,DC=corp,DC=acme,DC=com",
 		"domain_controllers": []any{"dc1.corp.acme.com"},
 	}
-	assets, err := src.Discover(context.Background(), cfg)
+	machines, err := src.Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("got %d assets, want 1", len(assets))
+	if len(machines) != 1 {
+		t.Fatalf("got %d machines, want 1", len(machines))
 	}
-	a := assets[0]
+	a := machines[0]
 	if a.Hostname != "ws01.corp.acme.com" {
 		t.Errorf("hostname = %q, want %q", a.Hostname, "ws01.corp.acme.com")
 	}
@@ -226,12 +226,12 @@ func TestLDAP_Discover_MaxObjectsTrips(t *testing.T) {
 		"domain_controllers": []any{"dc1.corp.acme.com"},
 		"max_objects":        2,
 	}
-	assets, err := src.Discover(context.Background(), cfg)
+	machines, err := src.Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 2 {
-		t.Fatalf("max_objects=2 should have truncated, got %d", len(assets))
+	if len(machines) != 2 {
+		t.Fatalf("max_objects=2 should have truncated, got %d", len(machines))
 	}
 }
 
@@ -405,14 +405,14 @@ func TestExtractComputer_DisabledAccount(t *testing.T) {
 	}
 }
 
-func TestClassifyAsset(t *testing.T) {
-	if classifyAsset(uacWorkstation, "Windows 11") != "workstation" {
+func TestClassifyMachine(t *testing.T) {
+	if classifyMachine(uacWorkstation, "Windows 11") != "workstation" {
 		t.Error("workstation trust should classify as workstation")
 	}
-	if classifyAsset(uacServerTrust, "Windows Server") != "server" {
+	if classifyMachine(uacServerTrust, "Windows Server") != "server" {
 		t.Error("server trust should classify as server")
 	}
-	if classifyAsset(0, "Windows Server 2022") != "server" {
+	if classifyMachine(0, "Windows Server 2022") != "server" {
 		t.Error("operatingSystem fallback to server")
 	}
 }

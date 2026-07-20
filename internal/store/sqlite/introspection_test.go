@@ -13,22 +13,22 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
-// seedAssetWithChildren inserts a single asset plus an installed software row
-// and an event referencing it. It returns the asset so tests can assert on its
+// seedMachineWithChildren inserts a single machine plus an installed software row
+// and an event referencing it. It returns the machine so tests can assert on its
 // PK in row reports.
-func seedAssetWithChildren(t *testing.T, s *SQLiteStore) model.Asset {
+func seedMachineWithChildren(t *testing.T, s *SQLiteStore) model.Machine {
 	t.Helper()
 	ctx := context.Background()
 
-	asset := makeAsset("introspect-host", model.AssetTypeServer)
-	asset.OSFamily = "linux"
-	require.NoError(t, s.UpsertAsset(ctx, asset))
+	machine := makeMachine("introspect-host", model.MachineTypeServer)
+	machine.OSFamily = "linux"
+	require.NoError(t, s.UpsertMachine(ctx, machine))
 
 	sw := model.InstalledSoftware{
 		SoftwareName: "openssl",
 		Version:      "3.0.0",
 	}
-	require.NoError(t, s.UpsertSoftware(ctx, asset.ID, []model.InstalledSoftware{sw}))
+	require.NoError(t, s.UpsertSoftware(ctx, machine.ID, []model.InstalledSoftware{sw}))
 
 	run := model.ScanRun{
 		ID:        uuid.Must(uuid.NewV7()),
@@ -37,17 +37,17 @@ func seedAssetWithChildren(t *testing.T, s *SQLiteStore) model.Asset {
 	}
 	require.NoError(t, s.CreateScanRun(ctx, run))
 
-	evt := model.AssetEvent{
+	evt := model.MachineEvent{
 		ID:        uuid.Must(uuid.NewV7()),
-		EventType: model.EventAssetDiscovered,
-		AssetID:   asset.ID,
+		EventType: model.EventMachineDiscovered,
+		MachineID: machine.ID,
 		ScanRunID: run.ID,
 		Severity:  model.SeverityLow,
 		Timestamp: time.Now().UTC().Truncate(time.Second),
 	}
-	require.NoError(t, s.InsertEvents(ctx, []model.AssetEvent{evt}))
+	require.NoError(t, s.InsertEvents(ctx, []model.MachineEvent{evt}))
 
-	return asset
+	return machine
 }
 
 func TestListContentTables_HidesSystemAndReportsColumns(t *testing.T) {
@@ -65,21 +65,21 @@ func TestListContentTables_HidesSystemAndReportsColumns(t *testing.T) {
 		assert.NotEqual(t, "schema_migrations", tbl.Name,
 			"migration bookkeeping table must be hidden")
 	}
-	require.Contains(t, names, "assets")
+	require.Contains(t, names, "machines")
 
-	assets := names["assets"]
-	require.NotEmpty(t, assets.Columns)
-	assert.Equal(t, []string{"id"}, assets.PrimaryKey)
+	machines := names["machines"]
+	require.NotEmpty(t, machines.Columns)
+	assert.Equal(t, []string{"id"}, machines.PrimaryKey)
 }
 
-func TestDescribeTable_AssetsColumns(t *testing.T) {
+func TestDescribeTable_MachinesColumns(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	schema, err := s.DescribeTable(ctx, "assets")
+	schema, err := s.DescribeTable(ctx, "machines")
 	require.NoError(t, err)
 	require.NotNil(t, schema)
-	assert.Equal(t, "assets", schema.Name)
+	assert.Equal(t, "machines", schema.Name)
 	assert.Equal(t, []string{"id"}, schema.PrimaryKey)
 
 	byName := make(map[string]store.ColumnSchema, len(schema.Columns))
@@ -87,7 +87,7 @@ func TestDescribeTable_AssetsColumns(t *testing.T) {
 		byName[c.Name] = c
 	}
 	require.Contains(t, byName, "hostname")
-	require.Contains(t, byName, "asset_type")
+	require.Contains(t, byName, "machine_type")
 	assert.True(t, byName["hostname"].NotNull)
 }
 
@@ -99,16 +99,16 @@ func TestDescribeTable_UnknownTableReturnsErr(t *testing.T) {
 	assert.ErrorIs(t, err, store.ErrUnknownTable)
 }
 
-func TestListRows_AssetsPagination(t *testing.T) {
+func TestListRows_MachinesPagination(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
-		a := makeAsset("paging-"+string(rune('a'+i)), model.AssetTypeServer)
-		require.NoError(t, s.UpsertAsset(ctx, a))
+		a := makeMachine("paging-"+string(rune('a'+i)), model.MachineTypeServer)
+		require.NoError(t, s.UpsertMachine(ctx, a))
 	}
 
-	rows, total, err := s.ListRows(ctx, store.RowsFilter{Table: "assets", Limit: 2})
+	rows, total, err := s.ListRows(ctx, store.RowsFilter{Table: "machines", Limit: 2})
 	require.NoError(t, err)
 	assert.EqualValues(t, 5, total)
 	assert.Len(t, rows, 2)
@@ -121,12 +121,12 @@ func TestListRows_UnknownTableRejected(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	_, _, err := s.ListRows(ctx, store.RowsFilter{Table: "assets; DROP TABLE assets; --"})
+	_, _, err := s.ListRows(ctx, store.RowsFilter{Table: "machines; DROP TABLE machines; --"})
 	assert.ErrorIs(t, err, store.ErrUnknownTable,
 		"identifier-injection attempt must be rejected against the live catalog")
 
-	rows, err := s.ListAssets(ctx, store.AssetFilter{})
-	require.NoError(t, err, "assets table must still exist after injection attempt")
+	rows, err := s.ListMachines(ctx, store.MachineFilter{})
+	require.NoError(t, err, "machines table must still exist after injection attempt")
 	_ = rows
 }
 
@@ -137,28 +137,28 @@ func TestListRows_ClampsToIntrospectionRowLimit(t *testing.T) {
 	// Insert 3 rows, but request a pathological limit to ensure the Store caps
 	// it at IntrospectionRowLimit rather than honoring it literally.
 	for i := 0; i < 3; i++ {
-		require.NoError(t, s.UpsertAsset(ctx, makeAsset("clamp-"+string(rune('a'+i)), model.AssetTypeServer)))
+		require.NoError(t, s.UpsertMachine(ctx, makeMachine("clamp-"+string(rune('a'+i)), model.MachineTypeServer)))
 	}
 
 	// Limit above the cap should still succeed and return all 3 rows.
 	rows, _, err := s.ListRows(ctx, store.RowsFilter{
-		Table: "assets",
+		Table: "machines",
 		Limit: store.IntrospectionRowLimit * 10,
 	})
 	require.NoError(t, err)
 	assert.Len(t, rows, 3)
 }
 
-func TestGetRowReport_AssetWithChildrenAndParents(t *testing.T) {
+func TestGetRowReport_MachineWithChildrenAndParents(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	asset := seedAssetWithChildren(t, s)
+	machine := seedMachineWithChildren(t, s)
 
-	report, err := s.GetRowReport(ctx, "assets", map[string]string{"id": asset.ID.String()})
+	report, err := s.GetRowReport(ctx, "machines", map[string]string{"id": machine.ID.String()})
 	require.NoError(t, err)
 	require.NotNil(t, report)
-	assert.Equal(t, "assets", report.Table)
+	assert.Equal(t, "machines", report.Table)
 
 	inboundTables := make(map[string]store.RelatedRowGroup, len(report.Inbound))
 	for _, g := range report.Inbound {
@@ -167,13 +167,13 @@ func TestGetRowReport_AssetWithChildrenAndParents(t *testing.T) {
 	require.Contains(t, inboundTables, "installed_software",
 		"inbound group must surface installed_software children")
 	require.Contains(t, inboundTables, "events",
-		"inbound group must surface events referencing the asset")
+		"inbound group must surface events referencing the machine")
 
 	for _, g := range report.Inbound {
 		assert.NotEmpty(t, g.Rows, "%s child rows must not be empty", g.Table)
 	}
 
-	// Events row itself carries outbound FKs to assets and scan_runs.
+	// Events row itself carries outbound FKs to machines and scan_runs.
 	eventsSchema, err := s.DescribeTable(ctx, "events")
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(eventsSchema.ForeignKeys), 2)
@@ -183,7 +183,7 @@ func TestGetRowReport_UnknownTableRejected(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	_, err := s.GetRowReport(ctx, "\"; DROP TABLE assets; --", map[string]string{"id": "x"})
+	_, err := s.GetRowReport(ctx, "\"; DROP TABLE machines; --", map[string]string{"id": "x"})
 	require.Error(t, err)
 	assert.True(t,
 		errors.Is(err, store.ErrUnknownTable) || errors.Is(err, store.ErrUnknownColumn),

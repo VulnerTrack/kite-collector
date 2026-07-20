@@ -27,7 +27,7 @@ func (k *Kamatera) Name() string { return "kamatera" }
 
 // Discover lists all Kamatera servers.
 // Credentials: KITE_KAMATERA_CLIENT_ID and KITE_KAMATERA_SECRET env vars.
-func (k *Kamatera) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (k *Kamatera) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	clientID := os.Getenv("KITE_KAMATERA_CLIENT_ID")
 	secret := os.Getenv("KITE_KAMATERA_SECRET")
 
@@ -52,15 +52,15 @@ func (k *Kamatera) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(servers))
+	machines := make([]model.Machine, 0, len(servers))
 	for i := range servers {
-		assets = append(assets, kamateraToAsset(servers[i], now))
+		machines = append(machines, kamateraToMachine(servers[i], now))
 	}
 
 	slog.Info("Kamatera VPS discovery complete",
 		"code", string(LogCodeKamateraComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Kamatera API response types ---
@@ -75,9 +75,9 @@ type kamateraServer struct {
 	RAM        int      `json:"ram"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func kamateraToAsset(srv kamateraServer, now time.Time) model.Asset {
+func kamateraToMachine(srv kamateraServer, now time.Time) model.Machine {
 	ip := ""
 	if len(srv.IPs) > 0 {
 		ip = srv.IPs[0]
@@ -94,10 +94,10 @@ func kamateraToAsset(srv kamateraServer, now time.Time) model.Asset {
 		tags["warning"] = "server powered off - not reachable by network scan"
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        srv.Name,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		Environment:     srv.Datacenter,
 		DiscoverySource: "kamatera",
 		FirstSeenAt:     now,
@@ -106,6 +106,6 @@ func kamateraToAsset(srv kamateraServer, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

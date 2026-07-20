@@ -23,15 +23,15 @@ func newEntraForTest(cfg EntraAuditConfig) *Entra {
 	return a
 }
 
-// entraDeviceAsset builds an Entra-discovered asset with the supplied tag
+// entraDeviceMachine builds an Entra-discovered machine with the supplied tag
 // map JSON-encoded into Tags.
-func entraDeviceAsset(t *testing.T, tags map[string]any) model.Asset {
+func entraDeviceMachine(t *testing.T, tags map[string]any) model.Machine {
 	t.Helper()
 	tagsJSON, err := json.Marshal(tags)
 	if err != nil {
 		t.Fatalf("marshal tags: %v", err)
 	}
-	return model.Asset{
+	return model.Machine{
 		ID:              uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 		Hostname:        "entra-host-001",
 		DiscoverySource: entra.SourceName,
@@ -46,11 +46,11 @@ func TestEntra_Name(t *testing.T) {
 }
 
 func TestEntra_Audit_NonCompliantDeviceFires(t *testing.T) {
-	asset := entraDeviceAsset(t, map[string]any{
+	machine := entraDeviceMachine(t, map[string]any{
 		"entra.tenant_id":    "tenant-1",
 		"entra.is_compliant": false,
 	})
-	got, err := newEntraForTest(EntraAuditConfig{}).Audit(context.Background(), asset)
+	got, err := newEntraForTest(EntraAuditConfig{}).Audit(context.Background(), machine)
 	if err != nil {
 		t.Fatalf("Audit: %v", err)
 	}
@@ -62,19 +62,19 @@ func TestEntra_Audit_NonCompliantDeviceFires(t *testing.T) {
 			if f.Severity != model.SeverityMedium {
 				t.Errorf("entra-005 severity = %s, want medium", f.Severity)
 			}
-			if f.AssetID == uuid.Nil {
-				t.Error("entra-005 should carry the asset id")
+			if f.MachineID == uuid.Nil {
+				t.Error("entra-005 should carry the machine id")
 			}
 		}
 	}
 }
 
 func TestEntra_Audit_CompliantDeviceSkipped(t *testing.T) {
-	asset := entraDeviceAsset(t, map[string]any{
+	machine := entraDeviceMachine(t, map[string]any{
 		"entra.tenant_id":    "tenant-1",
 		"entra.is_compliant": true,
 	})
-	got, err := newEntraForTest(EntraAuditConfig{}).Audit(context.Background(), asset)
+	got, err := newEntraForTest(EntraAuditConfig{}).Audit(context.Background(), machine)
 	if err != nil {
 		t.Fatalf("Audit: %v", err)
 	}
@@ -83,26 +83,26 @@ func TestEntra_Audit_CompliantDeviceSkipped(t *testing.T) {
 	}
 }
 
-func TestEntra_Audit_NonEntraAssetSkipped(t *testing.T) {
-	asset := model.Asset{
+func TestEntra_Audit_NonEntraMachineSkipped(t *testing.T) {
+	machine := model.Machine{
 		ID:              uuid.New(),
 		DiscoverySource: "agent",
 		Tags:            `{"entra.is_compliant":false}`,
 	}
-	got, err := newEntraForTest(EntraAuditConfig{}).Audit(context.Background(), asset)
+	got, err := newEntraForTest(EntraAuditConfig{}).Audit(context.Background(), machine)
 	if err != nil {
 		t.Fatalf("Audit: %v", err)
 	}
 	if len(got) != 0 {
-		t.Errorf("non-entra asset returned %d findings", len(got))
+		t.Errorf("non-entra machine returned %d findings", len(got))
 	}
 }
 
 func TestEntra_Audit_MissingComplianceTagSkipped(t *testing.T) {
-	asset := entraDeviceAsset(t, map[string]any{
+	machine := entraDeviceMachine(t, map[string]any{
 		"entra.tenant_id": "tenant-1",
 	})
-	got, err := newEntraForTest(EntraAuditConfig{}).Audit(context.Background(), asset)
+	got, err := newEntraForTest(EntraAuditConfig{}).Audit(context.Background(), machine)
 	if err != nil {
 		t.Fatalf("Audit: %v", err)
 	}

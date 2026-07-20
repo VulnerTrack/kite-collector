@@ -19,7 +19,7 @@ const (
 )
 
 // ProbeHeartbeat is the synthetic per-source per-scan liveness record. Every
-// discovery source emits exactly one — whether it found assets or not — so
+// discovery source emits exactly one — whether it found machines or not — so
 // the absence of a heartbeat for an expected collector is itself a signal.
 //
 // Signature is an Ed25519 signature over CanonicalPayload(), so the reconciler

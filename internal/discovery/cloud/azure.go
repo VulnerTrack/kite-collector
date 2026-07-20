@@ -31,7 +31,7 @@ func NewAzure() *Azure {
 func (az *Azure) Name() string { return "azure_vm" }
 
 // Discover lists Azure virtual machines in the configured subscription and
-// regions, returning them as assets. Credentials are read from standard
+// regions, returning them as machines. Credentials are read from standard
 // Azure environment variables. If credentials are not available the method
 // logs a warning and returns nil (graceful degradation).
 //
@@ -39,7 +39,7 @@ func (az *Azure) Name() string { return "azure_vm" }
 //
 //	regions         – []any of Azure region strings (e.g. ["eastus", "westeurope"])
 //	subscription_id – string Azure subscription ID to enumerate VMs from
-func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	regions := toStringSlice(cfg["regions"])
 	subscriptionID := toString(cfg["subscription_id"])
 
@@ -120,11 +120,11 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 
 	for _, subID := range subscriptionIDs {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("azure discovery cancelled: %w", err)
+			return machines, fmt.Errorf("azure discovery cancelled: %w", err)
 		}
 
 		slog.Info("Azure VM listing VMs for subscription",
@@ -149,9 +149,9 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 			osFamily := deriveAzureOSFamily(vm)
 
-			asset := model.Asset{
+			machine := model.Machine{
 				ID:              uuid.Must(uuid.NewV7()),
-				AssetType:       model.AssetTypeCloudInstance,
+				MachineType:     model.MachineTypeCloudInstance,
 				Hostname:        vm.name,
 				OSFamily:        osFamily,
 				DiscoverySource: "azure_vm",
@@ -161,16 +161,16 @@ func (az *Azure) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 				IsManaged:       model.ManagedUnknown,
 				Environment:     vm.location,
 			}
-			asset.ComputeNaturalKey()
-			assets = append(assets, asset)
+			machine.ComputeNaturalKey()
+			machines = append(machines, machine)
 		}
 	}
 
 	slog.Info("Azure VM discovery complete",
 		"code", string(LogCodeAzureVMComplete),
-		"total_assets", len(assets),
+		"total_machines", len(machines),
 		"subscriptions_scanned", len(subscriptionIDs))
-	return assets, nil
+	return machines, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -465,5 +465,5 @@ func deriveAzureOSFamily(vm azureVM) string {
 // ensure Azure satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Azure)(nil)

@@ -31,15 +31,15 @@ import (
 type PrivacyMode string
 
 const (
-	// PrivacyModePrivate disables ReportAssets — only aggregates leave the agent.
+	// PrivacyModePrivate disables ReportMachines — only aggregates leave the agent.
 	PrivacyModePrivate PrivacyMode = "private"
-	// PrivacyModeManaged allows full asset details, BYOK encrypted.
+	// PrivacyModeManaged allows full machine details, BYOK encrypted.
 	PrivacyModeManaged PrivacyMode = "managed"
 )
 
 // Server implements the kite.v1.CollectorService gRPC service. It receives
-// streamed asset snapshots from remote agents, converts them to domain
-// model.Asset values, and persists them through the store.Store interface.
+// streamed machine snapshots from remote agents, converts them to domain
+// model.Machine values, and persists them through the store.Store interface.
 type Server struct {
 	kitev1.UnimplementedCollectorServiceServer
 	store           store.Store
@@ -74,7 +74,7 @@ func New(addr string, st store.Store, logger *slog.Logger) *Server {
 }
 
 // SetPrivacyMode configures the tenant privacy mode (RFC-0077 §5.4).
-// In "private" mode, ReportAssets is disabled.
+// In "private" mode, ReportMachines is disabled.
 func (s *Server) SetPrivacyMode(mode PrivacyMode) {
 	s.privacyMode = mode
 	s.logger.Info("gRPC: privacy mode set", "mode", string(mode))
@@ -153,21 +153,21 @@ func (s *Server) Stop() {
 	}
 }
 
-// ReportAssets implements kite.v1.CollectorService.ReportAssets. It consumes
-// a client stream of AssetSnapshot messages, upserting each into the store
+// ReportMachines implements kite.v1.CollectorService.ReportMachines. It consumes
+// a client stream of MachineSnapshot messages, upserting each into the store
 // (along with any attached software inventory), and returns a summary of
 // accepted vs rejected snapshots when the stream ends.
 //
 // When mTLS is active, tenant_id is extracted from the certificate Organization
-// field and injected into every asset for tenant-scoped isolation (RFC-0063).
+// field and injected into every machine for tenant-scoped isolation (RFC-0063).
 //
 // In private mode (RFC-0077 §5.4), this RPC is disabled. The agent
-// retains all asset data locally and only sends aggregates via OTLP.
-func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer) error {
+// retains all machine data locally and only sends aggregates via OTLP.
+func (s *Server) ReportMachines(stream kitev1.CollectorService_ReportMachinesServer) error {
 	if s.privacyMode == PrivacyModePrivate {
-		return fmt.Errorf("report assets: %w", status.Error(codes.PermissionDenied,
-			"ReportAssets is disabled in private privacy mode — "+
-				"asset details are retained on the agent"))
+		return fmt.Errorf("report machines: %w", status.Error(codes.PermissionDenied,
+			"ReportMachines is disabled in private privacy mode — "+
+				"machine details are retained on the agent"))
 	}
 
 	ctx := stream.Context()
@@ -181,22 +181,22 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 				Accepted: accepted,
 				Rejected: rejected,
 			}); closeErr != nil {
-				return fmt.Errorf("send and close assets: %w", closeErr)
+				return fmt.Errorf("send and close machines: %w", closeErr)
 			}
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("recv asset snapshot: %w", err)
+			return fmt.Errorf("recv machine snapshot: %w", err)
 		}
 
-		asset := snapshotToAsset(snapshot)
+		machine := snapshotToMachine(snapshot)
 		if tenantID != "" {
-			asset.TenantID = tenantID
-			asset.ComputeNaturalKey() // recompute with tenant scope
+			machine.TenantID = tenantID
+			machine.ComputeNaturalKey() // recompute with tenant scope
 		}
 
-		if upsertErr := s.store.UpsertAsset(ctx, asset); upsertErr != nil {
-			s.logger.Warn("gRPC: failed to upsert asset", "code", string(LogCodeServerAssetUpsertFail), "hostname", snapshot.Hostname, "error", upsertErr)
+		if upsertErr := s.store.UpsertMachine(ctx, machine); upsertErr != nil {
+			s.logger.Warn("gRPC: failed to upsert machine", "code", string(LogCodeServerMachineUpsertFail), "hostname", snapshot.Hostname, "error", upsertErr)
 			rejected++
 			continue
 		}
@@ -207,7 +207,7 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 			for _, pkg := range snapshot.Software {
 				sw = append(sw, model.InstalledSoftware{
 					ID:             uuid.Must(uuid.NewV7()),
-					AssetID:        asset.ID,
+					MachineID:      machine.ID,
 					SoftwareName:   pkg.Name,
 					Version:        pkg.Version,
 					Vendor:         pkg.Vendor,
@@ -215,8 +215,8 @@ func (s *Server) ReportAssets(stream kitev1.CollectorService_ReportAssetsServer)
 					PackageManager: pkg.PackageManager,
 				})
 			}
-			if swErr := s.store.UpsertSoftware(ctx, asset.ID, sw); swErr != nil {
-				s.logger.Warn("gRPC: failed to upsert software", "code", string(LogCodeServerSoftwareUpsertFail), "asset_id", asset.ID, "error", swErr)
+			if swErr := s.store.UpsertSoftware(ctx, machine.ID, sw); swErr != nil {
+				s.logger.Warn("gRPC: failed to upsert software", "code", string(LogCodeServerSoftwareUpsertFail), "machine_id", machine.ID, "error", swErr)
 			}
 		}
 
@@ -325,14 +325,14 @@ func peerTenantID(ctx context.Context) string {
 	return orgs[0]
 }
 
-// snapshotToAsset converts a protobuf AssetSnapshot into a domain model.Asset
+// snapshotToMachine converts a protobuf MachineSnapshot into a domain model.Machine
 // with sensible defaults for missing fields.
-func snapshotToAsset(s *kitev1.AssetSnapshot) model.Asset {
+func snapshotToMachine(s *kitev1.MachineSnapshot) model.Machine {
 	now := time.Now().UTC()
-	a := model.Asset{
+	a := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        s.Hostname,
-		AssetType:       model.AssetType(s.AssetType),
+		MachineType:     model.MachineType(s.MachineType),
 		OSFamily:        s.OsFamily,
 		OSVersion:       s.OsVersion,
 		Environment:     s.Environment,
@@ -345,8 +345,8 @@ func snapshotToAsset(s *kitev1.AssetSnapshot) model.Asset {
 		FirstSeenAt:     now,
 		LastSeenAt:      now,
 	}
-	if !a.AssetType.Valid() {
-		a.AssetType = model.AssetTypeServer
+	if !a.MachineType.Valid() {
+		a.MachineType = model.MachineTypeServer
 	}
 	if a.DiscoverySource == "" {
 		a.DiscoverySource = "grpc_agent"

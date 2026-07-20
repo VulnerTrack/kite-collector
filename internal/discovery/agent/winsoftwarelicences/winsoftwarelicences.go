@@ -6,7 +6,7 @@
 // Linux + macOS install roots are also walked for the same
 // licence artifact filenames as a portability bonus.
 //
-// Per asset, the inventory captures product title,
+// Per machine, the inventory captures product title,
 // publisher, install date, purpose, vendor URL, and DP/DS
 // classification (datos personales / datos sensibles —
 // Ley 25.326 / GDPR / HIPAA / PCI scope).

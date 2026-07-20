@@ -11,7 +11,7 @@
 //	  Contabilidad\   (general ledger)
 //	  Stock\          (inventory)
 //	  Tesoreria\      (treasury / banking)
-//	  Activos\        (fixed assets)
+//	  Activos\        (fixed machines)
 //	  *.tdb *.fpt *.cdx *.idx
 //
 // Multi-empresa hosts are the norm for estudios contables and

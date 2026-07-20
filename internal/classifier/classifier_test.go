@@ -17,8 +17,8 @@ func TestAuthorizer_NoEntries_ReturnsUnknown(t *testing.T) {
 	auth, err := NewAuthorizer("", []string{"hostname"})
 	require.NoError(t, err)
 
-	asset := model.Asset{Hostname: "anything"}
-	assert.Equal(t, model.AuthorizationUnknown, auth.Authorize(asset))
+	machine := model.Machine{Hostname: "anything"}
+	assert.Equal(t, model.AuthorizationUnknown, auth.Authorize(machine))
 }
 
 func TestAuthorizer_MatchingHostname_ReturnsAuthorized(t *testing.T) {
@@ -27,8 +27,8 @@ func TestAuthorizer_MatchingHostname_ReturnsAuthorized(t *testing.T) {
 		matchFields: []string{"hostname"},
 	}
 
-	asset := model.Asset{Hostname: "web-01"}
-	assert.Equal(t, model.AuthorizationAuthorized, auth.Authorize(asset))
+	machine := model.Machine{Hostname: "web-01"}
+	assert.Equal(t, model.AuthorizationAuthorized, auth.Authorize(machine))
 }
 
 func TestAuthorizer_NonMatchingHostname_ReturnsUnauthorized(t *testing.T) {
@@ -37,8 +37,8 @@ func TestAuthorizer_NonMatchingHostname_ReturnsUnauthorized(t *testing.T) {
 		matchFields: []string{"hostname"},
 	}
 
-	asset := model.Asset{Hostname: "rogue-box"}
-	assert.Equal(t, model.AuthorizationUnauthorized, auth.Authorize(asset))
+	machine := model.Machine{Hostname: "rogue-box"}
+	assert.Equal(t, model.AuthorizationUnauthorized, auth.Authorize(machine))
 }
 
 func TestAuthorizer_GlobPattern(t *testing.T) {
@@ -48,11 +48,11 @@ func TestAuthorizer_GlobPattern(t *testing.T) {
 	}
 
 	assert.Equal(t, model.AuthorizationAuthorized,
-		auth.Authorize(model.Asset{Hostname: "server-01"}))
+		auth.Authorize(model.Machine{Hostname: "server-01"}))
 	assert.Equal(t, model.AuthorizationAuthorized,
-		auth.Authorize(model.Asset{Hostname: "server-99"}))
+		auth.Authorize(model.Machine{Hostname: "server-99"}))
 	assert.Equal(t, model.AuthorizationUnauthorized,
-		auth.Authorize(model.Asset{Hostname: "desktop-01"}))
+		auth.Authorize(model.Machine{Hostname: "desktop-01"}))
 }
 
 func TestAuthorizer_CaseInsensitiveHostname(t *testing.T) {
@@ -62,7 +62,7 @@ func TestAuthorizer_CaseInsensitiveHostname(t *testing.T) {
 	}
 
 	assert.Equal(t, model.AuthorizationAuthorized,
-		auth.Authorize(model.Asset{Hostname: "web-01"}))
+		auth.Authorize(model.Machine{Hostname: "web-01"}))
 }
 
 func TestAuthorizer_NoMatchFields_ReturnsUnauthorized(t *testing.T) {
@@ -73,7 +73,7 @@ func TestAuthorizer_NoMatchFields_ReturnsUnauthorized(t *testing.T) {
 
 	// With entries but no match fields, entryMatches returns false for all
 	assert.Equal(t, model.AuthorizationUnauthorized,
-		auth.Authorize(model.Asset{Hostname: "web-01"}))
+		auth.Authorize(model.Machine{Hostname: "web-01"}))
 }
 
 func TestAuthorizer_NonexistentFile_ReturnsUnknown(t *testing.T) {
@@ -82,7 +82,7 @@ func TestAuthorizer_NonexistentFile_ReturnsUnknown(t *testing.T) {
 
 	// File not found results in zero entries, so "unknown"
 	assert.Equal(t, model.AuthorizationUnknown,
-		auth.Authorize(model.Asset{Hostname: "web-01"}))
+		auth.Authorize(model.Machine{Hostname: "web-01"}))
 }
 
 // ---------------------------------------------------------------------------
@@ -92,15 +92,15 @@ func TestAuthorizer_NonexistentFile_ReturnsUnknown(t *testing.T) {
 func TestManager_EmptyControls_ReturnsUnknown(t *testing.T) {
 	mgr := NewManager(nil)
 
-	asset := model.Asset{Hostname: "host-01"}
-	assert.Equal(t, model.ManagedUnknown, mgr.Evaluate(asset))
+	machine := model.Machine{Hostname: "host-01"}
+	assert.Equal(t, model.ManagedUnknown, mgr.Evaluate(machine))
 }
 
 func TestManager_WithControls_ReturnsUnmanaged(t *testing.T) {
 	mgr := NewManager([]string{"edr_agent", "config_mgmt"})
 
-	asset := model.Asset{Hostname: "host-01"}
-	assert.Equal(t, model.ManagedUnmanaged, mgr.Evaluate(asset))
+	machine := model.Machine{Hostname: "host-01"}
+	assert.Equal(t, model.ManagedUnmanaged, mgr.Evaluate(machine))
 }
 
 // ---------------------------------------------------------------------------
@@ -115,12 +115,12 @@ func TestClassifier_ClassifyAll(t *testing.T) {
 	mgr := NewManager([]string{"edr"})
 	cls := New(auth, mgr)
 
-	assets := []model.Asset{
-		{Hostname: "known-01", AssetType: model.AssetTypeServer},
-		{Hostname: "rogue-01", AssetType: model.AssetTypeWorkstation},
+	machines := []model.Machine{
+		{Hostname: "known-01", MachineType: model.MachineTypeServer},
+		{Hostname: "rogue-01", MachineType: model.MachineTypeWorkstation},
 	}
 
-	result := cls.ClassifyAll(assets)
+	result := cls.ClassifyAll(machines)
 	require.Len(t, result, 2)
 
 	assert.Equal(t, model.AuthorizationAuthorized, result[0].IsAuthorized)
@@ -138,11 +138,11 @@ func TestClassifier_ClassifySingle(t *testing.T) {
 	mgr := NewManager(nil)
 	cls := New(auth, mgr)
 
-	asset := model.Asset{Hostname: "web-01"}
-	cls.Classify(&asset)
+	machine := model.Machine{Hostname: "web-01"}
+	cls.Classify(&machine)
 
-	assert.Equal(t, model.AuthorizationAuthorized, asset.IsAuthorized)
-	assert.Equal(t, model.ManagedUnknown, asset.IsManaged)
+	assert.Equal(t, model.AuthorizationAuthorized, machine.IsAuthorized)
+	assert.Equal(t, model.ManagedUnknown, machine.IsManaged)
 }
 
 // ---------------------------------------------------------------------------
@@ -152,47 +152,47 @@ func TestClassifier_ClassifySingle(t *testing.T) {
 func TestManager_EvaluateWithSoftware_EmptyControls_ReturnsUnknown(t *testing.T) {
 	mgr := NewManager(nil)
 
-	asset := model.Asset{Hostname: "host-01"}
+	machine := model.Machine{Hostname: "host-01"}
 	sw := []model.InstalledSoftware{{SoftwareName: "CrowdStrike Falcon"}}
-	assert.Equal(t, model.ManagedUnknown, mgr.EvaluateWithSoftware(asset, sw))
+	assert.Equal(t, model.ManagedUnknown, mgr.EvaluateWithSoftware(machine, sw))
 }
 
 func TestManager_EvaluateWithSoftware_AllControlsPresent_ReturnsManaged(t *testing.T) {
 	mgr := NewManager([]string{"crowdstrike", "osquery"})
 
-	asset := model.Asset{Hostname: "host-01"}
+	machine := model.Machine{Hostname: "host-01"}
 	sw := []model.InstalledSoftware{
 		{SoftwareName: "CrowdStrike Falcon"},
 		{SoftwareName: "osquery agent"},
 		{SoftwareName: "nginx"},
 	}
-	assert.Equal(t, model.ManagedManaged, mgr.EvaluateWithSoftware(asset, sw))
+	assert.Equal(t, model.ManagedManaged, mgr.EvaluateWithSoftware(machine, sw))
 }
 
 func TestManager_EvaluateWithSoftware_MissingControl_ReturnsUnmanaged(t *testing.T) {
 	mgr := NewManager([]string{"crowdstrike", "osquery"})
 
-	asset := model.Asset{Hostname: "host-01"}
+	machine := model.Machine{Hostname: "host-01"}
 	sw := []model.InstalledSoftware{
 		{SoftwareName: "CrowdStrike Falcon"},
 		{SoftwareName: "nginx"},
 	}
-	assert.Equal(t, model.ManagedUnmanaged, mgr.EvaluateWithSoftware(asset, sw))
+	assert.Equal(t, model.ManagedUnmanaged, mgr.EvaluateWithSoftware(machine, sw))
 }
 
 func TestManager_EvaluateWithSoftware_EmptySoftwareList_ReturnsUnmanaged(t *testing.T) {
 	mgr := NewManager([]string{"edr_agent"})
 
-	asset := model.Asset{Hostname: "host-01"}
-	assert.Equal(t, model.ManagedUnmanaged, mgr.EvaluateWithSoftware(asset, nil))
+	machine := model.Machine{Hostname: "host-01"}
+	assert.Equal(t, model.ManagedUnmanaged, mgr.EvaluateWithSoftware(machine, nil))
 }
 
 func TestManager_EvaluateWithSoftware_CaseInsensitive(t *testing.T) {
 	mgr := NewManager([]string{"CROWDSTRIKE"})
 
-	asset := model.Asset{Hostname: "host-01"}
+	machine := model.Machine{Hostname: "host-01"}
 	sw := []model.InstalledSoftware{{SoftwareName: "crowdstrike falcon sensor"}}
-	assert.Equal(t, model.ManagedManaged, mgr.EvaluateWithSoftware(asset, sw))
+	assert.Equal(t, model.ManagedManaged, mgr.EvaluateWithSoftware(machine, sw))
 }
 
 // ---------------------------------------------------------------------------
@@ -207,13 +207,13 @@ func TestClassifier_ClassifyWithSoftware(t *testing.T) {
 	mgr := NewManager([]string{"edr"})
 	cls := New(auth, mgr)
 
-	asset := model.Asset{Hostname: "web-01"}
+	machine := model.Machine{Hostname: "web-01"}
 	sw := []model.InstalledSoftware{{SoftwareName: "EDR Agent v3"}}
 
-	cls.ClassifyWithSoftware(&asset, sw)
+	cls.ClassifyWithSoftware(&machine, sw)
 
-	assert.Equal(t, model.AuthorizationAuthorized, asset.IsAuthorized)
-	assert.Equal(t, model.ManagedManaged, asset.IsManaged)
+	assert.Equal(t, model.AuthorizationAuthorized, machine.IsAuthorized)
+	assert.Equal(t, model.ManagedManaged, machine.IsManaged)
 }
 
 func TestClassifier_ClassifyWithSoftware_NoMatch(t *testing.T) {
@@ -224,13 +224,13 @@ func TestClassifier_ClassifyWithSoftware_NoMatch(t *testing.T) {
 	mgr := NewManager([]string{"edr"})
 	cls := New(auth, mgr)
 
-	asset := model.Asset{Hostname: "web-01"}
+	machine := model.Machine{Hostname: "web-01"}
 	sw := []model.InstalledSoftware{{SoftwareName: "nginx"}}
 
-	cls.ClassifyWithSoftware(&asset, sw)
+	cls.ClassifyWithSoftware(&machine, sw)
 
-	assert.Equal(t, model.AuthorizationAuthorized, asset.IsAuthorized)
-	assert.Equal(t, model.ManagedUnmanaged, asset.IsManaged)
+	assert.Equal(t, model.AuthorizationAuthorized, machine.IsAuthorized)
+	assert.Equal(t, model.ManagedUnmanaged, machine.IsManaged)
 }
 
 func TestClassifier_ClassifyAllWithSoftware(t *testing.T) {
@@ -245,10 +245,10 @@ func TestClassifier_ClassifyAllWithSoftware(t *testing.T) {
 	id2 := uuid.New()
 	id3 := uuid.New()
 
-	assets := []model.Asset{
-		{ID: id1, Hostname: "known-01", AssetType: model.AssetTypeServer},
-		{ID: id2, Hostname: "known-02", AssetType: model.AssetTypeServer},
-		{ID: id3, Hostname: "rogue-01", AssetType: model.AssetTypeWorkstation},
+	machines := []model.Machine{
+		{ID: id1, Hostname: "known-01", MachineType: model.MachineTypeServer},
+		{ID: id2, Hostname: "known-02", MachineType: model.MachineTypeServer},
+		{ID: id3, Hostname: "rogue-01", MachineType: model.MachineTypeWorkstation},
 	}
 
 	softwareMap := map[uuid.UUID][]model.InstalledSoftware{
@@ -257,7 +257,7 @@ func TestClassifier_ClassifyAllWithSoftware(t *testing.T) {
 		id3: {{SoftwareName: "nginx"}},
 	}
 
-	result := cls.ClassifyAllWithSoftware(assets, softwareMap)
+	result := cls.ClassifyAllWithSoftware(machines, softwareMap)
 	require.Len(t, result, 3)
 
 	// id1: authorized + managed (EDR present)

@@ -38,9 +38,9 @@ func route53MockServer(t *testing.T, listZonesXML, listRRSetsXML, dnssecXML stri
 
 func TestRoute53Discover_DisabledByConfig(t *testing.T) {
 	r := NewDNSRoute53()
-	assets, err := r.Discover(context.Background(), map[string]any{"enabled": false})
+	machines, err := r.Discover(context.Background(), map[string]any{"enabled": false})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 	assert.Nil(t, r.Snapshot(), "snapshot must remain nil when source is disabled")
 }
 
@@ -121,9 +121,9 @@ func TestRoute53Discover_HappyPath(t *testing.T) {
 	r.baseURL = srv.URL
 	r.httpClient = srv.Client()
 
-	assets, err := r.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := r.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets, "Discover must not return any model.Asset")
+	assert.Nil(t, machines, "Discover must not return any model.Machine")
 
 	snap := r.Snapshot()
 	require.NotNil(t, snap)

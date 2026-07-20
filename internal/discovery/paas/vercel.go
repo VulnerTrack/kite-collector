@@ -29,7 +29,7 @@ func (v *Vercel) Name() string { return "vercel" }
 
 // Discover lists all Vercel projects using timestamp-based pagination.
 // Credentials: KITE_VERCEL_TOKEN environment variable.
-func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_VERCEL_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -42,13 +42,13 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		"code", string(LogCodeVercelStarting))
 
 	client := newClient("vercel", v.baseURL, bearerAuth(token))
-	var assets []model.Asset
+	var machines []model.Machine
 	var until string
 	guard := safenet.NewPaginationGuardV2WithSource("vercel")
 
 	for {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("vercel: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("vercel: context cancelled: %w", ctx.Err())
 		}
 
 		path := fmt.Sprintf("/v9/projects?limit=%d", vercelPageSize)
@@ -59,15 +59,15 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		var resp vercelProjectsResponse
 		nBytes, err := client.getSized(ctx, path, &resp)
 		if err != nil {
-			return assets, fmt.Errorf("vercel: list projects: %w", err)
+			return machines, fmt.Errorf("vercel: list projects: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("vercel: %w", err)
+			return machines, fmt.Errorf("vercel: %w", err)
 		}
 
 		now := time.Now().UTC()
 		for i := range resp.Projects {
-			assets = append(assets, vercelToAsset(resp.Projects[i], now))
+			machines = append(machines, vercelToMachine(resp.Projects[i], now))
 		}
 
 		if resp.Pagination.Next == nil {
@@ -78,8 +78,8 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	slog.Info("Vercel PaaS discovery complete",
 		"code", string(LogCodeVercelComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Vercel API response types ---
@@ -102,9 +102,9 @@ type vercelProject struct {
 	UpdatedAt int64  `json:"updatedAt"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func vercelToAsset(proj vercelProject, now time.Time) model.Asset {
+func vercelToMachine(proj vercelProject, now time.Time) model.Machine {
 	tags := map[string]any{
 		"platform":    "vercel",
 		"provider_id": proj.ID,
@@ -122,10 +122,10 @@ func vercelToAsset(proj vercelProject, now time.Time) model.Asset {
 		lastSeen = time.UnixMilli(proj.UpdatedAt).UTC()
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        proj.Name,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		DiscoverySource: "vercel",
 		FirstSeenAt:     firstSeen,
 		LastSeenAt:      lastSeen,
@@ -133,6 +133,6 @@ func vercelToAsset(proj vercelProject, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

@@ -16,8 +16,8 @@ import (
 )
 
 // TestPostgresStoreLifecycle exercises the full PostgreSQL store lifecycle:
-// upsert assets -> upsert software -> insert events -> create/complete scan
-// run -> list/filter assets -> get stale assets.
+// upsert machines -> upsert software -> insert events -> create/complete scan
+// run -> list/filter machines -> get stale machines.
 func TestPostgresStoreLifecycle(t *testing.T) {
 	ctx := context.Background()
 	dsn := startPostgresContainer(ctx, t)
@@ -25,22 +25,22 @@ func TestPostgresStoreLifecycle(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
-	// ---- Upsert assets ----
-	assets := []model.Asset{
-		makeAsset("e2e-srv-01", model.AssetTypeServer, now),
-		makeAsset("e2e-ws-01", model.AssetTypeWorkstation, now),
-		makeAsset("e2e-cloud-01", model.AssetTypeCloudInstance, now),
+	// ---- Upsert machines ----
+	machines := []model.Machine{
+		makeMachine("e2e-srv-01", model.MachineTypeServer, now),
+		makeMachine("e2e-ws-01", model.MachineTypeWorkstation, now),
+		makeMachine("e2e-cloud-01", model.MachineTypeCloudInstance, now),
 	}
 
-	inserted, updated, err := st.UpsertAssets(ctx, assets)
+	inserted, updated, err := st.UpsertMachines(ctx, machines)
 	require.NoError(t, err)
 	assert.Equal(t, 3, inserted)
 	assert.Equal(t, 0, updated)
 
 	// Re-upsert with updated fields — should count as updates.
-	assets[0].OSVersion = "6.2"
-	assets[0].LastSeenAt = now.Add(time.Minute)
-	inserted, updated, err = st.UpsertAssets(ctx, assets)
+	machines[0].OSVersion = "6.2"
+	machines[0].LastSeenAt = now.Add(time.Minute)
+	inserted, updated, err = st.UpsertMachines(ctx, machines)
 	require.NoError(t, err)
 	assert.Equal(t, 0, inserted)
 	assert.Equal(t, 3, updated)
@@ -49,7 +49,7 @@ func TestPostgresStoreLifecycle(t *testing.T) {
 	software := []model.InstalledSoftware{
 		{
 			ID:             uuid.Must(uuid.NewV7()),
-			AssetID:        assets[0].ID,
+			MachineID:      machines[0].ID,
 			SoftwareName:   "falcon-sensor",
 			Vendor:         "CrowdStrike",
 			Version:        "7.0.0",
@@ -58,16 +58,16 @@ func TestPostgresStoreLifecycle(t *testing.T) {
 		},
 		{
 			ID:             uuid.Must(uuid.NewV7()),
-			AssetID:        assets[0].ID,
+			MachineID:      machines[0].ID,
 			SoftwareName:   "osquery",
 			Vendor:         "Meta",
 			Version:        "5.11.0",
 			PackageManager: "deb",
 		},
 	}
-	require.NoError(t, st.UpsertSoftware(ctx, assets[0].ID, software))
+	require.NoError(t, st.UpsertSoftware(ctx, machines[0].ID, software))
 
-	listedSW, err := st.ListSoftware(ctx, assets[0].ID)
+	listedSW, err := st.ListSoftware(ctx, machines[0].ID)
 	require.NoError(t, err)
 	assert.Len(t, listedSW, 2)
 
@@ -83,19 +83,19 @@ func TestPostgresStoreLifecycle(t *testing.T) {
 	require.NoError(t, st.CreateScanRun(ctx, scanRun))
 
 	// ---- Insert events ----
-	events := []model.AssetEvent{
-		makeEvent(assets[0].ID, scanRunID, model.EventAssetDiscovered, now),
-		makeEvent(assets[1].ID, scanRunID, model.EventAssetDiscovered, now),
-		makeEvent(assets[2].ID, scanRunID, model.EventAssetDiscovered, now),
+	events := []model.MachineEvent{
+		makeEvent(machines[0].ID, scanRunID, model.EventMachineDiscovered, now),
+		makeEvent(machines[1].ID, scanRunID, model.EventMachineDiscovered, now),
+		makeEvent(machines[2].ID, scanRunID, model.EventMachineDiscovered, now),
 	}
 	require.NoError(t, st.InsertEvents(ctx, events))
 
 	// ---- Complete scan run ----
 	result := model.ScanResult{
-		TotalAssets:     3,
-		NewAssets:       3,
-		UpdatedAssets:   0,
-		StaleAssets:     0,
+		TotalMachines:   3,
+		NewMachines:     3,
+		UpdatedMachines: 0,
+		StaleMachines:   0,
 		EventsEmitted:   3,
 		CoveragePercent: 100.0,
 	}
@@ -105,49 +105,49 @@ func TestPostgresStoreLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, latest)
 	assert.Equal(t, model.ScanStatusCompleted, latest.Status)
-	assert.Equal(t, 3, latest.TotalAssets)
+	assert.Equal(t, 3, latest.TotalMachines)
 	assert.NotNil(t, latest.CompletedAt)
 
-	// ---- List/filter assets ----
-	all, err := st.ListAssets(ctx, store.AssetFilter{Limit: 100})
+	// ---- List/filter machines ----
+	all, err := st.ListMachines(ctx, store.MachineFilter{Limit: 100})
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(all), 3)
 
-	cloudOnly, err := st.ListAssets(ctx, store.AssetFilter{
-		AssetType: string(model.AssetTypeCloudInstance),
-		Limit:     100,
+	cloudOnly, err := st.ListMachines(ctx, store.MachineFilter{
+		MachineType: string(model.MachineTypeCloudInstance),
+		Limit:       100,
 	})
 	require.NoError(t, err)
 	for _, a := range cloudOnly {
-		assert.Equal(t, model.AssetTypeCloudInstance, a.AssetType)
+		assert.Equal(t, model.MachineTypeCloudInstance, a.MachineType)
 	}
 
 	// ---- List events with filter ----
-	evByAsset, err := st.ListEvents(ctx, store.EventFilter{
-		AssetID: &assets[0].ID,
-		Limit:   100,
+	evByMachine, err := st.ListEvents(ctx, store.EventFilter{
+		MachineID: &machines[0].ID,
+		Limit:     100,
 	})
 	require.NoError(t, err)
-	assert.NotEmpty(t, evByAsset)
-	for _, e := range evByAsset {
-		assert.Equal(t, assets[0].ID, e.AssetID)
+	assert.NotEmpty(t, evByMachine)
+	for _, e := range evByMachine {
+		assert.Equal(t, machines[0].ID, e.MachineID)
 	}
 
-	// ---- Stale assets ----
-	staleAsset := makeAsset("e2e-stale-host", model.AssetTypeServer, now.Add(-72*time.Hour))
-	_, _, err = st.UpsertAssets(ctx, []model.Asset{staleAsset})
+	// ---- Stale machines ----
+	staleMachine := makeMachine("e2e-stale-host", model.MachineTypeServer, now.Add(-72*time.Hour))
+	_, _, err = st.UpsertMachines(ctx, []model.Machine{staleMachine})
 	require.NoError(t, err)
 
-	stale, err := st.GetStaleAssets(ctx, 24*time.Hour)
+	stale, err := st.GetStaleMachines(ctx, 24*time.Hour)
 	require.NoError(t, err)
 	staleNames := make(map[string]bool)
 	for _, a := range stale {
 		staleNames[a.Hostname] = true
 	}
-	assert.True(t, staleNames["e2e-stale-host"], "stale asset should appear")
+	assert.True(t, staleNames["e2e-stale-host"], "stale machine should appear")
 }
 
-// TestPostgresUpsertIdempotent verifies that upserting the same asset twice
+// TestPostgresUpsertIdempotent verifies that upserting the same machine twice
 // does not duplicate it.
 func TestPostgresUpsertIdempotent(t *testing.T) {
 	ctx := context.Background()
@@ -155,12 +155,12 @@ func TestPostgresUpsertIdempotent(t *testing.T) {
 	st := newTestStore(t, dsn)
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	asset := makeAsset("e2e-idempotent", model.AssetTypeServer, now)
+	machine := makeMachine("e2e-idempotent", model.MachineTypeServer, now)
 
-	require.NoError(t, st.UpsertAsset(ctx, asset))
-	require.NoError(t, st.UpsertAsset(ctx, asset))
+	require.NoError(t, st.UpsertMachine(ctx, machine))
+	require.NoError(t, st.UpsertMachine(ctx, machine))
 
-	listed, err := st.ListAssets(ctx, store.AssetFilter{
+	listed, err := st.ListMachines(ctx, store.MachineFilter{
 		Hostname: "e2e-idempotent",
 		Limit:    10,
 	})
@@ -176,28 +176,28 @@ func TestPostgresSoftwareReplacement(t *testing.T) {
 	st := newTestStore(t, dsn)
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	asset := makeAsset("e2e-sw-replace", model.AssetTypeServer, now)
-	_, _, err := st.UpsertAssets(ctx, []model.Asset{asset})
+	machine := makeMachine("e2e-sw-replace", model.MachineTypeServer, now)
+	_, _, err := st.UpsertMachines(ctx, []model.Machine{machine})
 	require.NoError(t, err)
 
 	// Initial set.
 	initial := []model.InstalledSoftware{
-		{ID: uuid.Must(uuid.NewV7()), AssetID: asset.ID, SoftwareName: "old-agent", Vendor: "Old", Version: "1.0"},
+		{ID: uuid.Must(uuid.NewV7()), MachineID: machine.ID, SoftwareName: "old-agent", Vendor: "Old", Version: "1.0"},
 	}
-	require.NoError(t, st.UpsertSoftware(ctx, asset.ID, initial))
+	require.NoError(t, st.UpsertSoftware(ctx, machine.ID, initial))
 
-	listed, err := st.ListSoftware(ctx, asset.ID)
+	listed, err := st.ListSoftware(ctx, machine.ID)
 	require.NoError(t, err)
 	assert.Len(t, listed, 1)
 
 	// Replace entirely.
 	replacement := []model.InstalledSoftware{
-		{ID: uuid.Must(uuid.NewV7()), AssetID: asset.ID, SoftwareName: "new-edr", Vendor: "New", Version: "2.0"},
-		{ID: uuid.Must(uuid.NewV7()), AssetID: asset.ID, SoftwareName: "config-mgmt", Vendor: "New", Version: "3.0"},
+		{ID: uuid.Must(uuid.NewV7()), MachineID: machine.ID, SoftwareName: "new-edr", Vendor: "New", Version: "2.0"},
+		{ID: uuid.Must(uuid.NewV7()), MachineID: machine.ID, SoftwareName: "config-mgmt", Vendor: "New", Version: "3.0"},
 	}
-	require.NoError(t, st.UpsertSoftware(ctx, asset.ID, replacement))
+	require.NoError(t, st.UpsertSoftware(ctx, machine.ID, replacement))
 
-	listed, err = st.ListSoftware(ctx, asset.ID)
+	listed, err = st.ListSoftware(ctx, machine.ID)
 	require.NoError(t, err)
 	assert.Len(t, listed, 2)
 

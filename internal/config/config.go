@@ -290,13 +290,13 @@ type ClassificationConfig struct {
 	Managed       ManagedConfig       `mapstructure:"managed"`
 }
 
-// AuthorizationConfig controls how assets are matched against an allowlist.
+// AuthorizationConfig controls how machines are matched against an allowlist.
 type AuthorizationConfig struct {
 	AllowlistFile string   `mapstructure:"allowlist_file"`
 	MatchFields   []string `mapstructure:"match_fields"`
 }
 
-// ManagedConfig defines which controls must be present for an asset to be
+// ManagedConfig defines which controls must be present for an machine to be
 // considered "managed".
 type ManagedConfig struct {
 	RequiredControls []string `mapstructure:"required_controls"`

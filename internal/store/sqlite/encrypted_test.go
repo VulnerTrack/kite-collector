@@ -20,7 +20,7 @@ import (
 )
 
 // Ensure store import is used.
-var _ store.AssetFilter
+var _ store.MachineFilter
 
 func testKey(t *testing.T) []byte {
 	t.Helper()
@@ -66,8 +66,8 @@ func TestNewEncrypted_ReopenWithSameKey(t *testing.T) {
 	require.NoError(t, es.Migrate(context.Background()))
 
 	ctx := context.Background()
-	asset := makeTestAsset("test-host", model.AssetTypeServer)
-	_, _, err = es.UpsertAssets(ctx, []model.Asset{asset})
+	machine := makeTestMachine("test-host", model.MachineTypeServer)
+	_, _, err = es.UpsertMachines(ctx, []model.Machine{machine})
 	require.NoError(t, err)
 	require.NoError(t, es.Close())
 
@@ -75,10 +75,10 @@ func TestNewEncrypted_ReopenWithSameKey(t *testing.T) {
 	es2, err := NewEncrypted(encPath, key, "keyring", slog.Default())
 	require.NoError(t, err)
 
-	assets, err := es2.ListAssets(ctx, store.AssetFilter{})
+	machines, err := es2.ListMachines(ctx, store.MachineFilter{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 1)
-	assert.Equal(t, "test-host", assets[0].Hostname)
+	assert.Len(t, machines, 1)
+	assert.Equal(t, "test-host", machines[0].Hostname)
 
 	require.NoError(t, es2.Close())
 }
@@ -121,8 +121,8 @@ func TestNewEncrypted_MigratesUnencryptedDatabase(t *testing.T) {
 	require.NoError(t, plain.Migrate(context.Background()))
 
 	ctx := context.Background()
-	asset := makeTestAsset("pre-existing", model.AssetTypeWorkstation)
-	_, _, err = plain.UpsertAssets(ctx, []model.Asset{asset})
+	machine := makeTestMachine("pre-existing", model.MachineTypeWorkstation)
+	_, _, err = plain.UpsertMachines(ctx, []model.Machine{machine})
 	require.NoError(t, err)
 	require.NoError(t, plain.Close())
 
@@ -135,10 +135,10 @@ func TestNewEncrypted_MigratesUnencryptedDatabase(t *testing.T) {
 	es, err := NewEncrypted(dbPath, key, "keyring", slog.Default())
 	require.NoError(t, err)
 
-	assets, err := es.ListAssets(ctx, store.AssetFilter{})
+	machines, err := es.ListMachines(ctx, store.MachineFilter{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 1)
-	assert.Equal(t, "pre-existing", assets[0].Hostname)
+	assert.Len(t, machines, 1)
+	assert.Equal(t, "pre-existing", machines[0].Hostname)
 
 	require.NoError(t, es.Close())
 
@@ -158,25 +158,25 @@ func TestNewEncrypted_MultipleWriteCloseCycles(t *testing.T) {
 	es, err := NewEncrypted(encPath, key, "tpm", slog.Default())
 	require.NoError(t, err)
 	require.NoError(t, es.Migrate(ctx))
-	asset1 := makeTestAsset("host-1", model.AssetTypeServer)
-	_, _, err = es.UpsertAssets(ctx, []model.Asset{asset1})
+	machine1 := makeTestMachine("host-1", model.MachineTypeServer)
+	_, _, err = es.UpsertMachines(ctx, []model.Machine{machine1})
 	require.NoError(t, err)
 	require.NoError(t, es.Close())
 
 	// Cycle 2: reopen + write more.
 	es, err = NewEncrypted(encPath, key, "tpm", slog.Default())
 	require.NoError(t, err)
-	asset2 := makeTestAsset("host-2", model.AssetTypeContainer)
-	_, _, err = es.UpsertAssets(ctx, []model.Asset{asset2})
+	machine2 := makeTestMachine("host-2", model.MachineTypeContainer)
+	_, _, err = es.UpsertMachines(ctx, []model.Machine{machine2})
 	require.NoError(t, err)
 	require.NoError(t, es.Close())
 
-	// Cycle 3: reopen + verify both assets present.
+	// Cycle 3: reopen + verify both machines present.
 	es, err = NewEncrypted(encPath, key, "tpm", slog.Default())
 	require.NoError(t, err)
-	assets, err := es.ListAssets(ctx, store.AssetFilter{})
+	machines, err := es.ListMachines(ctx, store.MachineFilter{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 2)
+	assert.Len(t, machines, 2)
 	require.NoError(t, es.Close())
 }
 
@@ -239,8 +239,8 @@ func TestNewEncrypted_NoPersistentPlaintextDuringOperation(t *testing.T) {
 	require.NoError(t, es.Migrate(context.Background()))
 
 	ctx := context.Background()
-	asset := makeTestAsset("sensitive-host", model.AssetTypeServer)
-	_, _, err = es.UpsertAssets(ctx, []model.Asset{asset})
+	machine := makeTestMachine("sensitive-host", model.MachineTypeServer)
+	_, _, err = es.UpsertMachines(ctx, []model.Machine{machine})
 	require.NoError(t, err)
 
 	// When RAM disk is active, no .work files should exist on persistent storage.
@@ -331,8 +331,8 @@ func TestEncryptedStore_ConcurrentInstancesDoNotCollide(t *testing.T) {
 		}
 		// A few writes to exercise WAL/SHM activity concurrently.
 		for i := 0; i < 5; i++ {
-			a := makeTestAsset(hostname, model.AssetTypeServer)
-			if _, _, err := es.UpsertAssets(ctx, []model.Asset{a}); err != nil {
+			a := makeTestMachine(hostname, model.MachineTypeServer)
+			if _, _, err := es.UpsertMachines(ctx, []model.Machine{a}); err != nil {
 				errCh <- err
 				return
 			}
@@ -366,21 +366,21 @@ func TestEncryptedStore_ConcurrentInstancesDoNotCollide(t *testing.T) {
 		ctx := context.Background()
 		es, err := NewEncrypted(tc.encPath, tc.key, "tpm", slog.Default())
 		require.NoError(t, err)
-		assets, err := es.ListAssets(ctx, store.AssetFilter{})
+		machines, err := es.ListMachines(ctx, store.MachineFilter{})
 		require.NoError(t, err)
-		require.NotEmpty(t, assets)
-		assert.Equal(t, tc.hostname, assets[0].Hostname)
+		require.NotEmpty(t, machines)
+		assert.Equal(t, tc.hostname, machines[0].Hostname)
 		require.NoError(t, es.Close())
 	}
 }
 
-// makeTestAsset creates a minimal asset for testing.
-func makeTestAsset(hostname string, assetType model.AssetType) model.Asset {
+// makeTestMachine creates a minimal machine for testing.
+func makeTestMachine(hostname string, machineType model.MachineType) model.Machine {
 	now := time.Now().UTC().Truncate(time.Second)
-	a := model.Asset{
+	a := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       assetType,
+		MachineType:     machineType,
 		IsAuthorized:    model.AuthorizationUnknown,
 		IsManaged:       model.ManagedUnknown,
 		DiscoverySource: "test",

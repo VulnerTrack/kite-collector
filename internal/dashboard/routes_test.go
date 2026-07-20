@@ -25,13 +25,13 @@ func newTestHandler(t *testing.T) http.Handler {
 	return srv.Handler
 }
 
-// TestRoute_GET_AssetsPlain_ReturnsFullShell — GET /assets without HX-Request
+// TestRoute_GET_MachinesPlain_ReturnsFullShell — GET /machines without HX-Request
 // MUST return the full HTML shell (so refresh / share-link / direct-load
-// work) AND embed the Assets fragment so the page is usable on first paint.
-// The Assets nav link MUST carry the `active` class; the others MUST NOT.
-func TestRoute_GET_AssetsPlain_ReturnsFullShell(t *testing.T) {
+// work) AND embed the Machines fragment so the page is usable on first paint.
+// The Machines nav link MUST carry the `active` class; the others MUST NOT.
+func TestRoute_GET_MachinesPlain_ReturnsFullShell(t *testing.T) {
 	handler := newTestHandler(t)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/assets", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/machines", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -39,31 +39,31 @@ func TestRoute_GET_AssetsPlain_ReturnsFullShell(t *testing.T) {
 	body := rec.Body.String()
 
 	assert.Contains(t, body, "<html", "plain GET should return full shell")
-	assert.Contains(t, body, "<h2>Assets", "shell should embed initial assets fragment")
-	// Assets link active.
+	assert.Contains(t, body, "<h2>Machines", "shell should embed initial machines fragment")
+	// Machines link active.
 	assert.True(t,
-		strings.Contains(body, `href="/assets" hx-get="/assets" hx-target="#content" hx-push-url="true" class="active"`),
-		"Assets link should have active class; got body=%s", body)
+		strings.Contains(body, `href="/machines" hx-get="/machines" hx-target="#content" hx-push-url="true" class="active"`),
+		"Machines link should have active class; got body=%s", body)
 	// Other tabs MUST NOT be active.
 	for _, other := range []string{"/software", "/findings", "/scans", "/tables"} {
 		needle := `href="` + other + `" hx-get="` + other + `" hx-target="#content" hx-push-url="true" class="active"`
-		assert.NotContains(t, body, needle, "%s link must not be active on /assets", other)
+		assert.NotContains(t, body, needle, "%s link must not be active on /machines", other)
 	}
 }
 
-// TestRoute_GET_AssetsHTMXOnly_ReturnsFragmentOnly — GET /assets with the
+// TestRoute_GET_MachinesHTMXOnly_ReturnsFragmentOnly — GET /machines with the
 // HX-Request header MUST return only the fragment HTML (no <html>), so
 // HTMX can swap it directly into #content without nesting a full doc.
-func TestRoute_GET_AssetsHTMXOnly_ReturnsFragmentOnly(t *testing.T) {
+func TestRoute_GET_MachinesHTMXOnly_ReturnsFragmentOnly(t *testing.T) {
 	handler := newTestHandler(t)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/assets", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/machines", nil)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
-	assert.Contains(t, body, "<h2>Assets", "fragment must contain the assets header")
+	assert.Contains(t, body, "<h2>Machines", "fragment must contain the machines header")
 	assert.NotContains(t, body, "<html", "HX-Request must NOT include the full shell")
 }
 
@@ -82,7 +82,7 @@ func TestRoute_GET_FindingsPlain_HasActiveOnFindingsLink(t *testing.T) {
 	assert.Contains(t, body,
 		`href="/findings" hx-get="/findings" hx-target="#content" hx-push-url="true" class="active"`,
 		"Findings link should be active")
-	for _, other := range []string{"/assets", "/software", "/scans", "/tables"} {
+	for _, other := range []string{"/machines", "/software", "/scans", "/tables"} {
 		needle := `href="` + other + `" hx-get="` + other + `" hx-target="#content" hx-push-url="true" class="active"`
 		assert.NotContains(t, body, needle, "%s link must not be active on /findings", other)
 	}
@@ -90,7 +90,7 @@ func TestRoute_GET_FindingsPlain_HasActiveOnFindingsLink(t *testing.T) {
 
 // TestRoute_GET_Root_RedirectsToOnboardingWhenUnenrolled — GET / on a fresh
 // host (no enrolled identity) lands on /onboarding so the operator sees the
-// install + enroll flow immediately instead of an empty /assets page.
+// install + enroll flow immediately instead of an empty /machines page.
 func TestRoute_GET_Root_RedirectsToOnboardingWhenUnenrolled(t *testing.T) {
 	handler := newTestHandler(t)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
@@ -103,10 +103,10 @@ func TestRoute_GET_Root_RedirectsToOnboardingWhenUnenrolled(t *testing.T) {
 		"fresh store with no enrolled identity should land on /onboarding")
 }
 
-// TestRoute_GET_Root_RedirectsToAssetsWhenEnrolled — once the identity slot
-// is populated, the root redirect flips to /assets so reload / share-link /
+// TestRoute_GET_Root_RedirectsToMachinesWhenEnrolled — once the identity slot
+// is populated, the root redirect flips to /machines so reload / share-link /
 // browser-back land on the steady-state home.
-func TestRoute_GET_Root_RedirectsToAssetsWhenEnrolled(t *testing.T) {
+func TestRoute_GET_Root_RedirectsToMachinesWhenEnrolled(t *testing.T) {
 	st := testStore(t)
 	sqliteStore, ok := st.(*sqlite.SQLiteStore)
 	require.True(t, ok, "test store must be a SQLite store")
@@ -122,8 +122,8 @@ func TestRoute_GET_Root_RedirectsToAssetsWhenEnrolled(t *testing.T) {
 	srv.Handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
-	assert.Equal(t, "/assets", rec.Header().Get("Location"),
-		"enrolled host should land on /assets, the steady-state home")
+	assert.Equal(t, "/machines", rec.Header().Get("Location"),
+		"enrolled host should land on /machines, the steady-state home")
 }
 
 func TestRoute_GET_KiteLogin_RendersManualSignInByDefault(t *testing.T) {
@@ -231,7 +231,7 @@ func TestRoute_GET_KiteSuccess_ReturnsAccessGrantedPage(t *testing.T) {
 	assert.Contains(t, body, "Success!")
 	assert.Contains(t, body, "You've granted Kite Collector access")
 	assert.Contains(t, body, "Go to Dashboard")
-	assert.Contains(t, body, `href="/assets"`)
+	assert.Contains(t, body, `href="/machines"`)
 }
 
 func TestRoute_GET_RootWithOAuthParams_ReturnsAccessGrantedPage(t *testing.T) {
@@ -315,14 +315,14 @@ func TestRoute_GET_TablesByName_HTMX_ReturnsFragmentOnly(t *testing.T) {
 // AND have a matching href= for non-JS / right-click fallbacks.
 func TestRoute_GET_NavLinks_HavePushURLTrue(t *testing.T) {
 	handler := newTestHandler(t)
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/assets", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/machines", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
-	for _, tab := range []string{"/assets", "/software", "/findings", "/scans", "/tables"} {
+	for _, tab := range []string{"/machines", "/software", "/findings", "/scans", "/tables"} {
 		// Both the href fallback and the HTMX push must be set on the
 		// same anchor — that is what makes browser back/forward and
 		// JS-disabled clients both work.

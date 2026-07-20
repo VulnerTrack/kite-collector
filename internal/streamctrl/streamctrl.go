@@ -75,7 +75,7 @@ func (c *Controller) Stop(_ context.Context) error {
 
 // Emit forwards event only while running. When stopped it drops the
 // event silently so the caller's scan logic is not penalised.
-func (c *Controller) Emit(ctx context.Context, event model.AssetEvent) error {
+func (c *Controller) Emit(ctx context.Context, event model.MachineEvent) error {
 	if !c.runningActive.Load() {
 		return nil
 	}
@@ -88,7 +88,7 @@ func (c *Controller) Emit(ctx context.Context, event model.AssetEvent) error {
 }
 
 // EmitBatch forwards the batch only while running.
-func (c *Controller) EmitBatch(ctx context.Context, events []model.AssetEvent) error {
+func (c *Controller) EmitBatch(ctx context.Context, events []model.MachineEvent) error {
 	if !c.runningActive.Load() {
 		return nil
 	}

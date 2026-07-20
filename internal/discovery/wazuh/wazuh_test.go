@@ -297,7 +297,7 @@ func TestWazuh_Discover_Success(t *testing.T) {
 	t.Setenv("KITE_WAZUH_INSECURE", "true")
 
 	w := New()
-	assets, err := w.Discover(context.Background(), map[string]any{
+	machines, err := w.Discover(context.Background(), map[string]any{
 		"collect_packages":        true,
 		"collect_vulnerabilities": true,
 		"collect_sca":             true,
@@ -305,12 +305,12 @@ func TestWazuh_Discover_Success(t *testing.T) {
 		"collect_interfaces":      true,
 	})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3, "3 agents = 3 assets")
+	assert.Len(t, machines, 3, "3 agents = 3 machines")
 
 	// Verify active agent.
-	web := findAsset(assets, "web-server")
+	web := findMachine(machines, "web-server")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeServer, web.AssetType)
+	assert.Equal(t, model.MachineTypeServer, web.MachineType)
 	assert.Equal(t, "wazuh", web.DiscoverySource)
 	assert.Equal(t, "ubuntu", web.OSFamily)
 	assert.Equal(t, "Ubuntu 22.04.3 LTS", web.OSVersion)
@@ -381,7 +381,7 @@ func TestWazuh_Discover_Success(t *testing.T) {
 	assert.Equal(t, "00:11:22:33:44:55", eth0["mac"])
 
 	// Verify disconnected agent.
-	db := findAsset(assets, "db-server")
+	db := findMachine(machines, "db-server")
 	require.NotNil(t, db)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
@@ -392,9 +392,9 @@ func TestWazuh_Discover_Success(t *testing.T) {
 	assert.Nil(t, dbTags["detected_cves"])
 
 	// Verify Windows agent is classified as workstation.
-	win := findAsset(assets, "win-desktop")
+	win := findMachine(machines, "win-desktop")
 	require.NotNil(t, win)
-	assert.Equal(t, model.AssetTypeWorkstation, win.AssetType)
+	assert.Equal(t, model.MachineTypeWorkstation, win.MachineType)
 	assert.Equal(t, "windows", win.OSFamily)
 }
 
@@ -436,11 +436,11 @@ func TestWazuh_Discover_EndpointFromConfig(t *testing.T) {
 	t.Setenv("KITE_WAZUH_INSECURE", "true")
 
 	w := New()
-	assets, err := w.Discover(context.Background(), map[string]any{
+	machines, err := w.Discover(context.Background(), map[string]any{
 		"endpoint": srv.URL,
 	})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 }
 
 func TestWazuh_Discover_MaxAgents(t *testing.T) {
@@ -453,13 +453,13 @@ func TestWazuh_Discover_MaxAgents(t *testing.T) {
 	t.Setenv("KITE_WAZUH_INSECURE", "true")
 
 	w := New()
-	assets, err := w.Discover(context.Background(), map[string]any{
+	machines, err := w.Discover(context.Background(), map[string]any{
 		"max_agents":              1,
 		"collect_packages":        false,
 		"collect_vulnerabilities": false,
 	})
 	require.NoError(t, err)
-	assert.Len(t, assets, 1, "max_agents=1 should limit to 1 asset")
+	assert.Len(t, machines, 1, "max_agents=1 should limit to 1 machine")
 }
 
 func TestWazuh_Discover_BaseURLOverride(t *testing.T) {
@@ -470,12 +470,12 @@ func TestWazuh_Discover_BaseURLOverride(t *testing.T) {
 	t.Setenv("KITE_WAZUH_PASSWORD", "secret")
 
 	w := &Wazuh{baseURL: srv.URL}
-	assets, err := w.Discover(context.Background(), map[string]any{
+	machines, err := w.Discover(context.Background(), map[string]any{
 		"collect_packages":        false,
 		"collect_vulnerabilities": false,
 	})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 }
 
 func TestIsDesktopOS(t *testing.T) {
@@ -547,12 +547,12 @@ func TestTokenAutoRefreshOn401(t *testing.T) {
 	t.Setenv("KITE_WAZUH_PASSWORD", "secret")
 
 	w := &Wazuh{baseURL: srv.URL}
-	assets, err := w.Discover(context.Background(), map[string]any{
+	machines, err := w.Discover(context.Background(), map[string]any{
 		"collect_packages":        false,
 		"collect_vulnerabilities": false,
 	})
 	require.NoError(t, err)
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 
 	// Auth should have been called twice (initial + refresh).
 	assert.Equal(t, 2, authCalls, "should refresh token on 401")
@@ -564,10 +564,10 @@ func TestTokenAutoRefreshOn401(t *testing.T) {
 // Helpers
 // -------------------------------------------------------------------------
 
-func findAsset(assets []model.Asset, hostname string) *model.Asset {
-	for i := range assets {
-		if assets[i].Hostname == hostname {
-			return &assets[i]
+func findMachine(machines []model.Machine, hostname string) *model.Machine {
+	for i := range machines {
+		if machines[i].Hostname == hostname {
+			return &machines[i]
 		}
 	}
 	return nil

@@ -88,13 +88,13 @@ func TestDigitalOcean_Discover_Success(t *testing.T) {
 
 	d := NewDigitalOcean()
 	d.baseURL = srv.URL
-	assets, err := d.Discover(context.Background(), map[string]any{})
+	machines, err := d.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	app := findAssetByHostname(assets, "app-1")
+	app := findMachineByHostname(machines, "app-1")
 	require.NotNil(t, app)
-	assert.Equal(t, model.AssetTypeCloudInstance, app.AssetType)
+	assert.Equal(t, model.MachineTypeCloudInstance, app.MachineType)
 	assert.Equal(t, "digitalocean", app.DiscoverySource)
 	assert.Equal(t, "Ubuntu", app.OSFamily)
 	assert.Equal(t, "nyc3", app.Environment)
@@ -105,7 +105,7 @@ func TestDigitalOcean_Discover_Success(t *testing.T) {
 	assert.NotContains(t, appTags, "warning")
 
 	// Powered-off droplet gets warning.
-	staging := findAssetByHostname(assets, "staging-1")
+	staging := findMachineByHostname(machines, "staging-1")
 	require.NotNil(t, staging)
 	var stagingTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(staging.Tags), &stagingTags))
@@ -121,9 +121,9 @@ func TestDigitalOcean_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_DIGITALOCEAN_TOKEN")
 
-	assets, err := d.Discover(context.Background(), nil)
+	machines, err := d.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestDigitalOcean_Discover_AuthFailure(t *testing.T) {

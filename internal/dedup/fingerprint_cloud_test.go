@@ -8,11 +8,11 @@ import (
 
 func baseCloudRecord() DiscoveryRecord {
 	return DiscoveryRecord{
-		TenantID:   "t-acme",
-		AssetType:  model.AssetTypeCloudInstance,
-		Provider:   "aws",
-		AccountID:  "123456789012",
-		InstanceID: "i-0abcdef1234567890",
+		TenantID:    "t-acme",
+		MachineType: model.MachineTypeCloudInstance,
+		Provider:    "aws",
+		AccountID:   "123456789012",
+		InstanceID:  "i-0abcdef1234567890",
 	}
 }
 

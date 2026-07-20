@@ -29,7 +29,7 @@ func (s *Scaleway) Name() string { return "scaleway" }
 // Discover lists all Scaleway instances in the configured zone.
 // Credentials: KITE_SCALEWAY_SECRET_KEY environment variable.
 // Zone: KITE_SCALEWAY_ZONE (default: fr-par-1).
-func (s *Scaleway) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Scaleway) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_SCALEWAY_SECRET_KEY")
 	if token == "" {
 		if cfg != nil {
@@ -52,27 +52,27 @@ func (s *Scaleway) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 		req.Header.Set("X-Auth-Token", token)
 	})
 
-	var assets []model.Asset
+	var machines []model.Machine
 	guard := safenet.NewPaginationGuardV2WithSource("scaleway")
 
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("scaleway: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("scaleway: context cancelled: %w", ctx.Err())
 		}
 
 		var resp scalewayServersResponse
 		path := fmt.Sprintf("/instance/v1/zones/%s/servers?page=%d&per_page=100", zone, page)
 		nBytes, err := client.getSized(ctx, path, &resp)
 		if err != nil {
-			return assets, fmt.Errorf("scaleway: list servers: %w", err)
+			return machines, fmt.Errorf("scaleway: list servers: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("scaleway: %w", err)
+			return machines, fmt.Errorf("scaleway: %w", err)
 		}
 
 		now := time.Now().UTC()
 		for i := range resp.Servers {
-			assets = append(assets, scalewayToAsset(resp.Servers[i], zone, now))
+			machines = append(machines, scalewayToMachine(resp.Servers[i], zone, now))
 		}
 
 		if len(resp.Servers) < 100 {
@@ -82,8 +82,8 @@ func (s *Scaleway) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 
 	slog.Info("Scaleway VPS discovery complete", //#nosec G706 -- integer count, no injection vector
 		"code", string(LogCodeScalewayComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Scaleway API response types ---
@@ -111,9 +111,9 @@ type scalewayIP struct {
 	Address string `json:"address"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func scalewayToAsset(srv scalewayServer, zone string, now time.Time) model.Asset {
+func scalewayToMachine(srv scalewayServer, zone string, now time.Time) model.Machine {
 	ip := ""
 	if len(srv.PublicIPs) > 0 {
 		ip = srv.PublicIPs[0].Address
@@ -143,10 +143,10 @@ func scalewayToAsset(srv scalewayServer, zone string, now time.Time) model.Asset
 		firstSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        srv.Name,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		OSFamily:        osFamily,
 		Environment:     zone,
 		DiscoverySource: "scaleway",
@@ -156,6 +156,6 @@ func scalewayToAsset(srv scalewayServer, zone string, now time.Time) model.Asset
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

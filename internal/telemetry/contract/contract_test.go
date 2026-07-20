@@ -46,8 +46,8 @@ func TestGoldenEvents(t *testing.T) {
 		file  string
 		event EventName
 	}{
-		{"log_asset_discovered.json", EventAssetDiscovered},
-		{"log_asset_changed.json", EventAssetChanged},
+		{"log_machine_discovered.json", EventMachineDiscovered},
+		{"log_machine_changed.json", EventMachineChanged},
 		{"log_finding_configuration.json", EventFindingConfiguration},
 		{"log_finding_posture.json", EventFindingPosture},
 		{"log_scan_lifecycle.json", EventScanLifecycle},
@@ -98,14 +98,14 @@ func TestPredicates(t *testing.T) {
 		for n := range AllowedEventNames {
 			assert.Truef(t, IsAllowedEventName(string(n)), "expected %q allowed", n)
 		}
-		for _, n := range []string{"", "kite.asset.discovered", "asset.unknown", "scan", "Asset.Discovered"} {
+		for _, n := range []string{"", "kite.machine.discovered", "machine.unknown", "scan", "Machine.Discovered"} {
 			assert.Falsef(t, IsAllowedEventName(n), "expected %q rejected", n)
 		}
 	})
 	t.Run("event_attribute", func(t *testing.T) {
-		assert.True(t, IsAllowedEventAttribute(EventAssetDiscovered, "security.asset.uid"))
-		assert.False(t, IsAllowedEventAttribute(EventAssetDiscovered, "security.finding.uid"),
-			"finding key must not be allowed on asset.discovered")
+		assert.True(t, IsAllowedEventAttribute(EventMachineDiscovered, "security.machine.uid"))
+		assert.False(t, IsAllowedEventAttribute(EventMachineDiscovered, "security.finding.uid"),
+			"finding key must not be allowed on machine.discovered")
 		assert.False(t, IsAllowedEventAttribute(EventName("nope"), AttrEventDomain),
 			"unknown event short-circuits to false")
 	})

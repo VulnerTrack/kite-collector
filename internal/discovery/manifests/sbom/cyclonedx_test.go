@@ -14,16 +14,16 @@ import (
 )
 
 func TestGenerate_BasicBOM(t *testing.T) {
-	asset := model.Asset{
-		ID:        uuid.New(),
-		AssetType: model.AssetTypeSoftwareProject,
-		Hostname:  "my-app",
+	machine := model.Machine{
+		ID:          uuid.New(),
+		MachineType: model.MachineTypeSoftwareProject,
+		Hostname:    "my-app",
 	}
 
 	sw := []model.InstalledSoftware{
 		{
 			ID:             uuid.New(),
-			AssetID:        asset.ID,
+			MachineID:      machine.ID,
 			SoftwareName:   "express",
 			Vendor:         "express",
 			Version:        "4.18.2",
@@ -32,7 +32,7 @@ func TestGenerate_BasicBOM(t *testing.T) {
 		},
 		{
 			ID:             uuid.New(),
-			AssetID:        asset.ID,
+			MachineID:      machine.ID,
 			SoftwareName:   "lodash",
 			Vendor:         "lodash",
 			Version:        "4.17.21",
@@ -40,7 +40,7 @@ func TestGenerate_BasicBOM(t *testing.T) {
 		},
 	}
 
-	bom, err := Generate(asset, sw)
+	bom, err := Generate(machine, sw)
 	require.NoError(t, err)
 
 	assert.Equal(t, "CycloneDX", bom.BOMFormat)
@@ -56,13 +56,13 @@ func TestGenerate_BasicBOM(t *testing.T) {
 }
 
 func TestGenerate_JSON(t *testing.T) {
-	asset := model.Asset{
-		ID:        uuid.New(),
-		AssetType: model.AssetTypeSoftwareProject,
-		Hostname:  "test-project",
+	machine := model.Machine{
+		ID:          uuid.New(),
+		MachineType: model.MachineTypeSoftwareProject,
+		Hostname:    "test-project",
 	}
 
-	bom, err := Generate(asset, nil)
+	bom, err := Generate(machine, nil)
 	require.NoError(t, err)
 
 	data, err := bom.JSON()
@@ -105,10 +105,10 @@ func TestGenerateAll(t *testing.T) {
 	id2 := uuid.New()
 	id3 := uuid.New()
 
-	assets := []model.Asset{
-		{ID: id1, AssetType: model.AssetTypeSoftwareProject, Hostname: "app1"},
-		{ID: id2, AssetType: model.AssetTypeRepository, Hostname: "repo"}, // skipped
-		{ID: id3, AssetType: model.AssetTypeSoftwareProject, Hostname: "app2"},
+	machines := []model.Machine{
+		{ID: id1, MachineType: model.MachineTypeSoftwareProject, Hostname: "app1"},
+		{ID: id2, MachineType: model.MachineTypeRepository, Hostname: "repo"}, // skipped
+		{ID: id3, MachineType: model.MachineTypeSoftwareProject, Hostname: "app2"},
 	}
 
 	swMap := map[uuid.UUID][]model.InstalledSoftware{
@@ -116,7 +116,7 @@ func TestGenerateAll(t *testing.T) {
 		// id3 has no software — should be skipped
 	}
 
-	boms := GenerateAll(assets, swMap)
+	boms := GenerateAll(machines, swMap)
 	assert.Len(t, boms, 1)
 	assert.Contains(t, boms, id1)
 }

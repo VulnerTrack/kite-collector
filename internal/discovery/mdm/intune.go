@@ -42,7 +42,7 @@ func NewIntune() *Intune {
 func (i *Intune) Name() string { return "intune" }
 
 // Discover lists managed devices from Microsoft Intune and returns them as
-// assets. It honours cfg["enabled"] first (F3), loads credentials via
+// machines. It honours cfg["enabled"] first (F3), loads credentials via
 // connectorkit and zeroes them on return (R1). Authentication uses OAuth2
 // client credentials (service principal). If credentials are absent the method
 // logs a warning and returns nil (graceful degradation).
@@ -52,7 +52,7 @@ func (i *Intune) Name() string { return "intune" }
 //	tenant_id     – string Azure AD tenant ID
 //	client_id     – string Application (client) ID
 //	client_secret – string Client secret value
-func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2: honour enabled:false even with creds present (F3)
 	}
@@ -103,12 +103,12 @@ func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(devices))
+	machines := make([]model.Machine, 0, len(devices))
 
 	for _, dev := range devices {
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:              uuid.Must(uuid.NewV7()),
-			AssetType:       classifyIntuneDevice(dev.operatingSystem),
+			MachineType:     classifyIntuneDevice(dev.operatingSystem),
 			Hostname:        dev.deviceName,
 			OSFamily:        deriveIntuneOSFamily(dev.operatingSystem),
 			OSVersion:       dev.osVersion,
@@ -119,18 +119,18 @@ func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			IsManaged:       model.ManagedManaged,
 			MDMEnrollmentID: dev.id,
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
 
 	slog.Info(
 		"Completed Intune managed device discovery",
 		"code", string(LogCodeIntuneComplete),
-		"total_assets", len(assets),
+		"total_machines", len(machines),
 		"total_devices", len(devices),
 		"graph_base_url", i.graphBaseURL,
 	)
-	return assets, nil
+	return machines, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -325,22 +325,22 @@ func deriveIntuneOSFamily(os string) string {
 	}
 }
 
-// classifyIntuneDevice maps the Intune operatingSystem to an asset type.
-func classifyIntuneDevice(os string) model.AssetType {
+// classifyIntuneDevice maps the Intune operatingSystem to an machine type.
+func classifyIntuneDevice(os string) model.MachineType {
 	lower := strings.ToLower(os)
 	switch {
 	case strings.Contains(lower, "windows server"):
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	case strings.Contains(lower, "windows"),
 		strings.Contains(lower, "macos"):
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	default:
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	}
 }
 
 // ensure Intune satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Intune)(nil)

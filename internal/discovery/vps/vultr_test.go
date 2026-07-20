@@ -74,13 +74,13 @@ func TestVultr_Discover_Success(t *testing.T) {
 
 	v := NewVultr()
 	v.baseURL = srv.URL
-	assets, err := v.Discover(context.Background(), map[string]any{})
+	machines, err := v.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	frontend := findAssetByHostname(assets, "frontend")
+	frontend := findMachineByHostname(machines, "frontend")
 	require.NotNil(t, frontend)
-	assert.Equal(t, model.AssetTypeCloudInstance, frontend.AssetType)
+	assert.Equal(t, model.MachineTypeCloudInstance, frontend.MachineType)
 	assert.Equal(t, "vultr", frontend.DiscoverySource)
 	assert.Equal(t, "Ubuntu 22.04 x64", frontend.OSFamily)
 	assert.Equal(t, "ewr", frontend.Environment)
@@ -91,7 +91,7 @@ func TestVultr_Discover_Success(t *testing.T) {
 	assert.NotContains(t, feTags, "warning")
 
 	// Stopped instance gets warning.
-	db := findAssetByHostname(assets, "database")
+	db := findMachineByHostname(machines, "database")
 	require.NotNil(t, db)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
@@ -107,9 +107,9 @@ func TestVultr_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_VULTR_TOKEN")
 
-	assets, err := v.Discover(context.Background(), nil)
+	machines, err := v.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestVultr_Discover_AuthFailure(t *testing.T) {

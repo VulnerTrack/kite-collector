@@ -11,10 +11,10 @@ import (
 )
 
 // AmbiguousMergeResolution describes what the deduper did with the
-// incoming asset when it detected a signal-based collision spanning
-// multiple existing asset records. The data path always parks the
-// incoming asset (Resolution = "deferred"); the operator decides
-// out-of-band whether to merge into one candidate, create a new asset,
+// incoming machine when it detected a signal-based collision spanning
+// multiple existing machine records. The data path always parks the
+// incoming machine (Resolution = "deferred"); the operator decides
+// out-of-band whether to merge into one candidate, create a new machine,
 // or reject the signal as noise.
 type AmbiguousMergeResolution string
 
@@ -24,10 +24,10 @@ const (
 	// event into one of the operator-facing values below.
 	AmbiguousResolutionDeferred AmbiguousMergeResolution = "deferred"
 	// AmbiguousResolutionMergeInto records that an operator merged the
-	// incoming asset into a specific existing asset_id.
+	// incoming machine into a specific existing machine_id.
 	AmbiguousResolutionMergeInto AmbiguousMergeResolution = "merge_into"
 	// AmbiguousResolutionCreateNew records that the candidates are
-	// genuinely distinct physical assets and the incoming asset deserves
+	// genuinely distinct physical machines and the incoming machine deserves
 	// its own row.
 	AmbiguousResolutionCreateNew AmbiguousMergeResolution = "create_new"
 	// AmbiguousResolutionRejectSignal records that the colliding signal
@@ -38,7 +38,7 @@ const (
 )
 
 // AmbiguousMerge is the event emitted when a Fingerprinter signal lookup
-// in the alias graph would have produced multiple distinct asset_ids.
+// in the alias graph would have produced multiple distinct machine_ids.
 // The deduper never picks among them silently — the alias-graph promotion
 // rule is conservative on purpose. Operators triage these via the
 // dashboard or via the TTL-default job that auto-resolves after a grace
@@ -50,7 +50,7 @@ type AmbiguousMerge struct {
 	DiscoverySource string                   `json:"discovery_source"`
 	Resolution      AmbiguousMergeResolution `json:"resolution"`
 	Candidates      []AmbiguousCandidate     `json:"candidates"`
-	Incoming        model.Asset              `json:"incoming"`
+	Incoming        model.Machine            `json:"incoming"`
 	EventID         uuid.UUID                `json:"event_id"`
 }
 
@@ -65,18 +65,18 @@ type AmbiguousSignal struct {
 	Value string `json:"value,omitempty"`
 }
 
-// AmbiguousCandidate is one of the existing assets that matched the
+// AmbiguousCandidate is one of the existing machines that matched the
 // colliding signal. The slice is sorted by Confidence DESC then
 // LastSeenAt DESC by the deduper before emission so the operator sees
 // the strongest evidence first — but the deduper never picks for them.
 type AmbiguousCandidate struct {
-	FirstSeenAt  time.Time       `json:"first_seen_at"`
-	LastSeenAt   time.Time       `json:"last_seen_at"`
-	Hostname     string          `json:"hostname"`
-	AssetType    model.AssetType `json:"asset_type"`
-	OtherSignals []string        `json:"other_signals"`
-	AssetID      uuid.UUID       `json:"asset_id"`
-	Confidence   uint8           `json:"confidence"`
+	FirstSeenAt  time.Time         `json:"first_seen_at"`
+	LastSeenAt   time.Time         `json:"last_seen_at"`
+	Hostname     string            `json:"hostname"`
+	MachineType  model.MachineType `json:"machine_type"`
+	OtherSignals []string          `json:"other_signals"`
+	MachineID    uuid.UUID         `json:"machine_id"`
+	Confidence   uint8             `json:"confidence"`
 }
 
 // NewAmbiguousMerge builds an AmbiguousMerge event with a freshly
@@ -85,7 +85,7 @@ type AmbiguousCandidate struct {
 func NewAmbiguousMerge(
 	now time.Time,
 	tenant, source string,
-	incoming model.Asset,
+	incoming model.Machine,
 	sig Signal,
 	value string,
 	candidates []AmbiguousCandidate,
@@ -107,30 +107,30 @@ func NewAmbiguousMerge(
 	}
 }
 
-// AliasEdge is one row in the alias graph: an asset has observed
+// AliasEdge is one row in the alias graph: an machine has observed
 // (signal_kind, signal_hash) at some confidence, from some source. The
 // graph index is over (signal_kind, signal_hash) so a single signal can
-// be looked up across all assets that have ever exhibited it.
+// be looked up across all machines that have ever exhibited it.
 type AliasEdge struct {
 	FirstSeenAt time.Time  `json:"first_seen_at"`
 	LastSeenAt  time.Time  `json:"last_seen_at"`
 	SignalKind  string     `json:"signal_kind"`
 	SignalHash  string     `json:"signal_hash"`
 	Source      string     `json:"source"`
-	AssetID     uuid.UUID  `json:"asset_id"`
+	MachineID   uuid.UUID  `json:"machine_id"`
 	Confidence  Confidence `json:"confidence"`
 }
 
 // AliasEdgesFromSignals converts the signal slice returned by a
 // Fingerprinter into the AliasEdge rows that should be upserted into
-// asset_aliases for an asset. Each signal becomes one edge; the
+// machine_aliases for an machine. Each signal becomes one edge; the
 // resulting rows can be batched into a single transaction by the store.
-func AliasEdgesFromSignals(assetID uuid.UUID, source string, conf Confidence, now time.Time, sigs []Signal) []AliasEdge {
+func AliasEdgesFromSignals(machineID uuid.UUID, source string, conf Confidence, now time.Time, sigs []Signal) []AliasEdge {
 	out := make([]AliasEdge, 0, len(sigs))
 	for _, s := range sigs {
 		h := sha256.Sum256(s.Bytes)
 		out = append(out, AliasEdge{
-			AssetID:     assetID,
+			MachineID:   machineID,
 			SignalKind:  s.Kind,
 			SignalHash:  hex.EncodeToString(h[:]),
 			Confidence:  conf,
@@ -157,21 +157,21 @@ type AliasLookup interface {
 // ResolveAmbiguous classifies the outcome of an alias-graph lookup.
 //
 //   - len(edges)==0 → no prior knowledge of this signal; insert.
-//   - len(edges)==1 → unambiguous match; merge into the matched asset.
-//   - len(edges)>1 with all rows pointing at a single asset_id → still
+//   - len(edges)==1 → unambiguous match; merge into the matched machine.
+//   - len(edges)>1 with all rows pointing at a single machine_id → still
 //     unambiguous; collapse.
 //   - otherwise → ambiguous; the caller emits an AmbiguousMerge event
-//     and parks the incoming asset.
+//     and parks the incoming machine.
 //
 // The returned bool is true when the result is unambiguous (the caller
-// may proceed); the uuid is the canonical asset_id when applicable.
+// may proceed); the uuid is the canonical machine_id when applicable.
 func ResolveAmbiguous(edges []AliasEdge) (canonical uuid.UUID, unambiguous bool) {
 	if len(edges) == 0 {
 		return uuid.Nil, true
 	}
-	first := edges[0].AssetID
+	first := edges[0].MachineID
 	for _, e := range edges[1:] {
-		if e.AssetID != first {
+		if e.MachineID != first {
 			return uuid.Nil, false
 		}
 	}

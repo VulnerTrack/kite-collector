@@ -23,8 +23,8 @@ const (
 	PrivilegeTierDNSZoneAdmin = "dns_zone_admin"
 	// PrivilegeTierDeviceManagement — reserved for RFC-0135's MDM sources.
 	PrivilegeTierDeviceManagement = "device_management"
-	// PrivilegeTierAssetRegistry — reserved for RFC-0135's CMDB sources.
-	PrivilegeTierAssetRegistry = "asset_registry"
+	// PrivilegeTierMachineRegistry — reserved for RFC-0135's CMDB sources.
+	PrivilegeTierMachineRegistry = "machine_registry"
 	// PrivilegeTierUnknown is the default when a connector does not classify its
 	// credential blast radius.
 	PrivilegeTierUnknown = "unknown"

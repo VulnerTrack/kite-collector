@@ -99,21 +99,21 @@ func TestParseLLDPCtlExtractsAllFields(t *testing.T) {
 	}
 }
 
-func TestAssetsFromNeighborsCollapsesByChassis(t *testing.T) {
+func TestMachinesFromNeighborsCollapsesByChassis(t *testing.T) {
 	ns, err := parseLLDPCtl([]byte(sampleLLDPCtl))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	assets := assetsFromNeighbors(ns)
-	if len(assets) != 1 {
-		t.Fatalf("two uplinks to same chassis must collapse: got %d assets", len(assets))
+	machines := machinesFromNeighbors(ns)
+	if len(machines) != 1 {
+		t.Fatalf("two uplinks to same chassis must collapse: got %d machines", len(machines))
 	}
-	a := assets[0]
+	a := machines[0]
 	if a.Hostname != "switch-01.lab.example" {
 		t.Fatalf("hostname not chassis name: %q", a.Hostname)
 	}
-	if a.AssetType != model.AssetTypeNetworkDevice {
-		t.Fatalf("Bridge+Router must classify as network_device, got %v", a.AssetType)
+	if a.MachineType != model.MachineTypeNetworkDevice {
+		t.Fatalf("Bridge+Router must classify as network_device, got %v", a.MachineType)
 	}
 	if a.DiscoverySource != "lldp" {
 		t.Fatalf("source not stamped: %q", a.DiscoverySource)
@@ -149,15 +149,15 @@ func TestClassifyPrecedence(t *testing.T) {
 	cases := []struct {
 		name  string
 		descr string
-		want  model.AssetType
+		want  model.MachineType
 		caps  []string
 	}{
-		{"bridge is network device", "", model.AssetTypeNetworkDevice, []string{"Bridge"}},
-		{"router is network device", "", model.AssetTypeNetworkDevice, []string{"Router"}},
-		{"wlan ap is network device", "", model.AssetTypeNetworkDevice, []string{"WLAN-Access-Point"}},
-		{"station-only is server", "Ubuntu 24.04", model.AssetTypeServer, []string{"Station-Only"}},
-		{"linux descr → server", "Linux 6.5", model.AssetTypeServer, nil},
-		{"unknown → network_device default", "", model.AssetTypeNetworkDevice, nil},
+		{"bridge is network device", "", model.MachineTypeNetworkDevice, []string{"Bridge"}},
+		{"router is network device", "", model.MachineTypeNetworkDevice, []string{"Router"}},
+		{"wlan ap is network device", "", model.MachineTypeNetworkDevice, []string{"WLAN-Access-Point"}},
+		{"station-only is server", "Ubuntu 24.04", model.MachineTypeServer, []string{"Station-Only"}},
+		{"linux descr → server", "Linux 6.5", model.MachineTypeServer, nil},
+		{"unknown → network_device default", "", model.MachineTypeNetworkDevice, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -183,7 +183,7 @@ func TestDiscoverSkipsWhenLLDPCtlMissing(t *testing.T) {
 		t.Fatalf("missing daemon must not error, got: %v", err)
 	}
 	if out != nil {
-		t.Fatalf("want nil assets, got %d", len(out))
+		t.Fatalf("want nil machines, got %d", len(out))
 	}
 }
 
@@ -210,10 +210,10 @@ func TestDiscoverEndToEndWithFakeRunner(t *testing.T) {
 		t.Fatalf("Discover: %v", err)
 	}
 	if len(out) != 1 {
-		t.Fatalf("want 1 asset, got %d", len(out))
+		t.Fatalf("want 1 machine, got %d", len(out))
 	}
 	if out[0].Hostname != "switch-01.lab.example" {
-		t.Fatalf("asset hostname: %q", out[0].Hostname)
+		t.Fatalf("machine hostname: %q", out[0].Hostname)
 	}
 }
 

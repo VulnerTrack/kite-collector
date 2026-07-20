@@ -74,8 +74,8 @@ var ecosystemToPURL = map[string]string{
 	"dotnet": "nuget",
 }
 
-// Generate creates a CycloneDX BOM from a project asset and its installed software.
-func Generate(asset model.Asset, software []model.InstalledSoftware) (*BOM, error) {
+// Generate creates a CycloneDX BOM from a project machine and its installed software.
+func Generate(machine model.Machine, software []model.InstalledSoftware) (*BOM, error) {
 	serial, err := uuid.NewV7()
 	if err != nil {
 		serial = uuid.New()
@@ -93,7 +93,7 @@ func Generate(asset model.Asset, software []model.InstalledSoftware) (*BOM, erro
 			},
 			Component: &MetaComp{
 				Type: "application",
-				Name: asset.Hostname,
+				Name: machine.Hostname,
 			},
 		},
 		Components: make([]Component, 0, len(software)),
@@ -171,14 +171,14 @@ func buildPURL(ecosystem, name, version string) string {
 	return purl.String()
 }
 
-// GenerateAll produces one BOM per project asset. Returns a map of asset ID → BOM.
-func GenerateAll(assets []model.Asset, softwareByAsset map[uuid.UUID][]model.InstalledSoftware) map[uuid.UUID]*BOM {
+// GenerateAll produces one BOM per project machine. Returns a map of machine ID → BOM.
+func GenerateAll(machines []model.Machine, softwareByMachine map[uuid.UUID][]model.InstalledSoftware) map[uuid.UUID]*BOM {
 	boms := make(map[uuid.UUID]*BOM)
-	for _, a := range assets {
-		if a.AssetType != model.AssetTypeSoftwareProject {
+	for _, a := range machines {
+		if a.MachineType != model.MachineTypeSoftwareProject {
 			continue
 		}
-		sw := softwareByAsset[a.ID]
+		sw := softwareByMachine[a.ID]
 		if len(sw) == 0 {
 			continue
 		}

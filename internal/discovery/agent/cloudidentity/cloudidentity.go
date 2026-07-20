@@ -7,10 +7,10 @@
 // is cross-platform: AWS/Azure/GCP all expose their IMDS over plain
 // HTTP at the same link-local IP regardless of guest OS.
 //
-// The collector returns one row per asset (singleton table) with:
+// The collector returns one row per machine (singleton table) with:
 //
 //   - cloud_provider — aws/azure/gcp/none (the first responding probe wins)
-//   - instance_id    — cross-cloud asset key
+//   - instance_id    — cross-cloud machine key
 //   - account_id     — AWS account / Azure subscription / GCP project
 //   - region/AZ/instance_type/image_id/private_ip/public_ip
 //   - imds_v2_required (AWS only) — flags hosts still answering IMDSv1
@@ -22,7 +22,7 @@
 // hosts complete the whole pass in ~1.5s).
 //
 // MITRE T1082 (System Information Discovery, defender side):
-// cross-cloud asset key. MITRE T1078.004 (Cloud Accounts): the
+// cross-cloud machine key. MITRE T1078.004 (Cloud Accounts): the
 // audit pipeline joins this against host_cloud_credentials to spot
 // hosts running with credentials from a different cloud account than
 // the one they're hosted in (lateral-cloud-pivot indicator).
@@ -125,7 +125,7 @@ func HashPayload(data []byte) string {
 const DefaultProbeTimeout = 500 * time.Millisecond
 
 // SortInfos returns a deterministic ordering for fleet aggregation —
-// the single-asset agent always emits one Info; this helper exists
+// the single-machine agent always emits one Info; this helper exists
 // for the audit pipeline's cross-host sort.
 func SortInfos(infos []Info) {
 	sort.Slice(infos, func(i, j int) bool {

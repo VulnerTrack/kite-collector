@@ -38,7 +38,7 @@ func NewWorkspaceOne() *WorkspaceOne {
 func (w *WorkspaceOne) Name() string { return "workspace_one" }
 
 // Discover lists managed devices from Workspace ONE UEM and returns them as
-// assets. It honours cfg["enabled"] first (F3), loads credentials via
+// machines. It honours cfg["enabled"] first (F3), loads credentials via
 // connectorkit and zeroes them on return (R1), and validates the operator URL
 // via SafeClient with allowPrivate=false (SaaS). If any required credential is
 // absent the method logs a warning and returns nil (graceful degradation).
@@ -49,7 +49,7 @@ func (w *WorkspaceOne) Name() string { return "workspace_one" }
 //	username – string API account username (HTTP Basic)
 //	password – string API account password (HTTP Basic)
 //	api_key  – string REST API tenant code (aw-tenant-code header)
-func (w *WorkspaceOne) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (w *WorkspaceOne) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2: honour enabled:false even with creds present (F3)
 	}
@@ -76,27 +76,27 @@ func (w *WorkspaceOne) Discover(ctx context.Context, cfg map[string]any) ([]mode
 	baseStr := strings.TrimRight(base.String(), "/")
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 	guard := connectorkit.NewGuard("workspace_one")
 
 	for page := 0; ; page++ {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("workspace_one discovery cancelled: %w", err)
+			return machines, fmt.Errorf("workspace_one discovery cancelled: %w", err)
 		}
 
 		resp, bodyLen, err := w.fetchDevicePage(ctx, client, baseStr, creds, page)
 		if err != nil {
-			return assets, err
+			return machines, err
 		}
 		if err := guard.NextPage(int64(bodyLen)); err != nil {
-			return assets, fmt.Errorf("workspace_one pagination guard: %w", err)
+			return machines, fmt.Errorf("workspace_one pagination guard: %w", err)
 		}
 
-		pageAssets := make([]model.Asset, 0, len(resp.Devices))
+		pageMachines := make([]model.Machine, 0, len(resp.Devices))
 		for _, dev := range resp.Devices {
-			pageAssets = append(pageAssets, workspaceOneDeviceToAsset(dev, now))
+			pageMachines = append(pageMachines, workspaceOneDeviceToMachine(dev, now))
 		}
-		assets = append(assets, pageAssets...)
+		machines = append(machines, pageMachines...)
 
 		fetched := len(resp.Devices)
 		if fetched < wsonePageSize {
@@ -107,8 +107,8 @@ func (w *WorkspaceOne) Discover(ctx context.Context, cfg map[string]any) ([]mode
 		}
 	}
 
-	slog.Info("workspace_one: discovery complete", "total_assets", len(assets))
-	return assets, nil
+	slog.Info("workspace_one: discovery complete", "total_machines", len(machines))
+	return machines, nil
 }
 
 // httpClient returns the validated client + base URL for this source. In tests
@@ -185,12 +185,12 @@ func (w *WorkspaceOne) fetchDevicePage(ctx context.Context, client *http.Client,
 }
 
 // ---------------------------------------------------------------------------
-// Asset mapping
+// Machine mapping
 // ---------------------------------------------------------------------------
 
-// workspaceOneDeviceToAsset converts a single Workspace ONE device into an
-// asset, populating the MDM dedicated fields.
-func workspaceOneDeviceToAsset(dev wsoneDevice, now time.Time) model.Asset {
+// workspaceOneDeviceToMachine converts a single Workspace ONE device into an
+// machine, populating the MDM dedicated fields.
+func workspaceOneDeviceToMachine(dev wsoneDevice, now time.Time) model.Machine {
 	enrollID := dev.Udid
 	if enrollID == "" && dev.DeviceID != 0 {
 		enrollID = strconv.FormatInt(dev.DeviceID, 10)
@@ -209,9 +209,9 @@ func workspaceOneDeviceToAsset(dev wsoneDevice, now time.Time) model.Asset {
 		tagsJSON = string(encoded)
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
-		AssetType:       model.AssetTypeWorkstation,
+		MachineType:     model.MachineTypeWorkstation,
 		Hostname:        dev.DeviceFriendlyName,
 		OSFamily:        deriveWorkspaceOneOSFamily(dev.Platform, dev.OperatingSystem),
 		OSVersion:       dev.OperatingSystem,
@@ -226,8 +226,8 @@ func workspaceOneDeviceToAsset(dev wsoneDevice, now time.Time) model.Asset {
 		ComplianceState: mapWorkspaceOneCompliance(dev.ComplianceStatus),
 		Tags:            tagsJSON,
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }
 
 // ---------------------------------------------------------------------------
@@ -284,5 +284,5 @@ func mapWorkspaceOneCompliance(status string) string {
 // ensure WorkspaceOne satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*WorkspaceOne)(nil)

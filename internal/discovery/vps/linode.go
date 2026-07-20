@@ -27,7 +27,7 @@ func (l *Linode) Name() string { return "linode" }
 
 // Discover lists all Linode instances.
 // Credentials: KITE_LINODE_TOKEN environment variable.
-func (l *Linode) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (l *Linode) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_LINODE_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -40,26 +40,26 @@ func (l *Linode) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		"code", string(LogCodeLinodeStarting))
 
 	client := newClient("linode", l.baseURL, bearerAuth(token))
-	var assets []model.Asset
+	var machines []model.Machine
 	guard := safenet.NewPaginationGuardV2WithSource("linode")
 
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("linode: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("linode: context cancelled: %w", ctx.Err())
 		}
 
 		var resp linodeInstancesResponse
 		nBytes, err := client.getSized(ctx, fmt.Sprintf("/linode/instances?page=%d&page_size=100", page), &resp)
 		if err != nil {
-			return assets, fmt.Errorf("linode: list instances: %w", err)
+			return machines, fmt.Errorf("linode: list instances: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("linode: %w", err)
+			return machines, fmt.Errorf("linode: %w", err)
 		}
 
 		now := time.Now().UTC()
 		for i := range resp.Data {
-			assets = append(assets, linodeToAsset(resp.Data[i], now))
+			machines = append(machines, linodeToMachine(resp.Data[i], now))
 		}
 
 		if page >= resp.Pages {
@@ -69,8 +69,8 @@ func (l *Linode) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	slog.Info("Linode VPS discovery complete",
 		"code", string(LogCodeLinodeComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Linode API response types ---
@@ -106,9 +106,9 @@ type linodeBackupSched struct {
 	Window string `json:"window"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func linodeToAsset(inst linodeInstance, now time.Time) model.Asset {
+func linodeToMachine(inst linodeInstance, now time.Time) model.Machine {
 	ip := ""
 	if len(inst.IPv4) > 0 {
 		ip = inst.IPv4[0]
@@ -136,10 +136,10 @@ func linodeToAsset(inst linodeInstance, now time.Time) model.Asset {
 		firstSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        inst.Label,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		OSFamily:        inst.Image,
 		Environment:     inst.Region,
 		DiscoverySource: "linode",
@@ -149,6 +149,6 @@ func linodeToAsset(inst linodeInstance, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

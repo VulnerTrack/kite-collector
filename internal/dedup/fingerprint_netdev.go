@@ -14,8 +14,10 @@ import (
 // hardware in the same fleet.
 type NetworkDeviceFingerprinter struct{}
 
-// AssetType returns the asset type this fingerprinter handles.
-func (NetworkDeviceFingerprinter) AssetType() model.AssetType { return model.AssetTypeNetworkDevice }
+// MachineType returns the machine type this fingerprinter handles.
+func (NetworkDeviceFingerprinter) MachineType() model.MachineType {
+	return model.MachineTypeNetworkDevice
+}
 
 // Identity composes whichever signals are available. LLDP alone is
 // Network confidence; LLDP + serial or SNMP + serial is Cryptographic.
@@ -45,5 +47,5 @@ func (NetworkDeviceFingerprinter) Identity(r DiscoveryRecord) ([32]byte, []Signa
 	if len(sigs) == 0 {
 		return [32]byte{}, nil, ConfidenceUnknown, false
 	}
-	return Compose(FPVersion, r.TenantID, model.AssetTypeNetworkDevice, sigs), sigs, conf, true
+	return Compose(FPVersion, r.TenantID, model.MachineTypeNetworkDevice, sigs), sigs, conf, true
 }

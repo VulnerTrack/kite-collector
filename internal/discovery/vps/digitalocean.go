@@ -27,7 +27,7 @@ func (d *DigitalOcean) Name() string { return "digitalocean" }
 
 // Discover lists all DigitalOcean droplets.
 // Credentials: KITE_DIGITALOCEAN_TOKEN environment variable.
-func (d *DigitalOcean) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (d *DigitalOcean) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_DIGITALOCEAN_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -40,26 +40,26 @@ func (d *DigitalOcean) Discover(ctx context.Context, cfg map[string]any) ([]mode
 		"code", string(LogCodeDigitalOceanStarting))
 
 	client := newClient("digitalocean", d.baseURL, bearerAuth(token))
-	var assets []model.Asset
+	var machines []model.Machine
 	guard := safenet.NewPaginationGuardV2WithSource("digitalocean")
 
 	for page := 1; ; page++ {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("digitalocean discovery cancelled: %w", err)
+			return machines, fmt.Errorf("digitalocean discovery cancelled: %w", err)
 		}
 
 		var resp doDropletsResponse
 		nBytes, err := client.getSized(ctx, fmt.Sprintf("/droplets?page=%d&per_page=100", page), &resp)
 		if err != nil {
-			return assets, fmt.Errorf("digitalocean: list droplets: %w", err)
+			return machines, fmt.Errorf("digitalocean: list droplets: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("digitalocean: %w", err)
+			return machines, fmt.Errorf("digitalocean: %w", err)
 		}
 
 		now := time.Now().UTC()
 		for i := range resp.Droplets {
-			assets = append(assets, doToAsset(resp.Droplets[i], now))
+			machines = append(machines, doToMachine(resp.Droplets[i], now))
 		}
 
 		if resp.Links.Pages.Next == "" {
@@ -69,8 +69,8 @@ func (d *DigitalOcean) Discover(ctx context.Context, cfg map[string]any) ([]mode
 
 	slog.Info("DigitalOcean VPS discovery complete",
 		"code", string(LogCodeDigitalOceanComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- DigitalOcean API response types ---
@@ -118,9 +118,9 @@ type doRegion struct {
 	Slug string `json:"slug"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func doToAsset(drop doDroplet, now time.Time) model.Asset {
+func doToMachine(drop doDroplet, now time.Time) model.Machine {
 	ip := ""
 	for _, n := range drop.Networks.V4 {
 		if n.Type == "public" {
@@ -147,10 +147,10 @@ func doToAsset(drop doDroplet, now time.Time) model.Asset {
 		firstSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        drop.Name,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		OSFamily:        drop.Image.Distribution,
 		OSVersion:       drop.Image.Name,
 		Environment:     drop.Region.Slug,
@@ -161,6 +161,6 @@ func doToAsset(drop doDroplet, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

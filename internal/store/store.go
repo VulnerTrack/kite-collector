@@ -114,9 +114,9 @@ type RelatedRow struct {
 	Row       Row
 }
 
-// AssetFilter constrains which assets are returned by ListAssets.
-type AssetFilter struct {
-	AssetType    string
+// MachineFilter constrains which machines are returned by ListMachines.
+type MachineFilter struct {
+	MachineType  string
 	IsAuthorized string
 	IsManaged    string
 	Hostname     string
@@ -126,7 +126,7 @@ type AssetFilter struct {
 
 // EventFilter constrains which events are returned by ListEvents.
 type EventFilter struct {
-	AssetID   *uuid.UUID
+	MachineID *uuid.UUID
 	ScanRunID *uuid.UUID
 	EventType string
 	Limit     int
@@ -136,44 +136,44 @@ type EventFilter struct {
 // Store defines the persistence interface for the kite-collector.
 // Implementations must be safe for concurrent use.
 type Store interface {
-	// UpsertAsset inserts a new asset or updates an existing one matched by
-	// the UNIQUE(hostname, asset_type) constraint.
-	UpsertAsset(ctx context.Context, asset model.Asset) error
+	// UpsertMachine inserts a new machine or updates an existing one matched by
+	// the UNIQUE(hostname, machine_type) constraint.
+	UpsertMachine(ctx context.Context, machine model.Machine) error
 
-	// UpsertAssets atomically upserts a batch of assets inside a single
+	// UpsertMachines atomically upserts a batch of machines inside a single
 	// transaction and returns the number of inserts and updates performed.
-	UpsertAssets(ctx context.Context, assets []model.Asset) (inserted, updated int, err error)
+	UpsertMachines(ctx context.Context, machines []model.Machine) (inserted, updated int, err error)
 
-	// GetAssetByID retrieves the asset identified by id.
+	// GetMachineByID retrieves the machine identified by id.
 	// Returns store.ErrNotFound when the id does not exist.
-	GetAssetByID(ctx context.Context, id uuid.UUID) (*model.Asset, error)
+	GetMachineByID(ctx context.Context, id uuid.UUID) (*model.Machine, error)
 
-	// GetAssetByNaturalKey retrieves the asset whose SHA-256 natural key
-	// (hostname|asset_type) matches key. Returns nil when not found.
-	GetAssetByNaturalKey(ctx context.Context, key string) (*model.Asset, error)
+	// GetMachineByNaturalKey retrieves the machine whose SHA-256 natural key
+	// (hostname|machine_type) matches key. Returns nil when not found.
+	GetMachineByNaturalKey(ctx context.Context, key string) (*model.Machine, error)
 
-	// GetAssetsByNaturalKeys batch-fetches assets whose natural keys are in
+	// GetMachinesByNaturalKeys batch-fetches machines whose natural keys are in
 	// the supplied slice. The returned map is keyed by NaturalKey so callers
-	// can perform O(1) lookups while constructing per-asset events; missing
+	// can perform O(1) lookups while constructing per-machine events; missing
 	// keys are simply absent from the map. An empty input yields a (nil, nil)
 	// return for callers to treat as "no prior state."
-	GetAssetsByNaturalKeys(ctx context.Context, keys []string) (map[string]model.Asset, error)
+	GetMachinesByNaturalKeys(ctx context.Context, keys []string) (map[string]model.Machine, error)
 
-	// ListAssets returns assets matching the supplied filter.
-	ListAssets(ctx context.Context, filter AssetFilter) ([]model.Asset, error)
+	// ListMachines returns machines matching the supplied filter.
+	ListMachines(ctx context.Context, filter MachineFilter) ([]model.Machine, error)
 
-	// GetStaleAssets returns assets whose last_seen_at is older than
+	// GetStaleMachines returns machines whose last_seen_at is older than
 	// time.Now().Add(-threshold).
-	GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error)
+	GetStaleMachines(ctx context.Context, threshold time.Duration) ([]model.Machine, error)
 
-	// InsertEvent persists a single asset lifecycle event.
-	InsertEvent(ctx context.Context, event model.AssetEvent) error
+	// InsertEvent persists a single machine lifecycle event.
+	InsertEvent(ctx context.Context, event model.MachineEvent) error
 
-	// InsertEvents persists a batch of asset lifecycle events.
-	InsertEvents(ctx context.Context, events []model.AssetEvent) error
+	// InsertEvents persists a batch of machine lifecycle events.
+	InsertEvents(ctx context.Context, events []model.MachineEvent) error
 
 	// ListEvents returns events matching the supplied filter.
-	ListEvents(ctx context.Context, filter EventFilter) ([]model.AssetEvent, error)
+	ListEvents(ctx context.Context, filter EventFilter) ([]model.MachineEvent, error)
 
 	// CreateScanRun records a new scan run with status "running".
 	CreateScanRun(ctx context.Context, run model.ScanRun) error
@@ -203,12 +203,12 @@ type Store interface {
 	MarkScanCancelRequested(ctx context.Context, id uuid.UUID, at time.Time) error
 
 	// UpsertSoftware replaces all installed software records for the given
-	// asset. It deletes existing rows for assetID and inserts the new set
+	// machine. It deletes existing rows for machineID and inserts the new set
 	// inside a single transaction (full replacement per scan).
-	UpsertSoftware(ctx context.Context, assetID uuid.UUID, software []model.InstalledSoftware) error
+	UpsertSoftware(ctx context.Context, machineID uuid.UUID, software []model.InstalledSoftware) error
 
-	// ListSoftware returns all installed software records for the given asset.
-	ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error)
+	// ListSoftware returns all installed software records for the given machine.
+	ListSoftware(ctx context.Context, machineID uuid.UUID) ([]model.InstalledSoftware, error)
 
 	// InsertFindings persists a batch of configuration audit findings.
 	InsertFindings(ctx context.Context, findings []model.ConfigFinding) error
@@ -302,7 +302,7 @@ type HeartbeatFilter struct {
 
 // FindingFilter constrains which config findings are returned by ListFindings.
 type FindingFilter struct {
-	AssetID   *uuid.UUID
+	MachineID *uuid.UUID
 	ScanRunID *uuid.UUID
 	Auditor   string
 	Severity  string

@@ -45,12 +45,12 @@ func TestRenderFindingsFragment_SeverityType(t *testing.T) {
 		Status:    model.ScanStatusRunning,
 	}))
 
-	// Create an asset (findings reference it).
-	assetID := uuid.Must(uuid.NewV7())
-	_, _, err := st.UpsertAssets(ctx, []model.Asset{{
-		ID:              assetID,
+	// Create an machine (findings reference it).
+	machineID := uuid.Must(uuid.NewV7())
+	_, _, err := st.UpsertMachines(ctx, []model.Machine{{
+		ID:              machineID,
 		Hostname:        "test-host",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		DiscoverySource: "test",
 		IsAuthorized:    model.AuthorizationUnknown,
 		IsManaged:       model.ManagedUnknown,
@@ -62,7 +62,7 @@ func TestRenderFindingsFragment_SeverityType(t *testing.T) {
 	// Insert a finding with model.Severity (not plain string).
 	findings := []model.ConfigFinding{{
 		ID:          uuid.Must(uuid.NewV7()),
-		AssetID:     assetID,
+		MachineID:   machineID,
 		ScanRunID:   runID,
 		Auditor:     "ssh",
 		CheckID:     "ssh-001",
@@ -97,11 +97,11 @@ func TestRenderFindingsFragment_AllSeverities(t *testing.T) {
 		Status:    model.ScanStatusRunning,
 	}))
 
-	assetID := uuid.Must(uuid.NewV7())
-	_, _, err := st.UpsertAssets(ctx, []model.Asset{{
-		ID:              assetID,
+	machineID := uuid.Must(uuid.NewV7())
+	_, _, err := st.UpsertMachines(ctx, []model.Machine{{
+		ID:              machineID,
 		Hostname:        "test-host",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		DiscoverySource: "test",
 		IsAuthorized:    model.AuthorizationUnknown,
 		IsManaged:       model.ManagedUnknown,
@@ -119,7 +119,7 @@ func TestRenderFindingsFragment_AllSeverities(t *testing.T) {
 	} {
 		finding := model.ConfigFinding{
 			ID:        uuid.Must(uuid.NewV7()),
-			AssetID:   assetID,
+			MachineID: machineID,
 			ScanRunID: runID,
 			Auditor:   "test",
 			CheckID:   "test-" + string(sev),
@@ -201,7 +201,7 @@ func TestFragmentEndpoints_NoSuperfluousWriteHeader(t *testing.T) {
 
 	// Test each fragment endpoint returns 200 with no errors.
 	endpoints := []string{
-		"/fragments/assets",
+		"/fragments/machines",
 		"/fragments/software",
 		"/fragments/findings",
 		"/fragments/scans",

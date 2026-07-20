@@ -9,9 +9,9 @@
 //
 // ENTRA-001 / 002 / 003 derive from the tenant-wide Snapshot the EntraID
 // discovery source caches after each Discover() call; ENTRA-005 inspects
-// individual asset tags emitted by that source. The split mirrors the
+// individual machine tags emitted by that source. The split mirrors the
 // LDAP auditor pattern but adds the AuditTenant entry point because
-// ENTRA-001..003 are not tied to a specific asset.
+// ENTRA-001..003 are not tied to a specific machine.
 package audit
 
 import (
@@ -38,9 +38,9 @@ type EntraAuditConfig struct {
 	StaleAccountDays int // 0 == use default (90 days)
 }
 
-// Entra audits Microsoft Entra ID-discovered assets and the tenant-wide
+// Entra audits Microsoft Entra ID-discovered machines and the tenant-wide
 // Snapshot for the four RFC-0121 §6 findings listed above. The auditor
-// is safe to register globally; non-Entra assets short-circuit on the
+// is safe to register globally; non-Entra machines short-circuit on the
 // DiscoverySource check inside Audit().
 type Entra struct {
 	now func() time.Time
@@ -62,39 +62,39 @@ func NewEntra(cfg EntraAuditConfig) *Entra {
 // Name returns the auditor identifier.
 func (e *Entra) Name() string { return "entra" }
 
-// Audit inspects a single asset for the per-asset ENTRA-005 finding
+// Audit inspects a single machine for the per-machine ENTRA-005 finding
 // (non-compliant managed device). Tenant-wide findings (ENTRA-001/002/003)
 // are emitted by AuditTenant which consumes the discovery snapshot.
 //
-// Non-Entra assets and assets without tags are skipped silently so the
+// Non-Entra machines and machines without tags are skipped silently so the
 // auditor can be registered globally alongside SSH / firewall / etc.
-func (e *Entra) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
-	if asset.DiscoverySource != entra.SourceName {
+func (e *Entra) Audit(_ context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
+	if machine.DiscoverySource != entra.SourceName {
 		return nil, nil
 	}
-	if asset.Tags == "" {
+	if machine.Tags == "" {
 		return nil, nil
 	}
 
 	var tags map[string]any
-	if err := json.Unmarshal([]byte(asset.Tags), &tags); err != nil {
+	if err := json.Unmarshal([]byte(machine.Tags), &tags); err != nil {
 		return nil, fmt.Errorf("entra audit: parse tags: %w", err)
 	}
 
 	now := e.now()
 	var findings []model.ConfigFinding
-	if f := e.checkNonCompliantDevice(asset, tags, now); f != nil {
+	if f := e.checkNonCompliantDevice(machine, tags, now); f != nil {
 		findings = append(findings, *f)
 	}
 	return findings, nil
 }
 
-// checkNonCompliantDevice fires when the device asset carries
+// checkNonCompliantDevice fires when the device machine carries
 // entra.is_compliant=false. The Graph API only emits is_compliant when
 // the tenant has Intune compliance evaluation enabled; absent values are
 // reported as "unknown" by the discovery source (the tag is not set), so
 // missing-tag is intentionally not flagged here.
-func (e *Entra) checkNonCompliantDevice(asset model.Asset, tags map[string]any, now time.Time) *model.ConfigFinding {
+func (e *Entra) checkNonCompliantDevice(machine model.Machine, tags map[string]any, now time.Time) *model.ConfigFinding {
 	v, ok := tags["entra.is_compliant"]
 	if !ok {
 		return nil
@@ -105,7 +105,7 @@ func (e *Entra) checkNonCompliantDevice(asset model.Asset, tags map[string]any, 
 	}
 	return &model.ConfigFinding{
 		ID:          uuid.Must(uuid.NewV7()),
-		AssetID:     asset.ID,
+		MachineID:   machine.ID,
 		Auditor:     "entra",
 		CheckID:     "entra-005",
 		Title:       "Entra-managed device is non-compliant",

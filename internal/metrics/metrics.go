@@ -13,11 +13,11 @@ import (
 // Each instance carries its own registry so nothing touches the global default.
 type Metrics struct {
 	ScanDuration         *prometheus.HistogramVec
-	AssetsTotal          *prometheus.GaugeVec
+	MachinesTotal        *prometheus.GaugeVec
 	EventsEmitted        *prometheus.CounterVec
 	DiscoveryErrors      *prometheus.CounterVec
 	ScanCoverage         *prometheus.GaugeVec
-	StaleAssets          prometheus.Gauge
+	StaleMachines        prometheus.Gauge
 	DedupSkipped         prometheus.Counter
 	PanicsRecovered      *prometheus.CounterVec
 	CircuitBreakerTrips  *prometheus.CounterVec
@@ -43,14 +43,14 @@ func New() *Metrics {
 		Help: "Duration of discovery scans in seconds.",
 	}, []string{"source"})
 
-	assetsTotal := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "kite_assets_total",
-		Help: "Current number of known assets by type, authorization and managed state.",
+	machinesTotal := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "kite_machines_total",
+		Help: "Current number of known machines by type, authorization and managed state.",
 	}, []string{"type", "authorized", "managed"})
 
 	eventsEmitted := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "kite_events_emitted_total",
-		Help: "Total number of asset events emitted.",
+		Help: "Total number of machine events emitted.",
 	}, []string{"event_type"})
 
 	discoveryErrors := prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -60,17 +60,17 @@ func New() *Metrics {
 
 	scanCoverage := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "kite_scan_coverage_ratio",
-		Help: "Fraction of expected assets that were seen in the latest scan.",
+		Help: "Fraction of expected machines that were seen in the latest scan.",
 	}, []string{"source"})
 
-	staleAssets := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "kite_stale_assets_total",
-		Help: "Number of assets that have not been seen within the staleness threshold.",
+	staleMachines := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "kite_stale_machines_total",
+		Help: "Number of machines that have not been seen within the staleness threshold.",
 	})
 
 	dedupSkipped := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "kite_dedup_skipped_total",
-		Help: "Total number of duplicate assets skipped during deduplication.",
+		Help: "Total number of duplicate machines skipped during deduplication.",
 	})
 
 	panicsRecovered := prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -126,11 +126,11 @@ func New() *Metrics {
 
 	reg.MustRegister(
 		scanDuration,
-		assetsTotal,
+		machinesTotal,
 		eventsEmitted,
 		discoveryErrors,
 		scanCoverage,
-		staleAssets,
+		staleMachines,
 		dedupSkipped,
 		panicsRecovered,
 		circuitBreakerTrips,
@@ -146,11 +146,11 @@ func New() *Metrics {
 
 	return &Metrics{
 		ScanDuration:             scanDuration,
-		AssetsTotal:              assetsTotal,
+		MachinesTotal:            machinesTotal,
 		EventsEmitted:            eventsEmitted,
 		DiscoveryErrors:          discoveryErrors,
 		ScanCoverage:             scanCoverage,
-		StaleAssets:              staleAssets,
+		StaleMachines:            staleMachines,
 		DedupSkipped:             dedupSkipped,
 		PanicsRecovered:          panicsRecovered,
 		CircuitBreakerTrips:      circuitBreakerTrips,

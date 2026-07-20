@@ -102,7 +102,7 @@ func TestAbsorbAndClassifyGateway(t *testing.T) {
 	if r.location == "" || r.server == "" || r.usn == "" {
 		t.Fatalf("absorb dropped fields: %+v", r)
 	}
-	if got := classify(r.sts, r.server); got != model.AssetTypeNetworkDevice {
+	if got := classify(r.sts, r.server); got != model.MachineTypeNetworkDevice {
 		t.Fatalf("gateway must classify as network_device, got %v", got)
 	}
 }
@@ -111,13 +111,13 @@ func TestClassifyPrecedence(t *testing.T) {
 	cases := []struct {
 		name   string
 		server string
-		want   model.AssetType
+		want   model.MachineType
 		sts    []string
 	}{
 		{
 			"gateway wins over mediarenderer",
 			"",
-			model.AssetTypeNetworkDevice,
+			model.MachineTypeNetworkDevice,
 			[]string{
 				"urn:schemas-upnp-org:device:MediaRenderer:1",
 				"urn:schemas-upnp-org:device:InternetGatewayDevice:1",
@@ -126,19 +126,19 @@ func TestClassifyPrecedence(t *testing.T) {
 		{
 			"printer from server header",
 			"Printer-Daemon IPP/2.0",
-			model.AssetTypeAppliance,
+			model.MachineTypeAppliance,
 			[]string{"upnp:rootdevice"},
 		},
 		{
 			"mediarenderer",
 			"",
-			model.AssetTypeIOTDevice,
+			model.MachineTypeIOTDevice,
 			[]string{"urn:schemas-upnp-org:device:MediaRenderer:1"},
 		},
 		{
 			"unknown falls back to iot",
 			"",
-			model.AssetTypeIOTDevice,
+			model.MachineTypeIOTDevice,
 			[]string{"upnp:rootdevice"},
 		},
 	}
@@ -155,7 +155,7 @@ func TestClassifyPrecedence(t *testing.T) {
 	}
 }
 
-func TestAssetsFromRespondersIsDeterministic(t *testing.T) {
+func TestMachinesFromRespondersIsDeterministic(t *testing.T) {
 	r1 := &responder{
 		addr:     net.IPv4(192, 168, 1, 1),
 		hostname: "192.168.1.1",
@@ -170,21 +170,21 @@ func TestAssetsFromRespondersIsDeterministic(t *testing.T) {
 		sts:      map[string]struct{}{"urn:schemas-upnp-org:device:MediaRenderer:1": {}},
 		usns:     map[string]struct{}{"uuid:bbb::urn:schemas-upnp-org:device:MediaRenderer:1": {}},
 	}
-	got := assetsFromResponders(map[string]*responder{
+	got := machinesFromResponders(map[string]*responder{
 		"192.168.1.50": r2,
 		"192.168.1.1":  r1,
 	})
 	if len(got) != 2 {
-		t.Fatalf("want 2 assets, got %d", len(got))
+		t.Fatalf("want 2 machines, got %d", len(got))
 	}
 	if got[0].Hostname != "192.168.1.1" || got[1].Hostname != "tv.local" {
 		t.Fatalf("sort order wrong: %q, %q", got[0].Hostname, got[1].Hostname)
 	}
-	if got[0].AssetType != model.AssetTypeNetworkDevice {
-		t.Fatalf("router not classified as network_device: %v", got[0].AssetType)
+	if got[0].MachineType != model.MachineTypeNetworkDevice {
+		t.Fatalf("router not classified as network_device: %v", got[0].MachineType)
 	}
-	if got[1].AssetType != model.AssetTypeIOTDevice {
-		t.Fatalf("tv not classified as iot_device: %v", got[1].AssetType)
+	if got[1].MachineType != model.MachineTypeIOTDevice {
+		t.Fatalf("tv not classified as iot_device: %v", got[1].MachineType)
 	}
 	if !strings.Contains(got[0].Tags, "InternetGatewayDevice") {
 		t.Fatalf("tags missing ST: %s", got[0].Tags)

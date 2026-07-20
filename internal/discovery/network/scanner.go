@@ -199,7 +199,7 @@ func (s *Scanner) validateAndClamp(ctx context.Context, c *ScannerConfig) (int, 
 }
 
 // Discover scans the CIDR ranges specified in cfg["scope"] ([]any of strings)
-// and probes each IP against tcp_ports. Assets are created for any IP that
+// and probes each IP against tcp_ports. Machines are created for any IP that
 // responds on at least one port.
 //
 // Supported config keys:
@@ -210,7 +210,7 @@ func (s *Scanner) validateAndClamp(ctx context.Context, c *ScannerConfig) (int, 
 //	max_concurrent    – float64 concurrency limit (default 256, capped 512)
 //	scan_timeout      – string duration overall deadline (default 30m)
 //	allow_link_local  – bool; opt-in to scanning RFC-3927/loopback ranges
-func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	scanID := uuid.Must(uuid.NewV7()).String()
 	startedAt := time.Now().UTC()
 	parsed := parseScannerConfig(cfg)
@@ -265,7 +265,7 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	sem := make(chan struct{}, parsed.MaxConcurrent)
 	var (
 		mu        sync.Mutex
-		assets    []model.Asset
+		machines  []model.Machine
 		openPorts []OpenPort
 		probed    int
 	)
@@ -286,8 +286,8 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 			if len(open) > 0 {
 				now := time.Now().UTC()
 				ipStr := ip.String()
-				assets = append(assets, model.Asset{
-					AssetType:       model.AssetTypeServer,
+				machines = append(machines, model.Machine{
+					MachineType:     model.MachineTypeServer,
 					Hostname:        ipStr,
 					DiscoverySource: "network_scan",
 					FirstSeenAt:     now,
@@ -335,7 +335,7 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		CompletedAt:      &completedAt,
 		IPsEnumerated:    totalIPs,
 		IPsScanned:       probed,
-		IPsResponsive:    len(assets),
+		IPsResponsive:    len(machines),
 		PortsProbedJSON:  portsJSON(parsed.TCPPorts),
 		Outcome:          outcome,
 		SafetyGuardCount: len(guardEvents),
@@ -343,7 +343,7 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	s.recordScanEvent(ctx, scanEvent)
 	s.recordOpenPorts(ctx, scanID, openPorts)
 
-	return assets, nil
+	return machines, nil
 }
 
 // recordGuardEvent persists a guard event when a sink is wired. Failures to
@@ -551,17 +551,17 @@ func ptrTime(t time.Time) *time.Time { return &t }
 // ensure Scanner satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Scanner)(nil)
 
 // NewNetworkInterfaces creates NetworkInterface entries for a discovered IP.
 // This is a helper for callers that need to persist interface data alongside
-// the asset.
-func NewNetworkInterfaces(assetID uuid.UUID, ipAddr string) []model.NetworkInterface {
+// the machine.
+func NewNetworkInterfaces(machineID uuid.UUID, ipAddr string) []model.NetworkInterface {
 	return []model.NetworkInterface{
 		{
 			ID:            uuid.Must(uuid.NewV7()),
-			AssetID:       assetID,
+			MachineID:     machineID,
 			InterfaceName: "eth0",
 			IPAddress:     ipAddr,
 			IsPrimary:     true,

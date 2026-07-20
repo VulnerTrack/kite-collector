@@ -102,7 +102,7 @@ func parseConfig(cfg map[string]any) Config {
 
 // responder accumulates everything seen from one SSDP endpoint, keyed by
 // source IP. We merge multiple announcements (ST/USN pairs) into a single
-// asset so a router advertising 8 service URNs is one asset, not 8.
+// machine so a router advertising 8 service URNs is one machine, not 8.
 type responder struct {
 	lastSeen time.Time
 	sts      map[string]struct{}
@@ -115,7 +115,7 @@ type responder struct {
 }
 
 // Discover sends M-SEARCH, joins the multicast group to also pick up
-// passive NOTIFY * announcements, and returns one asset per unique
+// passive NOTIFY * announcements, and returns one machine per unique
 // responder.
 //
 // Supported config keys (all optional):
@@ -126,7 +126,7 @@ type responder struct {
 //	mx             int       MX response budget (default 2, range 1..5)
 //	disable_ipv4   bool      skip IPv4 multicast
 //	disable_ipv6   bool      skip IPv6 multicast
-func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	parsed := parseConfig(cfg)
 
 	ctx, cancel := context.WithTimeout(ctx, parsed.ListenWindow+2*time.Second)
@@ -232,7 +232,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	cancel()
 	wg.Wait()
 
-	return assetsFromResponders(responders), nil
+	return machinesFromResponders(responders), nil
 }
 
 // pickInterfaces returns multicast-capable, up, non-loopback interfaces.
@@ -454,15 +454,15 @@ func absorbMessage(r *responder, m ssdpMessage) {
 	}
 }
 
-// assetsFromResponders collapses the per-source accumulator into a sorted
-// list of model.Asset values.
-func assetsFromResponders(in map[string]*responder) []model.Asset {
+// machinesFromResponders collapses the per-source accumulator into a sorted
+// list of model.Machine values.
+func machinesFromResponders(in map[string]*responder) []model.Machine {
 	keys := make([]string, 0, len(in))
 	for k := range in {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	out := make([]model.Asset, 0, len(keys))
+	out := make([]model.Machine, 0, len(keys))
 	for _, k := range keys {
 		r := in[k]
 		hostname := r.hostname
@@ -473,8 +473,8 @@ func assetsFromResponders(in map[string]*responder) []model.Asset {
 				hostname = r.addr.String()
 			}
 		}
-		a := model.Asset{
-			AssetType:       classify(r.sts, r.server),
+		a := model.Machine{
+			MachineType:     classify(r.sts, r.server),
 			Hostname:        hostname,
 			DiscoverySource: "ssdp",
 			FirstSeenAt:     r.lastSeen,
@@ -489,10 +489,10 @@ func assetsFromResponders(in map[string]*responder) []model.Asset {
 	return out
 }
 
-// classify maps observed Search Targets + Server header to an AssetType.
+// classify maps observed Search Targets + Server header to an MachineType.
 // The precedence ladder favours specific evidence (printer, router) over
 // generic UPnP device URNs.
-func classify(sts map[string]struct{}, server string) model.AssetType {
+func classify(sts map[string]struct{}, server string) model.MachineType {
 	contains := func(needle string) bool {
 		for st := range sts {
 			if strings.Contains(strings.ToLower(st), needle) {
@@ -506,17 +506,17 @@ func classify(sts map[string]struct{}, server string) model.AssetType {
 	switch {
 	case contains("internetgatewaydevice") || contains("wandevice") ||
 		contains("wanconnectiondevice") || contains("wfawlanconfig"):
-		return model.AssetTypeNetworkDevice
+		return model.MachineTypeNetworkDevice
 	case contains("printer") || strings.Contains(srv, "ipp"):
-		return model.AssetTypeAppliance
+		return model.MachineTypeAppliance
 	case contains("mediarenderer") || contains("mediaserver") ||
 		contains("dial-multiscreen-org") || contains("googlecast") ||
 		contains("avtransport"):
-		return model.AssetTypeIOTDevice
+		return model.MachineTypeIOTDevice
 	case contains("basic:1") && strings.Contains(srv, "linux"):
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	default:
-		return model.AssetTypeIOTDevice
+		return model.MachineTypeIOTDevice
 	}
 }
 

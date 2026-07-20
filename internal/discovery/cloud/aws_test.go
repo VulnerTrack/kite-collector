@@ -123,7 +123,7 @@ func TestAWSDiscover_MockEC2(t *testing.T) {
 
 	// We can't easily redirect the EC2 endpoint, but we can test the
 	// describeInstances method directly by overriding the HTTP call via
-	// the retry mechanism. Instead, test the parsing + asset creation flow.
+	// the retry mechanism. Instead, test the parsing + machine creation flow.
 	instances, err := parseDescribeInstancesResponse([]byte(ec2XML))
 	require.NoError(t, err)
 	assert.Len(t, instances, 2)
