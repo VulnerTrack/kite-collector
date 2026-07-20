@@ -15,7 +15,7 @@ import (
 )
 
 // lansweeperGraphQLPage builds the GraphQL response envelope for a single
-// page of asset resources.
+// page of machine resources.
 func lansweeperGraphQLPage(items []map[string]any, next string) map[string]any {
 	return map[string]any{
 		"data": map[string]any{
@@ -29,7 +29,7 @@ func lansweeperGraphQLPage(items []map[string]any, next string) map[string]any {
 	}
 }
 
-// lansweeperItemJSON builds a single asset resource item.
+// lansweeperItemJSON builds a single machine resource item.
 func lansweeperItemJSON(key, name, osCaption, ip, domain string) map[string]any {
 	return map[string]any{
 		"key": key,
@@ -78,11 +78,11 @@ func TestLansweeper_Discover_Success(t *testing.T) {
 		"site_id": "site-1",
 	}
 
-	assets, err := l.Discover(context.Background(), cfg)
+	machines, err := l.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 1)
+	require.Len(t, machines, 1)
 
-	ws := findAssetByHostname(assets, "win-ws-01")
+	ws := findMachineByHostname(machines, "win-ws-01")
 	require.NotNil(t, ws)
 	assert.Equal(t, "windows", ws.OSFamily)
 	assert.Equal(t, "ls-1", ws.CMDBSysID)
@@ -136,11 +136,11 @@ func TestLansweeper_Discover_Pagination(t *testing.T) {
 		"site_id": "s",
 	}
 
-	assets, err := l.Discover(context.Background(), cfg)
+	machines, err := l.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
-	assert.NotNil(t, findAssetByHostname(assets, "host-a"))
-	assert.NotNil(t, findAssetByHostname(assets, "host-b"))
+	require.Len(t, machines, 2)
+	assert.NotNil(t, findMachineByHostname(machines, "host-a"))
+	assert.NotNil(t, findMachineByHostname(machines, "host-b"))
 }
 
 func TestLansweeper_Discover_Disabled(t *testing.T) {
@@ -149,26 +149,26 @@ func TestLansweeper_Discover_Disabled(t *testing.T) {
 
 	// F3: creds present but enabled is false → discovery must be skipped.
 	l := &Lansweeper{baseURL: srv.URL}
-	assets, err := l.Discover(context.Background(), map[string]any{
+	machines, err := l.Discover(context.Background(), map[string]any{
 		"enabled": false,
 		"api_key": "ls-key",
 		"site_id": "site-1",
 	})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestLansweeper_Discover_MissingCredentials(t *testing.T) {
 	l := NewLansweeper()
 
 	// Enabled with an endpoint and site but no api_key → graceful skip.
-	assets, err := l.Discover(context.Background(), map[string]any{
+	machines, err := l.Discover(context.Background(), map[string]any{
 		"enabled": true,
 		"api_url": "https://api.lansweeper.com/graphql",
 		"site_id": "site-1",
 	})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestLansweeper_Discover_AuthFailure(t *testing.T) {
@@ -183,16 +183,16 @@ func TestLansweeper_Discover_AuthFailure(t *testing.T) {
 	}
 
 	// Auth failure → returns empty (graceful).
-	assets, err := l.Discover(context.Background(), cfg)
+	machines, err := l.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
-func TestClassifyLansweeperAsset(t *testing.T) {
-	assert.Equal(t, model.AssetTypeServer, classifyLansweeperAsset("Windows Server"))
-	assert.Equal(t, model.AssetTypeWorkstation, classifyLansweeperAsset("Workstation"))
-	assert.Equal(t, model.AssetTypeIOTDevice, classifyLansweeperAsset("Printer"))
-	assert.Equal(t, model.AssetTypeServer, classifyLansweeperAsset("Windows"))
+func TestClassifyLansweeperMachine(t *testing.T) {
+	assert.Equal(t, model.MachineTypeServer, classifyLansweeperMachine("Windows Server"))
+	assert.Equal(t, model.MachineTypeWorkstation, classifyLansweeperMachine("Workstation"))
+	assert.Equal(t, model.MachineTypeIOTDevice, classifyLansweeperMachine("Printer"))
+	assert.Equal(t, model.MachineTypeServer, classifyLansweeperMachine("Windows"))
 }
 
 func TestDeriveLansweeperOSFamily(t *testing.T) {

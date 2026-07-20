@@ -28,7 +28,7 @@ type LDAPAuditConfig struct {
 	StaleThresholdDays int    // 0 == use default (90 days)
 }
 
-// LDAP audits Active Directory / LDAP-discovered assets for posture
+// LDAP audits Active Directory / LDAP-discovered machines for posture
 // findings declared in RFC-0121 §6:
 //
 //	ad-001  stale-account            CWE-1002  medium
@@ -36,9 +36,9 @@ type LDAPAuditConfig struct {
 //	ad-003  disabled-active-account  CWE-672   low
 //	ad-004  cleartext-ldap-bind      CWE-319   high
 //
-// The auditor runs once per asset; it filters out anything that wasn't
+// The auditor runs once per machine; it filters out anything that wasn't
 // produced by the LDAP discovery source so registering it globally is
-// safe — non-LDAP assets short-circuit immediately.
+// safe — non-LDAP machines short-circuit immediately.
 type LDAP struct {
 	now func() time.Time
 	cfg LDAPAuditConfig
@@ -59,35 +59,35 @@ func NewLDAP(cfg LDAPAuditConfig) *LDAP {
 // Name returns the auditor identifier.
 func (l *LDAP) Name() string { return "ldap" }
 
-// Audit inspects the asset's tags JSON for AD-specific markers and
-// emits the four RFC-0121 findings where applicable. Non-LDAP assets
+// Audit inspects the machine's tags JSON for AD-specific markers and
+// emits the four RFC-0121 findings where applicable. Non-LDAP machines
 // are skipped silently.
-func (l *LDAP) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
-	if asset.DiscoverySource != "ldap" {
+func (l *LDAP) Audit(_ context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
+	if machine.DiscoverySource != "ldap" {
 		return nil, nil
 	}
-	if asset.Tags == "" {
+	if machine.Tags == "" {
 		return nil, nil
 	}
 
 	var tags map[string]any
-	if err := json.Unmarshal([]byte(asset.Tags), &tags); err != nil {
+	if err := json.Unmarshal([]byte(machine.Tags), &tags); err != nil {
 		return nil, fmt.Errorf("ldap audit: parse tags: %w", err)
 	}
 
 	now := l.now()
 	var findings []model.ConfigFinding
 
-	if f := l.checkStaleAccount(asset, tags, now); f != nil {
+	if f := l.checkStaleAccount(machine, tags, now); f != nil {
 		findings = append(findings, *f)
 	}
-	if f := l.checkKerberoastable(asset, tags, now); f != nil {
+	if f := l.checkKerberoastable(machine, tags, now); f != nil {
 		findings = append(findings, *f)
 	}
-	if f := l.checkDisabledInActiveOU(asset, tags, now); f != nil {
+	if f := l.checkDisabledInActiveOU(machine, tags, now); f != nil {
 		findings = append(findings, *f)
 	}
-	if f := l.checkCleartextBind(asset, tags, now); f != nil {
+	if f := l.checkCleartextBind(machine, tags, now); f != nil {
 		findings = append(findings, *f)
 	}
 
@@ -98,7 +98,7 @@ func (l *LDAP) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFindin
 // configured threshold (default 90 days). Accounts that have never
 // logged on (lastLogonTimestamp == 0) are intentionally NOT flagged —
 // brand-new computer accounts are the most common false-positive.
-func (l *LDAP) checkStaleAccount(asset model.Asset, tags map[string]any, now time.Time) *model.ConfigFinding {
+func (l *LDAP) checkStaleAccount(machine model.Machine, tags map[string]any, now time.Time) *model.ConfigFinding {
 	last, ok := numericTag(tags, contract.AttrADLastLogonTimestamp)
 	if !ok || last <= 0 {
 		return nil
@@ -110,7 +110,7 @@ func (l *LDAP) checkStaleAccount(asset model.Asset, tags map[string]any, now tim
 	ageDays := int((now.Unix() - last) / 86400)
 	return &model.ConfigFinding{
 		ID:          uuid.Must(uuid.NewV7()),
-		AssetID:     asset.ID,
+		MachineID:   machine.ID,
 		Auditor:     "ldap",
 		CheckID:     "ad-001",
 		Title:       "Stale Active Directory computer account",
@@ -128,7 +128,7 @@ func (l *LDAP) checkStaleAccount(asset model.Asset, tags map[string]any, now tim
 // (HOST/, RestrictedKrbHost/, TERMSRV/, GC/, ldap/, etc.). Computer
 // trust accounts always have HOST SPNs, so the filter must exclude
 // those default SPNs to avoid false positives.
-func (l *LDAP) checkKerberoastable(asset model.Asset, tags map[string]any, now time.Time) *model.ConfigFinding {
+func (l *LDAP) checkKerberoastable(machine model.Machine, tags map[string]any, now time.Time) *model.ConfigFinding {
 	enabled, _ := tags[contract.AttrADEnabled].(bool)
 	if !enabled {
 		return nil
@@ -140,7 +140,7 @@ func (l *LDAP) checkKerberoastable(asset model.Asset, tags map[string]any, now t
 	}
 	return &model.ConfigFinding{
 		ID:          uuid.Must(uuid.NewV7()),
-		AssetID:     asset.ID,
+		MachineID:   machine.ID,
 		Auditor:     "ldap",
 		CheckID:     "ad-002",
 		Title:       "Kerberoastable account with custom Service Principal Names",
@@ -157,7 +157,7 @@ func (l *LDAP) checkKerberoastable(asset model.Asset, tags map[string]any, now t
 // an OU that explicitly contains "Disabled" in its DN. AD operators
 // typically corral disabled accounts into "OU=Disabled Computers" so a
 // disabled account anywhere else is a sign of incomplete cleanup.
-func (l *LDAP) checkDisabledInActiveOU(asset model.Asset, tags map[string]any, now time.Time) *model.ConfigFinding {
+func (l *LDAP) checkDisabledInActiveOU(machine model.Machine, tags map[string]any, now time.Time) *model.ConfigFinding {
 	enabled, _ := tags[contract.AttrADEnabled].(bool)
 	if enabled {
 		return nil
@@ -168,7 +168,7 @@ func (l *LDAP) checkDisabledInActiveOU(asset model.Asset, tags map[string]any, n
 	}
 	return &model.ConfigFinding{
 		ID:          uuid.Must(uuid.NewV7()),
-		AssetID:     asset.ID,
+		MachineID:   machine.ID,
 		Auditor:     "ldap",
 		CheckID:     "ad-003",
 		Title:       "Disabled AD account left in active OU",
@@ -184,15 +184,15 @@ func (l *LDAP) checkDisabledInActiveOU(asset model.Asset, tags map[string]any, n
 // checkCleartextBind fires when the auditor was configured with
 // tls_mode=none, meaning the discovery bind sent credentials and
 // directory data in plaintext. This finding attaches to every LDAP
-// asset because each asset's data was technically exfiltrated in the
+// machine because each machine's data was technically exfiltrated in the
 // clear; downstream UIs deduplicate on (check_id, scan_run_id).
-func (l *LDAP) checkCleartextBind(asset model.Asset, _ map[string]any, now time.Time) *model.ConfigFinding {
+func (l *LDAP) checkCleartextBind(machine model.Machine, _ map[string]any, now time.Time) *model.ConfigFinding {
 	if l.cfg.TLSMode != "none" {
 		return nil
 	}
 	return &model.ConfigFinding{
 		ID:          uuid.Must(uuid.NewV7()),
-		AssetID:     asset.ID,
+		MachineID:   machine.ID,
 		Auditor:     "ldap",
 		CheckID:     "ad-004",
 		Title:       "Active Directory bind performed without TLS",

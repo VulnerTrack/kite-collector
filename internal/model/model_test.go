@@ -8,40 +8,40 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// AssetType.Valid()
+// MachineType.Valid()
 // ---------------------------------------------------------------------------
 
-func TestAssetType_Valid(t *testing.T) {
-	valid := []AssetType{
-		AssetTypeServer,
-		AssetTypeWorkstation,
-		AssetTypeNetworkDevice,
-		AssetTypeCloudInstance,
-		AssetTypeContainer,
-		AssetTypeVirtualMachine,
-		AssetTypeIOTDevice,
-		AssetTypeAppliance,
+func TestMachineType_Valid(t *testing.T) {
+	valid := []MachineType{
+		MachineTypeServer,
+		MachineTypeWorkstation,
+		MachineTypeNetworkDevice,
+		MachineTypeCloudInstance,
+		MachineTypeContainer,
+		MachineTypeVirtualMachine,
+		MachineTypeIOTDevice,
+		MachineTypeAppliance,
 	}
 	for _, at := range valid {
 		assert.True(t, at.Valid(), "expected %q to be valid", at)
 	}
 
-	invalid := []AssetType{"", "desktop", "phone", "UNKNOWN", "SERVER"}
+	invalid := []MachineType{"", "desktop", "phone", "UNKNOWN", "SERVER"}
 	for _, at := range invalid {
 		assert.False(t, at.Valid(), "expected %q to be invalid", at)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// Asset.ComputeNaturalKey()
+// Machine.ComputeNaturalKey()
 // ---------------------------------------------------------------------------
 
 func TestComputeNaturalKey_Deterministic(t *testing.T) {
-	a := Asset{Hostname: "web-01", AssetType: AssetTypeServer}
+	a := Machine{Hostname: "web-01", MachineType: MachineTypeServer}
 	a.ComputeNaturalKey()
 	key1 := a.NaturalKey
 
-	b := Asset{Hostname: "web-01", AssetType: AssetTypeServer}
+	b := Machine{Hostname: "web-01", MachineType: MachineTypeServer}
 	b.ComputeNaturalKey()
 	key2 := b.NaturalKey
 
@@ -50,21 +50,21 @@ func TestComputeNaturalKey_Deterministic(t *testing.T) {
 }
 
 func TestComputeNaturalKey_DifferentForDifferentInput(t *testing.T) {
-	a := Asset{Hostname: "web-01", AssetType: AssetTypeServer}
+	a := Machine{Hostname: "web-01", MachineType: MachineTypeServer}
 	a.ComputeNaturalKey()
 
-	b := Asset{Hostname: "web-02", AssetType: AssetTypeServer}
+	b := Machine{Hostname: "web-02", MachineType: MachineTypeServer}
 	b.ComputeNaturalKey()
 
-	c := Asset{Hostname: "web-01", AssetType: AssetTypeWorkstation}
+	c := Machine{Hostname: "web-01", MachineType: MachineTypeWorkstation}
 	c.ComputeNaturalKey()
 
 	assert.NotEqual(t, a.NaturalKey, b.NaturalKey, "different hostname must produce different key")
-	assert.NotEqual(t, a.NaturalKey, c.NaturalKey, "different asset_type must produce different key")
+	assert.NotEqual(t, a.NaturalKey, c.NaturalKey, "different machine_type must produce different key")
 }
 
 func TestComputeNaturalKey_StableOnRepeatedCall(t *testing.T) {
-	a := Asset{Hostname: "db-01", AssetType: AssetTypeAppliance}
+	a := Machine{Hostname: "db-01", MachineType: MachineTypeAppliance}
 	a.ComputeNaturalKey()
 	first := a.NaturalKey
 
@@ -73,7 +73,7 @@ func TestComputeNaturalKey_StableOnRepeatedCall(t *testing.T) {
 }
 
 func TestComputeNaturalKey_SHA256Hex(t *testing.T) {
-	a := Asset{Hostname: "host", AssetType: AssetTypeContainer}
+	a := Machine{Hostname: "host", MachineType: MachineTypeContainer}
 	a.ComputeNaturalKey()
 
 	// SHA-256 hex digest is always 64 hex chars
@@ -86,10 +86,10 @@ func TestComputeNaturalKey_SHA256Hex(t *testing.T) {
 
 func TestComputeNaturalKey_TenantScoped(t *testing.T) {
 	// Same hostname+type but different tenants must produce different keys.
-	a := Asset{Hostname: "web-01", AssetType: AssetTypeServer, TenantID: "tenant-alpha"}
+	a := Machine{Hostname: "web-01", MachineType: MachineTypeServer, TenantID: "tenant-alpha"}
 	a.ComputeNaturalKey()
 
-	b := Asset{Hostname: "web-01", AssetType: AssetTypeServer, TenantID: "tenant-beta"}
+	b := Machine{Hostname: "web-01", MachineType: MachineTypeServer, TenantID: "tenant-beta"}
 	b.ComputeNaturalKey()
 
 	assert.NotEqual(t, a.NaturalKey, b.NaturalKey,
@@ -97,11 +97,11 @@ func TestComputeNaturalKey_TenantScoped(t *testing.T) {
 }
 
 func TestComputeNaturalKey_TenantEmpty_BackwardsCompatible(t *testing.T) {
-	// An asset without TenantID must produce the same key as before RFC-0063.
-	withTenant := Asset{Hostname: "web-01", AssetType: AssetTypeServer, TenantID: ""}
+	// An machine without TenantID must produce the same key as before RFC-0063.
+	withTenant := Machine{Hostname: "web-01", MachineType: MachineTypeServer, TenantID: ""}
 	withTenant.ComputeNaturalKey()
 
-	withoutTenant := Asset{Hostname: "web-01", AssetType: AssetTypeServer}
+	withoutTenant := Machine{Hostname: "web-01", MachineType: MachineTypeServer}
 	withoutTenant.ComputeNaturalKey()
 
 	assert.Equal(t, withoutTenant.NaturalKey, withTenant.NaturalKey,
@@ -109,11 +109,11 @@ func TestComputeNaturalKey_TenantEmpty_BackwardsCompatible(t *testing.T) {
 }
 
 func TestComputeNaturalKey_TenantScoped_Deterministic(t *testing.T) {
-	a := Asset{Hostname: "db-01", AssetType: AssetTypeServer, TenantID: "tenant-x"}
+	a := Machine{Hostname: "db-01", MachineType: MachineTypeServer, TenantID: "tenant-x"}
 	a.ComputeNaturalKey()
 	key1 := a.NaturalKey
 
-	b := Asset{Hostname: "db-01", AssetType: AssetTypeServer, TenantID: "tenant-x"}
+	b := Machine{Hostname: "db-01", MachineType: MachineTypeServer, TenantID: "tenant-x"}
 	b.ComputeNaturalKey()
 
 	assert.Equal(t, key1, b.NaturalKey, "same inputs must produce the same key")

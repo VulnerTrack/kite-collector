@@ -28,7 +28,7 @@ make clean        # rm -rf bin/
 cmd/kite-collector/main.go      # CLI entry point (cobra commands)
 internal/
   config/                       # viper YAML + env var config
-  model/                        # Asset, InstalledSoftware, ConfigFinding, etc.
+  model/                        # Machine, InstalledSoftware, ConfigFinding, etc.
   discovery/                    # Pluggable discovery sources
     source.go                   # Source interface
     registry.go                 # Parallel fan-out orchestration
@@ -70,7 +70,7 @@ These are non-negotiable:
 - **CGO_ENABLED=0** -- pure Go only. No C dependencies. This ensures cross-compilation works and the binary is a single static file.
 - **Read-only discovery** -- never write to, modify, or execute code on discovered systems. This is a binding rule.
 - **No vendor SDKs** -- all API connectors use raw `net/http` + JSON. Keeps the binary small and avoids SDK version churn.
-- **Never default to authorized** -- assets must start as `unknown`. Only positive allowlist matches produce `authorized`.
+- **Never default to authorized** -- machines must start as `unknown`. Only positive allowlist matches produce `authorized`.
 - **Credentials via environment variables** -- never in config files, never in logs, never in SQLite.
 
 ## Adding a discovery source
@@ -81,7 +81,7 @@ These are non-negotiable:
 ```go
 type Source interface {
     Name() string
-    Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+    Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 }
 ```
 
@@ -122,7 +122,7 @@ type Collector interface {
 ```go
 type Auditor interface {
     Name() string
-    Audit(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error)
+    Audit(ctx context.Context, machine model.Machine) ([]model.ConfigFinding, error)
 }
 ```
 

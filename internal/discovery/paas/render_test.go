@@ -94,13 +94,13 @@ func TestRender_Discover_Success(t *testing.T) {
 
 	r := NewRender()
 	r.baseURL = srv.URL
-	assets, err := r.Discover(context.Background(), map[string]any{})
+	machines, err := r.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	frontend := findAssetByHostname(assets, "frontend")
+	frontend := findMachineByHostname(machines, "frontend")
 	require.NotNil(t, frontend)
-	assert.Equal(t, model.AssetTypeContainer, frontend.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, frontend.MachineType)
 	assert.Equal(t, "render", frontend.DiscoverySource)
 	assert.Equal(t, "oregon", frontend.Environment)
 	assert.NotEmpty(t, frontend.NaturalKey)
@@ -112,7 +112,7 @@ func TestRender_Discover_Success(t *testing.T) {
 	assert.NotContains(t, frontTags, "warning")
 
 	// Suspended service gets warning.
-	backend := findAssetByHostname(assets, "backend")
+	backend := findMachineByHostname(machines, "backend")
 	require.NotNil(t, backend)
 	var backTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(backend.Tags), &backTags))
@@ -120,7 +120,7 @@ func TestRender_Discover_Success(t *testing.T) {
 	assert.Equal(t, true, backTags["suspended"])
 
 	// Third page item found via cursor pagination.
-	worker := findAssetByHostname(assets, "worker")
+	worker := findMachineByHostname(machines, "worker")
 	require.NotNil(t, worker)
 	assert.Equal(t, "background_worker", func() string {
 		var tags map[string]any
@@ -138,9 +138,9 @@ func TestRender_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_RENDER_TOKEN")
 
-	assets, err := r.Discover(context.Background(), nil)
+	machines, err := r.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestRender_Discover_AuthFailure(t *testing.T) {

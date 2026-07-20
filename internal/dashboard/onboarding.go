@@ -168,7 +168,7 @@ const onboardingBody = `<div id="onboarding-toasts" class="toasts" aria-live="po
         <ul>
           <li><strong>Stored locally only.</strong> The enrollment credential is AES-256-GCM wrapped and written to your local SQLite DB at the certs-dir path.</li>
           <li><strong>Wrap key is in-memory.</strong> A fresh 32-byte AEAD wrap key is generated on each dashboard startup. Restarting the dashboard invalidates the wrapped blob; you'll see "fingerprint mismatch" and need to re-enroll. This is by design &mdash; the at-rest blob is useless without the in-memory wrap key.</li>
-          <li><strong>No exfiltration before stream.</strong> Until you press "Start streaming" in step&nbsp;4, no agent data leaves this host. The connection check (step&nbsp;3) sends only synthetic probes &mdash; never real asset data.</li>
+          <li><strong>No exfiltration before stream.</strong> Until you press "Start streaming" in step&nbsp;4, no agent data leaves this host. The connection check (step&nbsp;3) sends only synthetic probes &mdash; never real machine data.</li>
           <li><strong>Secret never logged.</strong> Only the first 8 hex chars of the SHA-256 fingerprint appear in logs, the dashboard UI, or the support bundle.</li>
         </ul>
       </details>

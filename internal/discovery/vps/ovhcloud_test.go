@@ -103,14 +103,14 @@ func TestOVHcloud_Discover_Success(t *testing.T) {
 
 	o := NewOVHcloud()
 	o.baseURL = srv.URL
-	assets, err := o.Discover(context.Background(), map[string]any{})
+	machines, err := o.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3, "expected 2 dedicated + 1 VPS")
+	assert.Len(t, machines, 3, "expected 2 dedicated + 1 VPS")
 
 	// Verify dedicated server with ok state.
-	ded1 := findAssetByHostname(assets, "ns1234.ip-1-2-3.eu")
+	ded1 := findMachineByHostname(machines, "ns1234.ip-1-2-3.eu")
 	require.NotNil(t, ded1)
-	assert.Equal(t, model.AssetTypeServer, ded1.AssetType)
+	assert.Equal(t, model.MachineTypeServer, ded1.MachineType)
 	assert.Equal(t, "ovhcloud", ded1.DiscoverySource)
 	assert.Equal(t, "debian11_64", ded1.OSFamily)
 	assert.Equal(t, "gra3", ded1.Environment)
@@ -121,20 +121,20 @@ func TestOVHcloud_Discover_Success(t *testing.T) {
 	assert.NotContains(t, ded1Tags, "warning")
 
 	// Verify dedicated server in error state gets warning.
-	ded2 := findAssetByHostname(assets, "ns5678.ip-4-5-6.eu")
+	ded2 := findMachineByHostname(machines, "ns5678.ip-4-5-6.eu")
 	require.NotNil(t, ded2)
 	var ded2Tags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(ded2.Tags), &ded2Tags))
 	assert.Contains(t, ded2Tags, "warning")
 
-	// Verify VPS asset.
-	vpsAsset := findAssetByHostname(assets, "my-vps")
-	require.NotNil(t, vpsAsset)
-	assert.Equal(t, model.AssetTypeCloudInstance, vpsAsset.AssetType)
-	assert.Equal(t, "eu-west-gra", vpsAsset.Environment)
+	// Verify VPS machine.
+	vpsMachine := findMachineByHostname(machines, "my-vps")
+	require.NotNil(t, vpsMachine)
+	assert.Equal(t, model.MachineTypeCloudInstance, vpsMachine.MachineType)
+	assert.Equal(t, "eu-west-gra", vpsMachine.Environment)
 
 	var vpsTags map[string]any
-	require.NoError(t, json.Unmarshal([]byte(vpsAsset.Tags), &vpsTags))
+	require.NoError(t, json.Unmarshal([]byte(vpsMachine.Tags), &vpsTags))
 	assert.Equal(t, "running", vpsTags["status"])
 	assert.NotContains(t, vpsTags, "warning")
 }
@@ -150,7 +150,7 @@ func TestOVHcloud_Discover_MissingCredentials(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_OVHCLOUD_APP_KEY")
 
-	assets, err := o.Discover(context.Background(), nil)
+	machines, err := o.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }

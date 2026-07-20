@@ -85,19 +85,19 @@ func (s *SQLiteStore) Close() error {
 }
 
 // ---------------------------------------------------------------------------
-// Assets
+// Machines
 // ---------------------------------------------------------------------------
 
-const assetColumns = `id, asset_type, hostname, os_family, os_version,
+const machineColumns = `id, machine_type, hostname, os_family, os_version,
 	kernel_version, architecture,
 	is_authorized, is_managed, environment, owner, criticality,
 	discovery_source, first_seen_at, last_seen_at, tags, natural_key,
-	mdm_enrollment_id, cmdb_sys_id, site, tenant, asset_tag,
+	mdm_enrollment_id, cmdb_sys_id, site, tenant, machine_tag,
 	operational_status, ownership_type, enrolled_user_upn, compliance_state`
 
-// scanAsset reads a single row from the result set into an Asset.
-func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
-	var a model.Asset
+// scanMachine reads a single row from the result set into an Machine.
+func scanMachine(row interface{ Scan(dest ...any) error }) (*model.Machine, error) {
+	var a model.Machine
 	var (
 		idStr         string
 		firstSeen     string
@@ -116,7 +116,7 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 		cmdbSysID         sql.NullString
 		site              sql.NullString
 		tenant            sql.NullString
-		assetTag          sql.NullString
+		machineTag        sql.NullString
 		operationalStatus sql.NullString
 		ownershipType     sql.NullString
 		enrolledUserUPN   sql.NullString
@@ -124,7 +124,7 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 	)
 	err := row.Scan(
 		&idStr,
-		&a.AssetType,
+		&a.MachineType,
 		&a.Hostname,
 		&osFamily,
 		&osVersion,
@@ -144,19 +144,19 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 		&cmdbSysID,
 		&site,
 		&tenant,
-		&assetTag,
+		&machineTag,
 		&operationalStatus,
 		&ownershipType,
 		&enrolledUserUPN,
 		&complianceState,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("scan asset: %w", err)
+		return nil, fmt.Errorf("scan machine: %w", err)
 	}
 
 	a.ID, err = uuid.Parse(idStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse asset id: %w", err)
+		return nil, fmt.Errorf("parse machine id: %w", err)
 	}
 	a.FirstSeenAt, err = time.Parse(time.RFC3339, firstSeen)
 	if err != nil {
@@ -179,7 +179,7 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 	a.CMDBSysID = cmdbSysID.String
 	a.Site = site.String
 	a.Tenant = tenant.String
-	a.AssetTag = assetTag.String
+	a.MachineTag = machineTag.String
 	a.OperationalStatus = operationalStatus.String
 	a.OwnershipType = ownershipType.String
 	a.EnrolledUserUPN = enrolledUserUPN.String
@@ -188,17 +188,17 @@ func scanAsset(row interface{ Scan(dest ...any) error }) (*model.Asset, error) {
 	return &a, nil
 }
 
-// UpsertAsset inserts a new asset or replaces an existing one matched by the
-// UNIQUE(hostname, asset_type) constraint. The natural key is computed before
+// UpsertMachine inserts a new machine or replaces an existing one matched by the
+// UNIQUE(hostname, machine_type) constraint. The natural key is computed before
 // writing.
-func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error {
-	asset.ComputeNaturalKey()
+func (s *SQLiteStore) UpsertMachine(ctx context.Context, machine model.Machine) error {
+	machine.ComputeNaturalKey()
 
 	_, err := s.db.ExecContext(
 		ctx, `
-		INSERT INTO assets (`+assetColumns+`)
+		INSERT INTO machines (`+machineColumns+`)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(hostname, asset_type) DO UPDATE SET
+		ON CONFLICT(hostname, machine_type) DO UPDATE SET
 			os_family        = excluded.os_family,
 			os_version       = excluded.os_version,
 			kernel_version   = excluded.kernel_version,
@@ -216,41 +216,41 @@ func (s *SQLiteStore) UpsertAsset(ctx context.Context, asset model.Asset) error 
 				cmdb_sys_id        = excluded.cmdb_sys_id,
 				site               = excluded.site,
 				tenant             = excluded.tenant,
-				asset_tag          = excluded.asset_tag,
+				machine_tag          = excluded.machine_tag,
 				operational_status = excluded.operational_status,
 				ownership_type     = excluded.ownership_type,
 				enrolled_user_upn  = excluded.enrolled_user_upn,
 				compliance_state   = excluded.compliance_state
 	`,
-		asset.ID.String(),
-		string(asset.AssetType),
-		asset.Hostname,
-		nullStr(asset.OSFamily),
-		nullStr(asset.OSVersion),
-		nullStr(asset.KernelVersion),
-		nullStr(asset.Architecture),
-		string(asset.IsAuthorized),
-		string(asset.IsManaged),
-		nullStr(asset.Environment),
-		nullStr(asset.Owner),
-		nullStr(asset.Criticality),
-		asset.DiscoverySource,
-		asset.FirstSeenAt.Format(time.RFC3339),
-		asset.LastSeenAt.Format(time.RFC3339),
-		nullStr(asset.Tags),
-		asset.NaturalKey,
-		nullStr(asset.MDMEnrollmentID),
-		nullStr(asset.CMDBSysID),
-		nullStr(asset.Site),
-		nullStr(asset.Tenant),
-		nullStr(asset.AssetTag),
-		nullStr(asset.OperationalStatus),
-		nullStr(asset.OwnershipType),
-		nullStr(asset.EnrolledUserUPN),
-		nullStr(asset.ComplianceState),
+		machine.ID.String(),
+		string(machine.MachineType),
+		machine.Hostname,
+		nullStr(machine.OSFamily),
+		nullStr(machine.OSVersion),
+		nullStr(machine.KernelVersion),
+		nullStr(machine.Architecture),
+		string(machine.IsAuthorized),
+		string(machine.IsManaged),
+		nullStr(machine.Environment),
+		nullStr(machine.Owner),
+		nullStr(machine.Criticality),
+		machine.DiscoverySource,
+		machine.FirstSeenAt.Format(time.RFC3339),
+		machine.LastSeenAt.Format(time.RFC3339),
+		nullStr(machine.Tags),
+		machine.NaturalKey,
+		nullStr(machine.MDMEnrollmentID),
+		nullStr(machine.CMDBSysID),
+		nullStr(machine.Site),
+		nullStr(machine.Tenant),
+		nullStr(machine.MachineTag),
+		nullStr(machine.OperationalStatus),
+		nullStr(machine.OwnershipType),
+		nullStr(machine.EnrolledUserUPN),
+		nullStr(machine.ComplianceState),
 	)
 	if err != nil {
-		return fmt.Errorf("upsert asset %s: %w", asset.ID, err)
+		return fmt.Errorf("upsert machine %s: %w", machine.ID, err)
 	}
 	return nil
 }
@@ -309,7 +309,7 @@ func (s *SQLiteStore) PersistSourceHealth(h safety.SourceHealth) error {
 	return nil
 }
 
-// UpsertAssets atomically upserts a batch of assets inside a single
+// UpsertMachines atomically upserts a batch of machines inside a single
 // transaction and returns counts of newly inserted and updated rows.
 //
 // The full BeginTx → upsert loop → Commit is wrapped in
@@ -317,11 +317,11 @@ func (s *SQLiteStore) PersistSourceHealth(h safety.SourceHealth) error {
 // cloud-sync agents, antivirus, or backup tools racing the WAL/SHM
 // files) is retried with a fresh transaction. The transaction is
 // atomic, so retrying the whole operation is safe.
-func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (inserted, updated int, err error) {
+func (s *SQLiteStore) UpsertMachines(ctx context.Context, machines []model.Machine) (inserted, updated int, err error) {
 	// Pre-compute natural keys for the whole batch (idempotent — safe
 	// to do once even if the inner closure runs multiple times).
-	for i := range assets {
-		assets[i].ComputeNaturalKey()
+	for i := range machines {
+		machines[i].ComputeNaturalKey()
 	}
 
 	err = withTransientRetry(3, func() error {
@@ -337,16 +337,16 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 		defer tx.Rollback() //nolint:errcheck
 
 		// Batch-query existing natural keys to avoid per-row SELECT COUNT(*).
-		existingKeys := make(map[string]bool, len(assets))
-		if len(assets) > 0 {
+		existingKeys := make(map[string]bool, len(machines))
+		if len(machines) > 0 {
 			lookupErr := func() error {
-				placeholders := make([]string, len(assets))
-				args := make([]any, len(assets))
-				for i, a := range assets {
+				placeholders := make([]string, len(machines))
+				args := make([]any, len(machines))
+				for i, a := range machines {
 					placeholders[i] = "?"
 					args[i] = a.NaturalKey
 				}
-				query := `SELECT natural_key FROM assets WHERE natural_key IN (` +
+				query := `SELECT natural_key FROM machines WHERE natural_key IN (` +
 					strings.Join(placeholders, ",") + `)` //#nosec G202 -- placeholders are literal "?" strings, values are in args
 				rows, qErr := tx.QueryContext(ctx, query, args...)
 				if qErr != nil {
@@ -370,12 +370,12 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 			}
 		}
 
-		for i := range assets {
+		for i := range machines {
 			_, execErr := tx.ExecContext(
 				ctx, `
-				INSERT INTO assets (`+assetColumns+`)
+				INSERT INTO machines (`+machineColumns+`)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				ON CONFLICT(hostname, asset_type) DO UPDATE SET
+				ON CONFLICT(hostname, machine_type) DO UPDATE SET
 					os_family        = excluded.os_family,
 					os_version       = excluded.os_version,
 					kernel_version   = excluded.kernel_version,
@@ -393,44 +393,44 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 				cmdb_sys_id        = excluded.cmdb_sys_id,
 				site               = excluded.site,
 				tenant             = excluded.tenant,
-				asset_tag          = excluded.asset_tag,
+				machine_tag          = excluded.machine_tag,
 				operational_status = excluded.operational_status,
 				ownership_type     = excluded.ownership_type,
 				enrolled_user_upn  = excluded.enrolled_user_upn,
 				compliance_state   = excluded.compliance_state
 			`,
-				assets[i].ID.String(),
-				string(assets[i].AssetType),
-				assets[i].Hostname,
-				nullStr(assets[i].OSFamily),
-				nullStr(assets[i].OSVersion),
-				nullStr(assets[i].KernelVersion),
-				nullStr(assets[i].Architecture),
-				string(assets[i].IsAuthorized),
-				string(assets[i].IsManaged),
-				nullStr(assets[i].Environment),
-				nullStr(assets[i].Owner),
-				nullStr(assets[i].Criticality),
-				assets[i].DiscoverySource,
-				assets[i].FirstSeenAt.Format(time.RFC3339),
-				assets[i].LastSeenAt.Format(time.RFC3339),
-				nullStr(assets[i].Tags),
-				assets[i].NaturalKey,
-				nullStr(assets[i].MDMEnrollmentID),
-				nullStr(assets[i].CMDBSysID),
-				nullStr(assets[i].Site),
-				nullStr(assets[i].Tenant),
-				nullStr(assets[i].AssetTag),
-				nullStr(assets[i].OperationalStatus),
-				nullStr(assets[i].OwnershipType),
-				nullStr(assets[i].EnrolledUserUPN),
-				nullStr(assets[i].ComplianceState),
+				machines[i].ID.String(),
+				string(machines[i].MachineType),
+				machines[i].Hostname,
+				nullStr(machines[i].OSFamily),
+				nullStr(machines[i].OSVersion),
+				nullStr(machines[i].KernelVersion),
+				nullStr(machines[i].Architecture),
+				string(machines[i].IsAuthorized),
+				string(machines[i].IsManaged),
+				nullStr(machines[i].Environment),
+				nullStr(machines[i].Owner),
+				nullStr(machines[i].Criticality),
+				machines[i].DiscoverySource,
+				machines[i].FirstSeenAt.Format(time.RFC3339),
+				machines[i].LastSeenAt.Format(time.RFC3339),
+				nullStr(machines[i].Tags),
+				machines[i].NaturalKey,
+				nullStr(machines[i].MDMEnrollmentID),
+				nullStr(machines[i].CMDBSysID),
+				nullStr(machines[i].Site),
+				nullStr(machines[i].Tenant),
+				nullStr(machines[i].MachineTag),
+				nullStr(machines[i].OperationalStatus),
+				nullStr(machines[i].OwnershipType),
+				nullStr(machines[i].EnrolledUserUPN),
+				nullStr(machines[i].ComplianceState),
 			)
 			if execErr != nil {
-				return fmt.Errorf("upsert asset %s: %w", assets[i].ID, execErr)
+				return fmt.Errorf("upsert machine %s: %w", machines[i].ID, execErr)
 			}
 
-			if existingKeys[assets[i].NaturalKey] {
+			if existingKeys[machines[i].NaturalKey] {
 				updated++
 			} else {
 				inserted++
@@ -448,42 +448,42 @@ func (s *SQLiteStore) UpsertAssets(ctx context.Context, assets []model.Asset) (i
 	return inserted, updated, nil
 }
 
-// GetAssetByID retrieves the asset identified by id. Returns store.ErrNotFound
+// GetMachineByID retrieves the machine identified by id. Returns store.ErrNotFound
 // when the id does not exist.
-func (s *SQLiteStore) GetAssetByID(ctx context.Context, id uuid.UUID) (*model.Asset, error) {
+func (s *SQLiteStore) GetMachineByID(ctx context.Context, id uuid.UUID) (*model.Machine, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE id = ?`, id.String())
-	a, err := scanAsset(row)
+		`SELECT `+machineColumns+` FROM machines WHERE id = ?`, id.String())
+	a, err := scanMachine(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get asset by id: %w", err)
+		return nil, fmt.Errorf("get machine by id: %w", err)
 	}
 	return a, nil
 }
 
-// GetAssetByNaturalKey retrieves the asset whose precomputed SHA-256 natural
+// GetMachineByNaturalKey retrieves the machine whose precomputed SHA-256 natural
 // key matches key. Returns (nil, nil) when no match is found.
-func (s *SQLiteStore) GetAssetByNaturalKey(ctx context.Context, key string) (*model.Asset, error) {
+func (s *SQLiteStore) GetMachineByNaturalKey(ctx context.Context, key string) (*model.Machine, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE natural_key = ?`, key)
-	a, err := scanAsset(row)
+		`SELECT `+machineColumns+` FROM machines WHERE natural_key = ?`, key)
+	a, err := scanMachine(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get asset by natural key: %w", err)
+		return nil, fmt.Errorf("get machine by natural key: %w", err)
 	}
 	return a, nil
 }
 
-// GetAssetsByNaturalKeys batch-fetches assets matching the supplied natural
+// GetMachinesByNaturalKeys batch-fetches machines matching the supplied natural
 // keys. The returned map is keyed by NaturalKey for O(1) lookup; keys with no
 // matching row are absent. An empty input slice returns (nil, nil).
-func (s *SQLiteStore) GetAssetsByNaturalKeys(
+func (s *SQLiteStore) GetMachinesByNaturalKeys(
 	ctx context.Context, keys []string,
-) (map[string]model.Asset, error) {
+) (map[string]model.Machine, error) {
 	if len(keys) == 0 {
 		return nil, nil
 	}
@@ -494,42 +494,42 @@ func (s *SQLiteStore) GetAssetsByNaturalKeys(
 		args[i] = k
 	}
 	//#nosec G202 -- placeholders are static "?" tokens; values flow via args.
-	query := `SELECT ` + assetColumns + ` FROM assets WHERE natural_key IN (` +
+	query := `SELECT ` + machineColumns + ` FROM machines WHERE natural_key IN (` +
 		strings.Join(placeholders, ",") + `)`
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		if isNoSuchTableErr(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get assets by natural keys: %w", err)
+		return nil, fmt.Errorf("get machines by natural keys: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	out := make(map[string]model.Asset, len(keys))
+	out := make(map[string]model.Machine, len(keys))
 	for rows.Next() {
-		a, err := scanAsset(rows)
+		a, err := scanMachine(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan asset row: %w", err)
+			return nil, fmt.Errorf("scan machine row: %w", err)
 		}
 		out[a.NaturalKey] = *a
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate asset rows: %w", err)
+		return nil, fmt.Errorf("iterate machine rows: %w", err)
 	}
 	return out, nil
 }
 
-// ListAssets returns assets matching the supplied filter. An empty filter
-// returns all assets (subject to Limit/Offset).
-func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) ([]model.Asset, error) {
+// ListMachines returns machines matching the supplied filter. An empty filter
+// returns all machines (subject to Limit/Offset).
+func (s *SQLiteStore) ListMachines(ctx context.Context, filter store.MachineFilter) ([]model.Machine, error) {
 	var (
 		clauses []string
 		args    []any
 	)
 
-	if filter.AssetType != "" {
-		clauses = append(clauses, "asset_type = ?")
-		args = append(args, filter.AssetType)
+	if filter.MachineType != "" {
+		clauses = append(clauses, "machine_type = ?")
+		args = append(args, filter.MachineType)
 	}
 	if filter.IsAuthorized != "" {
 		clauses = append(clauses, "is_authorized = ?")
@@ -544,7 +544,7 @@ func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) 
 		args = append(args, filter.Hostname)
 	}
 
-	query := `SELECT ` + assetColumns + ` FROM assets`
+	query := `SELECT ` + machineColumns + ` FROM machines`
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ") //#nosec G202 -- clauses use parameterized placeholders, values are in args
 	}
@@ -564,72 +564,72 @@ func (s *SQLiteStore) ListAssets(ctx context.Context, filter store.AssetFilter) 
 		if isNoSuchTableErr(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("list assets: %w", err)
+		return nil, fmt.Errorf("list machines: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var assets []model.Asset
+	var machines []model.Machine
 	for rows.Next() {
-		a, err := scanAsset(rows)
+		a, err := scanMachine(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan asset row: %w", err)
+			return nil, fmt.Errorf("scan machine row: %w", err)
 		}
-		assets = append(assets, *a)
+		machines = append(machines, *a)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate asset rows: %w", err)
+		return nil, fmt.Errorf("iterate machine rows: %w", err)
 	}
-	return assets, nil
+	return machines, nil
 }
 
-// GetStaleAssets returns assets whose last_seen_at is older than the given
+// GetStaleMachines returns machines whose last_seen_at is older than the given
 // threshold measured from the current time.
-func (s *SQLiteStore) GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error) {
+func (s *SQLiteStore) GetStaleMachines(ctx context.Context, threshold time.Duration) ([]model.Machine, error) {
 	cutoff := time.Now().UTC().Add(-threshold).Format(time.RFC3339)
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < ? ORDER BY last_seen_at ASC, id ASC`,
+		`SELECT `+machineColumns+` FROM machines WHERE last_seen_at < ? ORDER BY last_seen_at ASC, id ASC`,
 		cutoff,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("get stale assets: %w", err)
+		return nil, fmt.Errorf("get stale machines: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var assets []model.Asset
+	var machines []model.Machine
 	for rows.Next() {
-		a, err := scanAsset(rows)
+		a, err := scanMachine(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan stale asset row: %w", err)
+			return nil, fmt.Errorf("scan stale machine row: %w", err)
 		}
-		assets = append(assets, *a)
+		machines = append(machines, *a)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate stale asset rows: %w", err)
+		return nil, fmt.Errorf("iterate stale machine rows: %w", err)
 	}
-	return assets, nil
+	return machines, nil
 }
 
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
-const eventColumns = `id, event_type, asset_id, scan_run_id, severity, details, timestamp`
+const eventColumns = `id, event_type, machine_id, scan_run_id, severity, details, timestamp`
 
-// scanEvent reads a single row from the result set into an AssetEvent.
-func scanEvent(row interface{ Scan(dest ...any) error }) (*model.AssetEvent, error) {
-	var e model.AssetEvent
+// scanEvent reads a single row from the result set into an MachineEvent.
+func scanEvent(row interface{ Scan(dest ...any) error }) (*model.MachineEvent, error) {
+	var e model.MachineEvent
 	var (
-		idStr      string
-		assetIDStr string
-		scanIDStr  string
-		details    sql.NullString
-		ts         string
+		idStr        string
+		machineIDStr string
+		scanIDStr    string
+		details      sql.NullString
+		ts           string
 	)
 	err := row.Scan(
 		&idStr,
 		&e.EventType,
-		&assetIDStr,
+		&machineIDStr,
 		&scanIDStr,
 		&e.Severity,
 		&details,
@@ -643,9 +643,9 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (*model.AssetEvent, err
 	if err != nil {
 		return nil, fmt.Errorf("parse event id: %w", err)
 	}
-	e.AssetID, err = uuid.Parse(assetIDStr)
+	e.MachineID, err = uuid.Parse(machineIDStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse event asset_id: %w", err)
+		return nil, fmt.Errorf("parse event machine_id: %w", err)
 	}
 	e.ScanRunID, err = uuid.Parse(scanIDStr)
 	if err != nil {
@@ -660,14 +660,14 @@ func scanEvent(row interface{ Scan(dest ...any) error }) (*model.AssetEvent, err
 	return &e, nil
 }
 
-// InsertEvent persists a single asset lifecycle event.
-func (s *SQLiteStore) InsertEvent(ctx context.Context, event model.AssetEvent) error {
+// InsertEvent persists a single machine lifecycle event.
+func (s *SQLiteStore) InsertEvent(ctx context.Context, event model.MachineEvent) error {
 	_, err := s.db.ExecContext(
 		ctx,
 		`INSERT INTO events (`+eventColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		event.ID.String(),
 		string(event.EventType),
-		event.AssetID.String(),
+		event.MachineID.String(),
 		event.ScanRunID.String(),
 		string(event.Severity),
 		nullStr(event.Details),
@@ -684,7 +684,7 @@ func (s *SQLiteStore) InsertEvent(ctx context.Context, event model.AssetEvent) e
 // Wrapped in withTransientRetry with a higher attempt budget (5)
 // because event loss is the most painful failure mode — events drive
 // alerting, audit trails, and downstream ingestion.
-func (s *SQLiteStore) InsertEvents(ctx context.Context, events []model.AssetEvent) error {
+func (s *SQLiteStore) InsertEvents(ctx context.Context, events []model.MachineEvent) error {
 	return withTransientRetry(5, func() error {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
@@ -704,7 +704,7 @@ func (s *SQLiteStore) InsertEvents(ctx context.Context, events []model.AssetEven
 				ctx,
 				events[i].ID.String(),
 				string(events[i].EventType),
-				events[i].AssetID.String(),
+				events[i].MachineID.String(),
 				events[i].ScanRunID.String(),
 				string(events[i].Severity),
 				nullStr(events[i].Details),
@@ -723,7 +723,7 @@ func (s *SQLiteStore) InsertEvents(ctx context.Context, events []model.AssetEven
 }
 
 // ListEvents returns events matching the supplied filter.
-func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) ([]model.AssetEvent, error) {
+func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) ([]model.MachineEvent, error) {
 	var (
 		clauses []string
 		args    []any
@@ -733,9 +733,9 @@ func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) 
 		clauses = append(clauses, "event_type = ?")
 		args = append(args, filter.EventType)
 	}
-	if filter.AssetID != nil {
-		clauses = append(clauses, "asset_id = ?")
-		args = append(args, filter.AssetID.String())
+	if filter.MachineID != nil {
+		clauses = append(clauses, "machine_id = ?")
+		args = append(args, filter.MachineID.String())
 	}
 	if filter.ScanRunID != nil {
 		clauses = append(clauses, "scan_run_id = ?")
@@ -763,7 +763,7 @@ func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) 
 	}
 	defer func() { _ = rows.Close() }()
 
-	var events []model.AssetEvent
+	var events []model.MachineEvent
 	for rows.Next() {
 		e, err := scanEvent(rows)
 		if err != nil {
@@ -781,8 +781,8 @@ func (s *SQLiteStore) ListEvents(ctx context.Context, filter store.EventFilter) 
 // Scan runs
 // ---------------------------------------------------------------------------
 
-const scanRunColumns = `id, started_at, completed_at, status, total_assets,
-	new_assets, updated_assets, analyzed_assets, stale_assets, coverage_percent,
+const scanRunColumns = `id, started_at, completed_at, status, total_machines,
+	new_machines, updated_machines, analyzed_machines, stale_machines, coverage_percent,
 	error_count, scope_config, discovery_sources,
 	trigger_source, triggered_by, cancel_requested_at`
 
@@ -804,11 +804,11 @@ func scanScanRun(row interface{ Scan(dest ...any) error }) (*model.ScanRun, erro
 		&startedAt,
 		&completedAt,
 		&r.Status,
-		&r.TotalAssets,
-		&r.NewAssets,
-		&r.UpdatedAssets,
-		&r.AnalyzedAssets,
-		&r.StaleAssets,
+		&r.TotalMachines,
+		&r.NewMachines,
+		&r.UpdatedMachines,
+		&r.AnalyzedMachines,
+		&r.StaleMachines,
 		&r.CoveragePercent,
 		&r.ErrorCount,
 		&scopeConfig,
@@ -866,11 +866,11 @@ func (s *SQLiteStore) CreateScanRun(ctx context.Context, run model.ScanRun) erro
 			run.StartedAt.Format(time.RFC3339),
 			nullTimePtr(run.CompletedAt),
 			string(run.Status),
-			run.TotalAssets,
-			run.NewAssets,
-			run.UpdatedAssets,
-			run.AnalyzedAssets,
-			run.StaleAssets,
+			run.TotalMachines,
+			run.NewMachines,
+			run.UpdatedMachines,
+			run.AnalyzedMachines,
+			run.StaleMachines,
 			run.CoveragePercent,
 			run.ErrorCount,
 			nullStr(run.ScopeConfig),
@@ -902,21 +902,21 @@ func (s *SQLiteStore) CompleteScanRun(ctx context.Context, id uuid.UUID, result 
 		UPDATE scan_runs SET
 			completed_at     = ?,
 			status           = ?,
-			total_assets     = ?,
-			new_assets       = ?,
-			updated_assets   = ?,
-			analyzed_assets  = ?,
-			stale_assets     = ?,
+			total_machines     = ?,
+			new_machines       = ?,
+			updated_machines   = ?,
+			analyzed_machines  = ?,
+			stale_machines     = ?,
 			coverage_percent = ?,
 			error_count      = ?
 		WHERE id = ?`,
 			now,
 			status,
-			result.TotalAssets,
-			result.NewAssets,
-			result.UpdatedAssets,
-			result.AnalyzedAssets,
-			result.StaleAssets,
+			result.TotalMachines,
+			result.NewMachines,
+			result.UpdatedMachines,
+			result.AnalyzedMachines,
+			result.StaleMachines,
 			result.CoveragePercent,
 			result.ErrorCount,
 			id.String(),
@@ -1026,22 +1026,22 @@ func (s *SQLiteStore) MarkScanCancelRequested(ctx context.Context, id uuid.UUID,
 // Installed Software
 // ---------------------------------------------------------------------------
 
-const softwareColumns = `id, asset_id, software_name, vendor, version, cpe23, package_manager, architecture`
+const softwareColumns = `id, machine_id, software_name, vendor, version, cpe23, package_manager, architecture`
 
 // scanSoftware reads a single row from the result set into an InstalledSoftware.
 func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSoftware, error) {
 	var s model.InstalledSoftware
 	var (
-		idStr      string
-		assetIDStr string
-		vendor     sql.NullString
-		cpe23      sql.NullString
-		pkgMgr     sql.NullString
-		arch       sql.NullString
+		idStr        string
+		machineIDStr string
+		vendor       sql.NullString
+		cpe23        sql.NullString
+		pkgMgr       sql.NullString
+		arch         sql.NullString
 	)
 	err := row.Scan(
 		&idStr,
-		&assetIDStr,
+		&machineIDStr,
 		&s.SoftwareName,
 		&vendor,
 		&s.Version,
@@ -1057,9 +1057,9 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 	if err != nil {
 		return nil, fmt.Errorf("parse software id: %w", err)
 	}
-	s.AssetID, err = uuid.Parse(assetIDStr)
+	s.MachineID, err = uuid.Parse(machineIDStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse software asset_id: %w", err)
+		return nil, fmt.Errorf("parse software machine_id: %w", err)
 	}
 	s.Vendor = vendor.String
 	s.CPE23 = cpe23.String
@@ -1069,9 +1069,9 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 	return &s, nil
 }
 
-// UpsertSoftware replaces all installed software records for the given asset.
+// UpsertSoftware replaces all installed software records for the given machine.
 // It deletes existing rows and inserts the new set inside a single transaction.
-func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, software []model.InstalledSoftware) error {
+func (s *SQLiteStore) UpsertSoftware(ctx context.Context, machineID uuid.UUID, software []model.InstalledSoftware) error {
 	return withTransientRetry(3, func() error {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
@@ -1080,9 +1080,9 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 		defer tx.Rollback() //nolint:errcheck
 
 		_, err = tx.ExecContext(ctx,
-			`DELETE FROM installed_software WHERE asset_id = ?`, assetID.String())
+			`DELETE FROM installed_software WHERE machine_id = ?`, machineID.String())
 		if err != nil {
-			return fmt.Errorf("delete old software for %s: %w", assetID, err)
+			return fmt.Errorf("delete old software for %s: %w", machineID, err)
 		}
 
 		if len(software) == 0 {
@@ -1103,7 +1103,7 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 			_, err = stmt.ExecContext(
 				ctx,
 				software[i].ID.String(),
-				assetID.String(),
+				machineID.String(),
 				software[i].SoftwareName,
 				software[i].Vendor, // NOT NULL DEFAULT '' in schema
 				software[i].Version,
@@ -1123,13 +1123,13 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, sof
 	})
 }
 
-// ListSoftware returns all installed software records for the given asset,
+// ListSoftware returns all installed software records for the given machine,
 // ordered by software name.
-func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
+func (s *SQLiteStore) ListSoftware(ctx context.Context, machineID uuid.UUID) ([]model.InstalledSoftware, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
-		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = ? ORDER BY software_name ASC, version ASC, id ASC`,
-		assetID.String(),
+		`SELECT `+softwareColumns+` FROM installed_software WHERE machine_id = ? ORDER BY software_name ASC, version ASC, id ASC`,
+		machineID.String(),
 	)
 	if err != nil {
 		if isNoSuchTableErr(err) {
@@ -1157,7 +1157,7 @@ func (s *SQLiteStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]mo
 // Config Findings
 // ---------------------------------------------------------------------------
 
-const findingColumns = `id, asset_id, scan_run_id, auditor, check_id, title,
+const findingColumns = `id, machine_id, scan_run_id, auditor, check_id, title,
 	severity, evidence, expected, remediation,
 	cis_control, timestamp, first_seen_at`
 
@@ -1165,18 +1165,18 @@ const findingColumns = `id, asset_id, scan_run_id, auditor, check_id, title,
 func scanFinding(row interface{ Scan(dest ...any) error }) (*model.ConfigFinding, error) {
 	var f model.ConfigFinding
 	var (
-		idStr       string
-		assetIDStr  string
-		scanIDStr   string
-		expected    sql.NullString
-		remediation sql.NullString
-		cisControl  sql.NullString
-		ts          string
-		firstSeenAt sql.NullString
+		idStr        string
+		machineIDStr string
+		scanIDStr    string
+		expected     sql.NullString
+		remediation  sql.NullString
+		cisControl   sql.NullString
+		ts           string
+		firstSeenAt  sql.NullString
 	)
 	err := row.Scan(
 		&idStr,
-		&assetIDStr,
+		&machineIDStr,
 		&scanIDStr,
 		&f.Auditor,
 		&f.CheckID,
@@ -1197,9 +1197,9 @@ func scanFinding(row interface{ Scan(dest ...any) error }) (*model.ConfigFinding
 	if err != nil {
 		return nil, fmt.Errorf("parse finding id: %w", err)
 	}
-	f.AssetID, err = uuid.Parse(assetIDStr)
+	f.MachineID, err = uuid.Parse(machineIDStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse finding asset_id: %w", err)
+		return nil, fmt.Errorf("parse finding machine_id: %w", err)
 	}
 	f.ScanRunID, err = uuid.Parse(scanIDStr)
 	if err != nil {
@@ -1257,7 +1257,7 @@ func (s *SQLiteStore) InsertFindings(ctx context.Context, findings []model.Confi
 			_, err := stmt.ExecContext(
 				ctx,
 				findings[i].ID.String(),
-				findings[i].AssetID.String(),
+				findings[i].MachineID.String(),
 				findings[i].ScanRunID.String(),
 				findings[i].Auditor,
 				findings[i].CheckID,
@@ -1289,9 +1289,9 @@ func (s *SQLiteStore) ListFindings(ctx context.Context, filter store.FindingFilt
 		args    []any
 	)
 
-	if filter.AssetID != nil {
-		clauses = append(clauses, "asset_id = ?")
-		args = append(args, filter.AssetID.String())
+	if filter.MachineID != nil {
+		clauses = append(clauses, "machine_id = ?")
+		args = append(args, filter.MachineID.String())
 	}
 	if filter.ScanRunID != nil {
 		clauses = append(clauses, "scan_run_id = ?")

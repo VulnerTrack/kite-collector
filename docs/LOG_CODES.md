@@ -32,7 +32,7 @@ Source: [`api/grpc/logcodes.go`](../api/grpc/logcodes.go) · 6 codes
 | Code | Constant | Description |
 |---|---|---|
 | `grpc.server.insecure_listener` | `LogCodeServerInsecureListener` | — |
-| `grpc.server.asset_upsert_failed` | `LogCodeServerAssetUpsertFail` | — |
+| `grpc.server.machine_upsert_failed` | `LogCodeServerMachineUpsertFail` | — |
 | `grpc.server.software_upsert_failed` | `LogCodeServerSoftwareUpsertFail` | — |
 | `grpc.server.heartbeat_cn_mismatch` | `LogCodeServerHeartbeatCNMismatch` | — |
 
@@ -48,12 +48,12 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 | `rest.middleware.panic_recovered` | `LogCodeMiddlewarePanicRecovered` | — |
 | `rest.middleware.response_truncated` | `LogCodeMiddlewareResponseTruncated` | — |
 
-**assets surface**
+**machines surface**
 
 | Code | Constant | Description |
 |---|---|---|
-| `rest.assets.get_by_id_failed` | `LogCodeAssetsGetByID` | — |
-| `rest.assets.list_failed` | `LogCodeAssetsList` | — |
+| `rest.machines.get_by_id_failed` | `LogCodeMachinesGetByID` | — |
+| `rest.machines.list_failed` | `LogCodeMachinesList` | — |
 
 **events surface**
 
@@ -315,11 +315,11 @@ Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) ·
 | `dashboard.serve.tab_page_render_failed` | `LogCodeServeTabPageRender` | — |
 | `dashboard.serve.table_page_render_failed` | `LogCodeServeTablePageRender` | — |
 
-**csv export surface — /api/v1/{assets,software,findings,tables}/export.csv**
+**csv export surface — /api/v1/{machines,software,findings,tables}/export.csv**
 
 | Code | Constant | Description |
 |---|---|---|
-| `dashboard.export.assets_csv_failed` | `LogCodeExportAssetsCSV` | — |
+| `dashboard.export.machines_csv_failed` | `LogCodeExportMachinesCSV` | — |
 | `dashboard.export.software_csv_failed` | `LogCodeExportSoftwareCSV` | — |
 | `dashboard.export.findings_csv_failed` | `LogCodeExportFindingsCSV` | — |
 | `dashboard.export.table_csv_failed` | `LogCodeExportTableCSV` | — |
@@ -1182,13 +1182,13 @@ Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 35 co
 | `engine.discovery.deadline_exceeded` | `LogCodeDiscoveryDeadlineExceeded` | — |
 | `engine.discovery.completed` | `LogCodeDiscoveryComplete` | — |
 
-**asset persistence — phase 2**
+**machine persistence — phase 2**
 
 | Code | Constant | Description |
 |---|---|---|
-| `engine.assets.fingerprint_snapshot_failed` | `LogCodeAssetsFingerprintSnapshot` | — |
-| `engine.assets.persisted` | `LogCodeAssetsPersisted` | — |
-| `engine.assets.stale_detect_failed` | `LogCodeStaleDetectFailed` | — |
+| `engine.machines.fingerprint_snapshot_failed` | `LogCodeMachinesFingerprintSnapshot` | — |
+| `engine.machines.persisted` | `LogCodeMachinesPersisted` | — |
+| `engine.machines.stale_detect_failed` | `LogCodeStaleDetectFailed` | — |
 
 **software persistence**
 

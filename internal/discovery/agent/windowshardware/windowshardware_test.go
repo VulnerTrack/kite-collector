@@ -121,7 +121,7 @@ func TestParsePowerShellOutputDellLaptop(t *testing.T) {
         "system_version": "Latitude 7440",
         "system_name": "Latitude 7440",
         "chassis_serial": "ABCDEF1",
-        "chassis_asset_tag": "ASSET-001234",
+        "chassis_asset_tag": "MACHINE-001234",
         "chassis_types": [10],
         "chassis_security_status": 3
     }`)
@@ -132,8 +132,8 @@ func TestParsePowerShellOutputDellLaptop(t *testing.T) {
 	if got.SystemUUID != "12345678-abcd-1234-abcd-1234567890ab" {
 		t.Fatalf("UUID not lowercased: %q", got.SystemUUID)
 	}
-	if got.ChassisAssetTag != "ASSET-001234" {
-		t.Fatalf("asset_tag=%q", got.ChassisAssetTag)
+	if got.ChassisAssetTag != "MACHINE-001234" {
+		t.Fatalf("machine_tag=%q", got.ChassisAssetTag)
 	}
 	if len(got.ChassisTypes) != 1 || got.ChassisTypes[0] != 10 {
 		t.Fatalf("chassis_types=%v", got.ChassisTypes)

@@ -119,7 +119,7 @@ func NewService(criticalPorts []int) *Service {
 func (s *Service) Name() string { return "service" }
 
 // Audit enumerates listening ports and checks for insecure services.
-func (s *Service) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
+func (s *Service) Audit(ctx context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
 	ports, err := discoverListeningPorts(ctx)
 	if err != nil {
 		slog.Warn("service auditor: failed to discover ports",
@@ -128,7 +128,7 @@ func (s *Service) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigF
 		return nil, nil
 	}
 
-	return EvaluateServices(ports, asset), nil
+	return EvaluateServices(ports, machine), nil
 }
 
 // discoverListeningPorts attempts to parse ss output first, falling back
@@ -255,7 +255,7 @@ func parseProcNetTCP() ([]ListeningPort, error) {
 }
 
 // EvaluateServices checks listening ports against known insecure services.
-func EvaluateServices(ports []ListeningPort, asset model.Asset) []model.ConfigFinding {
+func EvaluateServices(ports []ListeningPort, machine model.Machine) []model.ConfigFinding {
 	now := time.Now().UTC()
 	var findings []model.ConfigFinding
 
@@ -296,7 +296,7 @@ func EvaluateServices(ports []ListeningPort, asset model.Asset) []model.ConfigFi
 
 		findings = append(findings, model.ConfigFinding{
 			ID:          uuid.Must(uuid.NewV7()),
-			AssetID:     asset.ID,
+			MachineID:   machine.ID,
 			Auditor:     "service",
 			CheckID:     check.ID,
 			Title:       check.Title,

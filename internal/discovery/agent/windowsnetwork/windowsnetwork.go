@@ -82,7 +82,7 @@ type Route struct {
 }
 
 // Inventory bundles both entity slices. The store layer fans this
-// out into two table writes via asset_id.
+// out into two table writes via machine_id.
 type Inventory struct {
 	Adapters []Adapter `json:"adapters"`
 	Routes   []Route   `json:"routes"`

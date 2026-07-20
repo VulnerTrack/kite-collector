@@ -134,7 +134,7 @@ func TestParseAppxManifestMicrosoftCalculator(t *testing.T) {
   <Properties>
     <DisplayName>ms-resource:AppName</DisplayName>
     <PublisherDisplayName>Microsoft Corporation</PublisherDisplayName>
-    <Logo>Assets\StoreLogo.png</Logo>
+    <Logo>Machines\StoreLogo.png</Logo>
   </Properties>
   <Applications>
     <Application Id="App" Executable="Calculator.exe" EntryPoint="Calculator.App" />

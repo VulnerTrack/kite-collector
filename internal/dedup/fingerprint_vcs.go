@@ -6,14 +6,14 @@ import "github.com/vulnertrack/kite-collector/internal/model"
 // by canonical VCS URL and (when known) the root commit. Root commit is
 // the strongest identity signal — it survives renames, host migrations,
 // and forks while remaining a single byte string. The Type field lets
-// the same logic register for both AssetTypeSoftwareProject (a logical
-// project) and AssetTypeRepository (a specific repo).
+// the same logic register for both MachineTypeSoftwareProject (a logical
+// project) and MachineTypeRepository (a specific repo).
 type VCSRepositoryFingerprinter struct {
-	Type model.AssetType
+	Type model.MachineType
 }
 
-// AssetType returns the asset type this fingerprinter handles.
-func (f VCSRepositoryFingerprinter) AssetType() model.AssetType { return f.Type }
+// MachineType returns the machine type this fingerprinter handles.
+func (f VCSRepositoryFingerprinter) MachineType() model.MachineType { return f.Type }
 
 // Identity composes a digest from canonical VCS URL plus optional root
 // commit. URL alone is Network confidence (URLs change under fork,

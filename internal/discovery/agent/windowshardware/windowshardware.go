@@ -3,8 +3,8 @@
 // Win32_ComputerSystemProduct, and Win32_SystemEnclosure.
 //
 // This is the second table of the MID Server-aligned Windows track
-// (windowsinfo is first). One row per asset; joins against
-// host_windows_info via asset_id.
+// (windowsinfo is first). One row per machine; joins against
+// host_windows_info via machine_id.
 //
 // The hardware-rooted fields it surfaces drive several audit joins:
 //
@@ -153,7 +153,7 @@ func AnnotateSecurity(h *Hardware) {
 }
 
 // SortHardwares returns a deterministic ordering for fleet aggregation:
-// vendor, then serial, then UUID. The single-asset agent emits one row;
+// vendor, then serial, then UUID. The single-machine agent emits one row;
 // this helper exists for the audit pipeline's cross-host sort.
 func SortHardwares(hs []Hardware) {
 	sort.Slice(hs, func(i, j int) bool {

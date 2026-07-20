@@ -1,6 +1,6 @@
 package model
 
-// SeverityRule maps an asset's environment and state to a severity level.
+// SeverityRule maps an machine's environment and state to a severity level.
 type SeverityRule struct {
 	Environment  string             `json:"environment"`
 	IsAuthorized AuthorizationState `json:"is_authorized"`
@@ -8,7 +8,7 @@ type SeverityRule struct {
 	Severity     Severity           `json:"severity"`
 }
 
-// ControlRequirement defines a compliance check that can be executed against assets.
+// ControlRequirement defines a compliance check that can be executed against machines.
 type ControlRequirement struct {
 	Name         string `json:"name"`
 	CheckCommand string `json:"check_command"`

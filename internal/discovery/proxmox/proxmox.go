@@ -34,7 +34,7 @@ func (p *Proxmox) Name() string { return "proxmox" }
 // Discover enumerates VMs and LXC containers across all Proxmox cluster nodes.
 // Credentials are read from KITE_PROXMOX_TOKEN_ID and KITE_PROXMOX_TOKEN_SECRET
 // environment variables.
-func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	endpoint := toString(cfg["endpoint"])
 	if endpoint == "" {
 		endpoint = os.Getenv("KITE_PROXMOX_ENDPOINT")
@@ -69,7 +69,7 @@ func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 
 	for _, node := range nodes {
 		// Enumerate QEMU VMs on this node.
@@ -79,7 +79,7 @@ func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		} else {
 			for _, vm := range vms {
 				cfg, snapshots := fetchVMDetails(ctx, client, node.Node, vm.VMID)
-				assets = append(assets, vmToAsset(node.Node, vm, cfg, snapshots, now))
+				machines = append(machines, vmToMachine(node.Node, vm, cfg, snapshots, now))
 			}
 		}
 
@@ -89,13 +89,13 @@ func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 			slog.Warn("proxmox: list LXC failed", "code", string(LogCodeEnumerateLXCFailed), "node", node.Node, "error", lxcErr)
 		} else {
 			for _, lxc := range lxcs {
-				assets = append(assets, lxcToAsset(node.Node, lxc, now))
+				machines = append(machines, lxcToMachine(node.Node, lxc, now))
 			}
 		}
 	}
 
-	slog.Info("proxmox: discovery complete", "assets", len(assets)) //#nosec G706 -- structured slog
-	return assets, nil
+	slog.Info("proxmox: discovery complete", "machines", len(machines)) //#nosec G706 -- structured slog
+	return machines, nil
 }
 
 func fetchVMDetails(ctx context.Context, client *pveClient, node string, vmid int) (*vmConfig, []snapshot) {
@@ -311,10 +311,10 @@ func (c *pveClient) listSnapshots(ctx context.Context, node string, vmid int) ([
 }
 
 // -------------------------------------------------------------------------
-// Asset mapping
+// Machine mapping
 // -------------------------------------------------------------------------
 
-func vmToAsset(node string, vm pveVM, cfg *vmConfig, snaps []snapshot, now time.Time) model.Asset {
+func vmToMachine(node string, vm pveVM, cfg *vmConfig, snaps []snapshot, now time.Time) model.Machine {
 	hostname := vm.Name
 	if hostname == "" {
 		hostname = fmt.Sprintf("qemu-%d", vm.VMID)
@@ -353,10 +353,10 @@ func vmToAsset(node string, vm pveVM, cfg *vmConfig, snaps []snapshot, now time.
 		osFamily = cfg.OSType
 	}
 
-	return model.Asset{
+	return model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       model.AssetTypeVirtualMachine,
+		MachineType:     model.MachineTypeVirtualMachine,
 		OSFamily:        osFamily,
 		DiscoverySource: "proxmox",
 		IsAuthorized:    model.AuthorizationUnknown,
@@ -366,7 +366,7 @@ func vmToAsset(node string, vm pveVM, cfg *vmConfig, snaps []snapshot, now time.
 	}
 }
 
-func lxcToAsset(node string, lxc pveLXC, now time.Time) model.Asset {
+func lxcToMachine(node string, lxc pveLXC, now time.Time) model.Machine {
 	hostname := lxc.Name
 	if hostname == "" {
 		hostname = fmt.Sprintf("lxc-%d", lxc.VMID)
@@ -383,10 +383,10 @@ func lxcToAsset(node string, lxc pveLXC, now time.Time) model.Asset {
 
 	tagsJSON, _ := json.Marshal(tags)
 
-	return model.Asset{
+	return model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		OSFamily:        "linux",
 		DiscoverySource: "proxmox",
 		IsAuthorized:    model.AuthorizationUnknown,

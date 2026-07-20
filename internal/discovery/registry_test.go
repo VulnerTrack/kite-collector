@@ -52,16 +52,16 @@ func (c *captureRecorder) snapshot() []recordedHeartbeat {
 // Mock sources
 // ---------------------------------------------------------------------------
 
-// fixedSource returns a predetermined set of assets.
+// fixedSource returns a predetermined set of machines.
 type fixedSource struct {
-	name   string
-	assets []model.Asset
+	name     string
+	machines []model.Machine
 }
 
 func (f *fixedSource) Name() string { return f.name }
 
-func (f *fixedSource) Discover(_ context.Context, _ map[string]any) ([]model.Asset, error) {
-	return f.assets, nil
+func (f *fixedSource) Discover(_ context.Context, _ map[string]any) ([]model.Machine, error) {
+	return f.machines, nil
 }
 
 // panickingSource panics during Discover.
@@ -71,7 +71,7 @@ type panickingSource struct {
 
 func (p *panickingSource) Name() string { return p.name }
 
-func (p *panickingSource) Discover(_ context.Context, _ map[string]any) ([]model.Asset, error) {
+func (p *panickingSource) Discover(_ context.Context, _ map[string]any) ([]model.Machine, error) {
 	panic("nil pointer dereference")
 }
 
@@ -82,7 +82,7 @@ type failingSource struct {
 
 func (f *failingSource) Name() string { return f.name }
 
-func (f *failingSource) Discover(_ context.Context, _ map[string]any) ([]model.Asset, error) {
+func (f *failingSource) Discover(_ context.Context, _ map[string]any) ([]model.Machine, error) {
 	return nil, errors.New("simulated failure")
 }
 
@@ -94,7 +94,7 @@ type structuredFailingSource struct {
 
 func (f *structuredFailingSource) Name() string { return f.name }
 
-func (f *structuredFailingSource) Discover(_ context.Context, _ map[string]any) ([]model.Asset, error) {
+func (f *structuredFailingSource) Discover(_ context.Context, _ map[string]any) ([]model.Machine, error) {
 	return nil, kiteerrors.FromCatalog("KITE-E002", nil).With("phase", "auth")
 }
 
@@ -107,15 +107,15 @@ func TestRegistry_DiscoverAll_RunsAllSources(t *testing.T) {
 
 	reg.Register(&fixedSource{
 		name: "src1",
-		assets: []model.Asset{
-			{Hostname: "host-a", AssetType: model.AssetTypeServer},
+		machines: []model.Machine{
+			{Hostname: "host-a", MachineType: model.MachineTypeServer},
 		},
 	})
 	reg.Register(&fixedSource{
 		name: "src2",
-		assets: []model.Asset{
-			{Hostname: "host-b", AssetType: model.AssetTypeWorkstation},
-			{Hostname: "host-c", AssetType: model.AssetTypeContainer},
+		machines: []model.Machine{
+			{Hostname: "host-b", MachineType: model.MachineTypeWorkstation},
+			{Hostname: "host-c", MachineType: model.MachineTypeContainer},
 		},
 	})
 
@@ -124,9 +124,9 @@ func TestRegistry_DiscoverAll_RunsAllSources(t *testing.T) {
 		"src2": {},
 	}
 
-	assets, err := reg.DiscoverAll(context.Background(), configs)
+	machines, err := reg.DiscoverAll(context.Background(), configs)
 	require.NoError(t, err)
-	assert.Len(t, assets, 3, "all assets from all sources must be returned")
+	assert.Len(t, machines, 3, "all machines from all sources must be returned")
 }
 
 func TestRegistry_DiscoverAll_EmptyRegistry(t *testing.T) {
@@ -136,9 +136,9 @@ func TestRegistry_DiscoverAll_EmptyRegistry(t *testing.T) {
 	defer slog.SetDefault(prev)
 
 	reg := NewRegistry()
-	assets, err := reg.DiscoverAll(context.Background(), nil)
+	machines, err := reg.DiscoverAll(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 
 	// The silent no-op is now explained via the catalogued KITE-E009 envelope.
 	var rec map[string]any
@@ -191,8 +191,8 @@ func TestRegistry_FailedSourceDoesNotAbortOthers(t *testing.T) {
 
 	reg.Register(&fixedSource{
 		name: "good",
-		assets: []model.Asset{
-			{Hostname: "good-host", AssetType: model.AssetTypeServer},
+		machines: []model.Machine{
+			{Hostname: "good-host", MachineType: model.MachineTypeServer},
 		},
 	})
 	reg.Register(&failingSource{name: "bad"})
@@ -202,10 +202,10 @@ func TestRegistry_FailedSourceDoesNotAbortOthers(t *testing.T) {
 		"bad":  {},
 	}
 
-	assets, err := reg.DiscoverAll(context.Background(), configs)
+	machines, err := reg.DiscoverAll(context.Background(), configs)
 	require.NoError(t, err)
-	assert.Len(t, assets, 1, "assets from the successful source must still be returned")
-	assert.Equal(t, "good-host", assets[0].Hostname)
+	assert.Len(t, machines, 1, "machines from the successful source must still be returned")
+	assert.Equal(t, "good-host", machines[0].Hostname)
 }
 
 func TestRegistry_AllSourcesFail(t *testing.T) {
@@ -219,9 +219,9 @@ func TestRegistry_AllSourcesFail(t *testing.T) {
 		"fail2": {},
 	}
 
-	assets, err := reg.DiscoverAll(context.Background(), configs)
+	machines, err := reg.DiscoverAll(context.Background(), configs)
 	require.NoError(t, err, "per-source failures are logged, not returned as errors")
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
 func TestRegistry_PanickingSourceDoesNotAbortOthers(t *testing.T) {
@@ -229,8 +229,8 @@ func TestRegistry_PanickingSourceDoesNotAbortOthers(t *testing.T) {
 
 	reg.Register(&fixedSource{
 		name: "good",
-		assets: []model.Asset{
-			{Hostname: "host-a", AssetType: model.AssetTypeServer},
+		machines: []model.Machine{
+			{Hostname: "host-a", MachineType: model.MachineTypeServer},
 		},
 	})
 	reg.Register(&panickingSource{name: "bad"})
@@ -240,10 +240,10 @@ func TestRegistry_PanickingSourceDoesNotAbortOthers(t *testing.T) {
 		"bad":  {},
 	}
 
-	assets, err := reg.DiscoverAll(context.Background(), configs)
+	machines, err := reg.DiscoverAll(context.Background(), configs)
 	require.NoError(t, err)
-	assert.Len(t, assets, 1, "assets from good source must be returned despite panic in bad source")
-	assert.Equal(t, "host-a", assets[0].Hostname)
+	assert.Len(t, machines, 1, "machines from good source must be returned despite panic in bad source")
+	assert.Equal(t, "host-a", machines[0].Hostname)
 }
 
 func TestRegistry_AllSourcesPanic(t *testing.T) {
@@ -257,9 +257,9 @@ func TestRegistry_AllSourcesPanic(t *testing.T) {
 		"panic2": {},
 	}
 
-	assets, err := reg.DiscoverAll(context.Background(), configs)
+	machines, err := reg.DiscoverAll(context.Background(), configs)
 	require.NoError(t, err, "panics are recovered, not returned as errors")
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
 func TestRegistry_Register(t *testing.T) {
@@ -280,8 +280,8 @@ func TestRegistry_DiscoverAll_EmitsHeartbeatPerSource(t *testing.T) {
 
 	reg.Register(&fixedSource{
 		name: "good",
-		assets: []model.Asset{
-			{Hostname: "h1", AssetType: model.AssetTypeServer},
+		machines: []model.Machine{
+			{Hostname: "h1", MachineType: model.MachineTypeServer},
 		},
 	})
 	reg.Register(&failingSource{name: "bad"})
@@ -317,10 +317,10 @@ func TestRegistry_DiscoverAll_NilRecorderIsNoop(t *testing.T) {
 	// must not panic.
 	reg := NewRegistry()
 	reg.Register(&fixedSource{
-		name:   "src",
-		assets: []model.Asset{{Hostname: "h", AssetType: model.AssetTypeServer}},
+		name:     "src",
+		machines: []model.Machine{{Hostname: "h", MachineType: model.MachineTypeServer}},
 	})
-	assets, err := reg.DiscoverAll(context.Background(), nil)
+	machines, err := reg.DiscoverAll(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Len(t, assets, 1)
+	assert.Len(t, machines, 1)
 }

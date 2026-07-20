@@ -99,43 +99,43 @@ func (s *fakeStore) createdCount() int {
 
 // --- unused methods return zero values ---
 
-func (s *fakeStore) UpsertAsset(_ context.Context, _ model.Asset) error {
+func (s *fakeStore) UpsertMachine(_ context.Context, _ model.Machine) error {
 	return nil
 }
 
-func (s *fakeStore) UpsertAssets(_ context.Context, _ []model.Asset) (int, int, error) {
+func (s *fakeStore) UpsertMachines(_ context.Context, _ []model.Machine) (int, int, error) {
 	return 0, 0, nil
 }
 
-func (s *fakeStore) GetAssetByID(_ context.Context, _ uuid.UUID) (*model.Asset, error) {
+func (s *fakeStore) GetMachineByID(_ context.Context, _ uuid.UUID) (*model.Machine, error) {
 	return nil, store.ErrNotFound
 }
 
-func (s *fakeStore) GetAssetByNaturalKey(_ context.Context, _ string) (*model.Asset, error) {
+func (s *fakeStore) GetMachineByNaturalKey(_ context.Context, _ string) (*model.Machine, error) {
 	return nil, nil
 }
 
-func (s *fakeStore) GetAssetsByNaturalKeys(_ context.Context, _ []string) (map[string]model.Asset, error) {
+func (s *fakeStore) GetMachinesByNaturalKeys(_ context.Context, _ []string) (map[string]model.Machine, error) {
 	return nil, nil
 }
 
-func (s *fakeStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
+func (s *fakeStore) ListMachines(_ context.Context, _ store.MachineFilter) ([]model.Machine, error) {
 	return nil, nil
 }
 
-func (s *fakeStore) GetStaleAssets(_ context.Context, _ time.Duration) ([]model.Asset, error) {
+func (s *fakeStore) GetStaleMachines(_ context.Context, _ time.Duration) ([]model.Machine, error) {
 	return nil, nil
 }
 
-func (s *fakeStore) InsertEvent(_ context.Context, _ model.AssetEvent) error {
+func (s *fakeStore) InsertEvent(_ context.Context, _ model.MachineEvent) error {
 	return nil
 }
 
-func (s *fakeStore) InsertEvents(_ context.Context, _ []model.AssetEvent) error {
+func (s *fakeStore) InsertEvents(_ context.Context, _ []model.MachineEvent) error {
 	return nil
 }
 
-func (s *fakeStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.AssetEvent, error) {
+func (s *fakeStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.MachineEvent, error) {
 	return nil, nil
 }
 

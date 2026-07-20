@@ -128,7 +128,7 @@ func TestAbsorbAndClassifyCamera(t *testing.T) {
 	if r.hostname != "192.168.1.64" {
 		t.Fatalf("hostname from xaddr missing: %q", r.hostname)
 	}
-	if got := classify(r.types, r.scopes); got != model.AssetTypeIOTDevice {
+	if got := classify(r.types, r.scopes); got != model.MachineTypeIOTDevice {
 		t.Fatalf("camera must be iot_device, got %v", got)
 	}
 }
@@ -138,13 +138,13 @@ func TestClassifyPrecedence(t *testing.T) {
 		name   string
 		types  string
 		scopes string
-		want   model.AssetType
+		want   model.MachineType
 	}{
-		{"onvif camera", "dn:NetworkVideoTransmitter", "onvif://www.onvif.org/Profile/Streaming", model.AssetTypeIOTDevice},
-		{"printer by type", "wprt:PrinterServiceV10", "ldap.printer.example/", model.AssetTypeAppliance},
-		{"windows computer", "pub:Computer", "microsoft.com/windows/domain", model.AssetTypeWorkstation},
-		{"generic device", "wsdp:Device", "", model.AssetTypeIOTDevice},
-		{"unknown", "", "", model.AssetTypeIOTDevice},
+		{"onvif camera", "dn:NetworkVideoTransmitter", "onvif://www.onvif.org/Profile/Streaming", model.MachineTypeIOTDevice},
+		{"printer by type", "wprt:PrinterServiceV10", "ldap.printer.example/", model.MachineTypeAppliance},
+		{"windows computer", "pub:Computer", "microsoft.com/windows/domain", model.MachineTypeWorkstation},
+		{"generic device", "wsdp:Device", "", model.MachineTypeIOTDevice},
+		{"unknown", "", "", model.MachineTypeIOTDevice},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -155,7 +155,7 @@ func TestClassifyPrecedence(t *testing.T) {
 	}
 }
 
-func TestAssetsFromRespondersDeterministicAndKeyed(t *testing.T) {
+func TestMachinesFromRespondersDeterministicAndKeyed(t *testing.T) {
 	rs := map[string]*responder{
 		"urn:uuid:cam": {
 			addr:     net.ParseIP("192.168.1.64"),
@@ -173,19 +173,19 @@ func TestAssetsFromRespondersDeterministicAndKeyed(t *testing.T) {
 			xaddrs: []string{"http://192.168.1.10:5357/wsd"},
 		},
 	}
-	got := assetsFromResponders(rs)
+	got := machinesFromResponders(rs)
 	if len(got) != 2 {
-		t.Fatalf("want 2 assets, got %d", len(got))
+		t.Fatalf("want 2 machines, got %d", len(got))
 	}
 	// Sorted by key — "urn:uuid:cam" < "urn:uuid:pc".
 	if got[0].Hostname != "192.168.1.64" {
-		t.Fatalf("first asset hostname=%q", got[0].Hostname)
+		t.Fatalf("first machine hostname=%q", got[0].Hostname)
 	}
-	if got[0].AssetType != model.AssetTypeIOTDevice {
-		t.Fatalf("camera not iot_device: %v", got[0].AssetType)
+	if got[0].MachineType != model.MachineTypeIOTDevice {
+		t.Fatalf("camera not iot_device: %v", got[0].MachineType)
 	}
-	if got[1].AssetType != model.AssetTypeWorkstation {
-		t.Fatalf("pc not workstation: %v", got[1].AssetType)
+	if got[1].MachineType != model.MachineTypeWorkstation {
+		t.Fatalf("pc not workstation: %v", got[1].MachineType)
 	}
 	if !strings.Contains(got[0].Tags, "onvif://www.onvif.org/Profile/Streaming") {
 		t.Fatalf("scopes missing from tags: %s", got[0].Tags)

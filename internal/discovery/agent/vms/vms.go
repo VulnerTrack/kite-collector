@@ -1,7 +1,7 @@
 // Package vms enumerates per-host virtual-machine inventory from any
 // installed hypervisor (libvirt/KVM, VirtualBox, Hyper-V, VMware, UTM,
 // Parallels, Multipass). Distinct from cross-host VM discovery (where
-// each VM is itself an asset) — this package answers "what hypervisor
+// each VM is itself an machine) — this package answers "what hypervisor
 // workload does this physical host run?" which is the signal needed for
 // capacity rollup + blast-radius analysis.
 //

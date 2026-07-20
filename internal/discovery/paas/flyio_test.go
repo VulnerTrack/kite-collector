@@ -100,15 +100,15 @@ func TestFlyIO_Discover_Success(t *testing.T) {
 
 	f := NewFlyIO()
 	f.baseURL = srv.URL
-	assets, err := f.Discover(context.Background(), map[string]any{
+	machines, err := f.Discover(context.Background(), map[string]any{
 		"org": "personal",
 	})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	green := findAssetByHostname(assets, "green-machine")
+	green := findMachineByHostname(machines, "green-machine")
 	require.NotNil(t, green)
-	assert.Equal(t, model.AssetTypeContainer, green.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, green.MachineType)
 	assert.Equal(t, "flyio", green.DiscoverySource)
 	assert.Equal(t, "iad", green.Environment)
 	assert.NotEmpty(t, green.NaturalKey)
@@ -121,7 +121,7 @@ func TestFlyIO_Discover_Success(t *testing.T) {
 	assert.NotContains(t, greenTags, "warning")
 
 	// Stopped machine gets warning.
-	blue := findAssetByHostname(assets, "blue-machine")
+	blue := findMachineByHostname(machines, "blue-machine")
 	require.NotNil(t, blue)
 	var blueTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(blue.Tags), &blueTags))
@@ -129,7 +129,7 @@ func TestFlyIO_Discover_Success(t *testing.T) {
 	assert.Equal(t, "lhr", blue.Environment)
 
 	// Machine from second app.
-	apiMachine := findAssetByHostname(assets, "api-machine")
+	apiMachine := findMachineByHostname(machines, "api-machine")
 	require.NotNil(t, apiMachine)
 	assert.Equal(t, "sea", apiMachine.Environment)
 }
@@ -143,9 +143,9 @@ func TestFlyIO_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_FLY_TOKEN")
 
-	assets, err := f.Discover(context.Background(), nil)
+	machines, err := f.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestFlyIO_Discover_AuthFailure(t *testing.T) {

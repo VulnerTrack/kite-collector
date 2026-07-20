@@ -68,17 +68,17 @@ func (s *PostgresStore) Close() error {
 }
 
 // ---------------------------------------------------------------------------
-// Assets
+// Machines
 // ---------------------------------------------------------------------------
 
-const assetColumns = `id, asset_type, hostname, os_family, os_version,
+const machineColumns = `id, machine_type, hostname, os_family, os_version,
 	kernel_version, architecture, is_authorized, is_managed, environment, owner, criticality,
 	discovery_source, first_seen_at, last_seen_at, tags, natural_key`
 
-// scanAsset reads a single row into a model.Asset. The column order must match
-// assetColumns exactly.
-func scanAsset(row pgx.Row) (*model.Asset, error) {
-	var a model.Asset
+// scanMachine reads a single row into a model.Machine. The column order must match
+// machineColumns exactly.
+func scanMachine(row pgx.Row) (*model.Machine, error) {
+	var a model.Machine
 	var (
 		osFamily      *string
 		osVersion     *string
@@ -92,7 +92,7 @@ func scanAsset(row pgx.Row) (*model.Asset, error) {
 	)
 	err := row.Scan(
 		&a.ID,
-		&a.AssetType,
+		&a.MachineType,
 		&a.Hostname,
 		&osFamily,
 		&osVersion,
@@ -110,7 +110,7 @@ func scanAsset(row pgx.Row) (*model.Asset, error) {
 		&naturalKey,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("scan asset: %w", err)
+		return nil, fmt.Errorf("scan machine: %w", err)
 	}
 
 	a.OSFamily = derefStr(osFamily)
@@ -126,34 +126,34 @@ func scanAsset(row pgx.Row) (*model.Asset, error) {
 	return &a, nil
 }
 
-// scanAssets collects all rows from a pgx.Rows result set into a slice.
-func scanAssets(rows pgx.Rows) ([]model.Asset, error) {
+// scanMachines collects all rows from a pgx.Rows result set into a slice.
+func scanMachines(rows pgx.Rows) ([]model.Machine, error) {
 	defer rows.Close()
-	var assets []model.Asset
+	var machines []model.Machine
 	for rows.Next() {
-		a, err := scanAsset(rows)
+		a, err := scanMachine(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan asset row: %w", err)
+			return nil, fmt.Errorf("scan machine row: %w", err)
 		}
-		assets = append(assets, *a)
+		machines = append(machines, *a)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate asset rows: %w", err)
+		return nil, fmt.Errorf("iterate machine rows: %w", err)
 	}
-	return assets, nil
+	return machines, nil
 }
 
-// UpsertAsset inserts a new asset or updates an existing one matched by the
-// UNIQUE(hostname, asset_type) constraint. The natural key is computed before
+// UpsertMachine inserts a new machine or updates an existing one matched by the
+// UNIQUE(hostname, machine_type) constraint. The natural key is computed before
 // writing.
-func (s *PostgresStore) UpsertAsset(ctx context.Context, asset model.Asset) error {
-	asset.ComputeNaturalKey()
+func (s *PostgresStore) UpsertMachine(ctx context.Context, machine model.Machine) error {
+	machine.ComputeNaturalKey()
 
 	_, err := s.pool.Exec(
 		ctx, `
-		INSERT INTO assets (`+assetColumns+`)
+		INSERT INTO machines (`+machineColumns+`)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-		ON CONFLICT(hostname, asset_type) DO UPDATE SET
+		ON CONFLICT(hostname, machine_type) DO UPDATE SET
 			os_family        = EXCLUDED.os_family,
 			os_version       = EXCLUDED.os_version,
 			kernel_version   = EXCLUDED.kernel_version,
@@ -168,51 +168,51 @@ func (s *PostgresStore) UpsertAsset(ctx context.Context, asset model.Asset) erro
 			tags             = EXCLUDED.tags,
 			natural_key      = EXCLUDED.natural_key
 	`,
-		asset.ID,
-		string(asset.AssetType),
-		asset.Hostname,
-		nullStr(asset.OSFamily),
-		nullStr(asset.OSVersion),
-		nullStr(asset.KernelVersion),
-		nullStr(asset.Architecture),
-		string(asset.IsAuthorized),
-		string(asset.IsManaged),
-		nullStr(asset.Environment),
-		nullStr(asset.Owner),
-		nullStr(asset.Criticality),
-		asset.DiscoverySource,
-		asset.FirstSeenAt,
-		asset.LastSeenAt,
-		nullStr(asset.Tags),
-		asset.NaturalKey,
+		machine.ID,
+		string(machine.MachineType),
+		machine.Hostname,
+		nullStr(machine.OSFamily),
+		nullStr(machine.OSVersion),
+		nullStr(machine.KernelVersion),
+		nullStr(machine.Architecture),
+		string(machine.IsAuthorized),
+		string(machine.IsManaged),
+		nullStr(machine.Environment),
+		nullStr(machine.Owner),
+		nullStr(machine.Criticality),
+		machine.DiscoverySource,
+		machine.FirstSeenAt,
+		machine.LastSeenAt,
+		nullStr(machine.Tags),
+		machine.NaturalKey,
 	)
 	if err != nil {
-		return fmt.Errorf("upsert asset %s: %w", asset.ID, err)
+		return fmt.Errorf("upsert machine %s: %w", machine.ID, err)
 	}
 	return nil
 }
 
-// UpsertAssets atomically upserts a batch of assets inside a single
+// UpsertMachines atomically upserts a batch of machines inside a single
 // transaction and returns counts of newly inserted and updated rows.
 // It uses the PostgreSQL xmax system column trick: after an INSERT ON CONFLICT
 // DO UPDATE, xmax = 0 means the row was inserted; xmax != 0 means it was
 // updated.
-func (s *PostgresStore) UpsertAssets(ctx context.Context, assets []model.Asset) (inserted, updated int, err error) {
+func (s *PostgresStore) UpsertMachines(ctx context.Context, machines []model.Machine) (inserted, updated int, err error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return 0, 0, fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	for i := range assets {
-		assets[i].ComputeNaturalKey()
+	for i := range machines {
+		machines[i].ComputeNaturalKey()
 
 		var xmax uint32
 		err = tx.QueryRow(
 			ctx, `
-			INSERT INTO assets (`+assetColumns+`)
+			INSERT INTO machines (`+machineColumns+`)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-			ON CONFLICT(hostname, asset_type) DO UPDATE SET
+			ON CONFLICT(hostname, machine_type) DO UPDATE SET
 				os_family        = EXCLUDED.os_family,
 				os_version       = EXCLUDED.os_version,
 				kernel_version   = EXCLUDED.kernel_version,
@@ -228,26 +228,26 @@ func (s *PostgresStore) UpsertAssets(ctx context.Context, assets []model.Asset) 
 				natural_key      = EXCLUDED.natural_key
 			RETURNING xmax
 		`,
-			assets[i].ID,
-			string(assets[i].AssetType),
-			assets[i].Hostname,
-			nullStr(assets[i].OSFamily),
-			nullStr(assets[i].OSVersion),
-			nullStr(assets[i].KernelVersion),
-			nullStr(assets[i].Architecture),
-			string(assets[i].IsAuthorized),
-			string(assets[i].IsManaged),
-			nullStr(assets[i].Environment),
-			nullStr(assets[i].Owner),
-			nullStr(assets[i].Criticality),
-			assets[i].DiscoverySource,
-			assets[i].FirstSeenAt,
-			assets[i].LastSeenAt,
-			nullStr(assets[i].Tags),
-			assets[i].NaturalKey,
+			machines[i].ID,
+			string(machines[i].MachineType),
+			machines[i].Hostname,
+			nullStr(machines[i].OSFamily),
+			nullStr(machines[i].OSVersion),
+			nullStr(machines[i].KernelVersion),
+			nullStr(machines[i].Architecture),
+			string(machines[i].IsAuthorized),
+			string(machines[i].IsManaged),
+			nullStr(machines[i].Environment),
+			nullStr(machines[i].Owner),
+			nullStr(machines[i].Criticality),
+			machines[i].DiscoverySource,
+			machines[i].FirstSeenAt,
+			machines[i].LastSeenAt,
+			nullStr(machines[i].Tags),
+			machines[i].NaturalKey,
 		).Scan(&xmax)
 		if err != nil {
-			return 0, 0, fmt.Errorf("upsert asset %s: %w", assets[i].ID, err)
+			return 0, 0, fmt.Errorf("upsert machine %s: %w", machines[i].ID, err)
 		}
 
 		if xmax == 0 {
@@ -263,79 +263,79 @@ func (s *PostgresStore) UpsertAssets(ctx context.Context, assets []model.Asset) 
 	return inserted, updated, nil
 }
 
-// GetAssetByID retrieves the asset identified by id. Returns store.ErrNotFound
+// GetMachineByID retrieves the machine identified by id. Returns store.ErrNotFound
 // when the id does not exist.
-func (s *PostgresStore) GetAssetByID(ctx context.Context, id uuid.UUID) (*model.Asset, error) {
+func (s *PostgresStore) GetMachineByID(ctx context.Context, id uuid.UUID) (*model.Machine, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE id = $1`, id)
-	a, err := scanAsset(row)
+		`SELECT `+machineColumns+` FROM machines WHERE id = $1`, id)
+	a, err := scanMachine(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get asset by id: %w", err)
+		return nil, fmt.Errorf("get machine by id: %w", err)
 	}
 	return a, nil
 }
 
-// GetAssetByNaturalKey retrieves the asset whose precomputed SHA-256 natural
+// GetMachineByNaturalKey retrieves the machine whose precomputed SHA-256 natural
 // key matches key. Returns (nil, nil) when no match is found.
-func (s *PostgresStore) GetAssetByNaturalKey(ctx context.Context, key string) (*model.Asset, error) {
+func (s *PostgresStore) GetMachineByNaturalKey(ctx context.Context, key string) (*model.Machine, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE natural_key = $1`, key)
-	a, err := scanAsset(row)
+		`SELECT `+machineColumns+` FROM machines WHERE natural_key = $1`, key)
+	a, err := scanMachine(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get asset by natural key: %w", err)
+		return nil, fmt.Errorf("get machine by natural key: %w", err)
 	}
 	return a, nil
 }
 
-// GetAssetsByNaturalKeys batch-fetches assets matching the supplied natural
+// GetMachinesByNaturalKeys batch-fetches machines matching the supplied natural
 // keys. The returned map is keyed by NaturalKey; keys with no matching row are
 // absent. An empty input slice returns (nil, nil).
-func (s *PostgresStore) GetAssetsByNaturalKeys(
+func (s *PostgresStore) GetMachinesByNaturalKeys(
 	ctx context.Context, keys []string,
-) (map[string]model.Asset, error) {
+) (map[string]model.Machine, error) {
 	if len(keys) == 0 {
 		return nil, nil
 	}
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE natural_key = ANY($1)`, keys)
+		`SELECT `+machineColumns+` FROM machines WHERE natural_key = ANY($1)`, keys)
 	if err != nil {
-		return nil, fmt.Errorf("get assets by natural keys: %w", err)
+		return nil, fmt.Errorf("get machines by natural keys: %w", err)
 	}
 	defer rows.Close()
 
-	out := make(map[string]model.Asset, len(keys))
+	out := make(map[string]model.Machine, len(keys))
 	for rows.Next() {
-		a, err := scanAsset(rows)
+		a, err := scanMachine(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan asset row: %w", err)
+			return nil, fmt.Errorf("scan machine row: %w", err)
 		}
 		out[a.NaturalKey] = *a
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate asset rows: %w", err)
+		return nil, fmt.Errorf("iterate machine rows: %w", err)
 	}
 	return out, nil
 }
 
-// ListAssets returns assets matching the supplied filter. An empty filter
-// returns all assets (subject to Limit/Offset).
-func (s *PostgresStore) ListAssets(ctx context.Context, filter store.AssetFilter) ([]model.Asset, error) {
+// ListMachines returns machines matching the supplied filter. An empty filter
+// returns all machines (subject to Limit/Offset).
+func (s *PostgresStore) ListMachines(ctx context.Context, filter store.MachineFilter) ([]model.Machine, error) {
 	var (
 		clauses []string
 		args    []any
 		paramN  int // positional parameter counter
 	)
 
-	if filter.AssetType != "" {
+	if filter.MachineType != "" {
 		paramN++
-		clauses = append(clauses, fmt.Sprintf("asset_type = $%d", paramN))
-		args = append(args, filter.AssetType)
+		clauses = append(clauses, fmt.Sprintf("machine_type = $%d", paramN))
+		args = append(args, filter.MachineType)
 	}
 	if filter.IsAuthorized != "" {
 		paramN++
@@ -353,7 +353,7 @@ func (s *PostgresStore) ListAssets(ctx context.Context, filter store.AssetFilter
 		args = append(args, filter.Hostname)
 	}
 
-	query := `SELECT ` + assetColumns + ` FROM assets`
+	query := `SELECT ` + machineColumns + ` FROM machines`
 	if len(clauses) > 0 {
 		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
@@ -372,41 +372,41 @@ func (s *PostgresStore) ListAssets(ctx context.Context, filter store.AssetFilter
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list assets: %w", err)
+		return nil, fmt.Errorf("list machines: %w", err)
 	}
-	return scanAssets(rows)
+	return scanMachines(rows)
 }
 
-// GetStaleAssets returns assets whose last_seen_at is older than the given
+// GetStaleMachines returns machines whose last_seen_at is older than the given
 // threshold measured from the current time.
-func (s *PostgresStore) GetStaleAssets(ctx context.Context, threshold time.Duration) ([]model.Asset, error) {
+func (s *PostgresStore) GetStaleMachines(ctx context.Context, threshold time.Duration) ([]model.Machine, error) {
 	cutoff := time.Now().UTC().Add(-threshold)
 	rows, err := s.pool.Query(
 		ctx,
-		`SELECT `+assetColumns+` FROM assets WHERE last_seen_at < $1 ORDER BY last_seen_at ASC, id ASC`,
+		`SELECT `+machineColumns+` FROM machines WHERE last_seen_at < $1 ORDER BY last_seen_at ASC, id ASC`,
 		cutoff,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("get stale assets: %w", err)
+		return nil, fmt.Errorf("get stale machines: %w", err)
 	}
-	return scanAssets(rows)
+	return scanMachines(rows)
 }
 
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------
 
-const eventColumns = `id, event_type, asset_id, scan_run_id, severity, details, timestamp`
+const eventColumns = `id, event_type, machine_id, scan_run_id, severity, details, timestamp`
 
-// scanEvent reads a single row into a model.AssetEvent. The column order must
+// scanEvent reads a single row into a model.MachineEvent. The column order must
 // match eventColumns exactly.
-func scanEvent(row pgx.Row) (*model.AssetEvent, error) {
-	var e model.AssetEvent
+func scanEvent(row pgx.Row) (*model.MachineEvent, error) {
+	var e model.MachineEvent
 	var details *string
 	err := row.Scan(
 		&e.ID,
 		&e.EventType,
-		&e.AssetID,
+		&e.MachineID,
 		&e.ScanRunID,
 		&e.Severity,
 		&details,
@@ -420,9 +420,9 @@ func scanEvent(row pgx.Row) (*model.AssetEvent, error) {
 }
 
 // scanEvents collects all rows from a pgx.Rows result set into a slice.
-func scanEvents(rows pgx.Rows) ([]model.AssetEvent, error) {
+func scanEvents(rows pgx.Rows) ([]model.MachineEvent, error) {
 	defer rows.Close()
-	var events []model.AssetEvent
+	var events []model.MachineEvent
 	for rows.Next() {
 		e, err := scanEvent(rows)
 		if err != nil {
@@ -436,14 +436,14 @@ func scanEvents(rows pgx.Rows) ([]model.AssetEvent, error) {
 	return events, nil
 }
 
-// InsertEvent persists a single asset lifecycle event.
-func (s *PostgresStore) InsertEvent(ctx context.Context, event model.AssetEvent) error {
+// InsertEvent persists a single machine lifecycle event.
+func (s *PostgresStore) InsertEvent(ctx context.Context, event model.MachineEvent) error {
 	_, err := s.pool.Exec(
 		ctx,
 		`INSERT INTO events (`+eventColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		event.ID,
 		string(event.EventType),
-		event.AssetID,
+		event.MachineID,
 		event.ScanRunID,
 		string(event.Severity),
 		nullStr(event.Details),
@@ -456,7 +456,7 @@ func (s *PostgresStore) InsertEvent(ctx context.Context, event model.AssetEvent)
 }
 
 // InsertEvents persists a batch of events inside a single transaction.
-func (s *PostgresStore) InsertEvents(ctx context.Context, events []model.AssetEvent) error {
+func (s *PostgresStore) InsertEvents(ctx context.Context, events []model.MachineEvent) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -469,7 +469,7 @@ func (s *PostgresStore) InsertEvents(ctx context.Context, events []model.AssetEv
 			`INSERT INTO events (`+eventColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 			events[i].ID,
 			string(events[i].EventType),
-			events[i].AssetID,
+			events[i].MachineID,
 			events[i].ScanRunID,
 			string(events[i].Severity),
 			nullStr(events[i].Details),
@@ -487,7 +487,7 @@ func (s *PostgresStore) InsertEvents(ctx context.Context, events []model.AssetEv
 }
 
 // ListEvents returns events matching the supplied filter.
-func (s *PostgresStore) ListEvents(ctx context.Context, filter store.EventFilter) ([]model.AssetEvent, error) {
+func (s *PostgresStore) ListEvents(ctx context.Context, filter store.EventFilter) ([]model.MachineEvent, error) {
 	var (
 		clauses []string
 		args    []any
@@ -499,10 +499,10 @@ func (s *PostgresStore) ListEvents(ctx context.Context, filter store.EventFilter
 		clauses = append(clauses, fmt.Sprintf("event_type = $%d", paramN))
 		args = append(args, filter.EventType)
 	}
-	if filter.AssetID != nil {
+	if filter.MachineID != nil {
 		paramN++
-		clauses = append(clauses, fmt.Sprintf("asset_id = $%d", paramN))
-		args = append(args, *filter.AssetID)
+		clauses = append(clauses, fmt.Sprintf("machine_id = $%d", paramN))
+		args = append(args, *filter.MachineID)
 	}
 	if filter.ScanRunID != nil {
 		paramN++
@@ -538,8 +538,8 @@ func (s *PostgresStore) ListEvents(ctx context.Context, filter store.EventFilter
 // Scan runs
 // ---------------------------------------------------------------------------
 
-const scanRunColumns = `id, started_at, completed_at, status, total_assets,
-	new_assets, updated_assets, analyzed_assets, stale_assets, coverage_percent,
+const scanRunColumns = `id, started_at, completed_at, status, total_machines,
+	new_machines, updated_machines, analyzed_machines, stale_machines, coverage_percent,
 	error_count, scope_config, discovery_sources,
 	trigger_source, triggered_by, cancel_requested_at`
 
@@ -558,11 +558,11 @@ func scanScanRun(row pgx.Row) (*model.ScanRun, error) {
 		&r.StartedAt,
 		&r.CompletedAt,
 		&r.Status,
-		&r.TotalAssets,
-		&r.NewAssets,
-		&r.UpdatedAssets,
-		&r.AnalyzedAssets,
-		&r.StaleAssets,
+		&r.TotalMachines,
+		&r.NewMachines,
+		&r.UpdatedMachines,
+		&r.AnalyzedMachines,
+		&r.StaleMachines,
 		&r.CoveragePercent,
 		&r.ErrorCount,
 		&scopeConfig,
@@ -595,11 +595,11 @@ func (s *PostgresStore) CreateScanRun(ctx context.Context, run model.ScanRun) er
 		run.StartedAt,
 		run.CompletedAt,
 		string(run.Status),
-		run.TotalAssets,
-		run.NewAssets,
-		run.UpdatedAssets,
-		run.AnalyzedAssets,
-		run.StaleAssets,
+		run.TotalMachines,
+		run.NewMachines,
+		run.UpdatedMachines,
+		run.AnalyzedMachines,
+		run.StaleMachines,
 		run.CoveragePercent,
 		run.ErrorCount,
 		nullStr(run.ScopeConfig),
@@ -627,21 +627,21 @@ func (s *PostgresStore) CompleteScanRun(ctx context.Context, id uuid.UUID, resul
 		UPDATE scan_runs SET
 			completed_at     = $1,
 			status           = $2,
-			total_assets     = $3,
-			new_assets       = $4,
-			updated_assets   = $5,
-			analyzed_assets  = $6,
-			stale_assets     = $7,
+			total_machines     = $3,
+			new_machines       = $4,
+			updated_machines   = $5,
+			analyzed_machines  = $6,
+			stale_machines     = $7,
 			coverage_percent = $8,
 			error_count      = $9
 		WHERE id = $10`,
 		now,
 		status,
-		result.TotalAssets,
-		result.NewAssets,
-		result.UpdatedAssets,
-		result.AnalyzedAssets,
-		result.StaleAssets,
+		result.TotalMachines,
+		result.NewMachines,
+		result.UpdatedMachines,
+		result.AnalyzedMachines,
+		result.StaleMachines,
 		result.CoveragePercent,
 		result.ErrorCount,
 		id,
@@ -738,7 +738,7 @@ func (s *PostgresStore) MarkScanCancelRequested(ctx context.Context, id uuid.UUI
 // Installed Software
 // ---------------------------------------------------------------------------
 
-const softwareColumns = `id, asset_id, software_name, vendor, version, cpe23, package_manager, architecture`
+const softwareColumns = `id, machine_id, software_name, vendor, version, cpe23, package_manager, architecture`
 
 // scanSoftware reads a single row into a model.InstalledSoftware.
 func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
@@ -750,7 +750,7 @@ func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
 	)
 	err := row.Scan(
 		&sw.ID,
-		&sw.AssetID,
+		&sw.MachineID,
 		&sw.SoftwareName,
 		&sw.Vendor,
 		&sw.Version,
@@ -767,9 +767,9 @@ func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
 	return &sw, nil
 }
 
-// UpsertSoftware replaces all installed software records for the given asset.
+// UpsertSoftware replaces all installed software records for the given machine.
 // It deletes existing rows and inserts the new set inside a single transaction.
-func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, software []model.InstalledSoftware) error {
+func (s *PostgresStore) UpsertSoftware(ctx context.Context, machineID uuid.UUID, software []model.InstalledSoftware) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -777,9 +777,9 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, s
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	_, err = tx.Exec(ctx,
-		`DELETE FROM installed_software WHERE asset_id = $1`, assetID)
+		`DELETE FROM installed_software WHERE machine_id = $1`, machineID)
 	if err != nil {
-		return fmt.Errorf("delete old software for %s: %w", assetID, err)
+		return fmt.Errorf("delete old software for %s: %w", machineID, err)
 	}
 
 	for i := range software {
@@ -787,7 +787,7 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, s
 			ctx,
 			`INSERT INTO installed_software (`+softwareColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 			software[i].ID,
-			assetID,
+			machineID,
 			software[i].SoftwareName,
 			software[i].Vendor,
 			software[i].Version,
@@ -806,13 +806,13 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, assetID uuid.UUID, s
 	return nil
 }
 
-// ListSoftware returns all installed software records for the given asset,
+// ListSoftware returns all installed software records for the given machine,
 // ordered by software name.
-func (s *PostgresStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
+func (s *PostgresStore) ListSoftware(ctx context.Context, machineID uuid.UUID) ([]model.InstalledSoftware, error) {
 	rows, err := s.pool.Query(
 		ctx,
-		`SELECT `+softwareColumns+` FROM installed_software WHERE asset_id = $1 ORDER BY software_name ASC, version ASC, id ASC`,
-		assetID,
+		`SELECT `+softwareColumns+` FROM installed_software WHERE machine_id = $1 ORDER BY software_name ASC, version ASC, id ASC`,
+		machineID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list software: %w", err)
@@ -837,7 +837,7 @@ func (s *PostgresStore) ListSoftware(ctx context.Context, assetID uuid.UUID) ([]
 // Config Findings
 // ---------------------------------------------------------------------------
 
-const findingColumns = `id, asset_id, scan_run_id, auditor, check_id, title,
+const findingColumns = `id, machine_id, scan_run_id, auditor, check_id, title,
 	severity, evidence, expected, remediation, cis_control, timestamp`
 
 // scanFinding reads a single row into a model.ConfigFinding. The column order
@@ -852,7 +852,7 @@ func scanFinding(row pgx.Row) (*model.ConfigFinding, error) {
 	)
 	err := row.Scan(
 		&f.ID,
-		&f.AssetID,
+		&f.MachineID,
 		&f.ScanRunID,
 		&f.Auditor,
 		&f.CheckID,
@@ -904,7 +904,7 @@ func (s *PostgresStore) InsertFindings(ctx context.Context, findings []model.Con
 			ctx,
 			`INSERT INTO config_findings (`+findingColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 			findings[i].ID,
-			findings[i].AssetID,
+			findings[i].MachineID,
 			findings[i].ScanRunID,
 			findings[i].Auditor,
 			findings[i].CheckID,
@@ -935,10 +935,10 @@ func (s *PostgresStore) ListFindings(ctx context.Context, filter store.FindingFi
 		paramN  int
 	)
 
-	if filter.AssetID != nil {
+	if filter.MachineID != nil {
 		paramN++
-		clauses = append(clauses, fmt.Sprintf("asset_id = $%d", paramN))
-		args = append(args, *filter.AssetID)
+		clauses = append(clauses, fmt.Sprintf("machine_id = $%d", paramN))
+		args = append(args, *filter.MachineID)
 	}
 	if filter.ScanRunID != nil {
 		paramN++

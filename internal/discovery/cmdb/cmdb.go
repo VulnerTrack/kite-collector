@@ -1,7 +1,7 @@
 // Package cmdb provides discovery sources for Configuration Management
 // Database (CMDB) systems. Each source implements [discovery.Source] and
-// enumerates configuration items / devices as [model.Asset] values.
-// Assets imported from a CMDB are considered authorised by default since
+// enumerates configuration items / devices as [model.Machine] values.
+// Machines imported from a CMDB are considered authorised by default since
 // their presence in the CMDB implies organisational awareness.
 //
 // Every connector in this package is built on

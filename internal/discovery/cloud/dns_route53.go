@@ -2,8 +2,8 @@
 // The source authenticates via SigV4 (reusing aws.go signing) and lists every
 // hosted zone (public + private) plus its resource record sets. Results land
 // on the in-memory DNSSnapshot so the engine can persist them via
-// store.UpsertCloudDNSSnapshot. Discover returns no assets — DNS zones are a
-// distinct ontology entity, not a kite-collector model.Asset.
+// store.UpsertCloudDNSSnapshot. Discover returns no machines — DNS zones are a
+// distinct ontology entity, not a kite-collector model.Machine.
 package cloud
 
 import (
@@ -76,14 +76,14 @@ func (r *Route53DNS) Snapshot() *DNSSnapshot {
 
 // Discover enumerates every hosted zone and its record sets via the Route53
 // management API. The result is captured on the source's snapshot for the
-// engine to persist; the returned []model.Asset is always empty because DNS
-// zones are not modelled as assets.
+// engine to persist; the returned []model.Machine is always empty because DNS
+// zones are not modelled as machines.
 //
 // Supported config keys:
 //
 //	enabled     – bool   (default: true)
 //	assume_role – string IAM role ARN for cross-account zone enumeration
-func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (r *Route53DNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if cfg != nil {
 		if enabled, ok := cfg["enabled"].(bool); ok && !enabled {
 			slog.Debug("Route53 DNS discovery disabled by configuration",
@@ -571,5 +571,5 @@ type route53DNSSECStatus struct {
 // Compile-time assertion that Route53DNS satisfies discovery.Source.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Route53DNS)(nil)

@@ -23,7 +23,7 @@ func TestEventToLogRecord_DerivesTraceIDFromScanRunID(t *testing.T) {
 	o := newTestEmitter(t)
 	scanRun := uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-0123456789ab")
 	evtID := uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-fedcba987654")
-	e := &model.AssetEvent{
+	e := &model.MachineEvent{
 		ID:        evtID,
 		ScanRunID: scanRun,
 		Timestamp: time.Unix(0, 0),
@@ -40,7 +40,7 @@ func TestEventToLogRecord_DerivesSpanIDFromEventID(t *testing.T) {
 	o := newTestEmitter(t)
 	scanRun := uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-0123456789ab")
 	evtID := uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-fedcba987654")
-	e := &model.AssetEvent{
+	e := &model.MachineEvent{
 		ID:        evtID,
 		ScanRunID: scanRun,
 		Timestamp: time.Unix(0, 0),
@@ -57,7 +57,7 @@ func TestEventToLogRecord_PreservesCallerProvidedTraceID(t *testing.T) {
 	o := newTestEmitter(t)
 	const callerTrace = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const callerSpan = "bbbbbbbbbbbbbbbb"
-	e := &model.AssetEvent{
+	e := &model.MachineEvent{
 		ID:        uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-fedcba987654"),
 		ScanRunID: uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-0123456789ab"),
 		TraceID:   callerTrace,
@@ -73,7 +73,7 @@ func TestEventToLogRecord_PreservesCallerProvidedTraceID(t *testing.T) {
 
 func TestEventToLogRecord_EmptyWhenIDsUnset(t *testing.T) {
 	o := newTestEmitter(t)
-	e := &model.AssetEvent{Timestamp: time.Unix(0, 0)}
+	e := &model.MachineEvent{Timestamp: time.Unix(0, 0)}
 
 	rec := o.eventToLogRecord(e, "0")
 
@@ -87,14 +87,14 @@ func TestEventToLogRecord_EmptyWhenIDsUnset(t *testing.T) {
 // snake_case attribute mirror.
 func TestEventToLogRecord_PopulatesEventName(t *testing.T) {
 	o := newTestEmitter(t)
-	e := &model.AssetEvent{
-		EventType: model.EventAssetDiscovered,
+	e := &model.MachineEvent{
+		EventType: model.EventMachineDiscovered,
 		Timestamp: time.Unix(0, 0),
 	}
 
 	rec := o.eventToLogRecord(e, "0")
 
-	assert.Equal(t, "kite.asset.discovered", rec.EventName)
+	assert.Equal(t, "kite.machine.discovered", rec.EventName)
 }
 
 // ---------------------------------------------------------------------------

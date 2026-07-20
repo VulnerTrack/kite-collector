@@ -4,7 +4,7 @@
 //
 // Third table-set in the MID Server-aligned Windows track. Two
 // related entity types (CPU, MemoryModule) live in one Collect()
-// call because the audit pipeline always joins them via asset_id
+// call because the audit pipeline always joins them via machine_id
 // and a single PowerShell round-trip is cheaper than two.
 //
 // Architecture: identical to windowsinfo / windowshardware (single
@@ -71,7 +71,7 @@ type MemoryModule struct {
 
 // Inventory bundles both entity slices so the collector can return
 // them in one shot. The store layer fans the bundle out into two
-// table writes via asset_id.
+// table writes via machine_id.
 type Inventory struct {
 	CPUs          []CPU          `json:"cpus"`
 	MemoryModules []MemoryModule `json:"memory_modules"`

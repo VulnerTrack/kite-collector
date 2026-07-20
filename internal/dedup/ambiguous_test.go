@@ -16,25 +16,25 @@ func TestResolveAmbiguous_Empty(t *testing.T) {
 	}
 }
 
-func TestResolveAmbiguous_SingleAsset(t *testing.T) {
+func TestResolveAmbiguous_SingleMachine(t *testing.T) {
 	id := uuid.Must(uuid.NewV7())
 	canonical, ok := ResolveAmbiguous([]AliasEdge{
-		{AssetID: id, SignalKind: "k", SignalHash: "h"},
-		{AssetID: id, SignalKind: "k", SignalHash: "h"},
+		{MachineID: id, SignalKind: "k", SignalHash: "h"},
+		{MachineID: id, SignalKind: "k", SignalHash: "h"},
 	})
 	if !ok || canonical != id {
-		t.Errorf("single-asset edges must collapse: ok=%v id=%v", ok, canonical)
+		t.Errorf("single-machine edges must collapse: ok=%v id=%v", ok, canonical)
 	}
 }
 
-func TestResolveAmbiguous_MultiAsset(t *testing.T) {
+func TestResolveAmbiguous_MultiMachine(t *testing.T) {
 	a := uuid.Must(uuid.NewV7())
 	b := uuid.Must(uuid.NewV7())
 	_, ok := ResolveAmbiguous([]AliasEdge{
-		{AssetID: a}, {AssetID: b},
+		{MachineID: a}, {MachineID: b},
 	})
 	if ok {
-		t.Error("multi-asset edges must be ambiguous")
+		t.Error("multi-machine edges must be ambiguous")
 	}
 }
 
@@ -51,16 +51,16 @@ func TestAliasEdgesFromSignals_HashesPerSignal(t *testing.T) {
 	if edges[0].SignalHash == edges[1].SignalHash {
 		t.Error("distinct signal bytes must hash differently")
 	}
-	if edges[0].AssetID != id || edges[0].Confidence != ConfidenceHardware {
+	if edges[0].MachineID != id || edges[0].Confidence != ConfidenceHardware {
 		t.Error("edge fields not propagated")
 	}
 }
 
 func TestNewAmbiguousMerge_PopulatesAndDefers(t *testing.T) {
 	now := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
-	asset := model.Asset{Hostname: "h", AssetType: model.AssetTypeServer}
+	machine := model.Machine{Hostname: "h", MachineType: model.MachineTypeServer}
 	sig := Signal{Kind: "instance_id", Bytes: []byte("i-abc")}
-	ev := NewAmbiguousMerge(now, "t", "agent", asset, sig, "i-abc", nil)
+	ev := NewAmbiguousMerge(now, "t", "agent", machine, sig, "i-abc", nil)
 	if ev.Resolution != AmbiguousResolutionDeferred {
 		t.Errorf("resolution = %s, want deferred", ev.Resolution)
 	}

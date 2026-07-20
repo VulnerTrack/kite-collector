@@ -38,7 +38,7 @@ func newMockDevice42API(t *testing.T) *httptest.Server {
 					"osver":         "22.04",
 					"serial_no":     "SN-501",
 					"service_level": "production",
-					"asset_no":      "D42-ASSET-501",
+					"asset_no":      "D42-MACHINE-501",
 					"in_service":    true,
 					"uuid":          "uuid-501",
 				},
@@ -50,7 +50,7 @@ func newMockDevice42API(t *testing.T) *httptest.Server {
 					"osver":         "2022",
 					"serial_no":     "SN-502",
 					"service_level": "staging",
-					"asset_no":      "D42-ASSET-502",
+					"asset_no":      "D42-MACHINE-502",
 					"in_service":    false,
 					"uuid":          "uuid-502",
 				},
@@ -76,38 +76,38 @@ func TestDevice42_Discover_Success(t *testing.T) {
 		"password": "d42-pass",
 	}
 
-	assets, err := d.Discover(context.Background(), cfg)
+	machines, err := d.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
+	require.Len(t, machines, 2)
 
-	srvAsset := findAssetByHostname(assets, "d42-srv-01")
-	require.NotNil(t, srvAsset)
-	assert.Equal(t, model.AssetTypeServer, srvAsset.AssetType)
-	assert.Equal(t, "linux", srvAsset.OSFamily)
-	assert.Equal(t, "22.04", srvAsset.OSVersion)
-	assert.Equal(t, "device42", srvAsset.DiscoverySource)
-	assert.Equal(t, model.AuthorizationAuthorized, srvAsset.IsAuthorized)
-	assert.Equal(t, model.ManagedUnknown, srvAsset.IsManaged)
-	assert.NotEmpty(t, srvAsset.NaturalKey)
+	srvMachine := findMachineByHostname(machines, "d42-srv-01")
+	require.NotNil(t, srvMachine)
+	assert.Equal(t, model.MachineTypeServer, srvMachine.MachineType)
+	assert.Equal(t, "linux", srvMachine.OSFamily)
+	assert.Equal(t, "22.04", srvMachine.OSVersion)
+	assert.Equal(t, "device42", srvMachine.DiscoverySource)
+	assert.Equal(t, model.AuthorizationAuthorized, srvMachine.IsAuthorized)
+	assert.Equal(t, model.ManagedUnknown, srvMachine.IsManaged)
+	assert.NotEmpty(t, srvMachine.NaturalKey)
 
 	// Dedicated CMDB fields (no Environment/Owner overloading).
-	assert.Equal(t, "501", srvAsset.CMDBSysID)
-	assert.Equal(t, "D42-ASSET-501", srvAsset.AssetTag)
-	assert.Equal(t, "operational", srvAsset.OperationalStatus)
-	assert.Empty(t, srvAsset.Environment)
-	assert.Empty(t, srvAsset.Owner)
+	assert.Equal(t, "501", srvMachine.CMDBSysID)
+	assert.Equal(t, "D42-MACHINE-501", srvMachine.MachineTag)
+	assert.Equal(t, "operational", srvMachine.OperationalStatus)
+	assert.Empty(t, srvMachine.Environment)
+	assert.Empty(t, srvMachine.Owner)
 
 	// service_level/serial_no/type land in Tags.
 	var srvTags map[string]any
-	require.NoError(t, json.Unmarshal([]byte(srvAsset.Tags), &srvTags))
+	require.NoError(t, json.Unmarshal([]byte(srvMachine.Tags), &srvTags))
 	assert.Equal(t, "production", srvTags["service_level"])
 	assert.Equal(t, "SN-501", srvTags["serial_no"])
 	assert.Equal(t, "physical", srvTags["type"])
 
 	// Virtual device → non_operational + VirtualMachine.
-	vm := findAssetByHostname(assets, "d42-vm-01")
+	vm := findMachineByHostname(machines, "d42-vm-01")
 	require.NotNil(t, vm)
-	assert.Equal(t, model.AssetTypeVirtualMachine, vm.AssetType)
+	assert.Equal(t, model.MachineTypeVirtualMachine, vm.MachineType)
 	assert.Equal(t, "windows", vm.OSFamily)
 	assert.Equal(t, "502", vm.CMDBSysID)
 	assert.Equal(t, "non_operational", vm.OperationalStatus)
@@ -119,25 +119,25 @@ func TestDevice42_Discover_Disabled(t *testing.T) {
 
 	// F3: creds present but enabled is false → discovery must be skipped.
 	d := &Device42{baseURL: srv.URL}
-	assets, err := d.Discover(context.Background(), map[string]any{
+	machines, err := d.Discover(context.Background(), map[string]any{
 		"enabled":  false,
 		"username": "d42-user",
 		"password": "d42-pass",
 	})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestDevice42_Discover_MissingCredentials(t *testing.T) {
 	d := NewDevice42()
 
 	// Enabled but no username/password → graceful skip.
-	assets, err := d.Discover(context.Background(), map[string]any{
+	machines, err := d.Discover(context.Background(), map[string]any{
 		"enabled": true,
 		"api_url": "https://device42.example.com",
 	})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestDevice42_Discover_AuthFailure(t *testing.T) {
@@ -152,16 +152,16 @@ func TestDevice42_Discover_AuthFailure(t *testing.T) {
 	}
 
 	// Auth failure → returns empty (graceful).
-	assets, err := d.Discover(context.Background(), cfg)
+	machines, err := d.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
 func TestClassifyDevice42(t *testing.T) {
-	assert.Equal(t, model.AssetTypeVirtualMachine, classifyDevice42("virtual"))
-	assert.Equal(t, model.AssetTypeServer, classifyDevice42("cluster"))
-	assert.Equal(t, model.AssetTypeServer, classifyDevice42("physical"))
-	assert.Equal(t, model.AssetTypeServer, classifyDevice42("unknown"))
+	assert.Equal(t, model.MachineTypeVirtualMachine, classifyDevice42("virtual"))
+	assert.Equal(t, model.MachineTypeServer, classifyDevice42("cluster"))
+	assert.Equal(t, model.MachineTypeServer, classifyDevice42("physical"))
+	assert.Equal(t, model.MachineTypeServer, classifyDevice42("unknown"))
 }
 
 func TestDeriveDevice42OSFamily(t *testing.T) {

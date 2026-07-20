@@ -115,14 +115,14 @@ func TestSubnetBroadcast(t *testing.T) {
 func TestClassifyPrecedence(t *testing.T) {
 	cases := []struct {
 		name     string
-		want     model.AssetType
+		want     model.MachineType
 		services []string
 	}{
-		{"file server suffix 0x20 → server", model.AssetTypeServer, []string{"KITE<20>"}},
-		{"domain master 0x1b → server", model.AssetTypeServer, []string{"KITE<00>", "WORKGROUP<1b>"}},
-		{"domain group 0x1c → server", model.AssetTypeServer, []string{"WORKGROUP<1c>"}},
-		{"plain workstation", model.AssetTypeWorkstation, []string{"KITE<00>", "WORKGROUP<00>"}},
-		{"empty fallback", model.AssetTypeWorkstation, nil},
+		{"file server suffix 0x20 → server", model.MachineTypeServer, []string{"KITE<20>"}},
+		{"domain master 0x1b → server", model.MachineTypeServer, []string{"KITE<00>", "WORKGROUP<1b>"}},
+		{"domain group 0x1c → server", model.MachineTypeServer, []string{"WORKGROUP<1c>"}},
+		{"plain workstation", model.MachineTypeWorkstation, []string{"KITE<00>", "WORKGROUP<00>"}},
+		{"empty fallback", model.MachineTypeWorkstation, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestClassifyPrecedence(t *testing.T) {
 	}
 }
 
-func TestAssetsFromRespondersDeterministicAndKeyed(t *testing.T) {
+func TestMachinesFromRespondersDeterministicAndKeyed(t *testing.T) {
 	in := map[string]*responder{
 		"192.168.1.50": {
 			addr:      net.ParseIP("192.168.1.50"),
@@ -149,18 +149,18 @@ func TestAssetsFromRespondersDeterministicAndKeyed(t *testing.T) {
 			services:  []string{"LAPTOP<00>", "WORKGROUP<00>"},
 		},
 	}
-	out := assetsFromResponders(in)
+	out := machinesFromResponders(in)
 	if len(out) != 2 {
-		t.Fatalf("want 2 assets, got %d", len(out))
+		t.Fatalf("want 2 machines, got %d", len(out))
 	}
 	if out[0].Hostname != "LAPTOP" {
-		t.Fatalf("first asset hostname=%q (sort by ip key)", out[0].Hostname)
+		t.Fatalf("first machine hostname=%q (sort by ip key)", out[0].Hostname)
 	}
-	if out[0].AssetType != model.AssetTypeWorkstation {
-		t.Fatalf("laptop should be workstation, got %v", out[0].AssetType)
+	if out[0].MachineType != model.MachineTypeWorkstation {
+		t.Fatalf("laptop should be workstation, got %v", out[0].MachineType)
 	}
-	if out[1].AssetType != model.AssetTypeServer {
-		t.Fatalf("file server (<20>) should be server, got %v", out[1].AssetType)
+	if out[1].MachineType != model.MachineTypeServer {
+		t.Fatalf("file server (<20>) should be server, got %v", out[1].MachineType)
 	}
 	if out[1].DiscoverySource != "netbios" {
 		t.Fatalf("source not stamped: %q", out[1].DiscoverySource)

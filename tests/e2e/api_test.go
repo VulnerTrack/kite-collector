@@ -29,12 +29,12 @@ func TestAPIEndpoints(t *testing.T) {
 
 	// ---- Seed test data ----
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	assets := []model.Asset{
-		makeAsset("api-srv-01", model.AssetTypeServer, now),
-		makeAsset("api-ws-01", model.AssetTypeWorkstation, now),
-		makeAsset("api-cloud-01", model.AssetTypeCloudInstance, now),
+	machines := []model.Machine{
+		makeMachine("api-srv-01", model.MachineTypeServer, now),
+		makeMachine("api-ws-01", model.MachineTypeWorkstation, now),
+		makeMachine("api-cloud-01", model.MachineTypeCloudInstance, now),
 	}
-	_, _, err := st.UpsertAssets(ctx, assets)
+	_, _, err := st.UpsertMachines(ctx, machines)
 	require.NoError(t, err)
 
 	scanRunID := uuid.Must(uuid.NewV7())
@@ -45,15 +45,15 @@ func TestAPIEndpoints(t *testing.T) {
 	}
 	require.NoError(t, st.CreateScanRun(ctx, scanRun))
 
-	events := []model.AssetEvent{
-		makeEvent(assets[0].ID, scanRunID, model.EventAssetDiscovered, now),
-		makeEvent(assets[1].ID, scanRunID, model.EventAssetDiscovered, now),
+	events := []model.MachineEvent{
+		makeEvent(machines[0].ID, scanRunID, model.EventMachineDiscovered, now),
+		makeEvent(machines[1].ID, scanRunID, model.EventMachineDiscovered, now),
 	}
 	require.NoError(t, st.InsertEvents(ctx, events))
 
 	result := model.ScanResult{
-		TotalAssets:     3,
-		NewAssets:       3,
+		TotalMachines:   3,
+		NewMachines:     3,
 		CoveragePercent: 100.0,
 	}
 	require.NoError(t, st.CompleteScanRun(ctx, scanRunID, result))
@@ -78,9 +78,9 @@ func TestAPIEndpoints(t *testing.T) {
 		assert.Equal(t, "ok", body["status"])
 	})
 
-	// ---- GET /api/v1/assets ----
-	t.Run("ListAssets", func(t *testing.T) {
-		resp, err := client.Get(srv.URL + "/api/v1/assets")
+	// ---- GET /api/v1/machines ----
+	t.Run("ListMachines", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/v1/machines")
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
@@ -91,9 +91,9 @@ func TestAPIEndpoints(t *testing.T) {
 		assert.GreaterOrEqual(t, len(body), 3)
 	})
 
-	// ---- GET /api/v1/assets?asset_type=cloud_instance ----
-	t.Run("ListAssets_FilterByType", func(t *testing.T) {
-		resp, err := client.Get(srv.URL + "/api/v1/assets?asset_type=cloud_instance")
+	// ---- GET /api/v1/machines?machine_type=cloud_instance ----
+	t.Run("ListMachines_FilterByType", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/v1/machines?machine_type=cloud_instance")
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
@@ -102,13 +102,13 @@ func TestAPIEndpoints(t *testing.T) {
 		var body []map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		for _, a := range body {
-			assert.Equal(t, "cloud_instance", a["asset_type"])
+			assert.Equal(t, "cloud_instance", a["machine_type"])
 		}
 	})
 
-	// ---- GET /api/v1/assets/{id} ----
-	t.Run("GetAsset_Found", func(t *testing.T) {
-		resp, err := client.Get(srv.URL + "/api/v1/assets/" + assets[0].ID.String())
+	// ---- GET /api/v1/machines/{id} ----
+	t.Run("GetMachine_Found", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/v1/machines/" + machines[0].ID.String())
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
@@ -116,12 +116,12 @@ func TestAPIEndpoints(t *testing.T) {
 
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Equal(t, assets[0].Hostname, body["hostname"])
+		assert.Equal(t, machines[0].Hostname, body["hostname"])
 	})
 
-	// ---- GET /api/v1/assets/{id} — 404 ----
-	t.Run("GetAsset_NotFound", func(t *testing.T) {
-		resp, err := client.Get(srv.URL + "/api/v1/assets/" + uuid.Must(uuid.NewV7()).String())
+	// ---- GET /api/v1/machines/{id} — 404 ----
+	t.Run("GetMachine_NotFound", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/v1/machines/" + uuid.Must(uuid.NewV7()).String())
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
@@ -129,12 +129,12 @@ func TestAPIEndpoints(t *testing.T) {
 
 		var body map[string]string
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-		assert.Equal(t, "asset not found", body["error"])
+		assert.Equal(t, "machine not found", body["error"])
 	})
 
-	// ---- GET /api/v1/assets/{id} — bad UUID ----
-	t.Run("GetAsset_BadID", func(t *testing.T) {
-		resp, err := client.Get(srv.URL + "/api/v1/assets/not-a-uuid")
+	// ---- GET /api/v1/machines/{id} — bad UUID ----
+	t.Run("GetMachine_BadID", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/v1/machines/not-a-uuid")
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
@@ -154,9 +154,9 @@ func TestAPIEndpoints(t *testing.T) {
 		assert.GreaterOrEqual(t, len(body), 2)
 	})
 
-	// ---- GET /api/v1/events?asset_id=... ----
-	t.Run("ListEvents_FilterByAsset", func(t *testing.T) {
-		resp, err := client.Get(srv.URL + "/api/v1/events?asset_id=" + assets[0].ID.String())
+	// ---- GET /api/v1/events?machine_id=... ----
+	t.Run("ListEvents_FilterByMachine", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/v1/events?machine_id=" + machines[0].ID.String())
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
@@ -165,7 +165,7 @@ func TestAPIEndpoints(t *testing.T) {
 		var body []map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		for _, e := range body {
-			assert.Equal(t, assets[0].ID.String(), e["asset_id"])
+			assert.Equal(t, machines[0].ID.String(), e["machine_id"])
 		}
 	})
 
@@ -197,8 +197,8 @@ func TestAPIEndpoints(t *testing.T) {
 	})
 
 	// ---- Pagination ----
-	t.Run("ListAssets_Pagination", func(t *testing.T) {
-		resp, err := client.Get(srv.URL + "/api/v1/assets?limit=1&offset=0")
+	t.Run("ListMachines_Pagination", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/v1/machines?limit=1&offset=0")
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
@@ -211,9 +211,9 @@ func TestAPIEndpoints(t *testing.T) {
 		require.NoError(t, json.Unmarshal(bodyBytes, &body))
 		// The store mock in handler_test.go doesn't enforce limit, but the
 		// real PostgreSQL store does. If the store supports it, we should get
-		// at most 1 result. The actual ListAssets in the handler does pass
+		// at most 1 result. The actual ListMachines in the handler does pass
 		// the filter with Limit to the store.
-		assert.LessOrEqual(t, len(body), 1, "limit=1 should return at most 1 asset")
+		assert.LessOrEqual(t, len(body), 1, "limit=1 should return at most 1 machine")
 	})
 }
 
@@ -229,9 +229,9 @@ func TestAPIEmptyStore(t *testing.T) {
 
 	client := srv.Client()
 
-	// Empty assets → []
-	t.Run("EmptyAssets", func(t *testing.T) {
-		resp, err := client.Get(srv.URL + "/api/v1/assets")
+	// Empty machines → []
+	t.Run("EmptyMachines", func(t *testing.T) {
+		resp, err := client.Get(srv.URL + "/api/v1/machines")
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 
@@ -263,5 +263,5 @@ func TestAPIEmptyStore(t *testing.T) {
 	})
 }
 
-// Ensure store.AssetFilter and store.EventFilter are used (suppress unused import).
-var _ = store.AssetFilter{}
+// Ensure store.MachineFilter and store.EventFilter are used (suppress unused import).
+var _ = store.MachineFilter{}

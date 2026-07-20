@@ -26,8 +26,8 @@ import (
 type mockStore struct {
 	scanRun  *model.ScanRun
 	software map[uuid.UUID][]model.InstalledSoftware
-	assets   []model.Asset
-	events   []model.AssetEvent
+	machines []model.Machine
+	events   []model.MachineEvent
 	mu       sync.Mutex
 }
 
@@ -37,24 +37,24 @@ func newMockStore() *mockStore {
 	}
 }
 
-func (m *mockStore) UpsertAsset(_ context.Context, asset model.Asset) error {
+func (m *mockStore) UpsertMachine(_ context.Context, machine model.Machine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.assets = append(m.assets, asset)
+	m.machines = append(m.machines, machine)
 	return nil
 }
 
-func (m *mockStore) UpsertAssets(_ context.Context, assets []model.Asset) (int, int, error) {
+func (m *mockStore) UpsertMachines(_ context.Context, machines []model.Machine) (int, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.assets = append(m.assets, assets...)
-	return len(assets), 0, nil
+	m.machines = append(m.machines, machines...)
+	return len(machines), 0, nil
 }
 
-func (m *mockStore) GetAssetByID(_ context.Context, id uuid.UUID) (*model.Asset, error) {
+func (m *mockStore) GetMachineByID(_ context.Context, id uuid.UUID) (*model.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, a := range m.assets {
+	for _, a := range m.machines {
 		if a.ID == id {
 			cp := a
 			return &cp, nil
@@ -63,44 +63,44 @@ func (m *mockStore) GetAssetByID(_ context.Context, id uuid.UUID) (*model.Asset,
 	return nil, store.ErrNotFound
 }
 
-func (m *mockStore) GetAssetByNaturalKey(_ context.Context, _ string) (*model.Asset, error) {
+func (m *mockStore) GetMachineByNaturalKey(_ context.Context, _ string) (*model.Machine, error) {
 	return nil, nil
 }
 
-func (m *mockStore) GetAssetsByNaturalKeys(_ context.Context, _ []string) (map[string]model.Asset, error) {
+func (m *mockStore) GetMachinesByNaturalKeys(_ context.Context, _ []string) (map[string]model.Machine, error) {
 	return nil, nil
 }
 
-func (m *mockStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
+func (m *mockStore) ListMachines(_ context.Context, _ store.MachineFilter) ([]model.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	cp := make([]model.Asset, len(m.assets))
-	copy(cp, m.assets)
+	cp := make([]model.Machine, len(m.machines))
+	copy(cp, m.machines)
 	return cp, nil
 }
 
-func (m *mockStore) GetStaleAssets(_ context.Context, _ time.Duration) ([]model.Asset, error) {
+func (m *mockStore) GetStaleMachines(_ context.Context, _ time.Duration) ([]model.Machine, error) {
 	return nil, nil
 }
 
-func (m *mockStore) InsertEvent(_ context.Context, event model.AssetEvent) error {
+func (m *mockStore) InsertEvent(_ context.Context, event model.MachineEvent) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, event)
 	return nil
 }
 
-func (m *mockStore) InsertEvents(_ context.Context, events []model.AssetEvent) error {
+func (m *mockStore) InsertEvents(_ context.Context, events []model.MachineEvent) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, events...)
 	return nil
 }
 
-func (m *mockStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.AssetEvent, error) {
+func (m *mockStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.MachineEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	cp := make([]model.AssetEvent, len(m.events))
+	cp := make([]model.MachineEvent, len(m.events))
 	copy(cp, m.events)
 	return cp, nil
 }
@@ -157,17 +157,17 @@ func (m *mockStore) MarkScanCancelRequested(_ context.Context, id uuid.UUID, at 
 	return nil
 }
 
-func (m *mockStore) UpsertSoftware(_ context.Context, assetID uuid.UUID, sw []model.InstalledSoftware) error {
+func (m *mockStore) UpsertSoftware(_ context.Context, machineID uuid.UUID, sw []model.InstalledSoftware) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.software[assetID] = sw
+	m.software[machineID] = sw
 	return nil
 }
 
-func (m *mockStore) ListSoftware(_ context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
+func (m *mockStore) ListSoftware(_ context.Context, machineID uuid.UUID) ([]model.InstalledSoftware, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.software[assetID], nil
+	return m.software[machineID], nil
 }
 
 func (m *mockStore) InsertFindings(_ context.Context, _ []model.ConfigFinding) error { return nil }
@@ -241,12 +241,12 @@ func TestHealthEndpoint(t *testing.T) {
 	assert.Equal(t, "ok", body["status"])
 }
 
-func TestListAssets_EmptyStore(t *testing.T) {
+func TestListMachines_EmptyStore(t *testing.T) {
 	ms := newMockStore()
 	h := New(ms, nil)
 	mux := h.Mux()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/assets", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/machines", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -258,14 +258,14 @@ func TestListAssets_EmptyStore(t *testing.T) {
 	assert.Len(t, body, 0)
 }
 
-func TestListAssets_ReturnsAssets(t *testing.T) {
+func TestListMachines_ReturnsMachines(t *testing.T) {
 	ms := newMockStore()
 	now := time.Now().UTC().Truncate(time.Second)
-	ms.assets = []model.Asset{
+	ms.machines = []model.Machine{
 		{
 			ID:              uuid.Must(uuid.NewV7()),
 			Hostname:        "web-01",
-			AssetType:       model.AssetTypeServer,
+			MachineType:     model.MachineTypeServer,
 			IsAuthorized:    model.AuthorizationAuthorized,
 			IsManaged:       model.ManagedManaged,
 			DiscoverySource: "test",
@@ -275,7 +275,7 @@ func TestListAssets_ReturnsAssets(t *testing.T) {
 		{
 			ID:              uuid.Must(uuid.NewV7()),
 			Hostname:        "db-01",
-			AssetType:       model.AssetTypeServer,
+			MachineType:     model.MachineTypeServer,
 			IsAuthorized:    model.AuthorizationUnknown,
 			IsManaged:       model.ManagedUnknown,
 			DiscoverySource: "test",
@@ -287,7 +287,7 @@ func TestListAssets_ReturnsAssets(t *testing.T) {
 	h := New(ms, nil)
 	mux := h.Mux()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/assets", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/machines", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -298,13 +298,13 @@ func TestListAssets_ReturnsAssets(t *testing.T) {
 	assert.Len(t, body, 2)
 }
 
-func TestGetAssetByID_NotFound(t *testing.T) {
+func TestGetMachineByID_NotFound(t *testing.T) {
 	ms := newMockStore()
 	h := New(ms, nil)
 	mux := h.Mux()
 
 	unknownID := uuid.Must(uuid.NewV7())
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/assets/"+unknownID.String(), nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/machines/"+unknownID.String(), nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -312,18 +312,18 @@ func TestGetAssetByID_NotFound(t *testing.T) {
 
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	assert.Equal(t, "asset not found", body["error"])
+	assert.Equal(t, "machine not found", body["error"])
 }
 
-func TestGetAssetByID_Found(t *testing.T) {
+func TestGetMachineByID_Found(t *testing.T) {
 	ms := newMockStore()
-	assetID := uuid.Must(uuid.NewV7())
+	machineID := uuid.Must(uuid.NewV7())
 	now := time.Now().UTC().Truncate(time.Second)
-	ms.assets = []model.Asset{
+	ms.machines = []model.Machine{
 		{
-			ID:              assetID,
+			ID:              machineID,
 			Hostname:        "found-host",
-			AssetType:       model.AssetTypeServer,
+			MachineType:     model.MachineTypeServer,
 			IsAuthorized:    model.AuthorizationAuthorized,
 			IsManaged:       model.ManagedManaged,
 			DiscoverySource: "test",
@@ -335,7 +335,7 @@ func TestGetAssetByID_Found(t *testing.T) {
 	h := New(ms, nil)
 	mux := h.Mux()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/assets/"+assetID.String(), nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/machines/"+machineID.String(), nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -346,12 +346,12 @@ func TestGetAssetByID_Found(t *testing.T) {
 	assert.Equal(t, "found-host", body["hostname"])
 }
 
-func TestGetAssetByID_InvalidUUID(t *testing.T) {
+func TestGetMachineByID_InvalidUUID(t *testing.T) {
 	ms := newMockStore()
 	h := New(ms, nil)
 	mux := h.Mux()
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/assets/not-a-uuid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/machines/not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 

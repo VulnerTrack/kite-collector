@@ -61,13 +61,13 @@ func TestCapRover_Discover_Success(t *testing.T) {
 
 	cr := NewCapRover()
 	cr.baseURL = srv.URL
-	assets, err := cr.Discover(context.Background(), map[string]any{})
+	machines, err := cr.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 2)
+	assert.Len(t, machines, 2)
 
-	myApp := findAssetByHostname(assets, "my-app")
+	myApp := findMachineByHostname(machines, "my-app")
 	require.NotNil(t, myApp)
-	assert.Equal(t, model.AssetTypeContainer, myApp.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, myApp.MachineType)
 	assert.Equal(t, "caprover", myApp.DiscoverySource)
 	assert.NotEmpty(t, myApp.NaturalKey)
 
@@ -79,7 +79,7 @@ func TestCapRover_Discover_Success(t *testing.T) {
 	assert.NotContains(t, myTags, "building")
 
 	// Building app gets building tag.
-	dbApp := findAssetByHostname(assets, "db-app")
+	dbApp := findMachineByHostname(machines, "db-app")
 	require.NotNil(t, dbApp)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(dbApp.Tags), &dbTags))
@@ -97,9 +97,9 @@ func TestCapRover_Discover_MissingCredentials(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_CAPROVER_TOKEN")
 
-	assets, err := cr.Discover(context.Background(), nil)
+	machines, err := cr.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestCapRover_Discover_AuthFailure(t *testing.T) {

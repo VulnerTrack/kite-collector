@@ -36,7 +36,7 @@ func newMockServiceNowAPI(t *testing.T) *httptest.Server {
 						"os":                 "Red Hat Enterprise Linux",
 						"os_version":         "8.6",
 						"ip_address":         "10.0.1.50",
-						"asset_tag":          "ASSET-1001",
+						"asset_tag":          "MACHINE-1001",
 						"operational_status": "1",
 					},
 					{
@@ -45,7 +45,7 @@ func newMockServiceNowAPI(t *testing.T) *httptest.Server {
 						"os":                 "Windows Server",
 						"os_version":         "2022",
 						"ip_address":         "10.0.1.51",
-						"asset_tag":          "ASSET-1002",
+						"asset_tag":          "MACHINE-1002",
 						"operational_status": "1",
 					},
 				},
@@ -111,13 +111,13 @@ func TestServiceNow_Discover_Success(t *testing.T) {
 		"table":    "cmdb_ci_server",
 	}
 
-	assets, err := s.Discover(context.Background(), cfg)
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
+	require.Len(t, machines, 2)
 
-	db := findAssetByHostname(assets, "prod-db-01")
+	db := findMachineByHostname(machines, "prod-db-01")
 	require.NotNil(t, db)
-	assert.Equal(t, model.AssetTypeServer, db.AssetType)
+	assert.Equal(t, model.MachineTypeServer, db.MachineType)
 	assert.Equal(t, "linux", db.OSFamily)
 	assert.Equal(t, "8.6", db.OSVersion)
 	assert.Equal(t, "servicenow", db.DiscoverySource)
@@ -127,11 +127,11 @@ func TestServiceNow_Discover_Success(t *testing.T) {
 
 	// F6 (Phase-2 acceptance) regression: sys_id, asset_tag and ip_address were
 	// previously requested from the API but silently dropped by the parser.
-	// They must now be surfaced (sys_id → CMDBSysID, asset_tag → AssetTag,
+	// They must now be surfaced (sys_id → CMDBSysID, asset_tag → MachineTag,
 	// ip_address → Tags), and operational_status must land in
 	// OperationalStatus rather than being overloaded into Owner (R6).
 	assert.Equal(t, "abc123", db.CMDBSysID)
-	assert.Equal(t, "ASSET-1001", db.AssetTag)
+	assert.Equal(t, "MACHINE-1001", db.MachineTag)
 	assert.Equal(t, "1", db.OperationalStatus)
 	assert.Empty(t, db.Owner)
 
@@ -139,11 +139,11 @@ func TestServiceNow_Discover_Success(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
 	assert.Equal(t, "10.0.1.50", dbTags["ip_address"])
 
-	web := findAssetByHostname(assets, "prod-web-01")
+	web := findMachineByHostname(machines, "prod-web-01")
 	require.NotNil(t, web)
 	assert.Equal(t, "windows", web.OSFamily)
 	assert.Equal(t, "def456", web.CMDBSysID)
-	assert.Equal(t, "ASSET-1002", web.AssetTag)
+	assert.Equal(t, "MACHINE-1002", web.MachineTag)
 }
 
 func TestServiceNow_Discover_DefaultTable(t *testing.T) {
@@ -158,9 +158,9 @@ func TestServiceNow_Discover_DefaultTable(t *testing.T) {
 		// table omitted — should default to cmdb_ci_server.
 	}
 
-	assets, err := s.Discover(context.Background(), cfg)
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, 2)
+	assert.Len(t, machines, 2)
 }
 
 func TestServiceNow_Discover_Disabled(t *testing.T) {
@@ -169,22 +169,22 @@ func TestServiceNow_Discover_Disabled(t *testing.T) {
 
 	// F3: creds present but enabled is false → discovery must be skipped.
 	s := &ServiceNow{baseURL: srv.URL}
-	assets, err := s.Discover(context.Background(), map[string]any{
+	machines, err := s.Discover(context.Background(), map[string]any{
 		"enabled":  false,
 		"username": "snow-user",
 		"password": "snow-pass",
 	})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestServiceNow_Discover_MissingCredentials(t *testing.T) {
 	s := NewServiceNow()
 
 	// Enabled but no username/password → graceful skip.
-	assets, err := s.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := s.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestServiceNow_Discover_AuthFailure(t *testing.T) {
@@ -199,9 +199,9 @@ func TestServiceNow_Discover_AuthFailure(t *testing.T) {
 	}
 
 	// Auth failure → returns empty (graceful).
-	assets, err := s.Discover(context.Background(), cfg)
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
 func TestServiceNow_Discover_Pagination(t *testing.T) {
@@ -215,9 +215,9 @@ func TestServiceNow_Discover_Pagination(t *testing.T) {
 		"password": "p",
 	}
 
-	assets, err := s.Discover(context.Background(), cfg)
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, serviceNowPageSize+1)
+	assert.Len(t, machines, serviceNowPageSize+1)
 }
 
 func TestServiceNow_Discover_MalformedResponse(t *testing.T) {
@@ -235,9 +235,9 @@ func TestServiceNow_Discover_MalformedResponse(t *testing.T) {
 	}
 
 	// Malformed entries parse with empty fields.
-	assets, err := s.Discover(context.Background(), cfg)
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, 1)
+	assert.Len(t, machines, 1)
 }
 
 func TestDeriveServiceNowOSFamily(t *testing.T) {
@@ -250,9 +250,9 @@ func TestDeriveServiceNowOSFamily(t *testing.T) {
 }
 
 func TestClassifyServiceNowCI(t *testing.T) {
-	assert.Equal(t, model.AssetTypeServer, classifyServiceNowCI("cmdb_ci_server"))
-	assert.Equal(t, model.AssetTypeServer, classifyServiceNowCI("cmdb_ci_linux_server"))
-	assert.Equal(t, model.AssetTypeWorkstation, classifyServiceNowCI("cmdb_ci_computer"))
-	assert.Equal(t, model.AssetTypeNetworkDevice, classifyServiceNowCI("cmdb_ci_netgear"))
-	assert.Equal(t, model.AssetTypeServer, classifyServiceNowCI("unknown_table"))
+	assert.Equal(t, model.MachineTypeServer, classifyServiceNowCI("cmdb_ci_server"))
+	assert.Equal(t, model.MachineTypeServer, classifyServiceNowCI("cmdb_ci_linux_server"))
+	assert.Equal(t, model.MachineTypeWorkstation, classifyServiceNowCI("cmdb_ci_computer"))
+	assert.Equal(t, model.MachineTypeNetworkDevice, classifyServiceNowCI("cmdb_ci_netgear"))
+	assert.Equal(t, model.MachineTypeServer, classifyServiceNowCI("unknown_table"))
 }

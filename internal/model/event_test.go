@@ -19,27 +19,27 @@ func decodeDetails(t *testing.T, raw string) map[string]string {
 	return out
 }
 
-func TestBuildEventDetails_IncludesEventTypeAndAssetID(t *testing.T) {
-	a := Asset{ID: uuid.Must(uuid.NewV7())}
+func TestBuildEventDetails_IncludesEventTypeAndMachineID(t *testing.T) {
+	a := Machine{ID: uuid.Must(uuid.NewV7())}
 
-	got := BuildEventDetails(a, EventAssetDiscovered)
+	got := BuildEventDetails(a, EventMachineDiscovered)
 	parsed := decodeDetails(t, got)
 
-	assert.Equal(t, string(EventAssetDiscovered), parsed["event_type"])
-	assert.Equal(t, EventAssetDiscovered.Name(), parsed["event_name"])
-	assert.Equal(t, "kite.asset.discovered", parsed["event_name"])
-	assert.Equal(t, a.ID.String(), parsed["asset_id"])
+	assert.Equal(t, string(EventMachineDiscovered), parsed["event_type"])
+	assert.Equal(t, EventMachineDiscovered.Name(), parsed["event_name"])
+	assert.Equal(t, "kite.machine.discovered", parsed["event_name"])
+	assert.Equal(t, a.ID.String(), parsed["machine_id"])
 }
 
 func TestBuildEventDetails_OmitsEmptyOptionalFields(t *testing.T) {
-	a := Asset{ID: uuid.Must(uuid.NewV7())}
+	a := Machine{ID: uuid.Must(uuid.NewV7())}
 
-	got := BuildEventDetails(a, EventAssetDiscovered)
+	got := BuildEventDetails(a, EventMachineDiscovered)
 	parsed := decodeDetails(t, got)
 
 	for _, key := range []string{
 		"hostname",
-		"asset_type",
+		"machine_type",
 		"os_family",
 		"environment",
 		"owner",
@@ -51,16 +51,16 @@ func TestBuildEventDetails_OmitsEmptyOptionalFields(t *testing.T) {
 		"last_seen_at",
 	} {
 		_, present := parsed[key]
-		assert.False(t, present, "expected key %q to be absent on a minimal asset", key)
+		assert.False(t, present, "expected key %q to be absent on a minimal machine", key)
 	}
 }
 
 func TestBuildEventDetails_IncludesPopulatedOptionalFields(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
-	a := Asset{
+	a := Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "host-01",
-		AssetType:       AssetTypeServer,
+		MachineType:     MachineTypeServer,
 		OSFamily:        "linux",
 		Environment:     "production",
 		Owner:           "platform-team",
@@ -72,11 +72,11 @@ func TestBuildEventDetails_IncludesPopulatedOptionalFields(t *testing.T) {
 		LastSeenAt:      now,
 	}
 
-	got := BuildEventDetails(a, EventAssetDiscovered)
+	got := BuildEventDetails(a, EventMachineDiscovered)
 	parsed := decodeDetails(t, got)
 
 	assert.Equal(t, "host-01", parsed["hostname"])
-	assert.Equal(t, string(AssetTypeServer), parsed["asset_type"])
+	assert.Equal(t, string(MachineTypeServer), parsed["machine_type"])
 	assert.Equal(t, "linux", parsed["os_family"])
 	assert.Equal(t, "production", parsed["environment"])
 	assert.Equal(t, "platform-team", parsed["owner"])
@@ -91,13 +91,13 @@ func TestBuildEventDetails_IncludesPopulatedOptionalFields(t *testing.T) {
 func TestBuildEventDetails_TimestampsRFC3339(t *testing.T) {
 	first := time.Date(2025, 6, 1, 12, 30, 45, 0, time.UTC)
 	last := time.Date(2025, 6, 5, 8, 15, 0, 0, time.UTC)
-	a := Asset{
+	a := Machine{
 		ID:          uuid.Must(uuid.NewV7()),
 		FirstSeenAt: first,
 		LastSeenAt:  last,
 	}
 
-	parsed := decodeDetails(t, BuildEventDetails(a, EventAssetUpdated))
+	parsed := decodeDetails(t, BuildEventDetails(a, EventMachineUpdated))
 
 	parsedFirst, err := time.Parse(time.RFC3339, parsed["first_seen_at"])
 	require.NoError(t, err, "first_seen_at must be RFC3339")
@@ -109,9 +109,9 @@ func TestBuildEventDetails_TimestampsRFC3339(t *testing.T) {
 }
 
 func TestBuildEventDetails_OmitsZeroTimestamps(t *testing.T) {
-	a := Asset{ID: uuid.Must(uuid.NewV7())} // zero FirstSeenAt / LastSeenAt
+	a := Machine{ID: uuid.Must(uuid.NewV7())} // zero FirstSeenAt / LastSeenAt
 
-	parsed := decodeDetails(t, BuildEventDetails(a, EventAssetNotSeen))
+	parsed := decodeDetails(t, BuildEventDetails(a, EventMachineNotSeen))
 
 	_, hasFirst := parsed["first_seen_at"]
 	_, hasLast := parsed["last_seen_at"]
@@ -129,14 +129,14 @@ func TestEventType_Name_AllEventTypes(t *testing.T) {
 		eventType EventType
 		want      string
 	}{
-		{EventAssetDiscovered, "kite.asset.discovered"},
-		{EventAssetUpdated, "kite.asset.updated"},
-		{EventAssetAnalyzed, "kite.asset.analyzed"},
-		{EventUnauthorizedAssetDetected, "kite.asset.unauthorized_detected"},
-		{EventUnmanagedAssetDetected, "kite.asset.unmanaged_detected"},
-		{EventAssetNotSeen, "kite.asset.not_seen"},
-		{EventAssetRemoved, "kite.asset.removed"},
-		{EventType("FooBar"), "kite.asset.unknown.foobar"},
+		{EventMachineDiscovered, "kite.machine.discovered"},
+		{EventMachineUpdated, "kite.machine.updated"},
+		{EventMachineAnalyzed, "kite.machine.analyzed"},
+		{EventUnauthorizedMachineDetected, "kite.machine.unauthorized_detected"},
+		{EventUnmanagedMachineDetected, "kite.machine.unmanaged_detected"},
+		{EventMachineNotSeen, "kite.machine.not_seen"},
+		{EventMachineRemoved, "kite.machine.removed"},
+		{EventType("FooBar"), "kite.machine.unknown.foobar"},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.eventType), func(t *testing.T) {

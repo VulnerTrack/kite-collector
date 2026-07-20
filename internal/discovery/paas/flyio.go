@@ -29,7 +29,7 @@ func (f *FlyIO) Name() string { return "flyio" }
 // Discover lists all Fly.io machines across all apps in an organization.
 // Credentials: KITE_FLY_TOKEN environment variable.
 // Config: "org" key selects the organization slug (default "personal").
-func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_FLY_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -56,10 +56,10 @@ func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		return nil, fmt.Errorf("flyio: list apps: %w", err)
 	}
 
-	var assets []model.Asset
+	var machines []model.Machine
 	for _, app := range appsResp.Apps {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("flyio: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("flyio: context cancelled: %w", ctx.Err())
 		}
 
 		safeName, err := safenet.SanitizePathSegment(app.Name)
@@ -73,8 +73,8 @@ func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			continue
 		}
 
-		var machines []flyMachine
-		if err := client.get(ctx, "/v1/apps/"+safeName+"/machines", &machines); err != nil {
+		var flyMachines []flyMachine
+		if err := client.get(ctx, "/v1/apps/"+safeName+"/machines", &flyMachines); err != nil {
 			slog.Warn(
 				"Fly.io list-machines for app failed; skipping",
 				"code", string(LogCodeFlyIOListMachinesFailed),
@@ -85,16 +85,16 @@ func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		}
 
 		now := time.Now().UTC()
-		for i := range machines {
-			assets = append(assets, flyMachineToAsset(app.Name, machines[i], now))
+		for i := range flyMachines {
+			machines = append(machines, flyMachineToMachine(app.Name, flyMachines[i], now))
 		}
 	}
 
 	slog.Info("Fly.io PaaS discovery complete",
 		"code", string(LogCodeFlyIOComplete),
-		"assets", len(assets),
+		"machines", len(machines),
 		"apps_scanned", len(appsResp.Apps))
-	return assets, nil
+	return machines, nil
 }
 
 // --- Fly.io API response types ---
@@ -129,9 +129,9 @@ type flyMachineGuest struct {
 	MemoryMB int `json:"memory_mb"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func flyMachineToAsset(appName string, m flyMachine, now time.Time) model.Asset {
+func flyMachineToMachine(appName string, m flyMachine, now time.Time) model.Machine {
 	hostname := m.Name
 	if hostname == "" {
 		hostname = m.ID
@@ -163,10 +163,10 @@ func flyMachineToAsset(appName string, m flyMachine, now time.Time) model.Asset 
 		lastSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		Environment:     m.Region,
 		DiscoverySource: "flyio",
 		FirstSeenAt:     firstSeen,
@@ -175,6 +175,6 @@ func flyMachineToAsset(appName string, m flyMachine, now time.Time) model.Asset 
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

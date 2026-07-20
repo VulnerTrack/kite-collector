@@ -111,7 +111,7 @@ const (
 const (
 	SvcName        = "kite-collector"
 	SvcDisplayName = "Kite Collector"
-	SvcDescription = "Continuous asset discovery and OTLP streaming agent"
+	SvcDescription = "Continuous machine discovery and OTLP streaming agent"
 )
 
 // DetectDefaults returns smart, OS-aware Options + the Detected facts that

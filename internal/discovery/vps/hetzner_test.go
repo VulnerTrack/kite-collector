@@ -80,14 +80,14 @@ func TestHetzner_Discover_Success(t *testing.T) {
 
 	h := NewHetzner()
 	h.baseURL = srv.URL
-	assets, err := h.Discover(context.Background(), map[string]any{})
+	machines, err := h.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3, "expected 2 servers on page 1 + 1 on page 2")
+	assert.Len(t, machines, 3, "expected 2 servers on page 1 + 1 on page 2")
 
 	// Verify running server.
-	web := findAssetByHostname(assets, "web-1")
+	web := findMachineByHostname(machines, "web-1")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeCloudInstance, web.AssetType)
+	assert.Equal(t, model.MachineTypeCloudInstance, web.MachineType)
 	assert.Equal(t, "hetzner", web.DiscoverySource)
 	assert.Equal(t, "ubuntu", web.OSFamily)
 	assert.Equal(t, "Ubuntu 22.04", web.OSVersion)
@@ -101,7 +101,7 @@ func TestHetzner_Discover_Success(t *testing.T) {
 	assert.NotContains(t, webTags, "warning")
 
 	// Verify powered-off server gets warning.
-	db := findAssetByHostname(assets, "db-1")
+	db := findMachineByHostname(machines, "db-1")
 	require.NotNil(t, db)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
@@ -120,9 +120,9 @@ func TestHetzner_Discover_MissingToken(t *testing.T) {
 	assert.Contains(t, err.Error(), "KITE_HETZNER_TOKEN")
 
 	// Without config → skip silently.
-	assets, err := h.Discover(context.Background(), nil)
+	machines, err := h.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestHetzner_Discover_AuthFailure(t *testing.T) {
@@ -138,11 +138,11 @@ func TestHetzner_Discover_AuthFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "authentication error")
 }
 
-// findAssetByHostname returns the first asset matching hostname, or nil.
-func findAssetByHostname(assets []model.Asset, hostname string) *model.Asset {
-	for i := range assets {
-		if assets[i].Hostname == hostname {
-			return &assets[i]
+// findMachineByHostname returns the first machine matching hostname, or nil.
+func findMachineByHostname(machines []model.Machine, hostname string) *model.Machine {
+	for i := range machines {
+		if machines[i].Hostname == hostname {
+			return &machines[i]
 		}
 	}
 	return nil

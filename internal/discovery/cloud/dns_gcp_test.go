@@ -13,9 +13,9 @@ import (
 
 func TestGCPDNSDiscover_DisabledByConfig(t *testing.T) {
 	g := NewDNSGCP()
-	assets, err := g.Discover(context.Background(), map[string]any{"enabled": false})
+	machines, err := g.Discover(context.Background(), map[string]any{"enabled": false})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 	assert.Nil(t, g.Snapshot())
 }
 
@@ -28,9 +28,9 @@ func TestGCPDNSDiscover_NoProjectErrorsWhenConfigured(t *testing.T) {
 
 func TestGCPDNSDiscover_NoProjectSkipsWhenUnconfigured(t *testing.T) {
 	g := NewDNSGCP()
-	assets, err := g.Discover(context.Background(), nil)
+	machines, err := g.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 	assert.Nil(t, g.Snapshot())
 }
 

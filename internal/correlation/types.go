@@ -6,7 +6,7 @@ package correlation
 import "time"
 
 // Request is a deduplicated set of CPE 2.3 identifiers submitted for
-// CVE matching. Contains no asset identity — only software identifiers.
+// CVE matching. Contains no machine identity — only software identifiers.
 type Request struct {
 	CPEs []string `json:"cpes"`
 }
@@ -36,24 +36,24 @@ type CPEMatch struct {
 // The SaaS never sees this structure — it exists only on the agent.
 type LocalCorrelation struct {
 	Hostname    string     `json:"hostname"`
-	AssetID     string     `json:"asset_id"`
+	MachineID   string     `json:"machine_id"`
 	MaxSeverity string     `json:"max_severity"`
 	Matches     []CPEMatch `json:"matches"`
 	TotalCVEs   int        `json:"total_cves"`
 }
 
 // AggregateStats summarises correlation results for OTLP emission.
-// Only these counts leave the agent — no asset identity data.
+// Only these counts leave the agent — no machine identity data.
 type AggregateStats struct {
-	MaxSeverity     string `json:"max_severity"`
-	TotalAssets     int    `json:"total_assets"`
-	CriticalCVEs    int    `json:"critical_cves"`
-	HighCVEs        int    `json:"high_cves"`
-	MediumCVEs      int    `json:"medium_cves"`
-	LowCVEs         int    `json:"low_cves"`
-	KEVCount        int    `json:"kev_count"`
-	AffectedAssets  int    `json:"affected_assets"`
-	TotalUniqueCVEs int    `json:"total_unique_cves"`
+	MaxSeverity      string `json:"max_severity"`
+	TotalMachines    int    `json:"total_machines"`
+	CriticalCVEs     int    `json:"critical_cves"`
+	HighCVEs         int    `json:"high_cves"`
+	MediumCVEs       int    `json:"medium_cves"`
+	LowCVEs          int    `json:"low_cves"`
+	KEVCount         int    `json:"kev_count"`
+	AffectedMachines int    `json:"affected_machines"`
+	TotalUniqueCVEs  int    `json:"total_unique_cves"`
 }
 
 // SeverityFromCVSS returns a severity label for a CVSS v3.1 base score.

@@ -7,7 +7,7 @@
 // opens, closes, or sends on any socket. Read-only is enforced by
 // guideline 4.2 of the kite-collector project.
 //
-// Listener rows are the single highest-value asset class for security
+// Listener rows are the single highest-value machine class for security
 // audits because they describe a host's *attack surface*:
 //
 //   - CWE-200 (Information Exposure) — anything bound to 0.0.0.0 / :: is

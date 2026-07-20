@@ -70,13 +70,13 @@ func TestHostinger_Discover_Success(t *testing.T) {
 
 	h := NewHostinger()
 	h.baseURL = srv.URL
-	assets, err := h.Discover(context.Background(), map[string]any{})
+	machines, err := h.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	web := findAssetByHostname(assets, "web-host-1")
+	web := findMachineByHostname(machines, "web-host-1")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeCloudInstance, web.AssetType)
+	assert.Equal(t, model.MachineTypeCloudInstance, web.MachineType)
 	assert.Equal(t, "hostinger", web.DiscoverySource)
 	assert.Equal(t, "Ubuntu 22.04", web.OSFamily)
 	assert.Equal(t, "us-east-1", web.Environment)
@@ -88,7 +88,7 @@ func TestHostinger_Discover_Success(t *testing.T) {
 	assert.NotContains(t, webTags, "warning")
 
 	// Stopped VM gets warning.
-	db := findAssetByHostname(assets, "db-host-1")
+	db := findMachineByHostname(machines, "db-host-1")
 	require.NotNil(t, db)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
@@ -104,9 +104,9 @@ func TestHostinger_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_HOSTINGER_TOKEN")
 
-	assets, err := h.Discover(context.Background(), nil)
+	machines, err := h.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestHostinger_Discover_AuthFailure(t *testing.T) {

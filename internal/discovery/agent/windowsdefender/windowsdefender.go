@@ -3,7 +3,7 @@
 // (runtime state) and Get-MpPreference (configured exclusions and
 // cloud-protection knobs).
 //
-// One row per asset (singleton). On hosts where a third-party AV is
+// One row per machine (singleton). On hosts where a third-party AV is
 // installed, Defender stands down: AMServiceEnabled=false +
 // AMRunningMode='Passive' (or absent). The row still gets written
 // with defender_running=0 so the audit pipeline can prove the host

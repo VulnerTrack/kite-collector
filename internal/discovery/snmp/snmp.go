@@ -43,8 +43,8 @@ func New() *SNMP { return &SNMP{} }
 func (s *SNMP) Name() string { return "snmp" }
 
 // Discover probes configured CIDR targets via SNMPv2c and returns discovered
-// network devices as assets.
-func (s *SNMP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+// network devices as machines.
+func (s *SNMP) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	community := toString(cfg["community"])
 	if community == "" {
 		community = os.Getenv("KITE_SNMP_COMMUNITY")
@@ -78,10 +78,10 @@ func (s *SNMP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 	}
 
 	var (
-		mu     sync.Mutex
-		assets []model.Asset
-		sem    = make(chan struct{}, maxConc)
-		wg     sync.WaitGroup
+		mu       sync.Mutex
+		machines []model.Machine
+		sem      = make(chan struct{}, maxConc)
+		wg       sync.WaitGroup
 	)
 
 	now := time.Now().UTC()
@@ -99,24 +99,24 @@ loop:
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			asset, probeErr := probeHost(ctx, addr, community, timeout, now)
+			machine, probeErr := probeHost(ctx, addr, community, timeout, now)
 			if probeErr != nil {
 				return // host didn't respond
 			}
 
 			mu.Lock()
-			assets = append(assets, *asset)
+			machines = append(machines, *machine)
 			mu.Unlock()
 		}(ip)
 	}
 
 	wg.Wait()
 
-	slog.Info("snmp: discovery complete", "probed", len(ips), "found", len(assets)) //#nosec G706 -- structured slog
-	return assets, nil
+	slog.Info("snmp: discovery complete", "probed", len(ips), "found", len(machines)) //#nosec G706 -- structured slog
+	return machines, nil
 }
 
-func probeHost(ctx context.Context, addr, community string, timeout time.Duration, now time.Time) (*model.Asset, error) {
+func probeHost(ctx context.Context, addr, community string, timeout time.Duration, now time.Time) (*model.Machine, error) {
 	target := fmt.Sprintf("%s:%d", addr, defaultSNMPPort)
 
 	// Probe sysName first — if this fails, the host is likely unreachable.
@@ -143,12 +143,12 @@ func probeHost(ctx context.Context, addr, community string, timeout time.Duratio
 
 	tagsJSON, _ := json.Marshal(tags)
 
-	assetType := classifyDevice(sysDescr)
+	machineType := classifyDevice(sysDescr)
 
-	return &model.Asset{
+	return &model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        sysName,
-		AssetType:       assetType,
+		MachineType:     machineType,
 		OSFamily:        extractOSFamily(sysDescr),
 		DiscoverySource: "snmp",
 		IsAuthorized:    model.AuthorizationUnknown,
@@ -158,18 +158,18 @@ func probeHost(ctx context.Context, addr, community string, timeout time.Duratio
 	}, nil
 }
 
-// classifyDevice infers the asset type from sysDescr.
-func classifyDevice(sysDescr string) model.AssetType {
+// classifyDevice infers the machine type from sysDescr.
+func classifyDevice(sysDescr string) model.MachineType {
 	lower := strings.ToLower(sysDescr)
 	switch {
 	case strings.Contains(lower, "switch") || strings.Contains(lower, "router"):
-		return model.AssetTypeNetworkDevice
+		return model.MachineTypeNetworkDevice
 	case strings.Contains(lower, "ups") || strings.Contains(lower, "pdu"):
-		return model.AssetTypeAppliance
+		return model.MachineTypeAppliance
 	case strings.Contains(lower, "linux") || strings.Contains(lower, "windows"):
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	default:
-		return model.AssetTypeNetworkDevice
+		return model.MachineTypeNetworkDevice
 	}
 }
 

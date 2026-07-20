@@ -24,10 +24,12 @@ type kiteLoginView struct {
 	CollectorURL          string
 	OAuthAuthorizationURL string
 	OAuthError            string
+	AppVersion            string
 }
 
 type kiteSuccessView struct {
 	DashboardURL string
+	AppVersion   string
 }
 
 type kiteOAuthTokenResponse struct {
@@ -261,6 +263,13 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     line-height: 1.45;
     margin: 0 0 24px 0;
   }
+  .kite-auth-version {
+    margin-top: 20px;
+    font-size: 0.72rem;
+    color: #919EAB;
+    letter-spacing: 0.3px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  }
 </style>
 </head>
 <body class="kite-auth-page">
@@ -269,7 +278,7 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     <img class="kite-auth-logo" src="/static/img/logo.png" alt="Vulnertrack Logo">
   </div>
   <h1 class="kite-auth-title">Link Kite Collector</h1>
-  <p class="kite-auth-desc">Connect this collector to your account to view assets, software, and findings in your dashboard.</p>
+  <p class="kite-auth-desc">Connect this collector to your account to view machines, software, and findings in your dashboard.</p>
   
   {{if .OAuthError}}
   <p class="kite-auth-error">{{.OAuthError}}</p>
@@ -289,6 +298,9 @@ const kiteLoginTemplate = `<!DOCTYPE html>
   <a class="kite-auth-panel-btn" href="{{.CollectorURL}}">
     Open local panel: <code>{{.CollectorURL}}</code>
   </a>
+  {{end}}
+  {{if .AppVersion}}
+  <div class="kite-auth-version">Kite Collector v{{.AppVersion}}</div>
   {{end}}
 </div>
 </body>
@@ -386,6 +398,13 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
     box-shadow: 0 6px 16px rgba(255, 49, 49, 0.3);
     transform: translateY(-1px);
   }
+  .kite-success-version {
+    margin-top: 20px;
+    font-size: 0.72rem;
+    color: #919EAB;
+    letter-spacing: 0.3px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  }
 </style>
 </head>
 <body class="kite-success-page">
@@ -400,6 +419,9 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
   <div class="kite-success-actions">
     <a class="kite-success-btn" href="{{.DashboardURL}}">Go to Dashboard</a>
   </div>
+  {{if .AppVersion}}
+  <div class="kite-success-version">Kite Collector v{{.AppVersion}}</div>
+  {{end}}
 </main>
 </body>
 </html>`
@@ -408,7 +430,7 @@ var kiteSuccessTmpl = template.Must(template.New("kiteSuccess").Parse(kiteSucces
 
 var kiteOAuthWaits sync.Map // wait_id -> time.Time
 
-func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions) {
+func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions, appVersion string) {
 	collectorURL := collectorBaseURL(r, r.URL.Query().Get("collector"))
 	authURL, verifier, state, authErr := buildKiteOAuthAuthorizationURL(oauth, collectorURL)
 
@@ -455,6 +477,7 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 	view := kiteLoginView{
 		CollectorURL:          collectorURL,
 		OAuthAuthorizationURL: authURL,
+		AppVersion:            appVersion,
 	}
 	if authErr != nil {
 		view.OAuthError = authErr.Error()
@@ -464,7 +487,7 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 	}
 }
 
-func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request) {
+func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions, appVersion string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	dashboardURL := r.URL.Query().Get("dashboard")
 	if dashboardURL == "" {
@@ -473,10 +496,15 @@ func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if dashboardURL == "" {
-		dashboardURL = "/assets"
+		dashboardURL = "/machines"
+	} else if strings.HasPrefix(dashboardURL, "/") {
+		// Allow in-site relative navigation.
+	} else if !isAllowedKiteLaunchURL(oauth, dashboardURL) {
+		dashboardURL = "/machines"
 	}
 	view := kiteSuccessView{
 		DashboardURL: dashboardURL,
+		AppVersion:   appVersion,
 	}
 	if err := kiteSuccessTmpl.Execute(w, view); err != nil {
 		http.Error(w, fmt.Sprintf("render kite success: %v", err), http.StatusInternalServerError)
@@ -490,14 +518,23 @@ func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request) {
 // first request's context gets canceled by the browser navigation, but the
 // token endpoint may have already consumed the code — causing later
 // requests to fail with "Invalid authorization code".
-var kiteOAuthInflight sync.Map // code → chan *kiteOAuthInflightResult
+var kiteOAuthInflight sync.Map // code → *kiteOAuthInflight
 
 type kiteOAuthInflightResult struct {
 	Token *kiteOAuthTokenResponse
 	Err   error
 }
 
-func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions, enrollment kiteOAuthEnrollmentOptions) {
+// kiteOAuthInflight broadcasts a single exchange result to any number of
+// waiters by closing done once the result is published. Waiters read
+// result after <-done unblocks, so no channel drain-and-refill race
+// exists between successive waiters.
+type kiteOAuthInflightEntry struct {
+	done   chan struct{}
+	result *kiteOAuthInflightResult
+}
+
+func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions, enrollment kiteOAuthEnrollmentOptions, appVersion string) {
 	logger := enrollment.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -562,15 +599,15 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 	// Deduplicate concurrent requests for the same authorization code.
 	// The consent page may trigger multiple rapid navigations; only the
 	// first one actually hits the token endpoint.
-	resultCh := make(chan *kiteOAuthInflightResult, 1)
-	if existing, loaded := kiteOAuthInflight.LoadOrStore(code, resultCh); loaded {
+	entry := &kiteOAuthInflightEntry{done: make(chan struct{})}
+	if existing, loaded := kiteOAuthInflight.LoadOrStore(code, entry); loaded {
 		// Another goroutine is already exchanging this code — wait for it.
 		logger.Info("OAuth token exchange dedup — waiting for in-flight request",
 			"code_prefix", code[:min(len(code), 12)]+"...",
 		)
-		ch := existing.(chan *kiteOAuthInflightResult)
-		result := <-ch
-		ch <- result // put it back for other waiters
+		shared := existing.(*kiteOAuthInflightEntry)
+		<-shared.done
+		result := shared.result
 		if result.Err != nil {
 			http.Error(w, "Kite OAuth token exchange failed: "+result.Err.Error(), http.StatusBadGateway)
 			return
@@ -584,7 +621,7 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 		clearKiteOAuthCookie(w, kiteOAuthDashboardCookie)
 		markKiteOAuthWaitComplete(r)
 		clearKiteOAuthCookie(w, kiteOAuthWaitCookie)
-		serveKiteSuccessPage(w, r)
+		serveKiteSuccessPage(w, r, oauth, appVersion)
 		return
 	}
 
@@ -597,9 +634,9 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 
 	token, exchangeErr := exchangeKiteOAuthCode(detachedReq, oauth, code, verifierCookie.Value, redirectURI)
 
-	// Publish the result and clean up the in-flight map.
-	result := &kiteOAuthInflightResult{Token: token, Err: exchangeErr}
-	resultCh <- result
+	// Publish the result to any waiters by writing then closing done.
+	entry.result = &kiteOAuthInflightResult{Token: token, Err: exchangeErr}
+	close(entry.done)
 	// Clean up after a short delay so late-arriving duplicates still find it.
 	go func() {
 		time.Sleep(5 * time.Second)
@@ -626,7 +663,7 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 	clearKiteOAuthCookie(w, kiteOAuthDashboardCookie)
 	markKiteOAuthWaitComplete(r)
 	clearKiteOAuthCookie(w, kiteOAuthWaitCookie)
-	serveKiteSuccessPage(w, r)
+	serveKiteSuccessPage(w, r, oauth, appVersion)
 }
 
 func markKiteOAuthWaitComplete(r *http.Request) {
@@ -802,9 +839,6 @@ func buildKiteOAuthAuthorizationURL(oauth OAuthOptions, collectorURL string) (st
 	if clientID == "" {
 		clientID = defaultKiteOAuthClientID
 	}
-	if clientID == "" {
-		return "", "", "", fmt.Errorf("kite OAuth is not configured; set KITE_OAUTH_CLIENT_ID and reload this page")
-	}
 
 	endpoint, err := url.Parse(resolveKiteOAuthAuthorizeURL(oauth))
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
@@ -851,9 +885,6 @@ func exchangeKiteOAuthCode(r *http.Request, oauth OAuthOptions, code, verifier, 
 	clientID := strings.TrimSpace(oauth.ClientID)
 	if clientID == "" {
 		clientID = defaultKiteOAuthClientID
-	}
-	if clientID == "" {
-		return nil, fmt.Errorf("missing OAuth client ID")
 	}
 
 	tokenURL, err := resolveKiteOAuthTokenURL(oauth)

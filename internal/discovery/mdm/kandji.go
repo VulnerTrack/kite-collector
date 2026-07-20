@@ -34,7 +34,7 @@ func NewKandji() *Kandji {
 // Name returns the stable identifier for this source.
 func (k *Kandji) Name() string { return "kandji" }
 
-// Discover lists enrolled devices from Kandji and returns them as assets. It
+// Discover lists enrolled devices from Kandji and returns them as machines. It
 // honours cfg["enabled"] first (F3), loads credentials via connectorkit and
 // zeroes them on return (R1), and validates the operator URL via SafeClient
 // with allowPrivate=false (SaaS). If any required credential is absent the
@@ -44,7 +44,7 @@ func (k *Kandji) Name() string { return "kandji" }
 //
 //	api_url – string base URL of the Kandji API (e.g. "https://SUBDOMAIN.api.kandji.io")
 //	api_key – string API token (Authorization: Bearer)
-func (k *Kandji) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (k *Kandji) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2: honour enabled:false even with creds present (F3)
 	}
@@ -71,35 +71,35 @@ func (k *Kandji) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	baseStr := strings.TrimRight(base.String(), "/")
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 	guard := connectorkit.NewGuard("kandji")
 
 	for offset := 0; ; offset += kandjiPageSize {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("kandji discovery cancelled: %w", err)
+			return machines, fmt.Errorf("kandji discovery cancelled: %w", err)
 		}
 
 		devices, bodyLen, err := k.fetchDevicePage(ctx, client, baseStr, creds.APIKey, offset)
 		if err != nil {
-			return assets, err
+			return machines, err
 		}
 		if err := guard.NextPage(int64(bodyLen)); err != nil {
-			return assets, fmt.Errorf("kandji pagination guard: %w", err)
+			return machines, fmt.Errorf("kandji pagination guard: %w", err)
 		}
 
-		pageAssets := make([]model.Asset, 0, len(devices))
+		pageMachines := make([]model.Machine, 0, len(devices))
 		for _, dev := range devices {
-			pageAssets = append(pageAssets, kandjiDeviceToAsset(dev, now))
+			pageMachines = append(pageMachines, kandjiDeviceToMachine(dev, now))
 		}
-		assets = append(assets, pageAssets...)
+		machines = append(machines, pageMachines...)
 
 		if len(devices) < kandjiPageSize {
 			break
 		}
 	}
 
-	slog.Info("kandji: discovery complete", "total_assets", len(assets))
-	return assets, nil
+	slog.Info("kandji: discovery complete", "total_machines", len(machines))
+	return machines, nil
 }
 
 // httpClient returns the validated client + base URL for this source. In tests
@@ -172,12 +172,12 @@ func (k *Kandji) fetchDevicePage(ctx context.Context, client *http.Client, baseU
 }
 
 // ---------------------------------------------------------------------------
-// Asset mapping
+// Machine mapping
 // ---------------------------------------------------------------------------
 
-// kandjiDeviceToAsset converts a single Kandji device into an asset, populating
+// kandjiDeviceToMachine converts a single Kandji device into an machine, populating
 // the MDM dedicated fields.
-func kandjiDeviceToAsset(dev kandjiDevice, now time.Time) model.Asset {
+func kandjiDeviceToMachine(dev kandjiDevice, now time.Time) model.Machine {
 	tags := map[string]any{}
 	if dev.SerialNumber != "" {
 		tags["serial_number"] = dev.SerialNumber
@@ -194,11 +194,11 @@ func kandjiDeviceToAsset(dev kandjiDevice, now time.Time) model.Asset {
 		tagsJSON = string(encoded)
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID: uuid.Must(uuid.NewV7()),
-		// The model has no dedicated mobile asset type, so Mac, iPhone and
+		// The model has no dedicated mobile machine type, so Mac, iPhone and
 		// iPad all map to Workstation.
-		AssetType:       model.AssetTypeWorkstation,
+		MachineType:     model.MachineTypeWorkstation,
 		Hostname:        dev.DeviceName,
 		OSFamily:        deriveKandjiOSFamily(dev.Platform, dev.Model),
 		OSVersion:       dev.OSVersion,
@@ -213,8 +213,8 @@ func kandjiDeviceToAsset(dev kandjiDevice, now time.Time) model.Asset {
 		ComplianceState: "not_evaluated",
 		Tags:            tagsJSON,
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }
 
 // ---------------------------------------------------------------------------
@@ -240,5 +240,5 @@ func deriveKandjiOSFamily(platform, model string) string {
 // ensure Kandji satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Kandji)(nil)

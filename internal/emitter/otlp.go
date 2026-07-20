@@ -58,7 +58,7 @@ type retryConfig struct {
 	maxDelay    time.Duration
 }
 
-// OTLPEmitter sends AssetEvent records as OTLP log entries over HTTP/JSON
+// OTLPEmitter sends MachineEvent records as OTLP log entries over HTTP/JSON
 // to an OpenTelemetry Collector's /v1/logs endpoint.
 //
 // Only the HTTP+JSON transport is implemented because it avoids heavy
@@ -166,12 +166,12 @@ func normalizeOTLPEndpoint(raw string) (string, error) {
 }
 
 // Emit sends a single event as an OTLP log record.
-func (o *OTLPEmitter) Emit(ctx context.Context, event model.AssetEvent) error {
-	return o.EmitBatch(ctx, []model.AssetEvent{event})
+func (o *OTLPEmitter) Emit(ctx context.Context, event model.MachineEvent) error {
+	return o.EmitBatch(ctx, []model.MachineEvent{event})
 }
 
 // EmitBatch sends multiple events in a single OTLP /v1/logs request.
-func (o *OTLPEmitter) EmitBatch(ctx context.Context, events []model.AssetEvent) error {
+func (o *OTLPEmitter) EmitBatch(ctx context.Context, events []model.MachineEvent) error {
 	o.mu.Lock()
 	if o.closed {
 		o.mu.Unlock()
@@ -263,7 +263,7 @@ type otlpKeyValue struct {
 // Payload construction
 // ---------------------------------------------------------------------------
 
-func (o *OTLPEmitter) buildPayload(events []model.AssetEvent) otlpLogsPayload {
+func (o *OTLPEmitter) buildPayload(events []model.MachineEvent) otlpLogsPayload {
 	records := make([]otlpLogRecord, 0, len(events))
 	now := strconv.FormatInt(time.Now().UnixNano(), 10)
 
@@ -309,7 +309,7 @@ func (o *OTLPEmitter) resourceAttributes() []otlpKeyValue {
 	}
 }
 
-func (o *OTLPEmitter) eventToLogRecord(e *model.AssetEvent, observedNano string) otlpLogRecord {
+func (o *OTLPEmitter) eventToLogRecord(e *model.MachineEvent, observedNano string) otlpLogRecord {
 	traceID := e.TraceID
 	if traceID == "" {
 		traceID = deriveTraceID(e)
@@ -336,7 +336,7 @@ func (o *OTLPEmitter) eventToLogRecord(e *model.AssetEvent, observedNano string)
 // matching the OTLP traceId spec. All events from the same scan share
 // the same traceId, enabling backend correlation. Returns "" when the
 // scan_run_id is unset so the omitempty JSON tag suppresses the field.
-func deriveTraceID(e *model.AssetEvent) string {
+func deriveTraceID(e *model.MachineEvent) string {
 	if e.ScanRunID == uuid.Nil {
 		return ""
 	}
@@ -348,7 +348,7 @@ func deriveTraceID(e *model.AssetEvent) string {
 // the OTLP spanId spec. Each event gets a unique spanId. Deterministic +
 // idempotent: replaying the same scan reproduces identical span IDs.
 // Returns "" when the event id is unset.
-func deriveSpanID(e *model.AssetEvent) string {
+func deriveSpanID(e *model.MachineEvent) string {
 	if e.ID == uuid.Nil {
 		return ""
 	}
@@ -356,19 +356,19 @@ func deriveSpanID(e *model.AssetEvent) string {
 }
 
 // buildAttributes constructs the OTLP log record attribute list from an event.
-// Optional asset fields are only included when non-empty so that minimal
-// events (e.g. those not created via FromAsset) remain compact.
+// Optional machine fields are only included when non-empty so that minimal
+// events (e.g. those not created via FromMachine) remain compact.
 //
 // All keys pass through redact.IsForbidden before being emitted so the
 // RFC-0115 §4.3 forbidden-key denylist is enforced at the last layer
 // before serialization. The keys produced here are all hard-coded constants
 // that the contract permits, so the filter is a defence-in-depth check
 // against future drift rather than a hot-path cost.
-func buildAttributes(e *model.AssetEvent) []otlpKeyValue {
+func buildAttributes(e *model.MachineEvent) []otlpKeyValue {
 	pairs := [][2]string{
 		{"event_type", string(e.EventType)},
 		{"event_name", e.EventType.Name()},
-		{"asset_id", e.AssetID.String()},
+		{"machine_id", e.MachineID.String()},
 		{"scan_run_id", e.ScanRunID.String()},
 		{"severity", string(e.Severity)},
 	}
@@ -379,7 +379,7 @@ func buildAttributes(e *model.AssetEvent) []otlpKeyValue {
 		pairs = append(pairs, [2]string{key, value})
 	}
 	add("hostname", e.Hostname)
-	add("asset_type", string(e.AssetType))
+	add("machine_type", string(e.MachineType))
 	add("os_family", e.OSFamily)
 	add("os_version", e.OSVersion)
 	add("kernel_version", e.KernelVersion)

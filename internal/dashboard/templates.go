@@ -104,29 +104,29 @@ func findFK(fks []store.ForeignKey, col string) *store.ForeignKey {
 	return nil
 }
 
-// renderAssetsFragment renders the assets table as an HTML fragment.
-func renderAssetsFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
-	assets, err := st.ListAssets(ctx, store.AssetFilter{Limit: 500})
+// renderMachinesFragment renders the machines table as an HTML fragment.
+func renderMachinesFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
+	machines, err := st.ListMachines(ctx, store.MachineFilter{Limit: 500})
 	if err != nil {
-		return fmt.Errorf("list assets: %w", err)
+		return fmt.Errorf("list machines: %w", err)
 	}
 
-	tmpl := template.Must(template.New("assets").Funcs(templateFuncs).Parse(assetsTemplate))
+	tmpl := template.Must(template.New("machines").Funcs(templateFuncs).Parse(machinesTemplate))
 	if err := tmpl.Execute(w, map[string]any{
-		"Assets":  assets,
-		"Context": rc,
+		"Machines": machines,
+		"Context":  rc,
 	}); err != nil {
-		return fmt.Errorf("render assets template: %w", err)
+		return fmt.Errorf("render machines template: %w", err)
 	}
 	return nil
 }
 
 // renderSoftwareFragment renders the software table as an HTML fragment.
 func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
-	// Collect software across all assets.
-	assets, err := st.ListAssets(ctx, store.AssetFilter{Limit: 100})
+	// Collect software across all machines.
+	machines, err := st.ListMachines(ctx, store.MachineFilter{Limit: 100})
 	if err != nil {
-		return fmt.Errorf("list assets: %w", err)
+		return fmt.Errorf("list machines: %w", err)
 	}
 
 	type softwareRow struct {
@@ -138,7 +138,7 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 	}
 
 	var rows []softwareRow
-	for _, a := range assets {
+	for _, a := range machines {
 		sw, swErr := st.ListSoftware(ctx, a.ID)
 		if swErr != nil {
 			continue
@@ -205,9 +205,9 @@ func renderScansFragment(w io.Writer, ctx context.Context, st store.Store, rc Re
 
 // HTML fragment templates — returned by HTMX endpoints.
 
-const assetsTemplate = `<h2>Assets ({{len .Assets}})</h2>
+const machinesTemplate = `<h2>Machines ({{len .Machines}})</h2>
 <div class="table-actions">
-  <a href="/api/v1/assets/export.csv" class="btn">Export CSV</a>
+  <a href="/api/v1/machines/export.csv" class="btn">Export CSV</a>
 </div>
 <div class="data-grid">
 <table>
@@ -223,10 +223,10 @@ const assetsTemplate = `<h2>Assets ({{len .Assets}})</h2>
     </tr>
   </thead>
   <tbody>
-  {{range .Assets}}
+  {{range .Machines}}
     <tr>
       <td>{{.Hostname}}</td>
-      <td>{{.AssetType}}</td>
+      <td>{{.MachineType}}</td>
       <td>{{.OSFamily}}{{if .OSVersion}} {{.OSVersion}}{{end}}</td>
       <td><span class="badge {{authClass .IsAuthorized}}">{{.IsAuthorized}}</span></td>
       <td>{{.IsManaged}}</td>
@@ -302,11 +302,11 @@ const scansTemplate = `<h2>Scan History ({{len .Scans}})</h2>
     <tr>
       <th>Started</th>
       <th>Status</th>
-      <th>Total Assets</th>
-      <th title="First-time sightings (AssetDiscovered events)">New</th>
-      <th title="Existing assets with material state changes (AssetUpdated events)">Updated</th>
-      <th title="Existing assets with no material change since last scan (AssetAnalyzed events)">Analyzed</th>
-      <th title="Assets older than the stale threshold (AssetNotSeen events)">Stale</th>
+      <th>Total Machines</th>
+      <th title="First-time sightings (MachineDiscovered events)">New</th>
+      <th title="Existing machines with material state changes (MachineUpdated events)">Updated</th>
+      <th title="Existing machines with no material change since last scan (MachineAnalyzed events)">Analyzed</th>
+      <th title="Machines older than the stale threshold (MachineNotSeen events)">Stale</th>
       <th>Coverage</th>
     </tr>
   </thead>
@@ -315,11 +315,11 @@ const scansTemplate = `<h2>Scan History ({{len .Scans}})</h2>
     <tr>
       <td>{{formatTime .StartedAt}}</td>
       <td>{{.Status}}</td>
-      <td>{{.TotalAssets}}</td>
-      <td>{{.NewAssets}}</td>
-      <td>{{.UpdatedAssets}}</td>
-      <td>{{.AnalyzedAssets}}</td>
-      <td>{{.StaleAssets}}</td>
+      <td>{{.TotalMachines}}</td>
+      <td>{{.NewMachines}}</td>
+      <td>{{.UpdatedMachines}}</td>
+      <td>{{.AnalyzedMachines}}</td>
+      <td>{{.StaleMachines}}</td>
       <td>{{printf "%.0f" .CoveragePercent}}%</td>
     </tr>
   {{end}}

@@ -865,7 +865,7 @@ var onboardingHeaderTmpl = template.Must(template.New("onboarding-header").Funcs
           <div id="first-scan-status" class="muted small">&nbsp;</div>
         </form>
       {{else}}
-        <p><strong>Run your first scan</strong> &mdash; discover assets, software, and
+        <p><strong>Run your first scan</strong> &mdash; discover machines, software, and
            vulnerabilities on this host. Usually 30&nbsp;seconds to 2&nbsp;minutes.
            Without it, the tabs below show empty tables.</p>
         <form hx-post="/api/v1/scan"
@@ -879,7 +879,7 @@ var onboardingHeaderTmpl = template.Must(template.New("onboarding-header").Funcs
     </div>
     {{end}}
     <ul class="launcher-links">
-      <li><a href="/assets">View asset inventory &rarr;</a><span class="muted small"> hosts, software, network interfaces</span></li>
+      <li><a href="/machines">View machine inventory &rarr;</a><span class="muted small"> hosts, software, network interfaces</span></li>
       <li><a href="/findings">View configuration findings &rarr;</a><span class="muted small"> hardening checks against your config</span></li>
       <li><a href="/scans">Recent scans &rarr;</a><span class="muted small"> when each source last ran, what it found</span></li>
       <li><a href="/tables">Inspect raw tables &rarr;</a><span class="muted small"> Datasette-style browser over local SQLite</span></li>

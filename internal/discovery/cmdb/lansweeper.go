@@ -19,8 +19,8 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
 
-// Lansweeper implements discovery.Source by listing asset resources from the
-// Lansweeper GraphQL API. All assets present in Lansweeper are considered
+// Lansweeper implements discovery.Source by listing machine resources from the
+// Lansweeper GraphQL API. All machines present in Lansweeper are considered
 // authorised since their presence in the CMDB implies organisational
 // awareness.
 type Lansweeper struct {
@@ -38,7 +38,7 @@ func NewLansweeper() *Lansweeper {
 // Name returns the stable identifier for this source.
 func (l *Lansweeper) Name() string { return "lansweeper" }
 
-// lansweeperQuery is the GraphQL query used to page asset resources for a
+// lansweeperQuery is the GraphQL query used to page machine resources for a
 // site. The cursor variable is empty on the first page and carries
 // pagination.next on subsequent pages.
 const lansweeperQuery = `query($siteId: ID!, $cursor: String) {` +
@@ -48,7 +48,7 @@ const lansweeperQuery = `query($siteId: ID!, $cursor: String) {` +
 	` pagination { next }` +
 	` } } }`
 
-// Discover lists asset resources from Lansweeper and returns them as assets.
+// Discover lists machine resources from Lansweeper and returns them as machines.
 // If discovery is not enabled, or credentials are not available, the method
 // returns nil (graceful degradation).
 //
@@ -58,7 +58,7 @@ const lansweeperQuery = `query($siteId: ID!, $cursor: String) {` +
 //	api_url – string GraphQL endpoint (e.g. "https://api.lansweeper.com/api/v2/graphql")
 //	api_key – string personal application API key (Bearer token)
 //	site_id – string Lansweeper site identifier to enumerate
-func (l *Lansweeper) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (l *Lansweeper) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2/F3: honour enabled:false even when creds are present.
 	}
@@ -93,30 +93,30 @@ func (l *Lansweeper) Discover(ctx context.Context, cfg map[string]any) ([]model.
 	}
 	endpoint := strings.TrimRight(base.String(), "/")
 
-	items, err := l.listAssets(ctx, client, endpoint, apiKey, siteID)
+	items, err := l.listMachines(ctx, client, endpoint, apiKey, siteID)
 	if err != nil {
-		return nil, fmt.Errorf("lansweeper: listing assets: %w", err)
+		return nil, fmt.Errorf("lansweeper: listing machines: %w", err)
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(items))
+	machines := make([]model.Machine, 0, len(items))
 
 	for _, it := range items {
 		osFamily := deriveLansweeperOSFamily(it.OperatingSystem.Caption)
 
 		// R6: ip_address/domain have no dedicated column — keep them in Tags.
 		tags := map[string]any{}
-		if it.AssetBasicInfo.IPAddress != "" {
-			tags["ip_address"] = it.AssetBasicInfo.IPAddress
+		if it.MachineBasicInfo.IPAddress != "" {
+			tags["ip_address"] = it.MachineBasicInfo.IPAddress
 		}
-		if it.AssetBasicInfo.Domain != "" {
-			tags["domain"] = it.AssetBasicInfo.Domain
+		if it.MachineBasicInfo.Domain != "" {
+			tags["domain"] = it.MachineBasicInfo.Domain
 		}
 
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:              uuid.Must(uuid.NewV7()),
-			AssetType:       classifyLansweeperAsset(it.AssetBasicInfo.Type),
-			Hostname:        it.AssetBasicInfo.Name,
+			MachineType:     classifyLansweeperMachine(it.MachineBasicInfo.Type),
+			Hostname:        it.MachineBasicInfo.Name,
 			OSFamily:        osFamily,
 			CMDBSysID:       it.Key,
 			DiscoverySource: "lansweeper",
@@ -127,14 +127,14 @@ func (l *Lansweeper) Discover(ctx context.Context, cfg map[string]any) ([]model.
 		}
 		if len(tags) > 0 {
 			b, _ := json.Marshal(tags)
-			asset.Tags = string(b)
+			machine.Tags = string(b)
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
 
-	slog.Info("lansweeper: discovery complete", "code", string(LogCodeLansweeperComplete), "total_assets", len(assets))
-	return assets, nil
+	slog.Info("lansweeper: discovery complete", "code", string(LogCodeLansweeperComplete), "total_machines", len(machines))
+	return machines, nil
 }
 
 // httpClient returns the outbound client and validated base URL. When baseURL
@@ -166,7 +166,7 @@ func (l *Lansweeper) httpClient(apiURL string) (*http.Client, *url.URL, error) {
 type lansweeperResponse struct {
 	Data struct {
 		Site struct {
-			AssetResources struct {
+			MachineResources struct {
 				Pagination struct {
 					Next string `json:"next"`
 				} `json:"pagination"`
@@ -176,10 +176,10 @@ type lansweeperResponse struct {
 	} `json:"data"`
 }
 
-// lansweeperItem holds the fields extracted from a single asset resource.
+// lansweeperItem holds the fields extracted from a single machine resource.
 type lansweeperItem struct {
-	Key            string `json:"key"`
-	AssetBasicInfo struct {
+	Key              string `json:"key"`
+	MachineBasicInfo struct {
 		Name      string `json:"name"`
 		Type      string `json:"type"`
 		IPAddress string `json:"ipAddress"`
@@ -194,10 +194,10 @@ type lansweeperItem struct {
 // API calls
 // ---------------------------------------------------------------------------
 
-// listAssets enumerates all asset resources using cursor pagination, bounding
+// listMachines enumerates all machine resources using cursor pagination, bounding
 // the loop with a pagination guard and sanitising each upstream cursor before
 // reuse.
-func (l *Lansweeper) listAssets(ctx context.Context, client *http.Client, endpoint, apiKey, siteID string) ([]lansweeperItem, error) {
+func (l *Lansweeper) listMachines(ctx context.Context, client *http.Client, endpoint, apiKey, siteID string) ([]lansweeperItem, error) {
 	var all []lansweeperItem
 	cursor := ""
 	guard := connectorkit.NewGuard("lansweeper")
@@ -215,9 +215,9 @@ func (l *Lansweeper) listAssets(ctx context.Context, client *http.Client, endpoi
 			return all, fmt.Errorf("lansweeper: %w", gErr)
 		}
 
-		all = append(all, page.Data.Site.AssetResources.Items...)
+		all = append(all, page.Data.Site.MachineResources.Items...)
 
-		next := page.Data.Site.AssetResources.Pagination.Next
+		next := page.Data.Site.MachineResources.Pagination.Next
 		if next == "" {
 			break
 		}
@@ -286,21 +286,21 @@ func (l *Lansweeper) fetchPage(ctx context.Context, client *http.Client, endpoin
 // Helpers
 // ---------------------------------------------------------------------------
 
-// classifyLansweeperAsset maps the Lansweeper asset type to an asset type.
-func classifyLansweeperAsset(assetType string) model.AssetType {
-	lower := strings.ToLower(assetType)
+// classifyLansweeperMachine maps the Lansweeper machine type to an machine type.
+func classifyLansweeperMachine(machineType string) model.MachineType {
+	lower := strings.ToLower(machineType)
 	switch {
 	case strings.Contains(lower, "server"):
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	case strings.Contains(lower, "workstation"),
 		strings.Contains(lower, "desktop"),
 		strings.Contains(lower, "laptop"):
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	case strings.Contains(lower, "printer"),
 		strings.Contains(lower, "monitor"):
-		return model.AssetTypeIOTDevice
+		return model.MachineTypeIOTDevice
 	default:
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
 }
 
@@ -336,5 +336,5 @@ func deriveLansweeperOSFamily(caption string) string {
 // ensure Lansweeper satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Lansweeper)(nil)

@@ -56,13 +56,13 @@ func TestKamatera_Discover_Success(t *testing.T) {
 
 	k := NewKamatera()
 	k.baseURL = srv.URL
-	assets, err := k.Discover(context.Background(), map[string]any{})
+	machines, err := k.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 2)
+	assert.Len(t, machines, 2)
 
-	web := findAssetByHostname(assets, "web-kam")
+	web := findMachineByHostname(machines, "web-kam")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeCloudInstance, web.AssetType)
+	assert.Equal(t, model.MachineTypeCloudInstance, web.MachineType)
 	assert.Equal(t, "kamatera", web.DiscoverySource)
 	assert.Equal(t, "EU", web.Environment)
 	assert.NotEmpty(t, web.NaturalKey)
@@ -73,7 +73,7 @@ func TestKamatera_Discover_Success(t *testing.T) {
 	assert.NotContains(t, webTags, "warning")
 
 	// Powered-off server gets warning.
-	db := findAssetByHostname(assets, "db-kam")
+	db := findMachineByHostname(machines, "db-kam")
 	require.NotNil(t, db)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
@@ -91,9 +91,9 @@ func TestKamatera_Discover_MissingCredentials(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_KAMATERA_CLIENT_ID")
 
-	assets, err := k.Discover(context.Background(), nil)
+	machines, err := k.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestKamatera_Discover_AuthFailure(t *testing.T) {

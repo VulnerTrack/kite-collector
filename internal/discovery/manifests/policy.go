@@ -81,7 +81,7 @@ func NewPolicyEngine(cfg PolicyConfig) *PolicyEngine {
 }
 
 // Evaluate checks a dependency against all policy rules and returns any violations.
-func (pe *PolicyEngine) Evaluate(dep parsers.Dependency, assetID uuid.UUID, now time.Time) []model.ConfigFinding {
+func (pe *PolicyEngine) Evaluate(dep parsers.Dependency, machineID uuid.UUID, now time.Time) []model.ConfigFinding {
 	if pe == nil {
 		return nil
 	}
@@ -98,7 +98,7 @@ func (pe *PolicyEngine) Evaluate(dep parsers.Dependency, assetID uuid.UUID, now 
 			}
 			findings = append(findings, model.ConfigFinding{
 				ID:          newID(),
-				AssetID:     assetID,
+				MachineID:   machineID,
 				Timestamp:   now,
 				Auditor:     "manifest_scanner",
 				CheckID:     "blocklist:" + rule.name,
@@ -114,7 +114,7 @@ func (pe *PolicyEngine) Evaluate(dep parsers.Dependency, assetID uuid.UUID, now 
 		if len(pe.allowlist) > 0 && !pe.isAllowed(dep.Name) {
 			findings = append(findings, model.ConfigFinding{
 				ID:          newID(),
-				AssetID:     assetID,
+				MachineID:   machineID,
 				Timestamp:   now,
 				Auditor:     "manifest_scanner",
 				CheckID:     "allowlist:not_approved",

@@ -66,7 +66,7 @@ func TestForRoute_ReturnsHighestPriority(t *testing.T) {
 				Config: config.EndpointConfig{
 					Name:     "secondary",
 					Priority: 2,
-					Routes:   []string{"assets", "heartbeat"},
+					Routes:   []string{"machines", "heartbeat"},
 				},
 				State: StateHealthy,
 			},
@@ -74,7 +74,7 @@ func TestForRoute_ReturnsHighestPriority(t *testing.T) {
 				Config: config.EndpointConfig{
 					Name:     "primary",
 					Priority: 1,
-					Routes:   []string{"assets", "heartbeat", "findings"},
+					Routes:   []string{"machines", "heartbeat", "findings"},
 				},
 				State: StateHealthy,
 			},
@@ -83,7 +83,7 @@ func TestForRoute_ReturnsHighestPriority(t *testing.T) {
 	// Sort by priority as NewManager would.
 	m.endpoints[0], m.endpoints[1] = m.endpoints[1], m.endpoints[0]
 
-	ep := m.ForRoute("assets")
+	ep := m.ForRoute("machines")
 	require.NotNil(t, ep)
 	assert.Equal(t, "primary", ep.Config.Name)
 }
@@ -96,7 +96,7 @@ func TestForRoute_FailoverToSecondary(t *testing.T) {
 				Config: config.EndpointConfig{
 					Name:     "primary",
 					Priority: 1,
-					Routes:   []string{"assets"},
+					Routes:   []string{"machines"},
 				},
 				State: StateUnreachable,
 			},
@@ -104,14 +104,14 @@ func TestForRoute_FailoverToSecondary(t *testing.T) {
 				Config: config.EndpointConfig{
 					Name:     "secondary",
 					Priority: 2,
-					Routes:   []string{"assets"},
+					Routes:   []string{"machines"},
 				},
 				State: StateHealthy,
 			},
 		},
 	}
 
-	ep := m.ForRoute("assets")
+	ep := m.ForRoute("machines")
 	require.NotNil(t, ep)
 	assert.Equal(t, "secondary", ep.Config.Name)
 }
@@ -123,14 +123,14 @@ func TestForRoute_NoHealthyEndpoint(t *testing.T) {
 			{
 				Config: config.EndpointConfig{
 					Name:   "primary",
-					Routes: []string{"assets"},
+					Routes: []string{"machines"},
 				},
 				State: StateUnreachable,
 			},
 		},
 	}
 
-	ep := m.ForRoute("assets")
+	ep := m.ForRoute("machines")
 	assert.Nil(t, ep)
 }
 
@@ -144,7 +144,7 @@ func TestList(t *testing.T) {
 					Name:     "ep1",
 					Address:  "a:443",
 					Priority: 1,
-					Routes:   []string{"assets"},
+					Routes:   []string{"machines"},
 				},
 				State:    StateHealthy,
 				LastSeen: now,
@@ -212,16 +212,16 @@ func TestQueue(t *testing.T) {
 	assert.Equal(t, 0, depth)
 
 	// Enqueue.
-	require.NoError(t, q.Enqueue(ctx, "assets", []byte("payload1")))
-	require.NoError(t, q.Enqueue(ctx, "assets", []byte("payload2")))
+	require.NoError(t, q.Enqueue(ctx, "machines", []byte("payload1")))
+	require.NoError(t, q.Enqueue(ctx, "machines", []byte("payload2")))
 	require.NoError(t, q.Enqueue(ctx, "heartbeat", []byte("hb1")))
 
 	depth, err = q.Depth(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, 3, depth)
 
-	// Peek assets.
-	items, err := q.Peek(ctx, "assets", 10)
+	// Peek machines.
+	items, err := q.Peek(ctx, "machines", 10)
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
 

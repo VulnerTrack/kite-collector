@@ -75,13 +75,13 @@ func TestVercel_Discover_Success(t *testing.T) {
 
 	v := NewVercel()
 	v.baseURL = srv.URL
-	assets, err := v.Discover(context.Background(), map[string]any{})
+	machines, err := v.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	marketing := findAssetByHostname(assets, "marketing-site")
+	marketing := findMachineByHostname(machines, "marketing-site")
 	require.NotNil(t, marketing)
-	assert.Equal(t, model.AssetTypeContainer, marketing.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, marketing.MachineType)
 	assert.Equal(t, "vercel", marketing.DiscoverySource)
 	assert.NotEmpty(t, marketing.NaturalKey)
 
@@ -91,7 +91,7 @@ func TestVercel_Discover_Success(t *testing.T) {
 	assert.Equal(t, "vercel", mTags["platform"])
 
 	// Third page item found via pagination.
-	docs := findAssetByHostname(assets, "docs")
+	docs := findMachineByHostname(machines, "docs")
 	require.NotNil(t, docs)
 	var dTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(docs.Tags), &dTags))
@@ -107,9 +107,9 @@ func TestVercel_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_VERCEL_TOKEN")
 
-	assets, err := v.Discover(context.Background(), nil)
+	machines, err := v.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestVercel_Discover_AuthFailure(t *testing.T) {

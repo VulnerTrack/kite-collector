@@ -82,13 +82,13 @@ func TestLinode_Discover_Success(t *testing.T) {
 
 	l := NewLinode()
 	l.baseURL = srv.URL
-	assets, err := l.Discover(context.Background(), map[string]any{})
+	machines, err := l.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	web := findAssetByHostname(assets, "web-linode")
+	web := findMachineByHostname(machines, "web-linode")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeCloudInstance, web.AssetType)
+	assert.Equal(t, model.MachineTypeCloudInstance, web.MachineType)
 	assert.Equal(t, "linode", web.DiscoverySource)
 	assert.Equal(t, "linode/ubuntu22.04", web.OSFamily)
 	assert.Equal(t, "us-east", web.Environment)
@@ -100,7 +100,7 @@ func TestLinode_Discover_Success(t *testing.T) {
 	assert.NotContains(t, webTags, "warning")
 
 	// Offline instance gets warning.
-	db := findAssetByHostname(assets, "db-linode")
+	db := findMachineByHostname(machines, "db-linode")
 	require.NotNil(t, db)
 	var dbTags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(db.Tags), &dbTags))
@@ -116,9 +116,9 @@ func TestLinode_Discover_MissingToken(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "KITE_LINODE_TOKEN")
 
-	assets, err := l.Discover(context.Background(), nil)
+	machines, err := l.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestLinode_Discover_AuthFailure(t *testing.T) {

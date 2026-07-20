@@ -27,7 +27,7 @@ func (u *UpCloud) Name() string { return "upcloud" }
 
 // Discover lists all UpCloud servers.
 // Credentials: KITE_UPCLOUD_USERNAME and KITE_UPCLOUD_PASSWORD env vars.
-func (u *UpCloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (u *UpCloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	user := os.Getenv("KITE_UPCLOUD_USERNAME")
 	pass := os.Getenv("KITE_UPCLOUD_PASSWORD")
 
@@ -50,15 +50,15 @@ func (u *UpCloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(resp.Servers.Server))
+	machines := make([]model.Machine, 0, len(resp.Servers.Server))
 	for i := range resp.Servers.Server {
-		assets = append(assets, upcloudToAsset(resp.Servers.Server[i], now))
+		machines = append(machines, upcloudToMachine(resp.Servers.Server[i], now))
 	}
 
 	slog.Info("UpCloud VPS discovery complete",
 		"code", string(LogCodeUpCloudComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // basicAuth returns an authFunc that sets HTTP Basic credentials.
@@ -103,9 +103,9 @@ type upcloudTags struct {
 	Tag []string `json:"tag"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func upcloudToAsset(srv upcloudServer, now time.Time) model.Asset {
+func upcloudToMachine(srv upcloudServer, now time.Time) model.Machine {
 	ip := ""
 	for _, addr := range srv.IPAddresses.IPAddress {
 		if addr.Access == "public" && addr.Family == "IPv4" {
@@ -132,10 +132,10 @@ func upcloudToAsset(srv upcloudServer, now time.Time) model.Asset {
 		hostname = srv.Title
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		Environment:     srv.Zone,
 		DiscoverySource: "upcloud",
 		FirstSeenAt:     now,
@@ -144,6 +144,6 @@ func upcloudToAsset(srv upcloudServer, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

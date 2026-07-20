@@ -23,13 +23,13 @@ func TestEvaluateSeverity_MatchingRule(t *testing.T) {
 	}
 	eng := New(rules, 168*time.Hour)
 
-	asset := model.Asset{
+	machine := model.Machine{
 		Environment:  "production",
 		IsAuthorized: model.AuthorizationUnauthorized,
 		IsManaged:    model.ManagedUnmanaged,
 	}
 
-	assert.Equal(t, model.SeverityCritical, eng.EvaluateSeverity(asset))
+	assert.Equal(t, model.SeverityCritical, eng.EvaluateSeverity(machine))
 }
 
 func TestEvaluateSeverity_FirstMatchWins(t *testing.T) {
@@ -39,49 +39,49 @@ func TestEvaluateSeverity_FirstMatchWins(t *testing.T) {
 	}
 	eng := New(rules, 168*time.Hour)
 
-	asset := model.Asset{Environment: "production"}
-	assert.Equal(t, model.SeverityHigh, eng.EvaluateSeverity(asset),
+	machine := model.Machine{Environment: "production"}
+	assert.Equal(t, model.SeverityHigh, eng.EvaluateSeverity(machine),
 		"first matching rule must win")
 }
 
 func TestEvaluateSeverity_DefaultUnauthorized_High(t *testing.T) {
 	eng := New(nil, 168*time.Hour) // no rules
 
-	asset := model.Asset{IsAuthorized: model.AuthorizationUnauthorized}
-	assert.Equal(t, model.SeverityHigh, eng.EvaluateSeverity(asset))
+	machine := model.Machine{IsAuthorized: model.AuthorizationUnauthorized}
+	assert.Equal(t, model.SeverityHigh, eng.EvaluateSeverity(machine))
 }
 
 func TestEvaluateSeverity_DefaultAuthorized_Medium(t *testing.T) {
 	eng := New(nil, 168*time.Hour) // no rules
 
-	asset := model.Asset{IsAuthorized: model.AuthorizationAuthorized}
-	assert.Equal(t, model.SeverityMedium, eng.EvaluateSeverity(asset))
+	machine := model.Machine{IsAuthorized: model.AuthorizationAuthorized}
+	assert.Equal(t, model.SeverityMedium, eng.EvaluateSeverity(machine))
 }
 
 func TestEvaluateSeverity_DefaultUnknown_Medium(t *testing.T) {
 	eng := New(nil, 168*time.Hour) // no rules
 
-	asset := model.Asset{IsAuthorized: model.AuthorizationUnknown}
-	assert.Equal(t, model.SeverityMedium, eng.EvaluateSeverity(asset))
+	machine := model.Machine{IsAuthorized: model.AuthorizationUnknown}
+	assert.Equal(t, model.SeverityMedium, eng.EvaluateSeverity(machine))
 }
 
 func TestEvaluateSeverity_WildcardRule(t *testing.T) {
-	// A rule with empty fields matches every asset.
+	// A rule with empty fields matches every machine.
 	rules := []model.SeverityRule{
 		{Severity: model.SeverityLow},
 	}
 	eng := New(rules, 168*time.Hour)
 
-	asset := model.Asset{
+	machine := model.Machine{
 		Environment:  "staging",
 		IsAuthorized: model.AuthorizationAuthorized,
 		IsManaged:    model.ManagedManaged,
 	}
-	assert.Equal(t, model.SeverityLow, eng.EvaluateSeverity(asset))
+	assert.Equal(t, model.SeverityLow, eng.EvaluateSeverity(machine))
 }
 
 func TestEvaluateSeverity_PartialMatch(t *testing.T) {
-	// Rule requires production + unauthorized, asset is production + authorized
+	// Rule requires production + unauthorized, machine is production + authorized
 	rules := []model.SeverityRule{
 		{
 			Environment:  "production",
@@ -91,50 +91,50 @@ func TestEvaluateSeverity_PartialMatch(t *testing.T) {
 	}
 	eng := New(rules, 168*time.Hour)
 
-	asset := model.Asset{
+	machine := model.Machine{
 		Environment:  "production",
 		IsAuthorized: model.AuthorizationAuthorized,
 	}
 	// Rule doesn't match, so default applies (authorized => medium)
-	assert.Equal(t, model.SeverityMedium, eng.EvaluateSeverity(asset))
+	assert.Equal(t, model.SeverityMedium, eng.EvaluateSeverity(machine))
 }
 
 // ---------------------------------------------------------------------------
 // IsStale
 // ---------------------------------------------------------------------------
 
-func TestIsStale_OldAsset_ReturnsTrue(t *testing.T) {
+func TestIsStale_OldMachine_ReturnsTrue(t *testing.T) {
 	eng := New(nil, 24*time.Hour)
 
-	asset := model.Asset{
+	machine := model.Machine{
 		LastSeenAt: time.Now().UTC().Add(-48 * time.Hour),
 	}
-	assert.True(t, eng.IsStale(asset))
+	assert.True(t, eng.IsStale(machine))
 }
 
-func TestIsStale_RecentAsset_ReturnsFalse(t *testing.T) {
+func TestIsStale_RecentMachine_ReturnsFalse(t *testing.T) {
 	eng := New(nil, 24*time.Hour)
 
-	asset := model.Asset{
+	machine := model.Machine{
 		LastSeenAt: time.Now().UTC().Add(-1 * time.Hour),
 	}
-	assert.False(t, eng.IsStale(asset))
+	assert.False(t, eng.IsStale(machine))
 }
 
 func TestIsStale_ExactlyAtThreshold(t *testing.T) {
 	eng := New(nil, 24*time.Hour)
 
-	// Asset seen exactly 24h ago -- time.Since will be >= threshold
-	asset := model.Asset{
+	// Machine seen exactly 24h ago -- time.Since will be >= threshold
+	machine := model.Machine{
 		LastSeenAt: time.Now().UTC().Add(-24 * time.Hour),
 	}
 	// Due to execution time, Since will be slightly > threshold
-	assert.True(t, eng.IsStale(asset))
+	assert.True(t, eng.IsStale(machine))
 }
 
 func TestIsStale_ZeroTime_ReturnsTrue(t *testing.T) {
 	eng := New(nil, 24*time.Hour)
 
-	asset := model.Asset{} // zero-value LastSeenAt
-	assert.True(t, eng.IsStale(asset))
+	machine := model.Machine{} // zero-value LastSeenAt
+	assert.True(t, eng.IsStale(machine))
 }

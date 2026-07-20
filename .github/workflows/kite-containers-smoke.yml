@@ -1,0 +1,44 @@
+# Daily end-to-end smoke test: verify container discovery + settings through the
+# real kite-collector binary.
+#
+# Builds kite-collector, stands up fixture containers, runs a real `scan` driven
+# by a settings file, and asserts the docker source discovers the fixtures with
+# correct fields — plus that settings are honored (host) and validated (bad
+# config rejected). Runs daily so drift in the docker Engine API, the asset JSON
+# contract, or config validation surfaces early.
+name: kite containers + settings smoke (daily)
+
+on:
+  schedule:
+    - cron: "37 6 * * *" # 06:37 UTC daily
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "tests/e2e/kite-containers/**"
+      - ".github/workflows/kite-containers-smoke.yml"
+      - "internal/discovery/docker/**"
+      - "internal/config/**"
+
+concurrency:
+  group: kite-containers-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run kite container + settings smoke
+        working-directory: tests/e2e/kite-containers
+        run: ./run.sh 2>&1 | tee kite-smoke.log
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kite-containers-smoke-log
+          path: tests/e2e/kite-containers/kite-smoke.log
+          if-no-files-found: warn

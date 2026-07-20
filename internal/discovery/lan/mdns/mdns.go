@@ -1,7 +1,7 @@
 // Package mdns implements a passive/active DNS-SD (RFC 6762/6763) discovery
 // source. It issues PTR queries for a curated set of service types over
 // link-local multicast (224.0.0.251:5353 / ff02::fb), listens for replies for
-// a bounded window, and emits one asset per unique target.
+// a bounded window, and emits one machine per unique target.
 //
 // mDNS catches devices that *announce themselves* — printers, AirPlay/Cast
 // targets, dev workstations, NAS, IP cameras — that a credentialed pull or a
@@ -113,7 +113,7 @@ func parseConfig(cfg map[string]any) Config {
 }
 
 // responder accumulates everything we observed about a single mDNS responder
-// (one host, one network address) before we collapse it into a model.Asset.
+// (one host, one network address) before we collapse it into a model.Machine.
 type responder struct {
 	lastSeen  time.Time
 	services  map[string]struct{}
@@ -124,7 +124,7 @@ type responder struct {
 
 // Discover sends DNS-SD PTR queries on every usable multicast-capable
 // interface, accumulates responses for cfg.listen_window, then returns one
-// asset per unique responder.
+// machine per unique responder.
 //
 // Supported config keys (all optional):
 //
@@ -134,7 +134,7 @@ type responder struct {
 //	query_repeat   int       how many times to re-send the query burst (default 2)
 //	disable_ipv4   bool      skip IPv4 multicast
 //	disable_ipv6   bool      skip IPv6 multicast
-func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	parsed := parseConfig(cfg)
 
 	ctx, cancel := context.WithTimeout(ctx, parsed.ListenWindow+2*time.Second)
@@ -236,7 +236,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	cancel()
 	wg.Wait()
 
-	return assetsFromResponders(responders), nil
+	return machinesFromResponders(responders), nil
 }
 
 // pickInterfaces returns multicast-capable, up-and-running interfaces.
@@ -495,16 +495,16 @@ func stripInstance(instance string) string {
 	return instance
 }
 
-// assetsFromResponders collapses the per-source accumulator map into a
-// deterministic list of model.Asset values.
-func assetsFromResponders(in map[string]*responder) []model.Asset {
+// machinesFromResponders collapses the per-source accumulator map into a
+// deterministic list of model.Machine values.
+func machinesFromResponders(in map[string]*responder) []model.Machine {
 	keys := make([]string, 0, len(in))
 	for k := range in {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	out := make([]model.Asset, 0, len(keys))
+	out := make([]model.Machine, 0, len(keys))
 	for _, k := range keys {
 		r := in[k]
 		hostname := r.hostname
@@ -512,8 +512,8 @@ func assetsFromResponders(in map[string]*responder) []model.Asset {
 			hostname = r.addr.String()
 		}
 		atype := classify(r.services)
-		a := model.Asset{
-			AssetType:       atype,
+		a := model.Machine{
+			MachineType:     atype,
 			Hostname:        hostname,
 			DiscoverySource: "mdns",
 			FirstSeenAt:     r.lastSeen,
@@ -528,25 +528,25 @@ func assetsFromResponders(in map[string]*responder) []model.Asset {
 	return out
 }
 
-// classify maps observed service types to an AssetType using a simple
+// classify maps observed service types to an MachineType using a simple
 // precedence ladder. Printers and IoT win over generic web/SSH.
-func classify(services map[string]struct{}) model.AssetType {
+func classify(services map[string]struct{}) model.MachineType {
 	has := func(s string) bool { _, ok := services[s]; return ok }
 	switch {
 	case has("_ipp._tcp.local") || has("_printer._tcp.local") ||
 		has("_pdl-datastream._tcp.local"):
-		return model.AssetTypeAppliance
+		return model.MachineTypeAppliance
 	case has("_airplay._tcp.local") || has("_googlecast._tcp.local") ||
 		has("_homekit._tcp.local") || has("_hap._tcp.local") ||
 		has("_raop._tcp.local"):
-		return model.AssetTypeIOTDevice
+		return model.MachineTypeIOTDevice
 	case has("_workstation._tcp.local"):
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	case has("_ssh._tcp.local") || has("_smb._tcp.local") ||
 		has("_http._tcp.local"):
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	default:
-		return model.AssetTypeIOTDevice
+		return model.MachineTypeIOTDevice
 	}
 }
 

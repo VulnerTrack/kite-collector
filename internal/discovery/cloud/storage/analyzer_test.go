@@ -15,7 +15,7 @@ import (
 func stubServer(t *testing.T, headerName, headerVal, body string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/asset.js", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/machine.js", func(w http.ResponseWriter, r *http.Request) {
 		if headerName != "" {
 			w.Header().Set(headerName, headerVal)
 		}
@@ -36,7 +36,7 @@ func TestAnalyzer_HitsAPIAndFileSignals(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	res, err := a.Analyze(ctx, srv.URL+"/asset.js")
+	res, err := a.Analyze(ctx, srv.URL+"/machine.js")
 	if err != nil {
 		t.Fatalf("analyze: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestAnalyzer_BodyTruncation(t *testing.T) {
 		Timeout:      2 * time.Second,
 	})
 
-	res, err := a.Analyze(context.Background(), srv.URL+"/asset.js")
+	res, err := a.Analyze(context.Background(), srv.URL+"/machine.js")
 	if err != nil {
 		t.Fatalf("analyze: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestAnalyzer_RespectsCallerDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := a.Analyze(ctx, srv.URL+"/asset.js")
+	_, err := a.Analyze(ctx, srv.URL+"/machine.js")
 	if err == nil {
 		t.Fatalf("expected context-deadline error, got nil")
 	}

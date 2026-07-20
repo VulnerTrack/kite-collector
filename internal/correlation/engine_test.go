@@ -129,8 +129,8 @@ func TestEngineAggregate(t *testing.T) {
 	}
 
 	stats := engine.Aggregate(correlations, 5)
-	assert.Equal(t, 5, stats.TotalAssets)
-	assert.Equal(t, 2, stats.AffectedAssets)
+	assert.Equal(t, 5, stats.TotalMachines)
+	assert.Equal(t, 2, stats.AffectedMachines)
 	assert.Equal(t, 2, stats.TotalUniqueCVEs)
 	assert.Equal(t, 1, stats.CriticalCVEs)
 	assert.Equal(t, 1, stats.MediumCVEs)

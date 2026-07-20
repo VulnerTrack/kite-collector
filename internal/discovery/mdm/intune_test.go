@@ -115,14 +115,14 @@ func TestIntune_Discover_Success(t *testing.T) {
 		"client_secret": "test-secret",
 	}
 
-	assets, err := i.Discover(context.Background(), cfg)
+	machines, err := i.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
+	require.Len(t, machines, 2)
 
 	// Windows device.
-	laptop := findAsset(assets, "LAPTOP-001")
+	laptop := findMachine(machines, "LAPTOP-001")
 	require.NotNil(t, laptop)
-	assert.Equal(t, model.AssetTypeWorkstation, laptop.AssetType)
+	assert.Equal(t, model.MachineTypeWorkstation, laptop.MachineType)
 	assert.Equal(t, "windows", laptop.OSFamily)
 	assert.Equal(t, "10.0.19044", laptop.OSVersion)
 	assert.Equal(t, "intune", laptop.DiscoverySource)
@@ -132,7 +132,7 @@ func TestIntune_Discover_Success(t *testing.T) {
 	assert.NotEmpty(t, laptop.NaturalKey)
 
 	// macOS device.
-	mac := findAsset(assets, "MAC-002")
+	mac := findMachine(machines, "MAC-002")
 	require.NotNil(t, mac)
 	assert.Equal(t, "darwin", mac.OSFamily)
 	assert.Equal(t, "dev-guid-002", mac.MDMEnrollmentID)
@@ -142,9 +142,9 @@ func TestIntune_Discover_MissingCredentials(t *testing.T) {
 	i := NewIntune()
 
 	// Enabled, but no credentials configured → skip (nil, nil).
-	assets, err := i.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := i.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestIntune_Discover_DisabledWithCredentials(t *testing.T) {
@@ -163,9 +163,9 @@ func TestIntune_Discover_DisabledWithCredentials(t *testing.T) {
 		"client_secret": "test-secret",
 	}
 
-	assets, err := i.Discover(context.Background(), cfg)
+	machines, err := i.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestIntune_Discover_TokenFailure(t *testing.T) {
@@ -184,9 +184,9 @@ func TestIntune_Discover_TokenFailure(t *testing.T) {
 	}
 
 	// Token failure → graceful degradation (nil, nil).
-	assets, err := i.Discover(context.Background(), cfg)
+	machines, err := i.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestIntune_Discover_Pagination(t *testing.T) {
@@ -204,11 +204,11 @@ func TestIntune_Discover_Pagination(t *testing.T) {
 		"client_secret": "test-secret",
 	}
 
-	assets, err := i.Discover(context.Background(), cfg)
+	machines, err := i.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, 2)
-	assert.NotNil(t, findAsset(assets, "DEV-A"))
-	assert.NotNil(t, findAsset(assets, "DEV-B"))
+	assert.Len(t, machines, 2)
+	assert.NotNil(t, findMachine(machines, "DEV-A"))
+	assert.NotNil(t, findMachine(machines, "DEV-B"))
 }
 
 func TestIntune_Discover_MalformedResponse(t *testing.T) {
@@ -239,10 +239,10 @@ func TestIntune_Discover_MalformedResponse(t *testing.T) {
 	}
 
 	// Malformed entries are skipped, not errors.
-	assets, err := i.Discover(context.Background(), cfg)
+	machines, err := i.Discover(context.Background(), cfg)
 	require.NoError(t, err)
 	// The device has no deviceName but still parses — just empty hostname.
-	assert.Len(t, assets, 1)
+	assert.Len(t, machines, 1)
 }
 
 func TestDeriveIntuneOSFamily(t *testing.T) {
@@ -266,16 +266,16 @@ func TestDeriveIntuneOSFamily(t *testing.T) {
 }
 
 func TestClassifyIntuneDevice(t *testing.T) {
-	assert.Equal(t, model.AssetTypeWorkstation, classifyIntuneDevice("Windows"))
-	assert.Equal(t, model.AssetTypeWorkstation, classifyIntuneDevice("macOS"))
-	assert.Equal(t, model.AssetTypeWorkstation, classifyIntuneDevice("Android"))
+	assert.Equal(t, model.MachineTypeWorkstation, classifyIntuneDevice("Windows"))
+	assert.Equal(t, model.MachineTypeWorkstation, classifyIntuneDevice("macOS"))
+	assert.Equal(t, model.MachineTypeWorkstation, classifyIntuneDevice("Android"))
 }
 
-// findAsset returns the first asset matching hostname, or nil.
-func findAsset(assets []model.Asset, hostname string) *model.Asset {
-	for i := range assets {
-		if assets[i].Hostname == hostname {
-			return &assets[i]
+// findMachine returns the first machine matching hostname, or nil.
+func findMachine(machines []model.Machine, hostname string) *model.Machine {
+	for i := range machines {
+		if machines[i].Hostname == hostname {
+			return &machines[i]
 		}
 	}
 	return nil

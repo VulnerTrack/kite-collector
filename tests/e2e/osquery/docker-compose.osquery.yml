@@ -1,0 +1,79 @@
+# Simulated osquery environment.
+#
+# `osquery` runs a real osqueryd in the foreground, exposing its Thrift
+# extensions socket on a shared volume — the exact surface a Go osquery-go
+# client (a future kite osquery-backed collector) binds to. `probe` attaches
+# over that socket and runs sample queries to prove it is live and queryable.
+#
+#   docker compose -f docker-compose.osquery.yml up --build            # keep it running
+#   docker compose -f docker-compose.osquery.yml run --rm probe        # one-shot verify
+#   docker compose -f docker-compose.osquery.yml down -v               # tear down
+name: kite-osquery-sim
+
+# Shared build spec. OSQUERY_VERSION defaults to the pinned release; the daily
+# drift job overrides it (e.g. OSQUERY_VERSION=latest docker compose ...).
+x-osq-build: &osq-build
+  context: .
+  dockerfile: Dockerfile.osquery
+  args:
+    OSQUERY_VERSION: "${OSQUERY_VERSION:-5.15.0}"
+
+services:
+  osquery:
+    build: *osq-build
+    # Foreground osqueryd. --ephemeral keeps the RocksDB in memory so the
+    # container is fully throwaway. The socket + config come from the image.
+    command:
+      - osqueryd
+      - --ephemeral
+      - --disable_logging
+      - --disable_watchdog
+      - --disable_events
+      - --config_path=/etc/osquery/osquery.conf
+      - --extensions_socket=/var/osquery/osquery.em
+      - --extensions_timeout=10
+      - --pidfile=/var/osquery/osqueryd.pid
+    volumes:
+      - osq-socket:/var/osquery
+    healthcheck:
+      # Green only when the daemon answers a query over the extensions socket.
+      # `--connect <socket>` takes the path as its argument.
+      test: ["CMD-SHELL", "osqueryi --connect /var/osquery/osquery.em 'SELECT 1;' >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    restart: "no"
+
+  # Quick "is it alive" probe — used by `make sim-osquery`.
+  probe:
+    build: *osq-build
+    depends_on:
+      osquery:
+        condition: service_healthy
+    environment:
+      OSQUERY_SOCKET: "/var/osquery/osquery.em"
+    volumes:
+      - osq-socket:/var/osquery
+    entrypoint: ["/usr/local/bin/probe.sh"]
+    restart: "no"
+
+  # Full diagnostic battery — used by the daily drift workflow. Reports which
+  # failure mode (version / socket / connect / table / column) hit.
+  checks:
+    build: *osq-build
+    depends_on:
+      osquery:
+        condition: service_healthy
+    environment:
+      OSQUERY_SOCKET: "/var/osquery/osquery.em"
+    volumes:
+      - osq-socket:/var/osquery
+    entrypoint: ["/usr/local/bin/checks.sh"]
+    restart: "no"
+
+volumes:
+  # The shared extensions socket. Mount this same volume (read-only) into a
+  # kite runner and point it at unix:///var/osquery/osquery.em to consume the
+  # simulated osquery from Go.
+  osq-socket:

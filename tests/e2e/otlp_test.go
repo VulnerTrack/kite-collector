@@ -92,24 +92,24 @@ func TestOTLPEmitterToCollector(t *testing.T) {
 
 	// Build test events.
 	scanRunID := uuid.Must(uuid.NewV7())
-	assetID := uuid.Must(uuid.NewV7())
+	machineID := uuid.Must(uuid.NewV7())
 	now := time.Now().UTC()
 
-	events := []model.AssetEvent{
+	events := []model.MachineEvent{
 		{
 			ID:        uuid.Must(uuid.NewV7()),
-			AssetID:   assetID,
+			MachineID: machineID,
 			ScanRunID: scanRunID,
-			EventType: model.EventAssetDiscovered,
+			EventType: model.EventMachineDiscovered,
 			Severity:  model.SeverityMedium,
 			Timestamp: now,
 			Details:   `{"source":"e2e-otlp"}`,
 		},
 		{
 			ID:        uuid.Must(uuid.NewV7()),
-			AssetID:   assetID,
+			MachineID: machineID,
 			ScanRunID: scanRunID,
-			EventType: model.EventUnauthorizedAssetDetected,
+			EventType: model.EventUnauthorizedMachineDetected,
 			Severity:  model.SeverityHigh,
 			Timestamp: now,
 			Details:   `{"reason":"not in allowlist"}`,
@@ -135,8 +135,8 @@ func TestOTLPEmitterToCollector(t *testing.T) {
 	require.NotEmpty(t, output, "collector should have written exported data")
 
 	// Verify key attributes are present in the output.
-	assert.Contains(t, output, "AssetDiscovered", "output should contain event type")
-	assert.Contains(t, output, assetID.String(), "output should contain asset ID")
+	assert.Contains(t, output, "MachineDiscovered", "output should contain event type")
+	assert.Contains(t, output, machineID.String(), "output should contain machine ID")
 	assert.Contains(t, output, scanRunID.String(), "output should contain scan run ID")
 	assert.Contains(t, output, "kite-collector", "output should contain service name")
 }

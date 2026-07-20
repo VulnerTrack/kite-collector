@@ -86,7 +86,7 @@ func parseConfig(cfg map[string]any) Config {
 	return out
 }
 
-// Discover invokes `lldpctl -f json` and emits one asset per LLDP neighbor.
+// Discover invokes `lldpctl -f json` and emits one machine per LLDP neighbor.
 // Supported config keys (all optional):
 //
 //	binary  string  override the lldpctl path (default: "lldpctl" on PATH)
@@ -95,7 +95,7 @@ func parseConfig(cfg map[string]any) Config {
 // If lldpctl is not installed the source returns (nil, nil) with an info
 // log — never an error. This is the "graceful degradation when the daemon
 // is absent" property documented in CONTRIBUTING.
-func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	parsed := parseConfig(cfg)
 
 	binPath, err := s.lookPath(parsed.Binary)
@@ -133,11 +133,11 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		neighbors = neighbors[:maxNeighbors]
 	}
 
-	return assetsFromNeighbors(neighbors), nil
+	return machinesFromNeighbors(neighbors), nil
 }
 
 // neighbor is the projected shape of one LLDP neighbor — exactly what we
-// need to build an asset and tag the switch-port edge.
+// need to build an machine and tag the switch-port edge.
 type neighbor struct {
 	LocalIface   string
 	ChassisName  string
@@ -368,10 +368,10 @@ func readCapabilities(raw json.RawMessage) []string {
 	return out
 }
 
-// assetsFromNeighbors collapses neighbors into a deterministic asset list.
-// One asset per unique chassis identity — multiple uplinks to the same
-// switch collapse to one asset whose tags name every observed local port.
-func assetsFromNeighbors(ns []neighbor) []model.Asset {
+// machinesFromNeighbors collapses neighbors into a deterministic machine list.
+// One machine per unique chassis identity — multiple uplinks to the same
+// switch collapse to one machine whose tags name every observed local port.
+func machinesFromNeighbors(ns []neighbor) []model.Machine {
 	byChassis := map[string][]neighbor{}
 	for _, n := range ns {
 		key := n.ChassisID
@@ -388,7 +388,7 @@ func assetsFromNeighbors(ns []neighbor) []model.Asset {
 	sort.Strings(keys)
 
 	now := time.Now().UTC()
-	out := make([]model.Asset, 0, len(keys))
+	out := make([]model.Machine, 0, len(keys))
 	for _, k := range keys {
 		group := byChassis[k]
 		first := group[0]
@@ -399,8 +399,8 @@ func assetsFromNeighbors(ns []neighbor) []model.Asset {
 		if hostname == "" {
 			hostname = first.ChassisID
 		}
-		a := model.Asset{
-			AssetType:       classify(first.Capabilities, first.ChassisDescr),
+		a := model.Machine{
+			MachineType:     classify(first.Capabilities, first.ChassisDescr),
 			Hostname:        hostname,
 			DiscoverySource: "lldp",
 			FirstSeenAt:     now,
@@ -415,25 +415,25 @@ func assetsFromNeighbors(ns []neighbor) []model.Asset {
 	return out
 }
 
-// classify maps LLDP system capabilities + sysDescr to an AssetType. LLDP
+// classify maps LLDP system capabilities + sysDescr to an MachineType. LLDP
 // neighbors are almost always switches/routers/APs, so the default is
 // network_device.
-func classify(caps []string, descr string) model.AssetType {
+func classify(caps []string, descr string) model.MachineType {
 	for _, c := range caps {
 		lc := strings.ToLower(c)
 		switch lc {
 		case "bridge", "router", "wlan", "wlan-access-point",
 			"docsis-cable-device", "telephone":
-			return model.AssetTypeNetworkDevice
+			return model.MachineTypeNetworkDevice
 		case "station-only":
-			return model.AssetTypeServer
+			return model.MachineTypeServer
 		}
 	}
 	d := strings.ToLower(descr)
 	if strings.Contains(d, "linux") && !strings.Contains(d, "router") {
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
-	return model.AssetTypeNetworkDevice
+	return model.MachineTypeNetworkDevice
 }
 
 // buildTags emits a JSON blob recording every switch-port edge we saw to

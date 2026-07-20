@@ -2,8 +2,8 @@ package audit
 
 import "encoding/json"
 
-// extractContainerIDTag reads the "container_id" key from an asset's JSON
-// tags blob, the same shape produced by docker.containerToAsset. The tags
+// extractContainerIDTag reads the "container_id" key from an machine's JSON
+// tags blob, the same shape produced by docker.containerToMachine. The tags
 // blob can mix string and non-string values (booleans, slices), so we
 // unmarshal into map[string]any and only return the value when it is a
 // string. Returns an empty string for malformed or missing tags.

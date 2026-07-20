@@ -173,7 +173,7 @@ func TestParseAppxManifestCalculator(t *testing.T) {
     <DisplayName>Microsoft Calculator</DisplayName>
     <PublisherDisplayName>Microsoft Corporation</PublisherDisplayName>
     <Description>The trusted Microsoft Calculator.</Description>
-    <Logo>Assets\StoreLogo.png</Logo>
+    <Logo>Machines\StoreLogo.png</Logo>
   </Properties>
   <Capabilities>
     <Capability Name="internetClient" />
@@ -351,7 +351,7 @@ func TestCollectorWalksAppxTree(t *testing.T) {
     <DisplayName>Windows Camera</DisplayName>
     <PublisherDisplayName>Microsoft Corporation</PublisherDisplayName>
     <Description>Take photos and videos.</Description>
-    <Logo>Assets\StoreLogo.png</Logo>
+    <Logo>Machines\StoreLogo.png</Logo>
   </Properties>
   <Capabilities>
     <Capability Name="internetClient" />

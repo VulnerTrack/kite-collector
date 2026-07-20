@@ -1,6 +1,6 @@
 // Package mdm provides discovery sources for Mobile Device Management and
 // endpoint management platforms. Each source implements [discovery.Source]
-// and enumerates managed devices as [model.Asset] values.
+// and enumerates managed devices as [model.Machine] values.
 //
 // Every connector in this package is built on
 // [github.com/vulnertrack/kite-collector/internal/discovery/connectorkit]:

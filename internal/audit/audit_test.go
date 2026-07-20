@@ -10,8 +10,8 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
-func testAsset() model.Asset {
-	return model.Asset{
+func testMachine() model.Machine {
+	return model.Machine{
 		ID:       uuid.Must(uuid.NewV7()),
 		Hostname: "test-host",
 	}
@@ -23,7 +23,7 @@ func TestEvaluateSSHSettings_InsecureRootLogin(t *testing.T) {
 	settings := map[string]string{
 		"PermitRootLogin": "yes",
 	}
-	findings := EvaluateSSHSettings(settings, testAsset(), "/etc/ssh/sshd_config")
+	findings := EvaluateSSHSettings(settings, testMachine(), "/etc/ssh/sshd_config")
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
 	}
@@ -45,7 +45,7 @@ func TestEvaluateSSHSettings_SecureConfig(t *testing.T) {
 		"MaxAuthTries":           "4",
 		"AllowTcpForwarding":     "no",
 	}
-	findings := EvaluateSSHSettings(settings, testAsset(), "/etc/ssh/sshd_config")
+	findings := EvaluateSSHSettings(settings, testMachine(), "/etc/ssh/sshd_config")
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings for secure config, got %d", len(findings))
 	}
@@ -57,7 +57,7 @@ func TestEvaluateSSHSettings_MultipleInsecure(t *testing.T) {
 		"PermitEmptyPasswords": "yes",
 		"Protocol":             "1",
 	}
-	findings := EvaluateSSHSettings(settings, testAsset(), "/etc/ssh/sshd_config")
+	findings := EvaluateSSHSettings(settings, testMachine(), "/etc/ssh/sshd_config")
 	if len(findings) != 3 {
 		t.Fatalf("expected 3 findings, got %d", len(findings))
 	}
@@ -76,21 +76,21 @@ func TestEvaluateSSHSettings_MultipleInsecure(t *testing.T) {
 func TestEvaluateSSHSettings_MaxAuthTriesBoundary(t *testing.T) {
 	// 6 is the threshold - should NOT trigger
 	settings := map[string]string{"MaxAuthTries": "6"}
-	findings := EvaluateSSHSettings(settings, testAsset(), "/etc/ssh/sshd_config")
+	findings := EvaluateSSHSettings(settings, testMachine(), "/etc/ssh/sshd_config")
 	if len(findings) != 0 {
 		t.Fatalf("MaxAuthTries=6 should not trigger, got %d findings", len(findings))
 	}
 
 	// 7 should trigger
 	settings["MaxAuthTries"] = "7"
-	findings = EvaluateSSHSettings(settings, testAsset(), "/etc/ssh/sshd_config")
+	findings = EvaluateSSHSettings(settings, testMachine(), "/etc/ssh/sshd_config")
 	if len(findings) != 1 {
 		t.Fatalf("MaxAuthTries=7 should trigger, got %d findings", len(findings))
 	}
 }
 
 func TestEvaluateSSHSettings_EmptySettings(t *testing.T) {
-	findings := EvaluateSSHSettings(map[string]string{}, testAsset(), "/etc/ssh/sshd_config")
+	findings := EvaluateSSHSettings(map[string]string{}, testMachine(), "/etc/ssh/sshd_config")
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings for empty settings, got %d", len(findings))
 	}
@@ -103,7 +103,7 @@ func TestEvaluateFirewall_NoFirewall(t *testing.T) {
 		"", fmt.Errorf("not found"),
 		"", fmt.Errorf("not found"),
 		"", fmt.Errorf("not found"),
-		testAsset(),
+		testMachine(),
 	)
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding, got %d", len(findings))
@@ -128,7 +128,7 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0`
 		iptables, nil,
 		"", fmt.Errorf("not found"),
 		"", fmt.Errorf("not found"),
-		testAsset(),
+		testMachine(),
 	)
 
 	hasInputAccept := false
@@ -157,7 +157,7 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0`
 		iptables, nil,
 		"", fmt.Errorf("not found"),
 		"", fmt.Errorf("not found"),
-		testAsset(),
+		testMachine(),
 	)
 
 	hasForwardAccept := false
@@ -186,7 +186,7 @@ target     prot opt source               destination`
 		iptables, nil,
 		"", fmt.Errorf("not found"),
 		"", fmt.Errorf("not found"),
-		testAsset(),
+		testMachine(),
 	)
 
 	hasSSHOpen := false
@@ -216,7 +216,7 @@ target     prot opt source               destination`
 		iptables, nil,
 		"", fmt.Errorf("not found"),
 		"", fmt.Errorf("not found"),
-		testAsset(),
+		testMachine(),
 	)
 
 	dbFindings := 0
@@ -245,7 +245,7 @@ target     prot opt source               destination`
 		iptables, nil,
 		"", fmt.Errorf("not found"),
 		"", fmt.Errorf("not found"),
-		testAsset(),
+		testMachine(),
 	)
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings for secure iptables, got %d", len(findings))
@@ -257,7 +257,7 @@ func TestEvaluateFirewall_UfwActive(t *testing.T) {
 		"", fmt.Errorf("not found"),
 		"", fmt.Errorf("not found"),
 		"Status: active", nil,
-		testAsset(),
+		testMachine(),
 	)
 	// UFW active means no fw-001
 	for _, f := range findings {
@@ -303,7 +303,7 @@ func TestEvaluatePermissions_NonExistentFiles(t *testing.T) {
 			IsInsecure:  func(m fs.FileMode) bool { return true },
 		},
 	}
-	findings := EvaluatePermissions(checks, testAsset())
+	findings := EvaluatePermissions(checks, testMachine())
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings for non-existent file, got %d", len(findings))
 	}
@@ -369,7 +369,7 @@ func TestEvaluateServices_TelnetListening(t *testing.T) {
 	ports := []ListeningPort{
 		{Port: 23, Address: "127.0.0.1"}, // telnet on localhost still bad
 	}
-	findings := EvaluateServices(ports, testAsset())
+	findings := EvaluateServices(ports, testMachine())
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding for telnet, got %d", len(findings))
 	}
@@ -385,7 +385,7 @@ func TestEvaluateServices_RedisOnLocalhost(t *testing.T) {
 	ports := []ListeningPort{
 		{Port: 6379, Address: "127.0.0.1"},
 	}
-	findings := EvaluateServices(ports, testAsset())
+	findings := EvaluateServices(ports, testMachine())
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings for Redis on localhost, got %d", len(findings))
 	}
@@ -395,7 +395,7 @@ func TestEvaluateServices_RedisOnWildcard(t *testing.T) {
 	ports := []ListeningPort{
 		{Port: 6379, Address: "0.0.0.0"},
 	}
-	findings := EvaluateServices(ports, testAsset())
+	findings := EvaluateServices(ports, testMachine())
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding for Redis on 0.0.0.0, got %d", len(findings))
 	}
@@ -409,7 +409,7 @@ func TestEvaluateServices_NoInsecurePorts(t *testing.T) {
 		{Port: 443, Address: "0.0.0.0"},
 		{Port: 8080, Address: "0.0.0.0"},
 	}
-	findings := EvaluateServices(ports, testAsset())
+	findings := EvaluateServices(ports, testMachine())
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings for safe ports, got %d", len(findings))
 	}
@@ -419,7 +419,7 @@ func TestEvaluateServices_MySQLOnWildcard(t *testing.T) {
 	ports := []ListeningPort{
 		{Port: 3306, Address: "0.0.0.0"},
 	}
-	findings := EvaluateServices(ports, testAsset())
+	findings := EvaluateServices(ports, testMachine())
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding for MySQL on 0.0.0.0, got %d", len(findings))
 	}
@@ -432,7 +432,7 @@ func TestEvaluateServices_PostgreSQLOnWildcard(t *testing.T) {
 	ports := []ListeningPort{
 		{Port: 5432, Address: "::"},
 	}
-	findings := EvaluateServices(ports, testAsset())
+	findings := EvaluateServices(ports, testMachine())
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding for PostgreSQL on ::, got %d", len(findings))
 	}
@@ -442,7 +442,7 @@ func TestEvaluateServices_FTPListening(t *testing.T) {
 	ports := []ListeningPort{
 		{Port: 21, Address: "192.168.1.1"}, // FTP on any address is bad
 	}
-	findings := EvaluateServices(ports, testAsset())
+	findings := EvaluateServices(ports, testMachine())
 	if len(findings) != 1 {
 		t.Fatalf("expected 1 finding for FTP, got %d", len(findings))
 	}
@@ -501,7 +501,7 @@ func TestParseAddrPort(t *testing.T) {
 
 func TestRegistry_AuditAll_Empty(t *testing.T) {
 	reg := NewRegistry()
-	findings, err := reg.AuditAll(context.Background(), testAsset())
+	findings, err := reg.AuditAll(context.Background(), testMachine())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

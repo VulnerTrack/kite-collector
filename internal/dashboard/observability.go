@@ -276,9 +276,9 @@ type runtimeStats struct {
 	ScanRunRows     string `json:"scan_runs_rows,omitempty"`
 	// Data-table row counts — answer the operator-facing question
 	// "what data has my agent actually collected?" in the same card
-	// that surfaces operational stats. Three counts: assets discovered,
+	// that surfaces operational stats. Three counts: machines discovered,
 	// events emitted, findings surfaced.
-	AssetRows         string        `json:"asset_rows,omitempty"`
+	MachineRows       string        `json:"machine_rows,omitempty"`
 	EventRows         string        `json:"event_rows,omitempty"`
 	FindingRows       string        `json:"finding_rows,omitempty"`
 	HeapTrendSVG      template.HTML `json:"-"` // SVG markup, UI-only; not in the JSON snapshot
@@ -440,7 +440,7 @@ func collectRuntimeStats(ctx context.Context, deps onboardingDeps) runtimeStats 
 		// Data-table placeholders default to em-dash so the nil-Store
 		// path (inspector mode) renders the same empty-state copy as
 		// the operational rows. Populated below when Store is wired.
-		AssetRows:   "—",
+		MachineRows: "—",
 		EventRows:   "—",
 		FindingRows: "—",
 		HeapTrendSVG: sparklineSVG(heapValues,
@@ -464,7 +464,7 @@ func collectRuntimeStats(ctx context.Context, deps onboardingDeps) runtimeStats 
 		}
 
 		// Row counts for the tables the observability page already reads
-		// from (operational tables) PLUS the data tables (assets, events,
+		// from (operational tables) PLUS the data tables (machines, events,
 		// config_findings) that answer the operator's "what data has the
 		// agent actually collected?" question. Failure of an individual
 		// COUNT leaves the corresponding *Rows field at its em-dash
@@ -483,8 +483,8 @@ func collectRuntimeStats(ctx context.Context, deps onboardingDeps) runtimeStats 
 			// Data tables. Treat any single success as "data row counts
 			// are usable" — partial data is still useful even when one
 			// table is missing on an older schema.
-			if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM assets`).Scan(&n); err == nil {
-				out.AssetRows = humanizeCount(n)
+			if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM machines`).Scan(&n); err == nil {
+				out.MachineRows = humanizeCount(n)
 				out.HasDataRowCounts = true
 			}
 			if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events`).Scan(&n); err == nil {
@@ -1140,7 +1140,7 @@ func aggregateRecentActivity(probes []sqlite.ProbeResultRecord, runs []model.Sca
 				AtRel:    humanizeRelativeTime(time.Since(*r.CompletedAt)),
 				Kind:     "scan." + status,
 				Label:    "scan " + verb,
-				Detail:   fmt.Sprintf("%s · %d assets", dur, r.TotalAssets),
+				Detail:   fmt.Sprintf("%s · %d machines", dur, r.TotalMachines),
 				Severity: sev,
 				Class:    cls,
 			})
@@ -1493,7 +1493,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     <tr><td>probe_result rows</td><td>{{.Runtime.ProbeResultRows}}</td></tr>
     <tr><td>scan_runs rows</td><td>{{.Runtime.ScanRunRows}}</td></tr>
     <tr><td colspan="2" class="kv-section-header"><span class="muted small">Data tables &mdash; what the agent has collected</span></td></tr>
-    <tr><td>assets discovered</td><td>{{.Runtime.AssetRows}}</td></tr>
+    <tr><td>machines discovered</td><td>{{.Runtime.MachineRows}}</td></tr>
     <tr><td>events emitted</td><td>{{.Runtime.EventRows}}</td></tr>
     <tr><td>findings surfaced</td><td>{{.Runtime.FindingRows}}</td></tr>
     {{end}}

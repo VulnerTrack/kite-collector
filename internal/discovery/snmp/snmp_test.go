@@ -167,13 +167,13 @@ func TestExpandCIDRs_Invalid(t *testing.T) {
 func TestClassifyDevice(t *testing.T) {
 	tests := []struct {
 		desc   string
-		expect model.AssetType
+		expect model.MachineType
 	}{
-		{"Cisco IOS Software, C2960 Switch", model.AssetTypeNetworkDevice},
-		{"APC Smart-UPS 1500 UPS", model.AssetTypeAppliance},
-		{"Linux hostname 5.15.0", model.AssetTypeServer},
-		{"Windows Server 2022", model.AssetTypeServer},
-		{"Unknown Device", model.AssetTypeNetworkDevice},
+		{"Cisco IOS Software, C2960 Switch", model.MachineTypeNetworkDevice},
+		{"APC Smart-UPS 1500 UPS", model.MachineTypeAppliance},
+		{"Linux hostname 5.15.0", model.MachineTypeServer},
+		{"Windows Server 2022", model.MachineTypeServer},
+		{"Unknown Device", model.MachineTypeNetworkDevice},
 	}
 
 	for _, tt := range tests {

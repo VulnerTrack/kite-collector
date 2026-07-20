@@ -56,8 +56,8 @@ const (
 	LogCodeServeTabPageRender   LogCode = "dashboard.serve.tab_page_render_failed"
 	LogCodeServeTablePageRender LogCode = "dashboard.serve.table_page_render_failed"
 
-	// csv export surface — /api/v1/{assets,software,findings,tables}/export.csv
-	LogCodeExportAssetsCSV   LogCode = "dashboard.export.assets_csv_failed"
+	// csv export surface — /api/v1/{machines,software,findings,tables}/export.csv
+	LogCodeExportMachinesCSV LogCode = "dashboard.export.machines_csv_failed"
 	LogCodeExportSoftwareCSV LogCode = "dashboard.export.software_csv_failed"
 	LogCodeExportFindingsCSV LogCode = "dashboard.export.findings_csv_failed"
 	LogCodeExportTableCSV    LogCode = "dashboard.export.table_csv_failed"

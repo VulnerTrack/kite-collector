@@ -2,7 +2,7 @@
 // configuration — primarily /etc/docker/daemon.json. The Docker
 // daemon is the most privileged service on a container host (it
 // effectively runs as init for every workload), so its configuration
-// posture is a CDMS asset on its own.
+// posture is a CDMS machine on its own.
 //
 // The shape of the file is the union of every flag documented by
 // `dockerd --help` — most fields are optional with engine defaults

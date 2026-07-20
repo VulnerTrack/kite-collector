@@ -102,8 +102,8 @@ const (
 type EventName string
 
 const (
-	EventAssetDiscovered      EventName = "asset.discovered"
-	EventAssetChanged         EventName = "asset.changed"
+	EventMachineDiscovered    EventName = "machine.discovered"
+	EventMachineChanged       EventName = "machine.changed"
 	EventFindingConfiguration EventName = "finding.configuration"
 	EventFindingPosture       EventName = "finding.posture"
 	EventScanLifecycle        EventName = "scan.lifecycle"
@@ -118,8 +118,8 @@ const (
 
 // AllowedEventNames is the closed event-name set.
 var AllowedEventNames = map[EventName]struct{}{
-	EventAssetDiscovered:      {},
-	EventAssetChanged:         {},
+	EventMachineDiscovered:    {},
+	EventMachineChanged:       {},
 	EventFindingConfiguration: {},
 	EventFindingPosture:       {},
 	EventScanLifecycle:        {},
@@ -172,7 +172,7 @@ const (
 )
 
 // AllowedDiscoverySources is the closed enum used both as the
-// security.asset.discovery.source attribute (§4.4.1) and as the
+// security.machine.discovery.source attribute (§4.4.1) and as the
 // discover.<source> span suffix (§4.5).
 var AllowedDiscoverySources = map[string]struct{}{
 	"agent":           {},
@@ -190,8 +190,8 @@ var AllowedDiscoverySources = map[string]struct{}{
 	"ldap":            {},
 }
 
-// LDAP/Active Directory asset tag keys per RFC-0121 §5.4. These keys are
-// emitted on EventAssetDiscovered records produced by the LDAP discovery
+// LDAP/Active Directory machine tag keys per RFC-0121 §5.4. These keys are
+// emitted on EventMachineDiscovered records produced by the LDAP discovery
 // source and consumed by the Python ontology bridge to materialize
 // ActiveDirectoryDomain / ActiveDirectoryAccount / OrganizationalUnit
 // entities. Values are JSON-encoded for collection-typed fields (spns,
@@ -218,8 +218,8 @@ var AllowedAuditModules = map[string]struct{}{
 	"tls":         {},
 }
 
-// AllowedAssetTypes per §4.4.1.
-var AllowedAssetTypes = map[string]struct{}{
+// AllowedMachineTypes per §4.4.1.
+var AllowedMachineTypes = map[string]struct{}{
 	"server":         {},
 	"workstation":    {},
 	"container":      {},
@@ -290,44 +290,44 @@ var AllowedFindingLikelihoods = map[string]struct{}{
 // of the listed keys; required-vs-optional is enforced separately by
 // EventRequiredAttributes.
 var EventAttributes = map[EventName]map[string]struct{}{
-	EventAssetDiscovered: {
-		AttrEventDomain:                   {},
-		AttrEventName:                     {},
-		AttrScanUID:                       {},
-		"security.asset.uid":              {},
-		"security.asset.type":             {},
-		"security.asset.name":             {},
-		"security.asset.os.name":          {},
-		"security.asset.os.version":       {},
-		"security.asset.ip.v4":            {},
-		"security.asset.ip.v6":            {},
-		"security.asset.mac":              {},
-		"security.asset.fqdn":             {},
-		"security.asset.authorization":    {},
-		"security.asset.managed_status":   {},
-		"security.asset.first_seen":       {},
-		"security.asset.discovery.source": {},
+	EventMachineDiscovered: {
+		AttrEventDomain:                     {},
+		AttrEventName:                       {},
+		AttrScanUID:                         {},
+		"security.machine.uid":              {},
+		"security.machine.type":             {},
+		"security.machine.name":             {},
+		"security.machine.os.name":          {},
+		"security.machine.os.version":       {},
+		"security.machine.ip.v4":            {},
+		"security.machine.ip.v6":            {},
+		"security.machine.mac":              {},
+		"security.machine.fqdn":             {},
+		"security.machine.authorization":    {},
+		"security.machine.managed_status":   {},
+		"security.machine.first_seen":       {},
+		"security.machine.discovery.source": {},
 	},
-	EventAssetChanged: {
-		AttrEventDomain:                   {},
-		AttrEventName:                     {},
-		AttrScanUID:                       {},
-		"security.asset.uid":              {},
-		"security.asset.type":             {},
-		"security.asset.name":             {},
-		"security.asset.os.name":          {},
-		"security.asset.os.version":       {},
-		"security.asset.ip.v4":            {},
-		"security.asset.ip.v6":            {},
-		"security.asset.mac":              {},
-		"security.asset.fqdn":             {},
-		"security.asset.authorization":    {},
-		"security.asset.managed_status":   {},
-		"security.asset.first_seen":       {},
-		"security.asset.discovery.source": {},
-		"security.asset.change.field":     {},
-		"security.asset.change.before":    {},
-		"security.asset.change.after":     {},
+	EventMachineChanged: {
+		AttrEventDomain:                     {},
+		AttrEventName:                       {},
+		AttrScanUID:                         {},
+		"security.machine.uid":              {},
+		"security.machine.type":             {},
+		"security.machine.name":             {},
+		"security.machine.os.name":          {},
+		"security.machine.os.version":       {},
+		"security.machine.ip.v4":            {},
+		"security.machine.ip.v6":            {},
+		"security.machine.mac":              {},
+		"security.machine.fqdn":             {},
+		"security.machine.authorization":    {},
+		"security.machine.managed_status":   {},
+		"security.machine.first_seen":       {},
+		"security.machine.discovery.source": {},
+		"security.machine.change.field":     {},
+		"security.machine.change.before":    {},
+		"security.machine.change.after":     {},
 	},
 	EventFindingConfiguration: {
 		AttrEventDomain:                     {},
@@ -345,8 +345,8 @@ var EventAttributes = map[EventName]map[string]struct{}{
 		"security.finding.remediation.desc": {},
 		"security.finding.evidence":         {},
 		"security.finding.expected":         {},
-		"security.asset.uid":                {},
-		"security.asset.name":               {},
+		"security.machine.uid":              {},
+		"security.machine.name":             {},
 	},
 	EventFindingPosture: {
 		AttrEventDomain:                     {},
@@ -364,8 +364,8 @@ var EventAttributes = map[EventName]map[string]struct{}{
 		"security.finding.remediation.desc": {},
 		"security.finding.likelihood":       {},
 		"security.finding.mitigation":       {},
-		"security.asset.uid":                {},
-		"security.asset.name":               {},
+		"security.machine.uid":              {},
+		"security.machine.name":             {},
 	},
 	EventScanLifecycle: {
 		AttrEventDomain:             {},
@@ -391,28 +391,28 @@ var EventAttributes = map[EventName]map[string]struct{}{
 // EventRequiredAttributes lists the MUST-have keys for each event per
 // §4.4.1–4.4.5. Missing keys cause the contract validator to fail.
 var EventRequiredAttributes = map[EventName][]string{
-	EventAssetDiscovered: {
+	EventMachineDiscovered: {
 		AttrEventDomain,
 		AttrEventName,
 		AttrScanUID,
-		"security.asset.uid",
-		"security.asset.type",
-		"security.asset.name",
-		"security.asset.authorization",
-		"security.asset.managed_status",
-		"security.asset.first_seen",
-		"security.asset.discovery.source",
+		"security.machine.uid",
+		"security.machine.type",
+		"security.machine.name",
+		"security.machine.authorization",
+		"security.machine.managed_status",
+		"security.machine.first_seen",
+		"security.machine.discovery.source",
 	},
-	EventAssetChanged: {
+	EventMachineChanged: {
 		AttrEventDomain,
 		AttrEventName,
 		AttrScanUID,
-		"security.asset.uid",
-		"security.asset.type",
-		"security.asset.name",
-		"security.asset.authorization",
-		"security.asset.managed_status",
-		"security.asset.change.field",
+		"security.machine.uid",
+		"security.machine.type",
+		"security.machine.name",
+		"security.machine.authorization",
+		"security.machine.managed_status",
+		"security.machine.change.field",
 	},
 	EventFindingConfiguration: {
 		AttrEventDomain,
@@ -423,8 +423,8 @@ var EventRequiredAttributes = map[EventName][]string{
 		"security.finding.title",
 		"security.finding.severity",
 		"security.finding.severity_id",
-		"security.asset.uid",
-		"security.asset.name",
+		"security.machine.uid",
+		"security.machine.name",
 	},
 	EventFindingPosture: {
 		AttrEventDomain,
@@ -436,8 +436,8 @@ var EventRequiredAttributes = map[EventName][]string{
 		"security.finding.severity",
 		"security.finding.severity_id",
 		"security.finding.likelihood",
-		"security.asset.uid",
-		"security.asset.name",
+		"security.machine.uid",
+		"security.machine.name",
 	},
 	EventScanLifecycle: {
 		AttrEventDomain,
@@ -498,20 +498,20 @@ var Metrics = map[string]MetricDefinition{
 		Name: "kite.discovery.duration", Kind: MetricKindHistogram, Unit: "s",
 		Labels: []string{"discovery.source"},
 	},
-	"kite.discovery.assets.found": {
-		Name: "kite.discovery.assets.found", Kind: MetricKindCounter, Unit: "{asset}",
+	"kite.discovery.machines.found": {
+		Name: "kite.discovery.machines.found", Kind: MetricKindCounter, Unit: "{machine}",
 		Labels: []string{"discovery.source"},
 	},
 	"kite.discovery.errors.count": {
 		Name: "kite.discovery.errors.count", Kind: MetricKindCounter, Unit: "{error}",
 		Labels: []string{"discovery.source", "error.kind"},
 	},
-	"kite.assets.total": {
-		Name: "kite.assets.total", Kind: MetricKindUpDownCounter, Unit: "{asset}",
-		Labels: []string{"asset.type", "authorization"},
+	"kite.machines.total": {
+		Name: "kite.machines.total", Kind: MetricKindUpDownCounter, Unit: "{machine}",
+		Labels: []string{"machine.type", "authorization"},
 	},
-	"kite.assets.stale": {
-		Name: "kite.assets.stale", Kind: MetricKindUpDownCounter, Unit: "{asset}",
+	"kite.machines.stale": {
+		Name: "kite.machines.stale", Kind: MetricKindUpDownCounter, Unit: "{machine}",
 	},
 	"kite.findings.count": {
 		Name: "kite.findings.count", Kind: MetricKindCounter, Unit: "{finding}",
@@ -557,8 +557,8 @@ var AllowedSignals = map[string]struct{}{
 var CardinalityBudget = map[string]int{
 	"security.finding.cwe.uid":   1500,
 	"security.finding.capec.uid": 600,
-	"security.asset.uid":         1_000_000,
-	"security.asset.fqdn":        200_000,
+	"security.machine.uid":       1_000_000,
+	"security.machine.fqdn":      200_000,
 	"security.scan.uid":          100_000,
 	"discovery.source":           16,
 	"audit.module":               16,

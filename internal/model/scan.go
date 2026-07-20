@@ -26,26 +26,26 @@ type ScanRun struct {
 	Status          ScanStatus `json:"status"`
 	ID              uuid.UUID  `json:"id"`
 	CoveragePercent float64    `json:"coverage_percent"`
-	TotalAssets     int        `json:"total_assets"`
-	NewAssets       int        `json:"new_assets"`
-	UpdatedAssets   int        `json:"updated_assets"`
-	// AnalyzedAssets counts rescans that produced an AssetAnalyzed event —
-	// assets that were already known and had no material change since the
-	// previous tick. These are tracked separately from UpdatedAssets so the
+	TotalMachines   int        `json:"total_machines"`
+	NewMachines     int        `json:"new_machines"`
+	UpdatedMachines int        `json:"updated_machines"`
+	// AnalyzedMachines counts rescans that produced an MachineAnalyzed event —
+	// machines that were already known and had no material change since the
+	// previous tick. These are tracked separately from UpdatedMachines so the
 	// dashboard can distinguish real state deltas from steady-state ticks.
-	AnalyzedAssets int `json:"analyzed_assets"`
-	StaleAssets    int `json:"stale_assets"`
-	ErrorCount     int `json:"error_count"`
+	AnalyzedMachines int `json:"analyzed_machines"`
+	StaleMachines    int `json:"stale_machines"`
+	ErrorCount       int `json:"error_count"`
 }
 
 // ScanResult is a summary returned after a scan completes.
 type ScanResult struct {
 	Status             string  `json:"status"`
-	TotalAssets        int     `json:"total_assets"`
-	NewAssets          int     `json:"new_assets"`
-	UpdatedAssets      int     `json:"updated_assets"`
-	AnalyzedAssets     int     `json:"analyzed_assets"`
-	StaleAssets        int     `json:"stale_assets"`
+	TotalMachines      int     `json:"total_machines"`
+	NewMachines        int     `json:"new_machines"`
+	UpdatedMachines    int     `json:"updated_machines"`
+	AnalyzedMachines   int     `json:"analyzed_machines"`
+	StaleMachines      int     `json:"stale_machines"`
 	EventsEmitted      int     `json:"events_emitted"`
 	SoftwareCount      int     `json:"software_count"`
 	SoftwareErrors     int     `json:"software_errors"`

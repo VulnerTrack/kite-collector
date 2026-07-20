@@ -15,7 +15,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeInterceptorsUnaryPanicRecovered,
 		LogCodeInterceptorsStreamPanicRecovered,
 		LogCodeServerInsecureListener,
-		LogCodeServerAssetUpsertFail,
+		LogCodeServerMachineUpsertFail,
 		LogCodeServerSoftwareUpsertFail,
 		LogCodeServerHeartbeatCNMismatch,
 	}
@@ -41,7 +41,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 		LogCodeInterceptorsUnaryPanicRecovered,
 		LogCodeInterceptorsStreamPanicRecovered,
 		LogCodeServerInsecureListener,
-		LogCodeServerAssetUpsertFail,
+		LogCodeServerMachineUpsertFail,
 		LogCodeServerSoftwareUpsertFail,
 		LogCodeServerHeartbeatCNMismatch,
 	}

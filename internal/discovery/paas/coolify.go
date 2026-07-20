@@ -29,7 +29,7 @@ func (c *Coolify) Name() string { return "coolify" }
 // Discover lists all Coolify applications and servers.
 // Credentials: KITE_COOLIFY_TOKEN environment variable.
 // Endpoint: KITE_COOLIFY_ENDPOINT env var or "endpoint" config key.
-func (c *Coolify) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (c *Coolify) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_COOLIFY_TOKEN")
 	endpoint := c.baseURL
 
@@ -69,7 +69,7 @@ func (c *Coolify) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		return nil, fmt.Errorf("coolify: %w", tlsErr)
 	}
 	client := newClientWithTLS("coolify", endpoint, bearerAuth(token), tlsCfg)
-	var assets []model.Asset
+	var machines []model.Machine
 	now := time.Now().UTC()
 
 	// Discover applications.
@@ -78,7 +78,7 @@ func (c *Coolify) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		return nil, fmt.Errorf("coolify: list applications: %w", err)
 	}
 	for i := range apps {
-		assets = append(assets, coolifyAppToAsset(apps[i], now))
+		machines = append(machines, coolifyAppToMachine(apps[i], now))
 	}
 
 	// Discover servers.
@@ -90,14 +90,14 @@ func (c *Coolify) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 			"apps_found", len(apps))
 	} else {
 		for i := range servers {
-			assets = append(assets, coolifyServerToAsset(servers[i], now))
+			machines = append(machines, coolifyServerToMachine(servers[i], now))
 		}
 	}
 
 	slog.Info("Coolify PaaS discovery complete",
 		"code", string(LogCodeCoolifyComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Coolify API response types ---
@@ -122,9 +122,9 @@ type coolifyServer struct {
 	ID        int    `json:"id"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func coolifyAppToAsset(app coolifyApplication, now time.Time) model.Asset {
+func coolifyAppToMachine(app coolifyApplication, now time.Time) model.Machine {
 	tags := map[string]any{
 		"platform":    "coolify",
 		"provider_id": app.ID,
@@ -148,10 +148,10 @@ func coolifyAppToAsset(app coolifyApplication, now time.Time) model.Asset {
 		lastSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        app.Name,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		DiscoverySource: "coolify",
 		FirstSeenAt:     firstSeen,
 		LastSeenAt:      lastSeen,
@@ -159,11 +159,11 @@ func coolifyAppToAsset(app coolifyApplication, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }
 
-func coolifyServerToAsset(srv coolifyServer, now time.Time) model.Asset {
+func coolifyServerToMachine(srv coolifyServer, now time.Time) model.Machine {
 	tags := map[string]any{
 		"platform":    "coolify",
 		"provider_id": srv.ID,
@@ -184,10 +184,10 @@ func coolifyServerToAsset(srv coolifyServer, now time.Time) model.Asset {
 		lastSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        srv.Name,
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		DiscoverySource: "coolify",
 		FirstSeenAt:     firstSeen,
 		LastSeenAt:      lastSeen,
@@ -195,6 +195,6 @@ func coolifyServerToAsset(srv coolifyServer, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

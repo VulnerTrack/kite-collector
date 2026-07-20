@@ -76,14 +76,14 @@ func TestCoolify_Discover_Success(t *testing.T) {
 
 	c := NewCoolify()
 	c.baseURL = srv.URL
-	assets, err := c.Discover(context.Background(), map[string]any{})
+	machines, err := c.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
 	// 2 apps + 1 server = 3
-	assert.Len(t, assets, 3)
+	assert.Len(t, machines, 3)
 
-	webapp := findAssetByHostname(assets, "webapp")
+	webapp := findMachineByHostname(machines, "webapp")
 	require.NotNil(t, webapp)
-	assert.Equal(t, model.AssetTypeContainer, webapp.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, webapp.MachineType)
 	assert.Equal(t, "coolify", webapp.DiscoverySource)
 
 	var wTags map[string]any
@@ -91,10 +91,10 @@ func TestCoolify_Discover_Success(t *testing.T) {
 	assert.Equal(t, "https://app.example.com", wTags["fqdn"])
 	assert.Equal(t, "running", wTags["status"])
 
-	// Server has AssetTypeServer.
-	server := findAssetByHostname(assets, "prod-server")
+	// Server has MachineTypeServer.
+	server := findMachineByHostname(machines, "prod-server")
 	require.NotNil(t, server)
-	assert.Equal(t, model.AssetTypeServer, server.AssetType)
+	assert.Equal(t, model.MachineTypeServer, server.MachineType)
 	assert.Equal(t, "coolify", server.DiscoverySource)
 
 	var sTags map[string]any
@@ -114,9 +114,9 @@ func TestCoolify_Discover_MissingCredentials(t *testing.T) {
 	assert.Contains(t, err.Error(), "KITE_COOLIFY_TOKEN")
 
 	// No config → silent skip.
-	assets, err := c.Discover(context.Background(), nil)
+	machines, err := c.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestCoolify_Discover_AuthFailure(t *testing.T) {

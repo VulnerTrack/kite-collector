@@ -1,0 +1,12 @@
+# Same as settings.yaml but points the docker source at a non-existent socket.
+# Proves the `host` setting is honored: kite uses the configured socket and does
+# NOT silently fall back to auto-detection, so no containers are discovered.
+log_level: info
+output_format: json
+data_dir: /tmp/kite-smoke
+
+discovery:
+  sources:
+    docker:
+      enabled: true
+      host: unix:///nonexistent/docker.sock

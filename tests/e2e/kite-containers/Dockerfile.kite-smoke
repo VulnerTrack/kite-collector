@@ -1,0 +1,25 @@
+# Builds the real kite-collector binary and packages it with the smoke script,
+# the settings files, and jq. The build context is the repo root (see the
+# compose `context: ../..`), so the source COPY and the tests/ COPY resolve.
+FROM golang:1.26-bookworm AS build
+# The golang:1.26 image may lag go.mod's pinned toolchain; `auto` fetches it.
+ENV GOTOOLCHAIN=auto
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /kite-collector ./cmd/kite-collector
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates jq \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /kite-collector /usr/local/bin/kite-collector
+COPY tests/e2e/kite-containers/settings.yaml           /etc/kite/settings.yaml
+COPY tests/e2e/kite-containers/settings-wronghost.yaml /etc/kite/settings-wronghost.yaml
+COPY tests/e2e/kite-containers/settings-invalid.yaml   /etc/kite/settings-invalid.yaml
+COPY tests/e2e/kite-containers/smoke.sh                /usr/local/bin/smoke.sh
+RUN chmod +x /usr/local/bin/smoke.sh
+
+ENTRYPOINT ["/usr/local/bin/smoke.sh"]

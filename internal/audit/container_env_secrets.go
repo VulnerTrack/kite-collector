@@ -48,18 +48,18 @@ type ContainerEnvLister interface {
 
 // ContainerEnvSecrets scans Docker container environment variables for
 // hard-coded credentials matching the shared secretPatterns ruleset. It
-// implements Auditor; it is a no-op for any asset whose AssetType is not
-// AssetTypeContainer.
+// implements Auditor; it is a no-op for any machine whose MachineType is not
+// MachineTypeContainer.
 //
 // The auditor reads container envs from a ContainerEnvLister at construction
-// time so the same Audit method can run per-asset without re-issuing Docker
+// time so the same Audit method can run per-machine without re-issuing Docker
 // API calls. The lister is a thin wrapper around docker.Docker.
 type ContainerEnvSecrets struct {
 	lister    ContainerEnvLister
 	dockerCfg map[string]any
 	// envByID caches the result of one ListContainerEnvs call so the
-	// engine's per-asset audit loop does not re-fetch container env data
-	// for every container asset. The cache is populated lazily on first
+	// engine's per-machine audit loop does not re-fetch container env data
+	// for every container machine. The cache is populated lazily on first
 	// Audit call and bounded to a single scan.
 	cache        map[string]dockerdisc.ContainerEnv
 	denyPrefixes []string
@@ -94,21 +94,21 @@ func NewContainerEnvSecrets(lister ContainerEnvLister, dockerCfg map[string]any,
 // Name returns the auditor identifier.
 func (c *ContainerEnvSecrets) Name() string { return containerEnvSecretsAuditorName }
 
-// Audit scans the env vars of the container identified by the asset's
-// container_id tag. Returns nil findings for non-container assets.
-func (c *ContainerEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
-	if asset.AssetType != model.AssetTypeContainer {
+// Audit scans the env vars of the container identified by the machine's
+// container_id tag. Returns nil findings for non-container machines.
+func (c *ContainerEnvSecrets) Audit(ctx context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
+	if machine.MachineType != model.MachineTypeContainer {
 		return nil, nil
 	}
 	if c.lister == nil {
 		return nil, nil
 	}
 
-	containerID := extractContainerIDTag(asset.Tags)
+	containerID := extractContainerIDTag(machine.Tags)
 	if containerID == "" {
-		slog.Warn("container_env_secrets: asset has no container_id tag, skipping",
+		slog.Warn("container_env_secrets: machine has no container_id tag, skipping",
 			"code", string(LogCodeContainerEnvMissingTag),
-			"asset_id", asset.ID)
+			"machine_id", machine.ID)
 		return nil, nil
 	}
 
@@ -118,11 +118,11 @@ func (c *ContainerEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]m
 	}
 
 	now := time.Now().UTC()
-	return scanContainerEnv(asset, env, c.denyPrefixes, now), nil
+	return scanContainerEnv(machine, env, c.denyPrefixes, now), nil
 }
 
 // envFor returns the cached ContainerEnv whose 12-char prefix matches the
-// asset's container_id tag. The cache is populated lazily on the first
+// machine's container_id tag. The cache is populated lazily on the first
 // successful call to ListContainerEnvs.
 func (c *ContainerEnvSecrets) envFor(ctx context.Context, shortID string) (dockerdisc.ContainerEnv, bool) {
 	if !c.cacheLoaded {
@@ -158,8 +158,8 @@ func (c *ContainerEnvSecrets) envFor(ctx context.Context, shortID string) (docke
 // returns one ConfigFinding per (pattern, env_var_name) pair. Findings are
 // deduplicated within the same scan. Secret values are never stored — only
 // the env var name and a 16-hex-char SHA-256 prefix of the matched value
-// are recorded so cross-asset correlation is possible without exposure.
-func scanContainerEnv(asset model.Asset, env dockerdisc.ContainerEnv, denyPrefixes []string, now time.Time) []model.ConfigFinding {
+// are recorded so cross-machine correlation is possible without exposure.
+func scanContainerEnv(machine model.Machine, env dockerdisc.ContainerEnv, denyPrefixes []string, now time.Time) []model.ConfigFinding {
 	if len(env.Env) == 0 {
 		return nil
 	}
@@ -189,7 +189,7 @@ func scanContainerEnv(asset model.Asset, env dockerdisc.ContainerEnv, denyPrefix
 			seen[dedupeKey] = true
 
 			valueHash := fmt.Sprintf("%x", sha256.Sum256([]byte(value)))[:16]
-			seed := fmt.Sprintf("container_env_secrets:%s:%s:%s", asset.ID, pat.ID, name)
+			seed := fmt.Sprintf("container_env_secrets:%s:%s:%s", machine.ID, pat.ID, name)
 			findingID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(seed))
 
 			evidence := fmt.Sprintf("ENV[%s]=<redacted> detected in container:%s (%s) hash:%s",
@@ -197,7 +197,7 @@ func scanContainerEnv(asset model.Asset, env dockerdisc.ContainerEnv, denyPrefix
 
 			findings = append(findings, model.ConfigFinding{
 				ID:          findingID,
-				AssetID:     asset.ID,
+				MachineID:   machine.ID,
 				Auditor:     containerEnvSecretsAuditorName,
 				CheckID:     pat.ID,
 				Title:       fmt.Sprintf("Container env secret: %s", pat.Name),
@@ -214,7 +214,7 @@ func scanContainerEnv(asset model.Asset, env dockerdisc.ContainerEnv, denyPrefix
 	if len(findings) > 0 {
 		slog.Info(
 			"container_env_secrets: findings detected",
-			"asset_id", asset.ID,
+			"machine_id", machine.ID,
 			"container_id", shortID,
 			"container_name", env.Name,
 			"count", len(findings),

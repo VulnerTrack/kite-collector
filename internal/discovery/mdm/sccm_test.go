@@ -69,14 +69,14 @@ func TestSCCM_Discover_Success(t *testing.T) {
 		"password": "sccm-pass",
 	}
 
-	assets, err := s.Discover(context.Background(), cfg)
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 3)
+	require.Len(t, machines, 3)
 
 	// Server with IsClient=true → managed.
-	winSrv := findAsset(assets, "WIN-SRV-01")
+	winSrv := findMachine(machines, "WIN-SRV-01")
 	require.NotNil(t, winSrv)
-	assert.Equal(t, model.AssetTypeServer, winSrv.AssetType)
+	assert.Equal(t, model.MachineTypeServer, winSrv.MachineType)
 	assert.Equal(t, "windows", winSrv.OSFamily)
 	assert.Equal(t, model.ManagedManaged, winSrv.IsManaged)
 	assert.Equal(t, "sccm", winSrv.DiscoverySource)
@@ -84,14 +84,14 @@ func TestSCCM_Discover_Success(t *testing.T) {
 	assert.NotEmpty(t, winSrv.NaturalKey)
 
 	// Workstation with IsClient=true → managed.
-	winWS := findAsset(assets, "WIN-WS-01")
+	winWS := findMachine(machines, "WIN-WS-01")
 	require.NotNil(t, winWS)
-	assert.Equal(t, model.AssetTypeWorkstation, winWS.AssetType)
+	assert.Equal(t, model.MachineTypeWorkstation, winWS.MachineType)
 	assert.Equal(t, model.ManagedManaged, winWS.IsManaged)
 	assert.Equal(t, "16777002", winWS.MDMEnrollmentID)
 
 	// IsClient=false → unknown management.
-	unmanaged := findAsset(assets, "UNMANAGED-01")
+	unmanaged := findMachine(machines, "UNMANAGED-01")
 	require.NotNil(t, unmanaged)
 	assert.Equal(t, model.ManagedUnknown, unmanaged.IsManaged)
 }
@@ -100,9 +100,9 @@ func TestSCCM_Discover_MissingCredentials(t *testing.T) {
 	s := NewSCCM()
 
 	// Enabled, but no credentials configured → skip (nil, nil).
-	assets, err := s.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := s.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestSCCM_Discover_DisabledWithCredentials(t *testing.T) {
@@ -117,9 +117,9 @@ func TestSCCM_Discover_DisabledWithCredentials(t *testing.T) {
 		"password": "sccm-pass",
 	}
 
-	assets, err := s.Discover(context.Background(), cfg)
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestSCCM_Discover_AuthFailure(t *testing.T) {
@@ -133,10 +133,10 @@ func TestSCCM_Discover_AuthFailure(t *testing.T) {
 		"password": "wrong",
 	}
 
-	// Auth failure → no assets (graceful).
-	assets, err := s.Discover(context.Background(), cfg)
+	// Auth failure → no machines (graceful).
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
 func TestSCCM_Discover_MalformedResponse(t *testing.T) {
@@ -154,9 +154,9 @@ func TestSCCM_Discover_MalformedResponse(t *testing.T) {
 	}
 
 	// Malformed entries are skipped.
-	assets, err := s.Discover(context.Background(), cfg)
+	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, 1) // entry parses but with empty Name
+	assert.Len(t, machines, 1) // entry parses but with empty Name
 }
 
 func TestDeriveSCCMOSFamily(t *testing.T) {
@@ -168,6 +168,6 @@ func TestDeriveSCCMOSFamily(t *testing.T) {
 }
 
 func TestClassifySCCMDevice(t *testing.T) {
-	assert.Equal(t, model.AssetTypeServer, classifySCCMDevice("Microsoft Windows Server 2022"))
-	assert.Equal(t, model.AssetTypeWorkstation, classifySCCMDevice("Microsoft Windows 11"))
+	assert.Equal(t, model.MachineTypeServer, classifySCCMDevice("Microsoft Windows Server 2022"))
+	assert.Equal(t, model.MachineTypeWorkstation, classifySCCMDevice("Microsoft Windows 11"))
 }
