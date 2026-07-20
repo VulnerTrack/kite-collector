@@ -36,7 +36,7 @@ func NewServiceNow() *ServiceNow {
 func (s *ServiceNow) Name() string { return "servicenow" }
 
 // Discover lists configuration items from ServiceNow CMDB and returns them
-// as assets. If discovery is not enabled, or credentials are not available,
+// as machines. If discovery is not enabled, or credentials are not available,
 // the method returns nil (graceful degradation).
 //
 // Supported config keys:
@@ -46,7 +46,7 @@ func (s *ServiceNow) Name() string { return "servicenow" }
 //	username     – string API account username
 //	password     – string API account password
 //	table        – string CMDB table to query (default: "cmdb_ci_server")
-func (s *ServiceNow) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *ServiceNow) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2/F3: honour enabled:false even when creds are present.
 	}
@@ -89,7 +89,7 @@ func (s *ServiceNow) Discover(ctx context.Context, cfg map[string]any) ([]model.
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(cis))
+	machines := make([]model.Machine, 0, len(cis))
 
 	for _, ci := range cis {
 		osFamily := deriveServiceNowOSFamily(ci.os)
@@ -104,14 +104,14 @@ func (s *ServiceNow) Discover(ctx context.Context, cfg map[string]any) ([]model.
 		// F6/R6: sys_id, asset_tag and operational_status now land in dedicated
 		// columns instead of being dropped (sys_id, asset_tag) or overloaded
 		// into Owner (operational_status).
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:                uuid.Must(uuid.NewV7()),
-			AssetType:         classifyServiceNowCI(table),
+			MachineType:       classifyServiceNowCI(table),
 			Hostname:          ci.name,
 			OSFamily:          osFamily,
 			OSVersion:         ci.osVersion,
 			CMDBSysID:         ci.sysID,
-			AssetTag:          ci.assetTag,
+			MachineTag:        ci.machineTag,
 			OperationalStatus: ci.operationalStatus,
 			DiscoverySource:   "servicenow",
 			FirstSeenAt:       now,
@@ -121,14 +121,14 @@ func (s *ServiceNow) Discover(ctx context.Context, cfg map[string]any) ([]model.
 		}
 		if len(tags) > 0 {
 			b, _ := json.Marshal(tags)
-			asset.Tags = string(b)
+			machine.Tags = string(b)
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
 
-	slog.Info("servicenow: discovery complete", "code", string(LogCodeServiceNowComplete), "total_assets", len(assets))
-	return assets, nil
+	slog.Info("servicenow: discovery complete", "code", string(LogCodeServiceNowComplete), "total_machines", len(machines))
+	return machines, nil
 }
 
 // httpClient returns the outbound client and validated base URL. When baseURL
@@ -164,7 +164,7 @@ type serviceNowCI struct {
 	operationalStatus string
 	sysID             string
 	ipAddress         string
-	assetTag          string
+	machineTag        string
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +275,7 @@ func parseServiceNowCI(data json.RawMessage) (serviceNowCI, error) {
 		OS                string `json:"os"`
 		OSVersion         string `json:"os_version"`
 		IPAddress         string `json:"ip_address"`
-		AssetTag          string `json:"asset_tag"`
+		MachineTag        string `json:"asset_tag"`
 		OperationalStatus string `json:"operational_status"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -289,7 +289,7 @@ func parseServiceNowCI(data json.RawMessage) (serviceNowCI, error) {
 		operationalStatus: raw.OperationalStatus,
 		sysID:             raw.SysID,
 		ipAddress:         raw.IPAddress,
-		assetTag:          raw.AssetTag,
+		machineTag:        raw.MachineTag,
 	}, nil
 }
 
@@ -326,22 +326,22 @@ func deriveServiceNowOSFamily(os string) string {
 	}
 }
 
-// classifyServiceNowCI maps the CMDB table name to an asset type.
-func classifyServiceNowCI(table string) model.AssetType {
+// classifyServiceNowCI maps the CMDB table name to an machine type.
+func classifyServiceNowCI(table string) model.MachineType {
 	switch table {
 	case "cmdb_ci_server", "cmdb_ci_linux_server", "cmdb_ci_win_server", "cmdb_ci_unix_server":
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	case "cmdb_ci_computer", "cmdb_ci_pc_hardware":
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	case "cmdb_ci_netgear":
-		return model.AssetTypeNetworkDevice
+		return model.MachineTypeNetworkDevice
 	default:
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
 }
 
 // ensure ServiceNow satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*ServiceNow)(nil)

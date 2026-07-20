@@ -37,7 +37,7 @@ func NewNetBox() *NetBox {
 // Name returns the stable identifier for this source.
 func (n *NetBox) Name() string { return "netbox" }
 
-// Discover lists devices from NetBox and returns them as assets. If discovery
+// Discover lists devices from NetBox and returns them as machines. If discovery
 // is not enabled, or credentials are not available, the method returns nil
 // (graceful degradation).
 //
@@ -46,7 +46,7 @@ func (n *NetBox) Name() string { return "netbox" }
 //	enabled  – bool; discovery is skipped unless explicitly true (F3)
 //	api_url  – string base URL of the NetBox instance (e.g. "https://netbox.corp.local")
 //	token    – string API authentication token
-func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if !connectorkit.Enabled(cfg) {
 		return nil, nil // R2/F3: honour enabled:false even when creds are present.
 	}
@@ -89,10 +89,10 @@ func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	}
 
 	now := time.Now().UTC()
-	assets := make([]model.Asset, 0, len(devices))
+	machines := make([]model.Machine, 0, len(devices))
 
 	for _, dev := range devices {
-		assetType := classifyNetBoxDevice(dev.deviceRole)
+		machineType := classifyNetBoxDevice(dev.deviceRole)
 		osFamily := ""
 		if dev.platform != "" {
 			osFamily = deriveNetBoxOSFamily(dev.platform)
@@ -110,9 +110,9 @@ func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 		// R6: stop overloading Environment/Owner — NetBox site and tenant have
 		// dedicated columns now, and the device id is the CMDB sys id.
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:              uuid.Must(uuid.NewV7()),
-			AssetType:       assetType,
+			MachineType:     machineType,
 			Hostname:        dev.name,
 			OSFamily:        osFamily,
 			Site:            dev.site,
@@ -126,20 +126,20 @@ func (n *NetBox) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		}
 		if len(tags) > 0 {
 			b, _ := json.Marshal(tags)
-			asset.Tags = string(b)
+			machine.Tags = string(b)
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
 
 	slog.Info(
 		"NetBox discovery completed",
 		"code", string(LogCodeNetBoxComplete),
 		"api_url_set", apiURL != "",
-		"total_assets", len(assets),
+		"total_machines", len(machines),
 		"raw_devices", len(devices),
 	)
-	return assets, nil
+	return machines, nil
 }
 
 // httpClient returns the outbound client and validated base URL. When baseURL
@@ -322,26 +322,26 @@ func parseNetBoxDevice(data json.RawMessage) (netboxDevice, error) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// classifyNetBoxDevice maps the NetBox device_role slug to an asset type.
-func classifyNetBoxDevice(role string) model.AssetType {
+// classifyNetBoxDevice maps the NetBox device_role slug to an machine type.
+func classifyNetBoxDevice(role string) model.MachineType {
 	lower := strings.ToLower(role)
 	switch {
 	case strings.Contains(lower, "server"):
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	case strings.Contains(lower, "router"),
 		strings.Contains(lower, "switch"),
 		strings.Contains(lower, "firewall"),
 		strings.Contains(lower, "load-balancer"),
 		strings.Contains(lower, "network"):
-		return model.AssetTypeNetworkDevice
+		return model.MachineTypeNetworkDevice
 	case strings.Contains(lower, "workstation"),
 		strings.Contains(lower, "desktop"),
 		strings.Contains(lower, "laptop"):
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	case strings.Contains(lower, "appliance"):
-		return model.AssetTypeAppliance
+		return model.MachineTypeAppliance
 	default:
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
 }
 
@@ -386,5 +386,5 @@ func deriveNetBoxOSFamily(platform string) string {
 // ensure NetBox satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*NetBox)(nil)

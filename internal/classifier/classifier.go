@@ -6,7 +6,7 @@ import (
 )
 
 // Classifier orchestrates authorization and managed-state classification for
-// discovered assets.
+// discovered machines.
 type Classifier struct {
 	authorizer *Authorizer
 	manager    *Manager
@@ -20,44 +20,44 @@ func New(authorizer *Authorizer, manager *Manager) *Classifier {
 	}
 }
 
-// ClassifyAll applies classification to every asset in the slice, updating
-// each asset's IsAuthorized and IsManaged fields in place.  The (possibly
+// ClassifyAll applies classification to every machine in the slice, updating
+// each machine's IsAuthorized and IsManaged fields in place.  The (possibly
 // mutated) slice is returned for convenience.
-func (c *Classifier) ClassifyAll(assets []model.Asset) []model.Asset {
-	for i := range assets {
-		c.Classify(&assets[i])
+func (c *Classifier) ClassifyAll(machines []model.Machine) []model.Machine {
+	for i := range machines {
+		c.Classify(&machines[i])
 	}
-	return assets
+	return machines
 }
 
-// Classify sets the IsAuthorized and IsManaged fields on a single asset.
-func (c *Classifier) Classify(asset *model.Asset) {
-	asset.IsAuthorized = c.authorizer.Authorize(*asset)
-	asset.IsManaged = c.manager.Evaluate(*asset)
+// Classify sets the IsAuthorized and IsManaged fields on a single machine.
+func (c *Classifier) Classify(machine *model.Machine) {
+	machine.IsAuthorized = c.authorizer.Authorize(*machine)
+	machine.IsManaged = c.manager.Evaluate(*machine)
 }
 
 // ClassifyWithSoftware sets the IsAuthorized and IsManaged fields on a single
-// asset, using the provided software inventory for managed-state evaluation.
+// machine, using the provided software inventory for managed-state evaluation.
 // This enables Phase 2 classification where installed software is checked
 // against required controls.
-func (c *Classifier) ClassifyWithSoftware(asset *model.Asset, software []model.InstalledSoftware) {
-	asset.IsAuthorized = c.authorizer.Authorize(*asset)
-	asset.IsManaged = c.manager.EvaluateWithSoftware(*asset, software)
+func (c *Classifier) ClassifyWithSoftware(machine *model.Machine, software []model.InstalledSoftware) {
+	machine.IsAuthorized = c.authorizer.Authorize(*machine)
+	machine.IsManaged = c.manager.EvaluateWithSoftware(*machine, software)
 }
 
-// ClassifyAllWithSoftware applies classification to every asset in the slice,
-// using the provided software map to look up installed software by asset ID.
-// Assets without an entry in the software map fall back to the Phase 1
+// ClassifyAllWithSoftware applies classification to every machine in the slice,
+// using the provided software map to look up installed software by machine ID.
+// Machines without an entry in the software map fall back to the Phase 1
 // Evaluate method (no software data available).  The (possibly mutated) slice
 // is returned for convenience.
-func (c *Classifier) ClassifyAllWithSoftware(assets []model.Asset, softwareByAsset map[uuid.UUID][]model.InstalledSoftware) []model.Asset {
-	for i := range assets {
-		sw, ok := softwareByAsset[assets[i].ID]
+func (c *Classifier) ClassifyAllWithSoftware(machines []model.Machine, softwareByMachine map[uuid.UUID][]model.InstalledSoftware) []model.Machine {
+	for i := range machines {
+		sw, ok := softwareByMachine[machines[i].ID]
 		if ok {
-			c.ClassifyWithSoftware(&assets[i], sw)
+			c.ClassifyWithSoftware(&machines[i], sw)
 		} else {
-			c.Classify(&assets[i])
+			c.Classify(&machines[i])
 		}
 	}
-	return assets
+	return machines
 }

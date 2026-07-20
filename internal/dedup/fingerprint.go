@@ -46,7 +46,7 @@ type Signal struct {
 }
 
 // DiscoveryRecord is the union of identity-bearing signals any discoverer
-// can produce for a single observed asset. All fields are optional;
+// can produce for a single observed machine. All fields are optional;
 // fingerprinters declare which subset they require and decline (ok=false)
 // when the minimum is not met, letting the caller fall back to the
 // hostname natural-key path. Discoverers should fill what they observe
@@ -66,7 +66,7 @@ type DiscoveryRecord struct {
 	ImageID           string
 	IMDSPayloadSHA256 string
 	SSHHostKeySHA256  string
-	AssetType         model.AssetType
+	MachineType       model.MachineType
 	UpstreamID        string
 	TenantID          string
 	UPnPUUID          string
@@ -83,20 +83,20 @@ type DiscoveryRecord struct {
 	MACAddresses      []string
 }
 
-// Fingerprinter produces a Tier-1 identity digest for one AssetType.
+// Fingerprinter produces a Tier-1 identity digest for one MachineType.
 // Implementations MUST canonicalize each signal via the canon helpers
 // before contributing it. Mutable state belongs in Tier 2
-// (Asset.MaterialFingerprint), not here.
+// (Machine.MaterialFingerprint), not here.
 type Fingerprinter interface {
-	AssetType() model.AssetType
+	MachineType() model.MachineType
 	Identity(rec DiscoveryRecord) (digest [32]byte, signals []Signal, conf Confidence, ok bool)
 }
 
-// Compose hashes the version byte, tenant scope, asset type, and signals
+// Compose hashes the version byte, tenant scope, machine type, and signals
 // into a SHA-256 digest. Each component is delimited by Sep so the
 // pre-image is unambiguous. Signal Kind is hashed before Bytes so two
 // different signal types with the same byte content cannot collide.
-func Compose(version byte, tenant string, t model.AssetType, sigs []Signal) [32]byte {
+func Compose(version byte, tenant string, t model.MachineType, sigs []Signal) [32]byte {
 	h := sha256.New()
 	h.Write([]byte{version})
 	h.Write([]byte(Sep))
@@ -117,29 +117,29 @@ func Compose(version byte, tenant string, t model.AssetType, sigs []Signal) [32]
 // Hex returns the lowercase hex encoding of a 32-byte digest.
 func Hex(d [32]byte) string { return hex.EncodeToString(d[:]) }
 
-// Registry dispatches per AssetType. It is safe for concurrent reads after
+// Registry dispatches per MachineType. It is safe for concurrent reads after
 // construction is complete; callers should register everything they need
 // before sharing the Registry across goroutines.
 type Registry struct {
-	m  map[model.AssetType]Fingerprinter
+	m  map[model.MachineType]Fingerprinter
 	mu sync.RWMutex
 }
 
 // NewRegistry returns an empty Registry.
-func NewRegistry() *Registry { return &Registry{m: map[model.AssetType]Fingerprinter{}} }
+func NewRegistry() *Registry { return &Registry{m: map[model.MachineType]Fingerprinter{}} }
 
 // Register adds a Fingerprinter, overwriting any prior registration for
-// the same AssetType. The last registration wins; this lets test code
+// the same MachineType. The last registration wins; this lets test code
 // substitute a stub without first clearing the slot.
 func (r *Registry) Register(f Fingerprinter) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.m[f.AssetType()] = f
+	r.m[f.MachineType()] = f
 }
 
-// Get returns the registered Fingerprinter for the given AssetType. The
+// Get returns the registered Fingerprinter for the given MachineType. The
 // second return value is false when no Fingerprinter is registered.
-func (r *Registry) Get(t model.AssetType) (Fingerprinter, bool) {
+func (r *Registry) Get(t model.MachineType) (Fingerprinter, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	f, ok := r.m[t]
@@ -152,24 +152,24 @@ func (r *Registry) Get(t model.AssetType) (Fingerprinter, bool) {
 func DefaultRegistry() *Registry {
 	r := NewRegistry()
 	r.Register(CloudInstanceFingerprinter{})
-	r.Register(AgentEnrolledHostFingerprinter{Type: model.AssetTypeServer})
-	r.Register(AgentEnrolledHostFingerprinter{Type: model.AssetTypeWorkstation})
+	r.Register(AgentEnrolledHostFingerprinter{Type: model.MachineTypeServer})
+	r.Register(AgentEnrolledHostFingerprinter{Type: model.MachineTypeWorkstation})
 	r.Register(ContainerFingerprinter{})
-	r.Register(VCSRepositoryFingerprinter{Type: model.AssetTypeSoftwareProject})
-	r.Register(VCSRepositoryFingerprinter{Type: model.AssetTypeRepository})
+	r.Register(VCSRepositoryFingerprinter{Type: model.MachineTypeSoftwareProject})
+	r.Register(VCSRepositoryFingerprinter{Type: model.MachineTypeRepository})
 	r.Register(NetworkDeviceFingerprinter{})
 	r.Register(LANAgentlessFingerprinter{})
 	r.Register(IOTDeviceFingerprinter{})
 	// CMDB is wrapped with both server/workstation/network_device types
-	// because the upstream system may emit any of them. The asset type
+	// because the upstream system may emit any of them. The machine type
 	// must already be set on the record by the discoverer.
-	for _, t := range []model.AssetType{
-		model.AssetTypeServer, model.AssetTypeWorkstation,
-		model.AssetTypeNetworkDevice, model.AssetTypeAppliance,
-		model.AssetTypeVirtualMachine,
+	for _, t := range []model.MachineType{
+		model.MachineTypeServer, model.MachineTypeWorkstation,
+		model.MachineTypeNetworkDevice, model.MachineTypeAppliance,
+		model.MachineTypeVirtualMachine,
 	} {
 		// CMDBFingerprinter routes on UpstreamSource/UpstreamID, not on
-		// asset type — but Get() dispatches on AssetType, so we register
+		// machine type — but Get() dispatches on MachineType, so we register
 		// the same logic for every type a CMDB might emit. CMDB observations
 		// only succeed when both UpstreamSource and UpstreamID are set,
 		// so server/workstation observations from other sources still

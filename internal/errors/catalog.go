@@ -199,7 +199,7 @@ var Catalog = map[string]KiteError{
 	"KITE-E013": {
 		Code:    "KITE-E013",
 		Message: "Scan deadline exceeded",
-		Cause:   "The scan did not complete within the configured deadline. Partial results were saved but some phases (software collection, auditing, stale-asset detection) may have been skipped.",
+		Cause:   "The scan did not complete within the configured deadline. Partial results were saved but some phases (software collection, auditing, stale-machine detection) may have been skipped.",
 		Remediation: map[string]string{
 			"default": "Increase the deadline: safety.scan_deadline in kite-collector.yaml (default: 30m).\nReduce scan scope: disable slow sources or narrow CIDR ranges.\nCheck source latency: sources behind high-latency networks increase scan time.\nReview the scan result status for which phases completed.",
 		},

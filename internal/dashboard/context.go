@@ -44,10 +44,10 @@ type ReportContext struct {
 	ScanRunID     string
 	ScanStartedAt string
 	ScanStatus    string
-	TotalAssets   int
+	TotalMachines int
 	TotalSoftware int
 	TotalFindings int
-	StaleAssets   int
+	StaleMachines int
 }
 
 // NewReportContext builds a ReportContext from the current environment and
@@ -78,13 +78,13 @@ func NewReportContext(ctx context.Context, st store.Store, dbPath, version, comm
 		rc.ScanRunID = run.ID.String()
 		rc.ScanStartedAt = run.StartedAt.Format(time.RFC3339)
 		rc.ScanStatus = string(run.Status)
-		rc.TotalAssets = run.TotalAssets
-		rc.StaleAssets = run.StaleAssets
+		rc.TotalMachines = run.TotalMachines
+		rc.StaleMachines = run.StaleMachines
 	}
 
 	// Counts.
-	if assets, err := st.ListAssets(ctx, store.AssetFilter{}); err == nil {
-		rc.TotalAssets = len(assets)
+	if machines, err := st.ListMachines(ctx, store.MachineFilter{}); err == nil {
+		rc.TotalMachines = len(machines)
 	}
 	if findings, err := st.ListFindings(ctx, store.FindingFilter{}); err == nil {
 		rc.TotalFindings = len(findings)

@@ -3,7 +3,7 @@
 // Server-aligned Windows track.
 //
 // Returns an Inventory bundle (Printers + Ports) so the store layer
-// fans out into two table writes via asset_id from one PowerShell
+// fans out into two table writes via machine_id from one PowerShell
 // round-trip.
 //
 // MITRE T1210 (Exploitation of Remote Services — defender side):

@@ -13,8 +13,8 @@ import (
 // workload identity.
 type ContainerFingerprinter struct{}
 
-// AssetType returns the asset type this fingerprinter handles.
-func (ContainerFingerprinter) AssetType() model.AssetType { return model.AssetTypeContainer }
+// MachineType returns the machine type this fingerprinter handles.
+func (ContainerFingerprinter) MachineType() model.MachineType { return model.MachineTypeContainer }
 
 // Identity requires at minimum a platform_id and a workload_name. When
 // an OCI image digest is present, the confidence band is Cryptographic
@@ -44,5 +44,5 @@ func (ContainerFingerprinter) Identity(r DiscoveryRecord) ([32]byte, []Signal, C
 		conf = ConfidenceCryptographic
 	}
 
-	return Compose(FPVersion, r.TenantID, model.AssetTypeContainer, sigs), sigs, conf, true
+	return Compose(FPVersion, r.TenantID, model.MachineTypeContainer, sigs), sigs, conf, true
 }

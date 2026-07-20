@@ -78,13 +78,13 @@ func TestWorkspaceOne_Discover_Success(t *testing.T) {
 		"api_key":  "tenant-key",
 	}
 
-	assets, err := w.Discover(context.Background(), cfg)
+	machines, err := w.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
+	require.Len(t, machines, 2)
 
-	phone := findAsset(assets, "iphone-ceo")
+	phone := findMachine(machines, "iphone-ceo")
 	require.NotNil(t, phone)
-	assert.Equal(t, model.AssetTypeWorkstation, phone.AssetType)
+	assert.Equal(t, model.MachineTypeWorkstation, phone.MachineType)
 	assert.Equal(t, "ios", phone.OSFamily)
 	assert.Equal(t, "iOS 17.4", phone.OSVersion)
 	assert.Equal(t, "workspace_one", phone.DiscoverySource)
@@ -101,7 +101,7 @@ func TestWorkspaceOne_Discover_Success(t *testing.T) {
 	assert.Equal(t, "F2LABC123", phoneTags["serial_number"])
 	assert.Equal(t, "iPhone 15 Pro", phoneTags["model"])
 
-	laptop := findAsset(assets, "win-laptop")
+	laptop := findMachine(machines, "win-laptop")
 	require.NotNil(t, laptop)
 	assert.Equal(t, "windows", laptop.OSFamily)
 	assert.Equal(t, "202", laptop.MDMEnrollmentID) // Udid empty → DeviceId fallback
@@ -151,11 +151,11 @@ func TestWorkspaceOne_Discover_Pagination(t *testing.T) {
 		"api_key":  "k",
 	}
 
-	assets, err := w.Discover(context.Background(), cfg)
+	machines, err := w.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, wsonePageSize+2)
+	assert.Len(t, machines, wsonePageSize+2)
 	// macOS device on page 1 normalises to darwin.
-	mac := findAsset(assets, "dev-p1-b")
+	mac := findMachine(machines, "dev-p1-b")
 	require.NotNil(t, mac)
 	assert.Equal(t, "darwin", mac.OSFamily)
 }
@@ -164,9 +164,9 @@ func TestWorkspaceOne_Discover_MissingCredentials(t *testing.T) {
 	w := NewWorkspaceOne()
 
 	// Enabled but no credentials → skip (nil, nil).
-	assets, err := w.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := w.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestWorkspaceOne_Discover_DisabledWithCredentials(t *testing.T) {
@@ -181,9 +181,9 @@ func TestWorkspaceOne_Discover_DisabledWithCredentials(t *testing.T) {
 		"api_key":  "tenant-key",
 	}
 
-	assets, err := w.Discover(context.Background(), cfg)
+	machines, err := w.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestWorkspaceOne_Discover_AuthFailure(t *testing.T) {

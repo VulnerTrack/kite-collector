@@ -124,7 +124,7 @@ func NewSSH(configPath string) *SSH {
 func (s *SSH) Name() string { return "ssh" }
 
 // Audit parses sshd_config and checks settings against known-insecure values.
-func (s *SSH) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
+func (s *SSH) Audit(_ context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
 	settings, err := ParseSSHDConfig(s.configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -140,7 +140,7 @@ func (s *SSH) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFinding
 		return nil, fmt.Errorf("ssh audit: %w", err)
 	}
 
-	return EvaluateSSHSettings(settings, asset, s.configPath), nil
+	return EvaluateSSHSettings(settings, machine, s.configPath), nil
 }
 
 // ParseSSHDConfig reads an sshd_config file and returns key-value settings.
@@ -181,7 +181,7 @@ func ParseSSHDConfig(path string) (map[string]string, error) {
 
 // EvaluateSSHSettings checks parsed sshd_config settings against known
 // insecure values and returns findings.
-func EvaluateSSHSettings(settings map[string]string, asset model.Asset, configPath string) []model.ConfigFinding {
+func EvaluateSSHSettings(settings map[string]string, machine model.Machine, configPath string) []model.ConfigFinding {
 	now := time.Now().UTC()
 	var findings []model.ConfigFinding
 
@@ -196,7 +196,7 @@ func EvaluateSSHSettings(settings map[string]string, asset model.Asset, configPa
 
 		findings = append(findings, model.ConfigFinding{
 			ID:          uuid.Must(uuid.NewV7()),
-			AssetID:     asset.ID,
+			MachineID:   machine.ID,
 			Auditor:     "ssh",
 			CheckID:     check.ID,
 			Title:       check.Title,

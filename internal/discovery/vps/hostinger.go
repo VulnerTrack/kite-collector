@@ -27,7 +27,7 @@ func (h *Hostinger) Name() string { return "hostinger" }
 
 // Discover lists all Hostinger VPS instances.
 // Credentials: KITE_HOSTINGER_TOKEN environment variable.
-func (h *Hostinger) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (h *Hostinger) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_HOSTINGER_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -40,26 +40,26 @@ func (h *Hostinger) Discover(ctx context.Context, cfg map[string]any) ([]model.A
 		"code", string(LogCodeHostingerStarting))
 
 	client := newClient("hostinger", h.baseURL, bearerAuth(token))
-	var assets []model.Asset
+	var machines []model.Machine
 	guard := safenet.NewPaginationGuardV2WithSource("hostinger")
 
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("hostinger: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("hostinger: context cancelled: %w", ctx.Err())
 		}
 
 		var resp hostingerVMsResponse
 		nBytes, err := client.getSized(ctx, fmt.Sprintf("/api/vps/v1/virtual-machines?page=%d", page), &resp)
 		if err != nil {
-			return assets, fmt.Errorf("hostinger: list VMs: %w", err)
+			return machines, fmt.Errorf("hostinger: list VMs: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("hostinger: %w", err)
+			return machines, fmt.Errorf("hostinger: %w", err)
 		}
 
 		now := time.Now().UTC()
 		for i := range resp.Data {
-			assets = append(assets, hostingerToAsset(resp.Data[i], now))
+			machines = append(machines, hostingerToMachine(resp.Data[i], now))
 		}
 
 		if resp.NextPage == "" {
@@ -69,8 +69,8 @@ func (h *Hostinger) Discover(ctx context.Context, cfg map[string]any) ([]model.A
 
 	slog.Info("Hostinger VPS discovery complete",
 		"code", string(LogCodeHostingerComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Hostinger API response types ---
@@ -92,9 +92,9 @@ type hostingerVM struct {
 	ID         int    `json:"id"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func hostingerToAsset(vm hostingerVM, now time.Time) model.Asset {
+func hostingerToMachine(vm hostingerVM, now time.Time) model.Machine {
 	tags := map[string]any{
 		"provider_id": vm.ID,
 		"ip":          vm.IPAddress,
@@ -107,10 +107,10 @@ func hostingerToAsset(vm hostingerVM, now time.Time) model.Asset {
 		tags["warning"] = "server powered off - not reachable by network scan"
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        vm.Hostname,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		OSFamily:        vm.OS,
 		Environment:     vm.Datacenter,
 		DiscoverySource: "hostinger",
@@ -120,6 +120,6 @@ func hostingerToAsset(vm hostingerVM, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

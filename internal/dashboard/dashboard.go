@@ -74,9 +74,11 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	}
 
 	mux.HandleFunc("GET /kite-login", func(w http.ResponseWriter, r *http.Request) {
-		serveKiteLoginPage(w, r, opts.OAuth)
+		serveKiteLoginPage(w, r, opts.OAuth, opts.AppVersion)
 	})
-	mux.HandleFunc("GET /kite-success", serveKiteSuccessPage)
+	mux.HandleFunc("GET /kite-success", func(w http.ResponseWriter, r *http.Request) {
+		serveKiteSuccessPage(w, r, opts.OAuth, opts.AppVersion)
+	})
 	mux.HandleFunc("GET /api/v1/enrollment/wait/{id}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, logger, http.StatusOK, map[string]bool{
 			"complete": kiteOAuthWaitComplete(r.PathValue("id")),
@@ -84,22 +86,22 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	})
 	kiteOAuthEnrollment := kiteOAuthEnrollmentOptions{Logger: logger, PlatformEndpoint: opts.PlatformEndpoint}
 	mux.HandleFunc("GET /oauth/callback", func(w http.ResponseWriter, r *http.Request) {
-		serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment)
+		serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment, opts.AppVersion)
 	})
 
 	// Dashboard root — context-aware redirect. Fresh hosts (no enrolled
 	// identity) land on /onboarding so the operator sees the install/enroll
-	// flow immediately instead of an empty /assets page. Once enrollment is
-	// done the redirect flips to /assets, which is the steady-state home.
+	// flow immediately instead of an empty /machines page. Once enrollment is
+	// done the redirect flips to /machines, which is the steady-state home.
 	// 307 preserves the request method on the off chance a non-GET client
 	// hits "/".
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Has("code") || r.URL.Query().Has("state") {
-			serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment)
+			serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment, opts.AppVersion)
 			return
 		}
 
-		target := "/assets"
+		target := "/machines"
 		if sqliteStore, ok := st.(*sqlite.SQLiteStore); ok {
 			if _, err := sqliteStore.GetEnrolledIdentity(r.Context()); err != nil {
 				// Any error (including ErrNoIdentity) → assume not yet onboarded
@@ -162,8 +164,8 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	// matching tab and is what nav links push into history. The existing
 	// /fragments/* routes are kept (used by polling status divs and CSV
 	// exports' Back-button paths).
-	mux.HandleFunc("GET /assets", serveTabRoute("assets", func(w io.Writer, ctx context.Context) error {
-		return renderAssetsFragment(w, ctx, st, rc)
+	mux.HandleFunc("GET /machines", serveTabRoute("machines", func(w io.Writer, ctx context.Context) error {
+		return renderMachinesFragment(w, ctx, st, rc)
 	}))
 	mux.HandleFunc("GET /software", serveTabRoute("software", func(w io.Writer, ctx context.Context) error {
 		return renderSoftwareFragment(w, ctx, st, rc)
@@ -209,9 +211,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	})
 
 	// HTMX fragment endpoints — return HTML snippets for dynamic loading.
-	mux.HandleFunc("GET /fragments/assets", func(w http.ResponseWriter, r *http.Request) {
-		renderFragment(w, "assets", func(buf io.Writer) error {
-			return renderAssetsFragment(buf, r.Context(), st, rc)
+	mux.HandleFunc("GET /fragments/machines", func(w http.ResponseWriter, r *http.Request) {
+		renderFragment(w, "machines", func(buf io.Writer) error {
+			return renderMachinesFragment(buf, r.Context(), st, rc)
 		})
 	})
 
@@ -234,12 +236,12 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	})
 
 	// CSV export endpoints.
-	mux.HandleFunc("GET /api/v1/assets/export.csv", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /api/v1/machines/export.csv", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=assets_%s.csv", rc.ReportID[:8]))
-		if exportErr := exportAssetsCSV(w, r.Context(), st, rc); exportErr != nil {
-			logger.Error("dashboard: export assets csv",
-				"code", string(LogCodeExportAssetsCSV),
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=machines_%s.csv", rc.ReportID[:8]))
+		if exportErr := exportMachinesCSV(w, r.Context(), st, rc); exportErr != nil {
+			logger.Error("dashboard: export machines csv",
+				"code", string(LogCodeExportMachinesCSV),
 				"error", exportErr)
 		}
 	})

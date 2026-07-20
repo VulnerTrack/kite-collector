@@ -32,14 +32,14 @@ func NewGCP() *GCP {
 func (g *GCP) Name() string { return "gcp_compute" }
 
 // Discover lists Compute Engine instances in the configured project and
-// regions, returning them as assets. If credentials are not available the
+// regions, returning them as machines. If credentials are not available the
 // method logs a warning and returns nil (graceful degradation).
 //
 // Supported config keys:
 //
 //	regions – []any of GCP region strings (e.g. ["us-central1", "europe-west1"])
 //	project – string GCP project ID to enumerate instances from
-func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	regions := toStringSlice(cfg["regions"])
 	project := toString(cfg["project"])
 
@@ -86,7 +86,7 @@ func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 
 	for _, inst := range instances {
 		// Filter by region if regions were specified. The zone format is
@@ -103,9 +103,9 @@ func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 		// back to the disk URL heuristic.
 		osFamily := g.enrichOSFromDisk(ctx, inst, token)
 
-		asset := model.Asset{
+		machine := model.Machine{
 			ID:              uuid.Must(uuid.NewV7()),
-			AssetType:       model.AssetTypeCloudInstance,
+			MachineType:     model.MachineTypeCloudInstance,
 			Hostname:        inst.name,
 			OSFamily:        osFamily,
 			DiscoverySource: "gcp_compute",
@@ -115,18 +115,18 @@ func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, 
 			IsManaged:       model.ManagedUnknown,
 			Environment:     inst.zone,
 		}
-		asset.ComputeNaturalKey()
-		assets = append(assets, asset)
+		machine.ComputeNaturalKey()
+		machines = append(machines, machine)
 	}
 
 	slog.Info(
 		"GCP Compute discovery complete",
 		"code", string(LogCodeGCPComputeComplete),
 		"total_instances", len(instances),
-		"matched_assets", len(assets),
+		"matched_machines", len(machines),
 		"project", project,
 	)
-	return assets, nil
+	return machines, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -552,5 +552,5 @@ func truncateBytes(data []byte, maxLen int) string {
 // ensure GCP satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*GCP)(nil)

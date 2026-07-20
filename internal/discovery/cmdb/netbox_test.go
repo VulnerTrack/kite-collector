@@ -89,14 +89,14 @@ func TestNetBox_Discover_Success(t *testing.T) {
 		"token":   "nb-test-token",
 	}
 
-	assets, err := n.Discover(context.Background(), cfg)
+	machines, err := n.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 3)
+	require.Len(t, machines, 3)
 
 	// Switch device.
-	sw := findAssetByHostname(assets, "core-sw-01")
+	sw := findMachineByHostname(machines, "core-sw-01")
 	require.NotNil(t, sw)
-	assert.Equal(t, model.AssetTypeNetworkDevice, sw.AssetType)
+	assert.Equal(t, model.MachineTypeNetworkDevice, sw.MachineType)
 	assert.Equal(t, "junos", sw.OSFamily)
 	// R6: site → Site, tenant → Tenant (no longer overloaded onto
 	// Environment/Owner), and NetBox device id → CMDBSysID.
@@ -117,17 +117,17 @@ func TestNetBox_Discover_Success(t *testing.T) {
 	assert.Equal(t, "Juniper JunOS", swTags["platform"])
 
 	// Server device.
-	webSrv := findAssetByHostname(assets, "web-srv-01")
+	webSrv := findMachineByHostname(machines, "web-srv-01")
 	require.NotNil(t, webSrv)
-	assert.Equal(t, model.AssetTypeServer, webSrv.AssetType)
+	assert.Equal(t, model.MachineTypeServer, webSrv.MachineType)
 	assert.Equal(t, "linux", webSrv.OSFamily)
 	assert.Empty(t, webSrv.Tenant) // no tenant
 	assert.Equal(t, "102", webSrv.CMDBSysID)
 
 	// Firewall from page 2.
-	fw := findAssetByHostname(assets, "fw-01")
+	fw := findMachineByHostname(machines, "fw-01")
 	require.NotNil(t, fw)
-	assert.Equal(t, model.AssetTypeNetworkDevice, fw.AssetType)
+	assert.Equal(t, model.MachineTypeNetworkDevice, fw.MachineType)
 	assert.Equal(t, "DC-West", fw.Site)
 	assert.Equal(t, "103", fw.CMDBSysID)
 }
@@ -138,21 +138,21 @@ func TestNetBox_Discover_Disabled(t *testing.T) {
 
 	// F3: creds are present but enabled is false → discovery must be skipped.
 	n := &NetBox{baseURL: srv.URL}
-	assets, err := n.Discover(context.Background(), map[string]any{
+	machines, err := n.Discover(context.Background(), map[string]any{
 		"enabled": false,
 		"token":   "nb-test-token",
 	})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestNetBox_Discover_MissingCredentials(t *testing.T) {
 	n := NewNetBox()
 
 	// Enabled but no token → graceful skip.
-	assets, err := n.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := n.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestNetBox_Discover_AuthFailure(t *testing.T) {
@@ -166,9 +166,9 @@ func TestNetBox_Discover_AuthFailure(t *testing.T) {
 	}
 
 	// Auth failure → returns empty (not an error).
-	assets, err := n.Discover(context.Background(), cfg)
+	machines, err := n.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
 func TestNetBox_Discover_MalformedResponse(t *testing.T) {
@@ -189,19 +189,19 @@ func TestNetBox_Discover_MalformedResponse(t *testing.T) {
 	}
 
 	// Malformed entries parse with empty fields.
-	assets, err := n.Discover(context.Background(), cfg)
+	machines, err := n.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, 1)
+	assert.Len(t, machines, 1)
 }
 
 func TestClassifyNetBoxDevice(t *testing.T) {
-	assert.Equal(t, model.AssetTypeServer, classifyNetBoxDevice("server"))
-	assert.Equal(t, model.AssetTypeNetworkDevice, classifyNetBoxDevice("switch"))
-	assert.Equal(t, model.AssetTypeNetworkDevice, classifyNetBoxDevice("router"))
-	assert.Equal(t, model.AssetTypeNetworkDevice, classifyNetBoxDevice("firewall"))
-	assert.Equal(t, model.AssetTypeWorkstation, classifyNetBoxDevice("workstation"))
-	assert.Equal(t, model.AssetTypeAppliance, classifyNetBoxDevice("appliance"))
-	assert.Equal(t, model.AssetTypeServer, classifyNetBoxDevice("unknown-role"))
+	assert.Equal(t, model.MachineTypeServer, classifyNetBoxDevice("server"))
+	assert.Equal(t, model.MachineTypeNetworkDevice, classifyNetBoxDevice("switch"))
+	assert.Equal(t, model.MachineTypeNetworkDevice, classifyNetBoxDevice("router"))
+	assert.Equal(t, model.MachineTypeNetworkDevice, classifyNetBoxDevice("firewall"))
+	assert.Equal(t, model.MachineTypeWorkstation, classifyNetBoxDevice("workstation"))
+	assert.Equal(t, model.MachineTypeAppliance, classifyNetBoxDevice("appliance"))
+	assert.Equal(t, model.MachineTypeServer, classifyNetBoxDevice("unknown-role"))
 }
 
 func TestDeriveNetBoxOSFamily(t *testing.T) {
@@ -214,11 +214,11 @@ func TestDeriveNetBoxOSFamily(t *testing.T) {
 	assert.Equal(t, "freebsd", deriveNetBoxOSFamily("FreeBSD"))
 }
 
-// findAssetByHostname returns the first asset matching hostname, or nil.
-func findAssetByHostname(assets []model.Asset, hostname string) *model.Asset {
-	for i := range assets {
-		if assets[i].Hostname == hostname {
-			return &assets[i]
+// findMachineByHostname returns the first machine matching hostname, or nil.
+func findMachineByHostname(machines []model.Machine, hostname string) *model.Machine {
+	for i := range machines {
+		if machines[i].Hostname == hostname {
+			return &machines[i]
 		}
 	}
 	return nil

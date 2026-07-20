@@ -18,7 +18,7 @@ const (
 
 	// server surface — listener lifecycle and per-RPC failures
 	LogCodeServerInsecureListener    LogCode = "grpc.server.insecure_listener"
-	LogCodeServerAssetUpsertFail     LogCode = "grpc.server.asset_upsert_failed"
+	LogCodeServerMachineUpsertFail   LogCode = "grpc.server.machine_upsert_failed"
 	LogCodeServerSoftwareUpsertFail  LogCode = "grpc.server.software_upsert_failed"
 	LogCodeServerHeartbeatCNMismatch LogCode = "grpc.server.heartbeat_cn_mismatch"
 )

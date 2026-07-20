@@ -27,7 +27,7 @@ func (h *Hetzner) Name() string { return "hetzner" }
 
 // Discover lists all Hetzner Cloud servers, including powered-off ones.
 // Credentials: KITE_HETZNER_TOKEN environment variable.
-func (h *Hetzner) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (h *Hetzner) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_HETZNER_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -40,26 +40,26 @@ func (h *Hetzner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 		"code", string(LogCodeHetznerStarting))
 
 	client := newClient("hetzner", h.baseURL, bearerAuth(token))
-	var assets []model.Asset
+	var machines []model.Machine
 	guard := safenet.NewPaginationGuardV2WithSource("hetzner")
 
 	for page := 1; ; page++ {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("hetzner: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("hetzner: context cancelled: %w", ctx.Err())
 		}
 
 		var resp hetznerServersResponse
 		nBytes, err := client.getSized(ctx, fmt.Sprintf("/servers?page=%d&per_page=50", page), &resp)
 		if err != nil {
-			return assets, fmt.Errorf("hetzner: list servers: %w", err)
+			return machines, fmt.Errorf("hetzner: list servers: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("hetzner: %w", err)
+			return machines, fmt.Errorf("hetzner: %w", err)
 		}
 
 		now := time.Now().UTC()
 		for i := range resp.Servers {
-			assets = append(assets, hetznerToAsset(resp.Servers[i], now))
+			machines = append(machines, hetznerToMachine(resp.Servers[i], now))
 		}
 
 		if resp.Meta.Pagination.NextPage == 0 {
@@ -69,8 +69,8 @@ func (h *Hetzner) Discover(ctx context.Context, cfg map[string]any) ([]model.Ass
 
 	slog.Info("Hetzner VPS discovery complete",
 		"code", string(LogCodeHetznerComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Hetzner API response types ---
@@ -122,9 +122,9 @@ type hetznerImage struct {
 	Description string `json:"description"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func hetznerToAsset(srv hetznerServer, now time.Time) model.Asset {
+func hetznerToMachine(srv hetznerServer, now time.Time) model.Machine {
 	tags := map[string]any{
 		"provider_id": srv.ID,
 		"ip":          srv.PublicNet.IPv4.IP,
@@ -149,10 +149,10 @@ func hetznerToAsset(srv hetznerServer, now time.Time) model.Asset {
 		firstSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        srv.Name,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		OSFamily:        osFamily,
 		OSVersion:       osVersion,
 		Environment:     srv.Datacenter.Name,
@@ -163,6 +163,6 @@ func hetznerToAsset(srv hetznerServer, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

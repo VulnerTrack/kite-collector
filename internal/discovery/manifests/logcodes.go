@@ -7,7 +7,7 @@ package manifests
 //
 // Two surfaces are exposed:
 //   - `scanner`: the manifest scanner (source.go) — orchestrates the
-//     walk, parses dependency manifests, and produces assets/findings.
+//     walk, parses dependency manifests, and produces machines/findings.
 //   - `walker`:  the filesystem walker (walker.go) — traverses scan
 //     roots and emits matches.
 //

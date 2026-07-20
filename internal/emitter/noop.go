@@ -17,10 +17,10 @@ type NoopEmitter struct{}
 func NewNoop() *NoopEmitter { return &NoopEmitter{} }
 
 // Emit is a no-op; it always returns nil.
-func (n *NoopEmitter) Emit(_ context.Context, _ model.AssetEvent) error { return nil }
+func (n *NoopEmitter) Emit(_ context.Context, _ model.MachineEvent) error { return nil }
 
 // EmitBatch is a no-op; it always returns nil.
-func (n *NoopEmitter) EmitBatch(_ context.Context, _ []model.AssetEvent) error { return nil }
+func (n *NoopEmitter) EmitBatch(_ context.Context, _ []model.MachineEvent) error { return nil }
 
 // Shutdown is a no-op; it always returns nil.
 func (n *NoopEmitter) Shutdown(_ context.Context) error { return nil }

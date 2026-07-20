@@ -41,10 +41,10 @@ func NewSource() *Source {
 func (s *Source) Name() string { return "manifests" }
 
 // Discover walks the filesystem, parses dependency manifests, and returns
-// discovered project and repository assets.  Discovered software and
+// discovered project and repository machines.  Discovered software and
 // findings are stored internally and accessible via CollectedSoftware and
 // CollectedFindings.
-func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	sc := parseSourceConfig(cfg)
 
 	s.mu.Lock()
@@ -83,40 +83,40 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		matches = applyLockfilePreference(matches)
 	}
 
-	// Phase 3: parse manifests, evaluate policies, and build assets.
-	var assets []model.Asset
+	// Phase 3: parse manifests, evaluate policies, and build machines.
+	var machines []model.Machine
 	now := time.Now().UTC()
 	policy := sc.policyEngine
 
 	for _, m := range matches {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("manifest scan cancelled: %w", err)
+			return machines, fmt.Errorf("manifest scan cancelled: %w", err)
 		}
 
 		if m.IsGitDir {
-			asset := s.processGitRepo(ctx, m.Path, now, sc)
-			if asset != nil {
-				assets = append(assets, *asset)
+			machine := s.processGitRepo(ctx, m.Path, now, sc)
+			if machine != nil {
+				machines = append(machines, *machine)
 			}
 			continue
 		}
 
-		asset, sw, deps := s.parseManifest(ctx, m.Path, now)
-		if asset == nil {
+		machine, sw, deps := s.parseManifest(ctx, m.Path, now)
+		if machine == nil {
 			continue
 		}
-		assets = append(assets, *asset)
+		machines = append(machines, *machine)
 
 		if len(sw) > 0 {
 			s.mu.Lock()
-			s.software[asset.ID] = sw
+			s.software[machine.ID] = sw
 			s.mu.Unlock()
 		}
 
 		// Evaluate dependency policies.
 		if policy != nil {
 			for _, dep := range deps {
-				pf := policy.Evaluate(dep, asset.ID, now)
+				pf := policy.Evaluate(dep, machine.ID, now)
 				if len(pf) > 0 {
 					s.mu.Lock()
 					s.findings = append(s.findings, pf...)
@@ -128,15 +128,15 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	slog.Info("manifest scanner: discovery complete",
 		"code", string(LogCodeScannerDiscoveryComplete),
-		"assets", len(assets),
+		"machines", len(machines),
 		"total_software", s.totalSoftware(),
 		"findings", len(s.findings))
 
-	return assets, nil
+	return machines, nil
 }
 
 // CollectedSoftware returns software discovered during the last Discover call,
-// keyed by asset ID.
+// keyed by machine ID.
 func (s *Source) CollectedSoftware() map[uuid.UUID][]model.InstalledSoftware {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -150,7 +150,7 @@ func (s *Source) CollectedFindings() []model.ConfigFinding {
 	return s.findings
 }
 
-func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) (*model.Asset, []model.InstalledSoftware, []parsers.Dependency) {
+func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) (*model.Machine, []model.InstalledSoftware, []parsers.Dependency) {
 	base := filepath.Base(path)
 	parser := s.registry.Match(base)
 	if parser == nil {
@@ -187,16 +187,16 @@ func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) 
 			"path", path, "warning", e)
 	}
 
-	// Create asset for this manifest.
-	assetID := newID()
+	// Create machine for this manifest.
+	machineID := newID()
 	hostname := result.ProjectName
 	if hostname == "" {
 		hostname = filepath.Base(filepath.Dir(path))
 	}
 
-	asset := model.Asset{
-		ID:              assetID,
-		AssetType:       model.AssetTypeSoftwareProject,
+	machine := model.Machine{
+		ID:              machineID,
+		MachineType:     model.MachineTypeSoftwareProject,
 		Hostname:        hostname,
 		DiscoverySource: "manifest_scanner",
 		FirstSeenAt:     now,
@@ -205,14 +205,14 @@ func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) 
 		IsManaged:       model.ManagedUnknown,
 		Tags:            manifestTags(path, parser.Ecosystem(), result),
 	}
-	asset.ComputeNaturalKey()
+	machine.ComputeNaturalKey()
 
 	// Convert dependencies to InstalledSoftware.
 	var sw []model.InstalledSoftware
 	for _, dep := range result.Dependencies {
 		sw = append(sw, model.InstalledSoftware{
 			ID:             newID(),
-			AssetID:        assetID,
+			MachineID:      machineID,
 			SoftwareName:   dep.Name,
 			Vendor:         dep.Vendor,
 			Version:        dep.Version,
@@ -221,10 +221,10 @@ func (s *Source) parseManifest(ctx context.Context, path string, now time.Time) 
 		})
 	}
 
-	return &asset, sw, result.Dependencies
+	return &machine, sw, result.Dependencies
 }
 
-func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time.Time, sc sourceConfig) *model.Asset {
+func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time.Time, sc sourceConfig) *model.Machine {
 	info, err := DetectGitRepo(ctx, gitDirPath, sc.gitDetectDirty, sc.gitStaleDays)
 	if err != nil {
 		slog.Warn("manifest scanner: git detection error",
@@ -252,9 +252,9 @@ func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time
 	}
 	tagsJSON, _ := json.Marshal(tags)
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              newID(),
-		AssetType:       model.AssetTypeRepository,
+		MachineType:     model.MachineTypeRepository,
 		Hostname:        hostname,
 		DiscoverySource: "manifest_scanner",
 		FirstSeenAt:     now,
@@ -263,13 +263,13 @@ func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time
 		IsManaged:       model.ManagedUnknown,
 		Tags:            string(tagsJSON),
 	}
-	asset.ComputeNaturalKey()
+	machine.ComputeNaturalKey()
 
 	// Generate findings for stale/dirty repos.
 	if info.IsStale {
 		finding := model.ConfigFinding{
 			ID:          newID(),
-			AssetID:     asset.ID,
+			MachineID:   machine.ID,
 			Timestamp:   now,
 			Auditor:     "manifest_scanner",
 			CheckID:     "git:stale_repo",
@@ -285,7 +285,7 @@ func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time
 	if info.IsDirty {
 		finding := model.ConfigFinding{
 			ID:          newID(),
-			AssetID:     asset.ID,
+			MachineID:   machine.ID,
 			Timestamp:   now,
 			Auditor:     "manifest_scanner",
 			CheckID:     "git:dirty_repo",
@@ -299,7 +299,7 @@ func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time
 		s.mu.Unlock()
 	}
 
-	return &asset
+	return &machine
 }
 
 func (s *Source) totalSoftware() int {

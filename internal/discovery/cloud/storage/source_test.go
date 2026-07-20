@@ -13,7 +13,7 @@ import (
 )
 
 // frozenSource returns a Source whose timestamps are reproducible — useful
-// because the asset's NaturalKey is timestamp-independent but the test
+// because the machine's NaturalKey is timestamp-independent but the test
 // otherwise leaks wall-clock variance into log lines.
 func frozenSource() *Source {
 	s := NewSource()
@@ -22,16 +22,16 @@ func frozenSource() *Source {
 }
 
 func TestSource_NoTargetsReturnsNil(t *testing.T) {
-	assets, err := frozenSource().Discover(context.Background(), nil)
+	machines, err := frozenSource().Discover(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Discover with nil cfg: %v", err)
 	}
-	if len(assets) != 0 {
-		t.Fatalf("expected zero assets with no config, got %+v", assets)
+	if len(machines) != 0 {
+		t.Fatalf("expected zero machines with no config, got %+v", machines)
 	}
 }
 
-func TestSource_EmitsAssetPerBucket(t *testing.T) {
+func TestSource_EmitsMachinePerBucket(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Amz-Request-Id", "abc")
 		_, _ = w.Write([]byte(`import { S3Client } from "@aws-sdk/client-s3";`))
@@ -41,14 +41,14 @@ func TestSource_EmitsAssetPerBucket(t *testing.T) {
 	cfg := map[string]any{
 		"targets": []any{srv.URL + "/main.js"},
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("expected 1 asset, got %d (%+v)", len(assets), assets)
+	if len(machines) != 1 {
+		t.Fatalf("expected 1 machine, got %d (%+v)", len(machines), machines)
 	}
-	a := assets[0]
+	a := machines[0]
 	if a.DiscoverySource != "storage_fingerprint" {
 		t.Errorf("unexpected DiscoverySource %q", a.DiscoverySource)
 	}
@@ -82,16 +82,16 @@ func TestSource_DeduplicatesByBucketHost(t *testing.T) {
 			srv.URL + "/b.js", // same host → same bucket host → dedup
 		},
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("expected 1 asset after dedup, got %d", len(assets))
+	if len(machines) != 1 {
+		t.Fatalf("expected 1 machine after dedup, got %d", len(machines))
 	}
 }
 
-func TestSource_FilterAppliedBeforeAssetEmission(t *testing.T) {
+func TestSource_FilterAppliedBeforeMachineEmission(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`@aws-sdk/client-s3`))
 	}))
@@ -101,12 +101,12 @@ func TestSource_FilterAppliedBeforeAssetEmission(t *testing.T) {
 		"targets":             []any{srv.URL + "/a.js"},
 		"providers_allowlist": []any{"supabase_storage"}, // filter out AWS
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 0 {
-		t.Fatalf("expected 0 assets after provider filter, got %+v", assets)
+	if len(machines) != 0 {
+		t.Fatalf("expected 0 machines after provider filter, got %+v", machines)
 	}
 }
 
@@ -120,22 +120,22 @@ func TestSource_MinConfidenceFromConfig(t *testing.T) {
 		"targets":        []any{srv.URL + "/a.js"},
 		"min_confidence": 3, // every catalogue rule we match here is high already; sanity
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("expected 1 asset at min-confidence=high, got %d", len(assets))
+	if len(machines) != 1 {
+		t.Fatalf("expected 1 machine at min-confidence=high, got %d", len(machines))
 	}
 
 	// min-confidence above any rule's confidence band silences output.
 	cfg["min_confidence"] = 99
-	assets, err = frozenSource().Discover(context.Background(), cfg)
+	machines, err = frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 0 {
-		t.Fatalf("expected 0 assets at impossible min-confidence, got %+v", assets)
+	if len(machines) != 0 {
+		t.Fatalf("expected 0 machines at impossible min-confidence, got %+v", machines)
 	}
 }
 
@@ -152,12 +152,12 @@ func TestSource_ProbeFailureDoesNotHaltOthers(t *testing.T) {
 		},
 		"timeout": "500ms",
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover should not error on partial probe failure: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("expected 1 asset from surviving probe, got %d", len(assets))
+	if len(machines) != 1 {
+		t.Fatalf("expected 1 machine from surviving probe, got %d", len(machines))
 	}
 }
 
@@ -181,21 +181,21 @@ func TestSource_PageTargetsFanOut(t *testing.T) {
 		"page_targets": []any{srv.URL + "/index.html"},
 		"timeout":      "2s",
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 1 {
+	if len(machines) != 1 {
 		// Both scripts share the same host (the httptest server), so
-		// dedup-by-bucket-host should collapse them to one asset. The
+		// dedup-by-bucket-host should collapse them to one machine. The
 		// test would need separate hosts to surface two — instead we
 		// assert that fan-out at least found the AWS provider.
-		t.Fatalf("expected 1 deduplicated asset, got %d (%+v)", len(assets), assets)
+		t.Fatalf("expected 1 deduplicated machine, got %d (%+v)", len(machines), machines)
 	}
 
 	// Tags should mention either aws_s3 or supabase_storage as primary.
-	if !strings.Contains(assets[0].Tags, "aws_s3") && !strings.Contains(assets[0].Tags, "supabase_storage") {
-		t.Errorf("expected aws_s3 or supabase_storage in tags, got %q", assets[0].Tags)
+	if !strings.Contains(machines[0].Tags, "aws_s3") && !strings.Contains(machines[0].Tags, "supabase_storage") {
+		t.Errorf("expected aws_s3 or supabase_storage in tags, got %q", machines[0].Tags)
 	}
 }
 
@@ -211,12 +211,12 @@ func TestSource_PageTargetsFailureSurvives(t *testing.T) {
 		"targets":      []any{srv.URL + "/app.js"},
 		"timeout":      "500ms",
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("expected 1 asset from surviving direct target, got %d", len(assets))
+	if len(machines) != 1 {
+		t.Fatalf("expected 1 machine from surviving direct target, got %d", len(machines))
 	}
 }
 
@@ -244,15 +244,15 @@ func TestSource_LoadsExternalSignatures(t *testing.T) {
 		"signature_file": sigsPath,
 		"timeout":        "2s",
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("expected 1 asset from custom signature, got %d", len(assets))
+	if len(machines) != 1 {
+		t.Fatalf("expected 1 machine from custom signature, got %d", len(machines))
 	}
-	if !strings.Contains(assets[0].Tags, "custom_provider") {
-		t.Errorf("expected custom_provider in Tags, got %q", assets[0].Tags)
+	if !strings.Contains(machines[0].Tags, "custom_provider") {
+		t.Errorf("expected custom_provider in Tags, got %q", machines[0].Tags)
 	}
 }
 
@@ -267,12 +267,12 @@ func TestSource_SignatureFileLoadErrorDegradesGracefully(t *testing.T) {
 		"signature_file": "/nonexistent/path/to/sigs.json",
 		"timeout":        "2s",
 	}
-	assets, err := frozenSource().Discover(context.Background(), cfg)
+	machines, err := frozenSource().Discover(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Discover should not error on bad signature_file: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("expected 1 asset from built-in catalogue fallback, got %d", len(assets))
+	if len(machines) != 1 {
+		t.Fatalf("expected 1 machine from built-in catalogue fallback, got %d", len(machines))
 	}
 }
 

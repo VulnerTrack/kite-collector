@@ -216,7 +216,7 @@ func CanonSSHHostKey(raw string) string {
 // CanonTLSCertSPKI parses a PEM- or DER-encoded X.509 certificate and
 // returns the SHA-256 hex digest of its SubjectPublicKeyInfo. SPKI is
 // stable across certificate reissuance with the same keypair, which is
-// the property we want for asset identity. Returns "" on parse failure.
+// the property we want for machine identity. Returns "" on parse failure.
 func CanonTLSCertSPKI(raw []byte) string {
 	if block, _ := pem.Decode(raw); block != nil {
 		raw = block.Bytes

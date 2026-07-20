@@ -1,10 +1,10 @@
 // Package ldap implements a discovery.Source that enumerates Windows
 // Active Directory / generic LDAP computer accounts (and, optionally,
-// users / groups / OUs) as kite assets per RFC-0121.
+// users / groups / OUs) as kite machines per RFC-0121.
 //
 // The source binds to one or more configured domain controllers using
 // ldaps:// (default), starttls, or plain LDAP, then runs paged searches
-// against the requested object classes and emits model.Asset records
+// against the requested object classes and emits model.Machine records
 // tagged with the contract.AttrAD* attribute set declared in
 // internal/telemetry/contract/v1.go. Findings are produced separately
 // in finding.go (Phase 2).
@@ -27,7 +27,7 @@ import (
 )
 
 // SourceName is the stable identifier emitted on the
-// security.asset.discovery.source attribute and the discover.<source>
+// security.machine.discovery.source attribute and the discover.<source>
 // span suffix per RFC-0115.
 const SourceName = "ldap"
 
@@ -85,11 +85,11 @@ func (l *LDAP) Name() string { return SourceName }
 
 // Discover binds to the first reachable configured domain controller,
 // runs a paged LDAP search for computer accounts, converts the results
-// to model.Asset values, and returns them. Failure to reach a single DC
+// to model.Machine values, and returns them. Failure to reach a single DC
 // causes the next configured DC to be tried; if none respond the source
 // returns an error, which the registry logs as a warning per
 // discovery.Registry.DiscoverAll.
-func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	conf, err := parseConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("ldap: %w", err)
@@ -131,15 +131,15 @@ func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 	}
 
 	now := l.now()
-	assets := make([]model.Asset, 0, len(result.Entries))
+	machines := make([]model.Machine, 0, len(result.Entries))
 	for _, entry := range result.Entries {
 		comp, exErr := extractComputer(entry, conf.baseDN)
 		if exErr != nil {
 			slog.Warn("ldap: skipping malformed entry", "code", string(LogCodeSearchSkipMalformedEntry), "dn", entry.DN, "error", exErr)
 			continue
 		}
-		assets = append(assets, comp.toAsset(now))
-		if len(assets) >= conf.maxObjects {
+		machines = append(machines, comp.toMachine(now))
+		if len(machines) >= conf.maxObjects {
 			slog.Warn(
 				"ldap: max_objects circuit breaker tripped — truncating",
 				"code", string(LogCodeSearchMaxObjectsTripped),
@@ -149,8 +149,8 @@ func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset,
 		}
 	}
 
-	slog.Info("ldap: discovery complete", "assets", len(assets), "dc", dc.host)
-	return assets, nil
+	slog.Info("ldap: discovery complete", "machines", len(machines), "dc", dc.host)
+	return machines, nil
 }
 
 // dialAny tries every configured domain controller in order and returns

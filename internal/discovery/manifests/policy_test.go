@@ -20,10 +20,10 @@ func TestPolicyEngine_Blocklist_AllVersions(t *testing.T) {
 		},
 	})
 
-	assetID := uuid.New()
+	machineID := uuid.New()
 	now := time.Now().UTC()
 
-	findings := pe.Evaluate(parsers.Dependency{Name: "colors", Version: "1.4.2"}, assetID, now)
+	findings := pe.Evaluate(parsers.Dependency{Name: "colors", Version: "1.4.2"}, machineID, now)
 	require.Len(t, findings, 1)
 	assert.Equal(t, model.SeverityCritical, findings[0].Severity)
 	assert.Equal(t, "blocklist:^colors$", findings[0].CheckID)
@@ -38,20 +38,20 @@ func TestPolicyEngine_Blocklist_VersionConstraint(t *testing.T) {
 		},
 	})
 
-	assetID := uuid.New()
+	machineID := uuid.New()
 	now := time.Now().UTC()
 
 	// Version below threshold — blocked.
-	findings := pe.Evaluate(parsers.Dependency{Name: "org.apache.logging.log4j:log4j-core", Version: "2.14.1"}, assetID, now)
+	findings := pe.Evaluate(parsers.Dependency{Name: "org.apache.logging.log4j:log4j-core", Version: "2.14.1"}, machineID, now)
 	require.Len(t, findings, 1)
 	assert.Contains(t, findings[0].Remediation, "2.17.1")
 
 	// Version at threshold — not blocked.
-	findings = pe.Evaluate(parsers.Dependency{Name: "org.apache.logging.log4j:log4j-core", Version: "2.17.1"}, assetID, now)
+	findings = pe.Evaluate(parsers.Dependency{Name: "org.apache.logging.log4j:log4j-core", Version: "2.17.1"}, machineID, now)
 	assert.Empty(t, findings)
 
 	// Version above threshold — not blocked.
-	findings = pe.Evaluate(parsers.Dependency{Name: "org.apache.logging.log4j:log4j-core", Version: "2.21.0"}, assetID, now)
+	findings = pe.Evaluate(parsers.Dependency{Name: "org.apache.logging.log4j:log4j-core", Version: "2.21.0"}, machineID, now)
 	assert.Empty(t, findings)
 }
 
@@ -76,15 +76,15 @@ func TestPolicyEngine_Allowlist(t *testing.T) {
 		},
 	})
 
-	assetID := uuid.New()
+	machineID := uuid.New()
 	now := time.Now().UTC()
 
 	// Approved dependency — no findings.
-	findings := pe.Evaluate(parsers.Dependency{Name: "express", Version: "4.18.2"}, assetID, now)
+	findings := pe.Evaluate(parsers.Dependency{Name: "express", Version: "4.18.2"}, machineID, now)
 	assert.Empty(t, findings)
 
 	// Unapproved dependency — flagged.
-	findings = pe.Evaluate(parsers.Dependency{Name: "unknown-pkg", Version: "1.0.0"}, assetID, now)
+	findings = pe.Evaluate(parsers.Dependency{Name: "unknown-pkg", Version: "1.0.0"}, machineID, now)
 	require.Len(t, findings, 1)
 	assert.Equal(t, model.SeverityMedium, findings[0].Severity)
 	assert.Equal(t, "allowlist:not_approved", findings[0].CheckID)
@@ -101,11 +101,11 @@ func TestPolicyEngine_BothMode(t *testing.T) {
 		},
 	})
 
-	assetID := uuid.New()
+	machineID := uuid.New()
 	now := time.Now().UTC()
 
 	// Blocklisted and not in allowlist — two findings.
-	findings := pe.Evaluate(parsers.Dependency{Name: "colors", Version: "1.4.2"}, assetID, now)
+	findings := pe.Evaluate(parsers.Dependency{Name: "colors", Version: "1.4.2"}, machineID, now)
 	require.Len(t, findings, 2)
 
 	severities := map[model.Severity]bool{}

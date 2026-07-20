@@ -21,10 +21,10 @@ const (
 	LogCodeDiscoveryDeadlineExceeded LogCode = "engine.discovery.deadline_exceeded"
 	LogCodeDiscoveryComplete         LogCode = "engine.discovery.completed"
 
-	// asset persistence — phase 2
-	LogCodeAssetsFingerprintSnapshot LogCode = "engine.assets.fingerprint_snapshot_failed"
-	LogCodeAssetsPersisted           LogCode = "engine.assets.persisted"
-	LogCodeStaleDetectFailed         LogCode = "engine.assets.stale_detect_failed"
+	// machine persistence — phase 2
+	LogCodeMachinesFingerprintSnapshot LogCode = "engine.machines.fingerprint_snapshot_failed"
+	LogCodeMachinesPersisted           LogCode = "engine.machines.persisted"
+	LogCodeStaleDetectFailed           LogCode = "engine.machines.stale_detect_failed"
 
 	// software persistence
 	LogCodeSoftwarePersistFailed  LogCode = "engine.software.persist_failed"

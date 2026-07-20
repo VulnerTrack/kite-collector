@@ -13,9 +13,9 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
-// Source implements discovery.Source by probing a configured list of asset
+// Source implements discovery.Source by probing a configured list of machine
 // URLs (typically JS bundles served from a webapp) and turning each
-// detected S3-compatible bucket into a model.Asset.
+// detected S3-compatible bucket into a model.Machine.
 //
 // Configuration map (set via the kite-collector.yaml `storage_fingerprint`
 // block):
@@ -24,7 +24,7 @@ import (
 //	page_targets        []string  HTML pages to crawl; every <script src=...>
 //	                              found on the page is added to the probe queue.
 //	providers_allowlist []string  Optional. When non-empty, only these
-//	                              providers are surfaced as assets.
+//	                              providers are surfaced as machines.
 //	min_confidence      int       0..3. Defaults to 0 (no minimum).
 //	timeout             string    Go duration ("10s"). Default 10s.
 //	max_body_bytes      int       Per-probe body cap. Default 5 MiB.
@@ -56,10 +56,10 @@ func NewSource() *Source {
 func (s *Source) Name() string { return "storage_fingerprint" }
 
 // Discover probes every configured target, applies the filter, and emits
-// one cloud_instance asset per unique bucket host. Per-probe failures are
+// one cloud_instance machine per unique bucket host. Per-probe failures are
 // logged and skipped — partial results from successful probes are still
 // returned, matching the graceful-degradation contract of cloud/aws.go.
-func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	targets := stringSliceFromCfg(cfg["targets"])
 	pageTargets := stringSliceFromCfg(cfg["page_targets"])
 	if len(targets) == 0 && len(pageTargets) == 0 {
@@ -107,10 +107,10 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		filter.Providers = append(filter.Providers, Provider(p))
 	}
 
-	var assets []model.Asset
+	var machines []model.Machine
 	seen := make(map[string]struct{})
 
-	// addMatches converts one analysed evidence/match pair into an asset
+	// addMatches converts one analysed evidence/match pair into an machine
 	// (when the bucket host is novel) and appends it to the result slice.
 	// Pulled out so the direct-target and page-crawl loops share dedup.
 	addMatches := func(target string, res AnalyzeResult) {
@@ -130,7 +130,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			return
 		}
 		seen[host] = struct{}{}
-		assets = append(assets, s.buildAsset(host, matches))
+		machines = append(machines, s.buildMachine(host, matches))
 	}
 
 	// Crawl page_targets first. Each <script src=...> on a page becomes a
@@ -138,7 +138,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	// its results.
 	for _, page := range pageTargets {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("storage_fingerprint cancelled: %w", err)
+			return machines, fmt.Errorf("storage_fingerprint cancelled: %w", err)
 		}
 		pageResults, err := analyzer.AnalyzePage(ctx, page)
 		if err != nil {
@@ -168,7 +168,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	// at the same bucket.
 	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
-			return assets, fmt.Errorf("storage_fingerprint cancelled: %w", err)
+			return machines, fmt.Errorf("storage_fingerprint cancelled: %w", err)
 		}
 		res, err := analyzer.Analyze(ctx, target)
 		if err != nil {
@@ -186,22 +186,22 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		"source", s.Name(),
 		"targets", len(targets),
 		"page_targets", len(pageTargets),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
-// buildAsset turns a bucket host plus its match set into a model.Asset.
+// buildMachine turns a bucket host plus its match set into a model.Machine.
 // The primary provider is whichever match has the highest confidence;
 // ties are broken by signal-type stability (sorted alphabetically) so the
 // dedup natural key stays stable across scans.
-func (s *Source) buildAsset(host string, matches []Match) model.Asset {
+func (s *Source) buildMachine(host string, matches []Match) model.Machine {
 	primary := pickPrimary(matches)
 	tags := summariseMatches(matches, primary)
 
 	now := s.now()
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		Hostname:        host,
 		DiscoverySource: s.Name(),
 		FirstSeenAt:     now,
@@ -211,8 +211,8 @@ func (s *Source) buildAsset(host string, matches []Match) model.Asset {
 		Environment:     string(primary.Provider),
 		Tags:            tags,
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }
 
 // pickPrimary returns the highest-confidence match, breaking ties by
@@ -228,7 +228,7 @@ func pickPrimary(matches []Match) Match {
 	return sorted[0]
 }
 
-// summariseMatches serialises a compact summary into the asset's Tags field.
+// summariseMatches serialises a compact summary into the machine's Tags field.
 // The schema is JSON so downstream consumers (dashboard, reconciler) can
 // parse it without bespoke logic. Marshal cannot fail for these flat types;
 // we ignore the error to keep the function infallible.

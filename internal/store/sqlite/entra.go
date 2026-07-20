@@ -116,7 +116,7 @@ func (s *SQLiteStore) UpsertEntraSnapshot(ctx context.Context, snap *entra.Snaps
 
 // upsertEntraUsers persists the SnapshotUser slice into entra_users. On
 // (tenant_id, object_id) conflict, the existing id is preserved so foreign
-// references (e.g. asset_id) survive across scans.
+// references (e.g. machine_id) survive across scans.
 func upsertEntraUsers(ctx context.Context, tx *sql.Tx, tenantID string, users []entra.SnapshotUser, now int64) error {
 	if len(users) == 0 {
 		return nil

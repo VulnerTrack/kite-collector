@@ -1,7 +1,7 @@
 // Package cloud provides discovery sources for major cloud providers.
 //
 // Each source implements [discovery.Source] and enumerates compute instances
-// (EC2, Compute Engine, Azure VMs) as [model.Asset] values. The current
+// (EC2, Compute Engine, Azure VMs) as [model.Machine] values. The current
 // implementations are stubs that document the expected configuration keys
 // and return empty results; full cloud SDK integration is planned for a
 // future release.

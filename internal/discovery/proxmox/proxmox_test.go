@@ -147,14 +147,14 @@ func TestProxmox_Discover_Success(t *testing.T) {
 	t.Setenv("KITE_PROXMOX_INSECURE", "true")
 
 	p := New()
-	assets, err := p.Discover(context.Background(), map[string]any{})
+	machines, err := p.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
-	assert.Len(t, assets, 3, "2 VMs + 1 LXC")
+	assert.Len(t, machines, 3, "2 VMs + 1 LXC")
 
-	// Verify VM asset.
-	web := findAsset(assets, "web-server")
+	// Verify VM machine.
+	web := findMachine(machines, "web-server")
 	require.NotNil(t, web)
-	assert.Equal(t, model.AssetTypeVirtualMachine, web.AssetType)
+	assert.Equal(t, model.MachineTypeVirtualMachine, web.MachineType)
 	assert.Equal(t, "proxmox", web.DiscoverySource)
 	assert.Equal(t, "l26", web.OSFamily)
 
@@ -167,10 +167,10 @@ func TestProxmox_Discover_Success(t *testing.T) {
 	assert.Equal(t, float64(1), webTags["snapshot_count"])
 	assert.Contains(t, webTags, "latest_snapshot_age_hours")
 
-	// Verify LXC asset.
-	dns := findAsset(assets, "dns-resolver")
+	// Verify LXC machine.
+	dns := findMachine(machines, "dns-resolver")
 	require.NotNil(t, dns)
-	assert.Equal(t, model.AssetTypeContainer, dns.AssetType)
+	assert.Equal(t, model.MachineTypeContainer, dns.MachineType)
 	assert.Equal(t, "linux", dns.OSFamily)
 
 	var dnsTags map[string]any
@@ -220,10 +220,10 @@ func TestLatestSnapshot(t *testing.T) {
 // Helpers
 // -------------------------------------------------------------------------
 
-func findAsset(assets []model.Asset, hostname string) *model.Asset {
-	for i := range assets {
-		if assets[i].Hostname == hostname {
-			return &assets[i]
+func findMachine(machines []model.Machine, hostname string) *model.Machine {
+	for i := range machines {
+		if machines[i].Hostname == hostname {
+			return &machines[i]
 		}
 	}
 	return nil

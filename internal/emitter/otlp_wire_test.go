@@ -132,11 +132,11 @@ func attrMap(kvs []otlpKeyValue) map[string]string {
 
 // makeEvent assembles a fully-populated event for tests that want to assert
 // optional attributes flow through.
-func makeEvent(t *testing.T, eventType model.EventType, sev model.Severity) model.AssetEvent {
+func makeEvent(t *testing.T, eventType model.EventType, sev model.Severity) model.MachineEvent {
 	t.Helper()
-	return model.AssetEvent{
+	return model.MachineEvent{
 		ID:        uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-fedcba987654"),
-		AssetID:   uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-aaaabbbbcccc"),
+		MachineID: uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-aaaabbbbcccc"),
 		ScanRunID: uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-0123456789ab"),
 		Timestamp: time.Unix(1_700_000_000, 0),
 		EventType: eventType,
@@ -154,7 +154,7 @@ func TestOTLP_WireShape_CanonicalEvent(t *testing.T) {
 	em := newWireTestEmitter(t, endpoint)
 	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
 
-	evt := makeEvent(t, model.EventAssetDiscovered, model.SeverityMedium)
+	evt := makeEvent(t, model.EventMachineDiscovered, model.SeverityMedium)
 
 	emitStart := time.Now()
 	require.NoError(t, em.Emit(context.Background(), evt))
@@ -195,14 +195,14 @@ func TestOTLP_WireShape_CanonicalEvent(t *testing.T) {
 	require.NotNil(t, rec.Body.StringValue)
 	assert.Equal(t, evt.Details, *rec.Body.StringValue)
 
-	assert.Equal(t, "kite.asset.discovered", rec.EventName,
+	assert.Equal(t, "kite.machine.discovered", rec.EventName,
 		"top-level eventName must mirror EventType.Name()")
 
 	attrs := attrMap(rec.Attributes)
 	assert.Equal(t, string(evt.EventType), attrs["event_type"])
-	assert.Equal(t, "kite.asset.discovered", attrs["event_name"],
+	assert.Equal(t, "kite.machine.discovered", attrs["event_name"],
 		"event_name attribute must mirror EventType.Name()")
-	assert.Equal(t, evt.AssetID.String(), attrs["asset_id"])
+	assert.Equal(t, evt.MachineID.String(), attrs["machine_id"])
 	assert.Equal(t, evt.ScanRunID.String(), attrs["scan_run_id"])
 	assert.Equal(t, string(evt.Severity), attrs["severity"])
 
@@ -218,12 +218,12 @@ func TestOTLP_WireShape_CanonicalEvent(t *testing.T) {
 
 func TestOTLP_WireShape_AllEventTypes(t *testing.T) {
 	cases := []model.EventType{
-		model.EventAssetDiscovered,
-		model.EventAssetUpdated,
-		model.EventUnauthorizedAssetDetected,
-		model.EventUnmanagedAssetDetected,
-		model.EventAssetNotSeen,
-		model.EventAssetRemoved,
+		model.EventMachineDiscovered,
+		model.EventMachineUpdated,
+		model.EventUnauthorizedMachineDetected,
+		model.EventUnmanagedMachineDetected,
+		model.EventMachineNotSeen,
+		model.EventMachineRemoved,
 	}
 
 	for _, et := range cases {
@@ -273,7 +273,7 @@ func TestOTLP_WireShape_SeverityMapping(t *testing.T) {
 			em := newWireTestEmitter(t, endpoint)
 			t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
 
-			evt := makeEvent(t, model.EventAssetDiscovered, tc.sev)
+			evt := makeEvent(t, model.EventMachineDiscovered, tc.sev)
 			require.NoError(t, em.Emit(context.Background(), evt))
 
 			require.Len(t, *reqs, 1)
@@ -294,9 +294,9 @@ func TestOTLP_WireShape_OptionalAttributesIncludedWhenSet(t *testing.T) {
 	em := newWireTestEmitter(t, endpoint)
 	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
 
-	evt := makeEvent(t, model.EventAssetDiscovered, model.SeverityHigh)
+	evt := makeEvent(t, model.EventMachineDiscovered, model.SeverityHigh)
 	evt.Hostname = "host-01.corp.local"
-	evt.AssetType = model.AssetTypeServer
+	evt.MachineType = model.MachineTypeServer
 	evt.OSFamily = "linux"
 	evt.Environment = "production"
 	evt.Owner = "platform-team"
@@ -312,7 +312,7 @@ func TestOTLP_WireShape_OptionalAttributesIncludedWhenSet(t *testing.T) {
 	attrs := attrMap(payload.ResourceLogs[0].ScopeLogs[0].LogRecords[0].Attributes)
 
 	assert.Equal(t, "host-01.corp.local", attrs["hostname"])
-	assert.Equal(t, string(model.AssetTypeServer), attrs["asset_type"])
+	assert.Equal(t, string(model.MachineTypeServer), attrs["machine_type"])
 	assert.Equal(t, "linux", attrs["os_family"])
 	assert.Equal(t, "production", attrs["environment"])
 	assert.Equal(t, "platform-team", attrs["owner"])
@@ -331,7 +331,7 @@ func TestOTLP_WireShape_OptionalAttributesOmittedWhenEmpty(t *testing.T) {
 	em := newWireTestEmitter(t, endpoint)
 	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
 
-	evt := makeEvent(t, model.EventAssetDiscovered, model.SeverityLow)
+	evt := makeEvent(t, model.EventMachineDiscovered, model.SeverityLow)
 	require.NoError(t, em.Emit(context.Background(), evt))
 
 	require.Len(t, *reqs, 1)
@@ -340,7 +340,7 @@ func TestOTLP_WireShape_OptionalAttributesOmittedWhenEmpty(t *testing.T) {
 
 	optional := []string{
 		"hostname",
-		"asset_type",
+		"machine_type",
 		"os_family",
 		"os_version",
 		"kernel_version",
@@ -368,14 +368,14 @@ func TestOTLP_WireShape_BatchSharesTraceIDAndDistinctSpanIDs(t *testing.T) {
 	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
 
 	scanRun := uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-0123456789ab")
-	events := make([]model.AssetEvent, 3)
+	events := make([]model.MachineEvent, 3)
 	for i := range events {
-		events[i] = model.AssetEvent{
+		events[i] = model.MachineEvent{
 			ID:        uuid.Must(uuid.NewV7()),
-			AssetID:   uuid.Must(uuid.NewV7()),
+			MachineID: uuid.Must(uuid.NewV7()),
 			ScanRunID: scanRun,
 			Timestamp: time.Unix(1_700_000_000, int64(i)),
-			EventType: model.EventAssetDiscovered,
+			EventType: model.EventMachineDiscovered,
 			Severity:  model.SeverityLow,
 			Details:   `{}`,
 		}
@@ -412,7 +412,7 @@ func TestOTLP_WireShape_CallerProvidedTraceIDOverride(t *testing.T) {
 	const callerTrace = "deadbeefdeadbeefdeadbeefdeadbeef"
 	const callerSpan = "cafebabecafebabe"
 
-	evt := makeEvent(t, model.EventAssetDiscovered, model.SeverityHigh)
+	evt := makeEvent(t, model.EventMachineDiscovered, model.SeverityHigh)
 	evt.TraceID = callerTrace
 	evt.SpanID = callerSpan
 
@@ -442,7 +442,7 @@ func TestOTLP_RetryOn5xx_EventualSuccess(t *testing.T) {
 	em := newWireTestEmitter(t, endpoint)
 	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
 
-	evt := makeEvent(t, model.EventAssetDiscovered, model.SeverityMedium)
+	evt := makeEvent(t, model.EventMachineDiscovered, model.SeverityMedium)
 	require.NoError(t, em.Emit(context.Background(), evt))
 
 	assert.Len(t, *reqs, 3, "emitter should retry twice before the 200")
@@ -457,7 +457,7 @@ func TestOTLP_NoRetryOn4xx(t *testing.T) {
 	em := newWireTestEmitter(t, endpoint)
 	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
 
-	evt := makeEvent(t, model.EventAssetDiscovered, model.SeverityMedium)
+	evt := makeEvent(t, model.EventMachineDiscovered, model.SeverityMedium)
 	err := em.Emit(context.Background(), evt)
 	require.Error(t, err)
 	assert.Len(t, *reqs, 1, "4xx must not be retried")
@@ -484,7 +484,7 @@ func TestOTLP_NoRetryOnURLError(t *testing.T) {
 	// "unsupported protocol scheme \"\"". The retry loop must NOT retry.
 	em.endpoint = "otel.vulnertrack.io/v1/logs"
 
-	evt := makeEvent(t, model.EventAssetDiscovered, model.SeverityMedium)
+	evt := makeEvent(t, model.EventMachineDiscovered, model.SeverityMedium)
 	err := em.Emit(context.Background(), evt)
 
 	require.Error(t, err)
@@ -500,11 +500,11 @@ func TestOTLP_OmitsOptionalTraceIDWhenScanRunIDIsNil(t *testing.T) {
 	em := newWireTestEmitter(t, endpoint)
 	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
 
-	evt := model.AssetEvent{
+	evt := model.MachineEvent{
 		// Both ID and ScanRunID intentionally left as uuid.Nil.
-		AssetID:   uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-aaaabbbbcccc"),
+		MachineID: uuid.MustParse("018f9c2a-7b3d-7a01-8c2e-aaaabbbbcccc"),
 		Timestamp: time.Unix(1_700_000_000, 0),
-		EventType: model.EventAssetDiscovered,
+		EventType: model.EventMachineDiscovered,
 		Severity:  model.SeverityLow,
 		Details:   `{}`,
 	}

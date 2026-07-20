@@ -1,0 +1,13 @@
+{
+  "event.domain": "security",
+  "event.name": "machine.changed",
+  "security.scan.uid": "01931cb6-b7c4-7c41-c000-1111aaaa2222",
+  "security.machine.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
+  "security.machine.type": "server",
+  "security.machine.name": "db-primary-01.prod",
+  "security.machine.authorization": "unauthorized",
+  "security.machine.managed_status": "managed",
+  "security.machine.change.field": "authorization",
+  "security.machine.change.before": "authorized",
+  "security.machine.change.after": "unauthorized"
+}

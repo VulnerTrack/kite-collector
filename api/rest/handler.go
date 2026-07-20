@@ -1,4 +1,4 @@
-// Package rest provides an HTTP REST API for querying kite-collector assets,
+// Package rest provides an HTTP REST API for querying kite-collector machines,
 // events, and scan history. It uses the Go 1.22+ stdlib ServeMux with
 // method-based routing and requires no external router dependencies.
 package rest
@@ -129,8 +129,8 @@ func (h *Handler) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/v1/health", h.handleHealth)
-	mux.HandleFunc("GET /api/v1/assets/{id}", h.handleGetAsset)
-	mux.HandleFunc("GET /api/v1/assets", h.handleListAssets)
+	mux.HandleFunc("GET /api/v1/machines/{id}", h.handleGetMachine)
+	mux.HandleFunc("GET /api/v1/machines", h.handleListMachines)
 	mux.HandleFunc("GET /api/v1/events", h.handleListEvents)
 	mux.HandleFunc("GET /api/v1/scans/latest", h.handleLatestScan)
 	mux.HandleFunc("GET /api/v1/scans/{id}/events", h.handleScanEvents)
@@ -187,7 +187,7 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (h *Handler) handleGetAsset(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleGetMachine(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("REST request received",
 		"code", string(LogCodeRequestReceived),
 		"method", r.Method,
@@ -198,29 +198,29 @@ func (h *Handler) handleGetAsset(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid asset id")
+		writeError(w, http.StatusBadRequest, "invalid machine id")
 		return
 	}
 
-	asset, err := h.store.GetAssetByID(r.Context(), id)
+	machine, err := h.store.GetMachineByID(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "asset not found")
+		writeError(w, http.StatusNotFound, "machine not found")
 		return
 	}
 	if err != nil {
-		h.logger.Error("asset GetByID query failed",
-			"code", string(LogCodeAssetsGetByID),
+		h.logger.Error("machine GetByID query failed",
+			"code", string(LogCodeMachinesGetByID),
 			"error", err,
-			"asset_id", id,
+			"machine_id", id,
 			"path", r.URL.Path)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, asset)
+	writeJSON(w, http.StatusOK, machine)
 }
 
-func (h *Handler) handleListAssets(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleListMachines(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("REST request received",
 		"code", string(LogCodeRequestReceived),
 		"method", r.Method,
@@ -230,8 +230,8 @@ func (h *Handler) handleListAssets(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 
-	filter := store.AssetFilter{
-		AssetType:    q.Get("asset_type"),
+	filter := store.MachineFilter{
+		MachineType:  q.Get("machine_type"),
 		IsAuthorized: q.Get("is_authorized"),
 		IsManaged:    q.Get("is_managed"),
 		Hostname:     q.Get("hostname"),
@@ -239,24 +239,24 @@ func (h *Handler) handleListAssets(w http.ResponseWriter, r *http.Request) {
 		Offset:       clampOffset(parseIntParam(q.Get("offset"), 0)),
 	}
 
-	assets, err := h.store.ListAssets(r.Context(), filter)
+	machines, err := h.store.ListMachines(r.Context(), filter)
 	if err != nil {
-		h.logger.Error("assets List query failed",
-			"code", string(LogCodeAssetsList),
+		h.logger.Error("machines List query failed",
+			"code", string(LogCodeMachinesList),
 			"error", err,
-			"asset_type_filter", filter.AssetType,
+			"machine_type_filter", filter.MachineType,
 			"limit", filter.Limit,
 			"offset", filter.Offset)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	if len(assets) == 0 {
+	if len(machines) == 0 {
 		writeJSON(w, http.StatusOK, emptyArray)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, assets)
+	writeJSON(w, http.StatusOK, machines)
 }
 
 func (h *Handler) handleListEvents(w http.ResponseWriter, r *http.Request) {
@@ -275,13 +275,13 @@ func (h *Handler) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		Offset:    clampOffset(parseIntParam(q.Get("offset"), 0)),
 	}
 
-	if raw := q.Get("asset_id"); raw != "" {
+	if raw := q.Get("machine_id"); raw != "" {
 		id, err := uuid.Parse(raw)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid asset_id")
+			writeError(w, http.StatusBadRequest, "invalid machine_id")
 			return
 		}
-		filter.AssetID = &id
+		filter.MachineID = &id
 	}
 
 	if raw := q.Get("scan_run_id"); raw != "" {

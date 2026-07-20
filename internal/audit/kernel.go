@@ -103,8 +103,8 @@ func NewKernel() *Kernel { return &Kernel{} }
 func (k *Kernel) Name() string { return "kernel" }
 
 // Audit reads kernel parameters from /proc/sys and checks for insecure values.
-func (k *Kernel) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
-	return EvaluateKernelParams(asset), nil
+func (k *Kernel) Audit(_ context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
+	return EvaluateKernelParams(machine), nil
 }
 
 // ReadProcSys reads a single sysctl value from /proc/sys. Returns empty
@@ -121,7 +121,7 @@ func ReadProcSys(path string) string {
 }
 
 // EvaluateKernelParams checks all kernel parameters and returns findings.
-func EvaluateKernelParams(asset model.Asset) []model.ConfigFinding {
+func EvaluateKernelParams(machine model.Machine) []model.ConfigFinding {
 	now := time.Now().UTC()
 	var findings []model.ConfigFinding
 
@@ -136,7 +136,7 @@ func EvaluateKernelParams(asset model.Asset) []model.ConfigFinding {
 
 		findings = append(findings, model.ConfigFinding{
 			ID:          uuid.Must(uuid.NewV7()),
-			AssetID:     asset.ID,
+			MachineID:   machine.ID,
 			Auditor:     "kernel",
 			CheckID:     check.ID,
 			Title:       check.Title,

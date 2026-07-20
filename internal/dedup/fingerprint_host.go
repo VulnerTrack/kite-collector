@@ -10,15 +10,15 @@ import "github.com/vulnertrack/kite-collector/internal/model"
 // Hardware. With neither hardware nor network signals available the
 // fingerprinter declines so the caller falls back to the hostname path.
 //
-// Registered for AssetTypeServer and AssetTypeWorkstation; the Type
+// Registered for MachineTypeServer and MachineTypeWorkstation; the Type
 // field selects which one this instance handles so the Registry can hold
 // two entries that share the same logic.
 type AgentEnrolledHostFingerprinter struct {
-	Type model.AssetType
+	Type model.MachineType
 }
 
-// AssetType returns the asset type this fingerprinter handles.
-func (f AgentEnrolledHostFingerprinter) AssetType() model.AssetType { return f.Type }
+// MachineType returns the machine type this fingerprinter handles.
+func (f AgentEnrolledHostFingerprinter) MachineType() model.MachineType { return f.Type }
 
 // Identity composes a digest from whichever hardware/network signals are
 // present. The order of signals contributed to the pre-image is fixed

@@ -69,11 +69,11 @@ func TestIsForbidden_AllowsContractKeys(t *testing.T) {
 		"agent.id",
 		"tenant.id",
 		"security.scan.uid",
-		"security.asset.uid",
+		"security.machine.uid",
 		"security.finding.uid",
 		"event.domain",
 		"event.name",
-		"security.asset.name",
+		"security.machine.name",
 		"security.finding.title",
 	}
 	for _, k := range cases {
@@ -89,14 +89,14 @@ func TestIsForbidden_BlocksEmpty(t *testing.T) {
 
 func TestFilter_RemovesForbiddenKeys(t *testing.T) {
 	attrs := map[string]string{
-		"service.name":       "kite-collector",
-		"DB_PASSWORD":        "leaked",
-		"api_key":            "leaked",
-		"security.asset.uid": "12345",
+		"service.name":         "kite-collector",
+		"DB_PASSWORD":          "leaked",
+		"api_key":              "leaked",
+		"security.machine.uid": "12345",
 	}
 	got := Filter(attrs)
 	assert.Equal(t, "kite-collector", got["service.name"])
-	assert.Equal(t, "12345", got["security.asset.uid"])
+	assert.Equal(t, "12345", got["security.machine.uid"])
 	_, hasPwd := got["DB_PASSWORD"]
 	_, hasKey := got["api_key"]
 	assert.False(t, hasPwd, "password must be filtered")
@@ -105,9 +105,9 @@ func TestFilter_RemovesForbiddenKeys(t *testing.T) {
 
 func TestFilter_PassThroughWhenClean(t *testing.T) {
 	attrs := map[string]string{
-		"service.name":       "kite-collector",
-		"event.name":         "asset.discovered",
-		"security.asset.uid": "abc",
+		"service.name":         "kite-collector",
+		"event.name":           "machine.discovered",
+		"security.machine.uid": "abc",
 	}
 	got := Filter(attrs)
 	assert.Equal(t, len(attrs), len(got))

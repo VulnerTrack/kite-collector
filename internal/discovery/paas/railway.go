@@ -56,7 +56,7 @@ func (ry *Railway) Name() string { return "railway" }
 
 // Discover lists all Railway projects and their services via GraphQL.
 // Credentials: KITE_RAILWAY_TOKEN environment variable.
-func (ry *Railway) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (ry *Railway) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_RAILWAY_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -77,7 +77,7 @@ func (ry *Railway) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 		return nil, fmt.Errorf("railway: query projects: %w", err)
 	}
 
-	var assets []model.Asset
+	var machines []model.Machine
 	now := time.Now().UTC()
 
 	for _, edge := range resp.Data.Me.Projects.Edges {
@@ -85,19 +85,19 @@ func (ry *Railway) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 
 		for _, svcEdge := range proj.Services.Edges {
 			svc := svcEdge.Node
-			assets = append(assets, railwayToAsset(proj, svc, now))
+			machines = append(machines, railwayToMachine(proj, svc, now))
 		}
 
 		// If a project has no services, track the project itself.
 		if len(proj.Services.Edges) == 0 {
-			assets = append(assets, railwayProjectToAsset(proj, now))
+			machines = append(machines, railwayProjectToMachine(proj, now))
 		}
 	}
 
 	slog.Info("Railway PaaS discovery complete",
 		"code", string(LogCodeRailwayComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Railway GraphQL response types ---
@@ -138,9 +138,9 @@ type railwayEnvironment struct {
 	Name string `json:"name"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func railwayToAsset(proj railwayProject, svc railwayService, now time.Time) model.Asset {
+func railwayToMachine(proj railwayProject, svc railwayService, now time.Time) model.Machine {
 	envNames := make([]string, 0, len(proj.Environments.Edges))
 	for _, e := range proj.Environments.Edges {
 		envNames = append(envNames, e.Node.Name)
@@ -159,10 +159,10 @@ func railwayToAsset(proj railwayProject, svc railwayService, now time.Time) mode
 		tags["environments"] = envNames
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        svc.Name,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		DiscoverySource: "railway",
 		FirstSeenAt:     now,
 		LastSeenAt:      now,
@@ -170,21 +170,21 @@ func railwayToAsset(proj railwayProject, svc railwayService, now time.Time) mode
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }
 
-func railwayProjectToAsset(proj railwayProject, now time.Time) model.Asset {
+func railwayProjectToMachine(proj railwayProject, now time.Time) model.Machine {
 	tags := map[string]any{
 		"platform":    "railway",
 		"provider_id": proj.ID,
 		"warning":     "project has no services",
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        proj.Name,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		DiscoverySource: "railway",
 		FirstSeenAt:     now,
 		LastSeenAt:      now,
@@ -192,6 +192,6 @@ func railwayProjectToAsset(proj railwayProject, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

@@ -82,13 +82,13 @@ func TestJamf_Discover_Success(t *testing.T) {
 		"password": "secret",
 	}
 
-	assets, err := j.Discover(context.Background(), cfg)
+	machines, err := j.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	require.Len(t, assets, 2)
+	require.Len(t, machines, 2)
 
-	mac1 := findAsset(assets, "mac-pro-1")
+	mac1 := findMachine(machines, "mac-pro-1")
 	require.NotNil(t, mac1)
-	assert.Equal(t, model.AssetTypeWorkstation, mac1.AssetType)
+	assert.Equal(t, model.MachineTypeWorkstation, mac1.MachineType)
 	assert.Equal(t, "darwin", mac1.OSFamily)
 	assert.Equal(t, "14.2", mac1.OSVersion)
 	assert.Equal(t, "jamf", mac1.DiscoverySource)
@@ -102,7 +102,7 @@ func TestJamf_Discover_Success(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(mac1.Tags), &mac1Tags))
 	assert.Equal(t, "C02ABC123", mac1Tags["serial_number"])
 
-	mac2 := findAsset(assets, "macbook-2")
+	mac2 := findMachine(machines, "macbook-2")
 	require.NotNil(t, mac2)
 	assert.Equal(t, "darwin", mac2.OSFamily)
 	assert.Equal(t, "2", mac2.MDMEnrollmentID)
@@ -112,9 +112,9 @@ func TestJamf_Discover_MissingCredentials(t *testing.T) {
 	j := NewJamf()
 
 	// Enabled, but no credentials configured → skip (nil, nil).
-	assets, err := j.Discover(context.Background(), map[string]any{"enabled": true})
+	machines, err := j.Discover(context.Background(), map[string]any{"enabled": true})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestJamf_Discover_DisabledWithCredentials(t *testing.T) {
@@ -129,9 +129,9 @@ func TestJamf_Discover_DisabledWithCredentials(t *testing.T) {
 		"password": "secret",
 	}
 
-	assets, err := j.Discover(context.Background(), cfg)
+	machines, err := j.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 }
 
 func TestJamf_Discover_AuthFailure(t *testing.T) {
@@ -145,10 +145,10 @@ func TestJamf_Discover_AuthFailure(t *testing.T) {
 		"password": "wrong",
 	}
 
-	// Auth failure returns no assets (Jamf treats 401 as graceful skip).
-	assets, err := j.Discover(context.Background(), cfg)
+	// Auth failure returns no machines (Jamf treats 401 as graceful skip).
+	machines, err := j.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
 func TestJamf_Discover_DetailFetchFailure(t *testing.T) {
@@ -175,9 +175,9 @@ func TestJamf_Discover_DetailFetchFailure(t *testing.T) {
 	}
 
 	// Individual detail failure is skipped, not an overall error.
-	assets, err := j.Discover(context.Background(), cfg)
+	machines, err := j.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Empty(t, assets)
+	assert.Empty(t, machines)
 }
 
 func TestDeriveJamfOSFamily(t *testing.T) {

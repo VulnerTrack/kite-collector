@@ -18,8 +18,8 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeDiscoveryStart,
 		LogCodeDiscoveryDeadlineExceeded,
 		LogCodeDiscoveryComplete,
-		LogCodeAssetsFingerprintSnapshot,
-		LogCodeAssetsPersisted,
+		LogCodeMachinesFingerprintSnapshot,
+		LogCodeMachinesPersisted,
 		LogCodeStaleDetectFailed,
 		LogCodeSoftwarePersistFailed,
 		LogCodeSoftwarePersisted,
@@ -75,7 +75,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 	seen := map[LogCode]bool{}
 	all := []LogCode{
 		LogCodeDiscoveryStart, LogCodeDiscoveryDeadlineExceeded, LogCodeDiscoveryComplete,
-		LogCodeAssetsFingerprintSnapshot, LogCodeAssetsPersisted, LogCodeStaleDetectFailed,
+		LogCodeMachinesFingerprintSnapshot, LogCodeMachinesPersisted, LogCodeStaleDetectFailed,
 		LogCodeSoftwarePersistFailed, LogCodeSoftwarePersisted, LogCodeSoftwareParseError, LogCodeSoftwareParseTruncated,
 		LogCodeAuditFailed, LogCodeAuditFindingsPersistFailed, LogCodeAuditComplete,
 		LogCodeAuditCodeFailed, LogCodeAuditCodePersistFailed, LogCodeAuditCodeComplete,

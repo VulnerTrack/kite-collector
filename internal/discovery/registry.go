@@ -85,7 +85,7 @@ func (r *Registry) Get(name string) Source {
 // Per-source failures are logged as warnings but do not abort the overall
 // discovery; partial results from successful sources are still returned.
 // The function only returns an error when the parent context is cancelled.
-func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[string]any) ([]model.Asset, error) {
+func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[string]any) ([]model.Machine, error) {
 	if len(r.sources) == 0 {
 		// No sources registered — the scan can find nothing. Explain the no-op
 		// with the catalogued KITE-E009 remediation (enable at least one source
@@ -96,8 +96,8 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 	}
 
 	var (
-		mu     sync.Mutex
-		assets []model.Asset
+		mu       sync.Mutex
+		machines []model.Machine
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -157,11 +157,11 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 			slog.Info(
 				"discovery source completed",
 				"source", src.Name(),
-				"assets", len(discovered),
+				"machines", len(discovered),
 			)
 
 			mu.Lock()
-			assets = append(assets, discovered...)
+			machines = append(machines, discovered...)
 			mu.Unlock()
 
 			r.emitHeartbeat(ctx, src.Name(), model.HeartbeatOK, len(discovered), elapsed)
@@ -170,10 +170,10 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 	}
 
 	if err := g.Wait(); err != nil {
-		return assets, fmt.Errorf("discovery: %w", err)
+		return machines, fmt.Errorf("discovery: %w", err)
 	}
 
-	return assets, nil
+	return machines, nil
 }
 
 // emitHeartbeat fires one synthetic liveness record for src. The recorder

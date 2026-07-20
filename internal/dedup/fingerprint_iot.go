@@ -13,8 +13,8 @@ import (
 // hostname-only.
 type IOTDeviceFingerprinter struct{}
 
-// AssetType returns the asset type this fingerprinter handles.
-func (IOTDeviceFingerprinter) AssetType() model.AssetType { return model.AssetTypeIOTDevice }
+// MachineType returns the machine type this fingerprinter handles.
+func (IOTDeviceFingerprinter) MachineType() model.MachineType { return model.MachineTypeIOTDevice }
 
 // Identity prefers UPnPUUID (most IoT gear that exposes it is stable on
 // it). Falls back to MAC set; declines when neither is present.
@@ -43,5 +43,5 @@ func (IOTDeviceFingerprinter) Identity(r DiscoveryRecord) ([32]byte, []Signal, C
 	if len(sigs) == 0 {
 		return [32]byte{}, nil, ConfidenceUnknown, false
 	}
-	return Compose(FPVersion, r.TenantID, model.AssetTypeIOTDevice, sigs), sigs, conf, true
+	return Compose(FPVersion, r.TenantID, model.MachineTypeIOTDevice, sigs), sigs, conf, true
 }

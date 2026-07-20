@@ -10,7 +10,7 @@ import (
 )
 
 // FuzzBuildPayload_DoesNotPanic exercises buildPayload + json.Marshal with
-// fuzz-driven AssetEvent inputs. Goal: prove the OTLP wire encoder never
+// fuzz-driven MachineEvent inputs. Goal: prove the OTLP wire encoder never
 // panics on hostile strings (null bytes, lone surrogates, JSON metachars,
 // pathological lengths) and that the produced payload is always valid JSON
 // that re-parses to the same shape.
@@ -21,19 +21,19 @@ import (
 func FuzzBuildPayload_DoesNotPanic(f *testing.F) {
 	// Well-formed baseline.
 	f.Add(
-		"AssetDiscovered", "high", "host-01", "server",
-		`{"event_type":"AssetDiscovered"}`,
+		"MachineDiscovered", "high", "host-01", "server",
+		`{"event_type":"MachineDiscovered"}`,
 	)
 	// Empty everywhere.
 	f.Add("", "", "", "", "")
 	// JSON metacharacters that must be escaped in the body.
 	f.Add(
-		"AssetUpdated", "low", `host"with\quote`, "container",
+		"MachineUpdated", "low", `host"with\quote`, "container",
 		`{"k":"v\nwith\u0000null"}`,
 	)
 	// Control characters 0x00-0x1f in every string slot.
 	f.Add(
-		"AssetRemoved", "critical", "\x00\x01\x02host", "server",
+		"MachineRemoved", "critical", "\x00\x01\x02host", "server",
 		"\x00\x1f\x7f",
 	)
 	// Invalid UTF-8 (lone continuation + surrogate halves).
@@ -48,27 +48,27 @@ func FuzzBuildPayload_DoesNotPanic(f *testing.F) {
 	for i := range long {
 		long[i] = 'A' + byte(i%26)
 	}
-	f.Add("UnauthorizedAssetDetected", "high", string(long), string(long), string(long))
+	f.Add("UnauthorizedMachineDetected", "high", string(long), string(long), string(long))
 
 	o := &OTLPEmitter{
 		serviceName:    "kite-collector",
 		serviceVersion: "fuzz",
 	}
 
-	f.Fuzz(func(t *testing.T, eventType, severity, hostname, assetType, details string) {
-		evt := model.AssetEvent{
-			Timestamp: time.Unix(0, 0),
-			EventType: model.EventType(eventType),
-			Severity:  model.Severity(severity),
-			Hostname:  hostname,
-			AssetType: model.AssetType(assetType),
-			Details:   details,
-			ID:        uuid.Must(uuid.NewV7()),
-			AssetID:   uuid.Must(uuid.NewV7()),
-			ScanRunID: uuid.Must(uuid.NewV7()),
+	f.Fuzz(func(t *testing.T, eventType, severity, hostname, machineType, details string) {
+		evt := model.MachineEvent{
+			Timestamp:   time.Unix(0, 0),
+			EventType:   model.EventType(eventType),
+			Severity:    model.Severity(severity),
+			Hostname:    hostname,
+			MachineType: model.MachineType(machineType),
+			Details:     details,
+			ID:          uuid.Must(uuid.NewV7()),
+			MachineID:   uuid.Must(uuid.NewV7()),
+			ScanRunID:   uuid.Must(uuid.NewV7()),
 		}
 
-		payload := o.buildPayload([]model.AssetEvent{evt})
+		payload := o.buildPayload([]model.MachineEvent{evt})
 
 		body, err := json.Marshal(payload)
 		if err != nil {

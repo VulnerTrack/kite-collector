@@ -29,7 +29,7 @@ func (cr *CapRover) Name() string { return "caprover" }
 // Discover lists all CapRover app definitions.
 // Credentials: KITE_CAPROVER_TOKEN environment variable.
 // Endpoint: KITE_CAPROVER_ENDPOINT env var or "endpoint" config key.
-func (cr *CapRover) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (cr *CapRover) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_CAPROVER_TOKEN")
 	endpoint := cr.baseURL
 
@@ -79,16 +79,16 @@ func (cr *CapRover) Discover(ctx context.Context, cfg map[string]any) ([]model.A
 		return nil, fmt.Errorf("caprover: unexpected API status %d: %s", resp.Status, resp.Description)
 	}
 
-	var assets []model.Asset
+	var machines []model.Machine
 	now := time.Now().UTC()
 	for i := range resp.Data.AppDefinitions {
-		assets = append(assets, caproverToAsset(resp.Data.AppDefinitions[i], now))
+		machines = append(machines, caproverToMachine(resp.Data.AppDefinitions[i], now))
 	}
 
 	slog.Info("CapRover PaaS discovery complete",
 		"code", string(LogCodeCapRoverComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- CapRover API response types ---
@@ -108,9 +108,9 @@ type caproverApp struct {
 	IsAppBuilding     bool   `json:"isAppBuilding"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func caproverToAsset(app caproverApp, now time.Time) model.Asset {
+func caproverToMachine(app caproverApp, now time.Time) model.Machine {
 	tags := map[string]any{
 		"platform":        "caprover",
 		"instance_count":  app.InstanceCount,
@@ -120,10 +120,10 @@ func caproverToAsset(app caproverApp, now time.Time) model.Asset {
 		tags["building"] = true
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        app.AppName,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		DiscoverySource: "caprover",
 		FirstSeenAt:     now,
 		LastSeenAt:      now,
@@ -131,6 +131,6 @@ func caproverToAsset(app caproverApp, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
-// Manager determines whether an asset satisfies the organisation's required
+// Manager determines whether an machine satisfies the organisation's required
 // security controls (e.g. EDR agent, configuration management).
 type Manager struct {
 	requiredControls []string
@@ -25,7 +25,7 @@ func NewManager(requiredControls []string) *Manager {
 //   - Empty requiredControls = opt-in, return "unknown"
 //   - All required controls present = "managed"
 //   - Any required control missing = "unmanaged"
-func (m *Manager) EvaluateWithSoftware(asset model.Asset, software []model.InstalledSoftware) model.ManagedState {
+func (m *Manager) EvaluateWithSoftware(machine model.Machine, software []model.InstalledSoftware) model.ManagedState {
 	if len(m.requiredControls) == 0 {
 		return model.ManagedUnknown
 	}
@@ -52,7 +52,7 @@ func (m *Manager) EvaluateWithSoftware(asset model.Asset, software []model.Insta
 //     opt-in and we return "unknown".
 //   - If controls are configured, we return "unmanaged" because no software
 //     inventory is available to verify control presence.
-func (m *Manager) Evaluate(asset model.Asset) model.ManagedState {
+func (m *Manager) Evaluate(machine model.Machine) model.ManagedState {
 	if len(m.requiredControls) == 0 {
 		return model.ManagedUnknown
 	}

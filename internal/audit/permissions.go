@@ -147,12 +147,12 @@ func NewPermissions(additionalPaths []string) *Permissions {
 func (p *Permissions) Name() string { return "permissions" }
 
 // Audit checks file permissions on critical system files.
-func (p *Permissions) Audit(_ context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
-	return EvaluatePermissions(p.checks, asset), nil
+func (p *Permissions) Audit(_ context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
+	return EvaluatePermissions(p.checks, machine), nil
 }
 
 // EvaluatePermissions checks file modes against expected permissions.
-func EvaluatePermissions(checks []permCheck, asset model.Asset) []model.ConfigFinding {
+func EvaluatePermissions(checks []permCheck, machine model.Machine) []model.ConfigFinding {
 	now := time.Now().UTC()
 	var findings []model.ConfigFinding
 
@@ -179,7 +179,7 @@ func EvaluatePermissions(checks []permCheck, asset model.Asset) []model.ConfigFi
 
 		findings = append(findings, model.ConfigFinding{
 			ID:          uuid.Must(uuid.NewV7()),
-			AssetID:     asset.ID,
+			MachineID:   machine.ID,
 			Auditor:     "permissions",
 			CheckID:     check.ID,
 			Title:       check.Title,

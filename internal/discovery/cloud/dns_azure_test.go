@@ -13,9 +13,9 @@ import (
 
 func TestAzureDNSDiscover_DisabledByConfig(t *testing.T) {
 	a := NewDNSAzure()
-	assets, err := a.Discover(context.Background(), map[string]any{"enabled": false})
+	machines, err := a.Discover(context.Background(), map[string]any{"enabled": false})
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 	assert.Nil(t, a.Snapshot())
 }
 
@@ -34,9 +34,9 @@ func TestAzureDNSDiscover_NoCredentialsSkipsWhenUnconfigured(t *testing.T) {
 	t.Setenv("AZURE_CLIENT_ID", "")
 	t.Setenv("AZURE_CLIENT_SECRET", "")
 	a := NewDNSAzure()
-	assets, err := a.Discover(context.Background(), nil)
+	machines, err := a.Discover(context.Background(), nil)
 	require.NoError(t, err)
-	assert.Nil(t, assets)
+	assert.Nil(t, machines)
 	assert.Nil(t, a.Snapshot())
 }
 

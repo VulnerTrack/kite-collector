@@ -1,4 +1,4 @@
-.PHONY: build build-host test test-e2e test-smoke-containers test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers sim-osquery osquery-checks test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -127,6 +127,27 @@ test-e2e:
 # against them. Requires docker + the compose plugin (not just `go test`).
 test-smoke-containers:
 	./tests/e2e/containers/run.sh
+
+# End-to-end container + settings smoke test through the real kite-collector
+# binary (docker discovery source, driven by a settings file). Requires docker
+# + the compose plugin.
+test-kite-containers:
+	./tests/e2e/kite-containers/run.sh
+
+# Simulated osquery environment: runs a real osqueryd exposing its extensions
+# socket, then probes it over that socket. Groundwork for an osquery-backed
+# collector; requires docker + the compose plugin.
+sim-osquery:
+	docker compose -f tests/e2e/osquery/docker-compose.osquery.yml run --rm --build probe
+	docker compose -f tests/e2e/osquery/docker-compose.osquery.yml down -v
+
+# Full osquery diagnostic battery (the daily drift check, run locally). Reports
+# which failure mode hit. Override OSQUERY_VERSION=latest to test drift.
+osquery-checks:
+	docker compose -f tests/e2e/osquery/docker-compose.osquery.yml run --rm --build checks; \
+	  rc=$$?; \
+	  docker compose -f tests/e2e/osquery/docker-compose.osquery.yml down -v >/dev/null 2>&1 || true; \
+	  exit $$rc
 
 test-cloud:
 	go test -tags cloud -count=1 -timeout 60s ./internal/discovery/cloud/...

@@ -5,7 +5,7 @@
       "id": "quick_scan",
       "primary": true,
       "title": "Quick local scan (offline, no backend)",
-      "description": "Scan this machine for assets, software, and misconfigurations. Results stored locally in SQLite.",
+      "description": "Scan this host for machines, software, and misconfigurations. Results stored locally in SQLite.",
       "context": {
         "discovery.agent.enabled": true,
         "discovery.agent.collect_software": true,
@@ -29,7 +29,7 @@
     {
       "id": "network_inventory",
       "primary": false,
-      "title": "Network asset inventory (scan a CIDR range)",
+      "title": "Network machine inventory (scan a CIDR range)",
       "description": "Discover all hosts on your network via TCP scanning + local agent. Offline, no backend required.",
       "context": {
         "discovery.agent.enabled": true,
@@ -52,7 +52,7 @@
       "id": "connect_otel",
       "primary": true,
       "title": "Stream findings to OpenTelemetry / VulnerTrack backend",
-      "description": "Configure the agent to push asset events, findings, and metrics to an OTEL Collector or VulnerTrack server over mTLS.",
+      "description": "Configure the agent to push machine events, findings, and metrics to an OTEL Collector or VulnerTrack server over mTLS.",
       "context": {
         "discovery.agent.enabled": true,
         "discovery.agent.collect_software": true,
@@ -103,8 +103,8 @@
     {
       "id": "cloud_inventory",
       "primary": false,
-      "title": "Cloud + VPS asset inventory (AWS, GCP, Azure, Hetzner, ...)",
-      "description": "Discover assets across cloud providers and VPS hosting platforms. Requires API tokens in environment variables.",
+      "title": "Cloud + VPS machine inventory (AWS, GCP, Azure, Hetzner, ...)",
+      "description": "Discover machines across cloud providers and VPS hosting platforms. Requires API tokens in environment variables.",
       "context": {
         "discovery.agent.enabled": true,
         "discovery.agent.collect_software": false,
@@ -146,7 +146,7 @@
       "id": "mssp_multi_tenant",
       "primary": false,
       "title": "MSSP multi-tenant agent (report to client + fleet manager)",
-      "description": "Configure an agent that reports assets to a client's backend and heartbeats to the MSSP's fleet manager. Requires enrollment tokens for both endpoints.",
+      "description": "Configure an agent that reports machines to a client's backend and heartbeats to the MSSP's fleet manager. Requires enrollment tokens for both endpoints.",
       "context": {
         "discovery.agent.enabled": true,
         "discovery.agent.collect_software": true,
@@ -233,7 +233,7 @@
         {
           "id": "stale_threshold",
           "type": "input",
-          "prompt": "Stale asset threshold (e.g., 168h = 7 days)",
+          "prompt": "Stale machine threshold (e.g., 168h = 7 days)",
           "depends_on": [],
           "default_rule": "'168h'",
           "required": true
@@ -597,7 +597,7 @@
         {
           "id": "business.owner",
           "type": "input",
-          "prompt": "Asset owner (team or person responsible)",
+          "prompt": "Machine owner (team or person responsible)",
           "depends_on": [],
           "default_rule": "''",
           "required": false
@@ -605,7 +605,7 @@
         {
           "id": "business.criticality",
           "type": "select",
-          "prompt": "Business criticality of assets on this host",
+          "prompt": "Business criticality of machines on this host",
           "options": [
             "critical",
             "high",
@@ -621,7 +621,7 @@
         {
           "id": "business.process",
           "type": "input",
-          "prompt": "Business process this asset supports (e.g., payment-processing, customer-portal, ci-cd)",
+          "prompt": "Business process this machine supports (e.g., payment-processing, customer-portal, ci-cd)",
           "depends_on": [],
           "default_rule": "''",
           "required": false
@@ -629,7 +629,7 @@
         {
           "id": "business.data_classification",
           "type": "select",
-          "prompt": "Data classification for assets on this host",
+          "prompt": "Data classification for machines on this host",
           "options": [
             "public",
             "internal",
@@ -669,7 +669,7 @@
         {
           "id": "classification.allowlist_file",
           "type": "input",
-          "prompt": "Path to authorized assets allowlist YAML (blank = skip authorization classification)",
+          "prompt": "Path to authorized machines allowlist YAML (blank = skip authorization classification)",
           "depends_on": [],
           "default_rule": "''",
           "required": false,

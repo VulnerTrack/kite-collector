@@ -17,7 +17,7 @@ func TestWithTransientRetry_RetriesOnIOErr(t *testing.T) {
 		if calls < 3 {
 			// Mimic the modernc.org/sqlite extended-code error string
 			// observed in the field for SQLITE_IOERR_DELETE_NOENT.
-			return errors.New("upsert assets: commit tx: disk I/O error (5898)")
+			return errors.New("upsert machines: commit tx: disk I/O error (5898)")
 		}
 		return nil
 	})
@@ -29,7 +29,7 @@ func TestWithTransientRetry_GivesUpAfterMaxAttempts(t *testing.T) {
 	calls := 0
 	err := withTransientRetry(3, func() error {
 		calls++
-		return errors.New("upsert assets: commit tx: disk I/O error (5898)")
+		return errors.New("upsert machines: commit tx: disk I/O error (5898)")
 	})
 	require.Error(t, err)
 	assert.Equal(t, 3, calls, "fn must be called exactly maxAttempts times")

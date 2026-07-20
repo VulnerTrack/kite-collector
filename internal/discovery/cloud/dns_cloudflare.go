@@ -2,7 +2,7 @@
 // The source authenticates via a Bearer token (CF_API_TOKEN) and lists every
 // zone the token can see plus its DNS records via the Cloudflare API v4.
 // Results land on the in-memory DNSSnapshot so the engine can persist them
-// via store.UpsertCloudDNSSnapshot. Discover returns no assets.
+// via store.UpsertCloudDNSSnapshot. Discover returns no machines.
 package cloud
 
 import (
@@ -59,13 +59,13 @@ func (c *CloudflareDNS) Snapshot() *DNSSnapshot {
 
 // Discover enumerates every Cloudflare zone visible to the API token plus its
 // DNS records. The result is captured on the source's snapshot for the engine
-// to persist; the returned []model.Asset is always empty.
+// to persist; the returned []model.Machine is always empty.
 //
 // Supported config keys:
 //
 //	enabled    – bool   (default: true)
 //	account_id – string optional Cloudflare account scope filter
-func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (c *CloudflareDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	if cfg != nil {
 		if enabled, ok := cfg["enabled"].(bool); ok && !enabled {
 			slog.Debug("Cloudflare DNS discovery disabled by configuration",
@@ -393,5 +393,5 @@ type cloudflareRecord struct {
 // Compile-time assertion that CloudflareDNS satisfies discovery.Source.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*CloudflareDNS)(nil)

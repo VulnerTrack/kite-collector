@@ -6,7 +6,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
-// Asset Tag JSON keys for the Entra discovery source. Mirrors the
+// Machine Tag JSON keys for the Entra discovery source. Mirrors the
 // contract.AttrAD* convention used by the LDAP source — once the central
 // telemetry contract grows an Entra section these keys can be promoted there.
 const (
@@ -24,7 +24,7 @@ const (
 )
 
 // deviceTags assembles the Tags-JSON payload attached to an EntraDevice
-// asset. nil-typed fields (compliance, managed) are omitted so downstream
+// machine. nil-typed fields (compliance, managed) are omitted so downstream
 // consumers can distinguish "unknown" from "explicitly false".
 func deviceTags(d entraDevice, tenantID string) map[string]any {
 	tags := map[string]any{
@@ -56,20 +56,20 @@ func deviceTags(d entraDevice, tenantID string) map[string]any {
 }
 
 // classifyEntraDevice maps the Entra `operatingSystem` field to the kite
-// asset taxonomy. Servers, workstations, and mobile clients are all visible
+// machine taxonomy. Servers, workstations, and mobile clients are all visible
 // in /v1.0/devices; we group everything non-server under workstation since
 // the kite taxonomy has no dedicated mobile bucket.
-func classifyEntraDevice(os string) model.AssetType {
+func classifyEntraDevice(os string) model.MachineType {
 	lower := strings.ToLower(strings.TrimSpace(os))
 	switch {
 	case strings.Contains(lower, "windows server"), strings.Contains(lower, "linux server"):
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	case strings.Contains(lower, "server"):
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	case lower == "":
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	default:
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	}
 }
 

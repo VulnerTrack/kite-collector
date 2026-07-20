@@ -27,7 +27,7 @@ func (v *Vultr) Name() string { return "vultr" }
 
 // Discover lists all Vultr instances using cursor-based pagination.
 // Credentials: KITE_VULTR_TOKEN environment variable.
-func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_VULTR_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -40,13 +40,13 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		"code", string(LogCodeVultrStarting))
 
 	client := newClient("vultr", v.baseURL, bearerAuth(token))
-	var assets []model.Asset
+	var machines []model.Machine
 	cursor := ""
 	guard := safenet.NewPaginationGuardV2WithSource("vultr")
 
 	for {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("vultr: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("vultr: context cancelled: %w", ctx.Err())
 		}
 
 		path := "/instances?per_page=100"
@@ -57,15 +57,15 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		var resp vultrInstancesResponse
 		nBytes, err := client.getSized(ctx, path, &resp)
 		if err != nil {
-			return assets, fmt.Errorf("vultr: list instances: %w", err)
+			return machines, fmt.Errorf("vultr: list instances: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("vultr: %w", err)
+			return machines, fmt.Errorf("vultr: %w", err)
 		}
 
 		now := time.Now().UTC()
 		for i := range resp.Instances {
-			assets = append(assets, vultrToAsset(resp.Instances[i], now))
+			machines = append(machines, vultrToMachine(resp.Instances[i], now))
 		}
 
 		raw := resp.Meta.Links.Next
@@ -77,7 +77,7 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 			slog.Warn("Vultr pagination cursor rejected by safenet; stopping pagination",
 				"code", string(LogCodeVultrPaginationRejected),
 				"error", sanErr,
-				"assets_so_far", len(assets))
+				"machines_so_far", len(machines))
 			break
 		}
 		cursor = clean
@@ -85,8 +85,8 @@ func (v *Vultr) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 
 	slog.Info("Vultr VPS discovery complete",
 		"code", string(LogCodeVultrComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Vultr API response types ---
@@ -118,9 +118,9 @@ type vultrInstance struct {
 	Tags        []string `json:"tags"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func vultrToAsset(inst vultrInstance, now time.Time) model.Asset {
+func vultrToMachine(inst vultrInstance, now time.Time) model.Machine {
 	tags := map[string]any{
 		"provider_id": inst.ID,
 		"ip":          inst.MainIP,
@@ -139,10 +139,10 @@ func vultrToAsset(inst vultrInstance, now time.Time) model.Asset {
 		firstSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        inst.Label,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		OSFamily:        inst.OS,
 		Environment:     inst.Region,
 		DiscoverySource: "vultr",
@@ -152,6 +152,6 @@ func vultrToAsset(inst vultrInstance, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

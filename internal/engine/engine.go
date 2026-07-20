@@ -292,7 +292,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 				"discovery exceeded scan deadline; processing partial results",
 				"code", string(LogCodeDiscoveryDeadlineExceeded),
 				"scan_id", scanID,
-				"partial_assets", len(discovered),
+				"partial_machines", len(discovered),
 				"error", err,
 			)
 			// Fall through — process whatever was discovered.
@@ -309,36 +309,36 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	slog.Info("discovery phase complete",
 		"code", string(LogCodeDiscoveryComplete),
 		"scan_id", scanID,
-		"raw_assets", len(discovered))
+		"raw_machines", len(discovered))
 
 	dedupResult, err := e.deduplicator.Deduplicate(ctx, discovered)
 	if err != nil {
 		return nil, fmt.Errorf("deduplicate: %w", err)
 	}
 
-	assets := e.classifier.ClassifyAll(dedupResult.Assets)
+	machines := e.classifier.ClassifyAll(dedupResult.Machines)
 
-	// Snapshot the pre-update view of every asset by natural key BEFORE
+	// Snapshot the pre-update view of every machine by natural key BEFORE
 	// the upsert, so the event-classification block below can compare
 	// material fingerprints (existing-on-disk vs incoming-from-discovery)
-	// and emit AssetAnalyzed for repeated rescans where only the
+	// and emit MachineAnalyzed for repeated rescans where only the
 	// timestamps moved. This is what keeps the event stream from being
-	// dominated by per-tick AssetUpdated noise. The lookup tolerates
+	// dominated by per-tick MachineUpdated noise. The lookup tolerates
 	// errors — degrading to "treat all as discovered/updated" — because
 	// noise is preferable to dropping a scan.
-	priorByKey := make(map[string]model.Asset, len(assets))
-	if len(assets) > 0 {
-		keys := make([]string, 0, len(assets))
-		for i := range assets {
-			if assets[i].NaturalKey != "" {
-				keys = append(keys, assets[i].NaturalKey)
+	priorByKey := make(map[string]model.Machine, len(machines))
+	if len(machines) > 0 {
+		keys := make([]string, 0, len(machines))
+		for i := range machines {
+			if machines[i].NaturalKey != "" {
+				keys = append(keys, machines[i].NaturalKey)
 			}
 		}
-		fetched, perr := e.store.GetAssetsByNaturalKeys(ctx, keys)
+		fetched, perr := e.store.GetMachinesByNaturalKeys(ctx, keys)
 		if perr != nil {
 			slog.Warn(
-				"prior-asset fingerprint snapshot failed; degrading to update-only event classification",
-				"code", string(LogCodeAssetsFingerprintSnapshot),
+				"prior-machine fingerprint snapshot failed; degrading to update-only event classification",
+				"code", string(LogCodeMachinesFingerprintSnapshot),
 				"error", perr,
 				"scan_id", scanID,
 				"natural_keys", len(keys),
@@ -348,37 +348,37 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 	}
 
-	inserted, updated, err := e.store.UpsertAssets(ctx, assets)
+	inserted, updated, err := e.store.UpsertMachines(ctx, machines)
 	if err != nil {
-		return nil, fmt.Errorf("upsert assets: %w", err)
+		return nil, fmt.Errorf("upsert machines: %w", err)
 	}
-	slog.Info("assets persisted to store",
-		"code", string(LogCodeAssetsPersisted),
+	slog.Info("machines persisted to store",
+		"code", string(LogCodeMachinesPersisted),
 		"scan_id", scanID,
 		"inserted", inserted,
 		"updated", updated,
-		"total_assets", len(assets))
+		"total_machines", len(machines))
 
-	// Collect and persist installed software for the agent asset.
+	// Collect and persist installed software for the agent machine.
 	// Skip if scan deadline already exceeded.
 	var softwareCount, softwareErrors int
 	if scanCtx.Err() == nil {
 		if agentCfg, ok := configs["agent"]; ok {
 			if cs, ok := agentCfg["collect_software"].(bool); ok && cs {
-				if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
+				if agentID := findAgentMachineID(machines); agentID != uuid.Nil {
 					swReg := software.NewRegistry()
 					swResult := swReg.Collect(scanCtx)
 					softwareCount = len(swResult.Items)
 					if len(swResult.Items) > 0 {
 						for i := range swResult.Items {
-							swResult.Items[i].AssetID = agentID
+							swResult.Items[i].MachineID = agentID
 						}
 						if swErr := e.store.UpsertSoftware(ctx, agentID, swResult.Items); swErr != nil {
 							slog.Error("software inventory upsert failed",
 								"code", string(LogCodeSoftwarePersistFailed),
 								"error", swErr,
 								"scan_id", scanID,
-								"asset_id", agentID,
+								"machine_id", agentID,
 								"item_count", len(swResult.Items),
 								"parse_errors", swResult.TotalErrors())
 							softwareErrors++
@@ -387,7 +387,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 								"software inventory persisted",
 								"code", string(LogCodeSoftwarePersisted),
 								"scan_id", scanID,
-								"asset_id", agentID,
+								"machine_id", agentID,
 								"item_count", len(swResult.Items),
 								"parse_errors", swResult.TotalErrors(),
 							)
@@ -401,15 +401,15 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 	}
 
-	// Configuration audit phase: run enabled auditors on the agent asset.
+	// Configuration audit phase: run enabled auditors on the agent machine.
 	// Skip if scan deadline already exceeded.
 	var findingsCount, postureCount int
 	if scanCtx.Err() == nil && cfg.Audit.Enabled {
-		if agentID := findAgentAssetID(assets); agentID != uuid.Nil {
-			var agentAsset model.Asset
-			for _, a := range assets {
+		if agentID := findAgentMachineID(machines); agentID != uuid.Nil {
+			var agentMachine model.Machine
+			for _, a := range machines {
 				if a.ID == agentID {
-					agentAsset = a
+					agentMachine = a
 					break
 				}
 			}
@@ -438,14 +438,14 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 				}))
 			}
 
-			findings, auditErr := auditReg.AuditAll(scanCtx, agentAsset)
+			findings, auditErr := auditReg.AuditAll(scanCtx, agentMachine)
 			if auditErr != nil {
 				slog.Warn("config-audit phase returned error",
 					"code", string(LogCodeAuditFailed),
 					"error", auditErr,
 					"scan_id", scanID,
-					"asset_id", agentAsset.ID,
-					"hostname", agentAsset.Hostname)
+					"machine_id", agentMachine.ID,
+					"hostname", agentMachine.Hostname)
 			}
 			if len(findings) > 0 {
 				for i := range findings {
@@ -456,14 +456,14 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 						"code", string(LogCodeAuditFindingsPersistFailed),
 						"error", fErr,
 						"scan_id", scanID,
-						"asset_id", agentAsset.ID,
+						"machine_id", agentMachine.ID,
 						"finding_count", len(findings))
 				} else {
 					findingsCount = len(findings)
 					slog.Info("config-audit phase complete",
 						"code", string(LogCodeAuditComplete),
 						"scan_id", scanID,
-						"asset_id", agentAsset.ID,
+						"machine_id", agentMachine.ID,
 						"findings", findingsCount)
 					e.recordFindingMetrics(findings)
 				}
@@ -479,8 +479,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			codeAuditReg.Register(audit.NewSecrets())
 		}
 
-		for _, a := range assets {
-			if a.AssetType != model.AssetTypeRepository {
+		for _, a := range machines {
+			if a.MachineType != model.MachineTypeRepository {
 				continue
 			}
 			codeFindings, auditErr := codeAuditReg.AuditAll(scanCtx, a)
@@ -489,7 +489,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"code", string(LogCodeAuditCodeFailed),
 					"error", auditErr,
 					"scan_id", scanID,
-					"asset_id", a.ID,
+					"machine_id", a.ID,
 					"hostname", a.Hostname)
 				continue
 			}
@@ -504,7 +504,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"code", string(LogCodeAuditCodePersistFailed),
 					"error", fErr,
 					"scan_id", scanID,
-					"asset_id", a.ID,
+					"machine_id", a.ID,
 					"hostname", a.Hostname,
 					"finding_count", len(codeFindings))
 			} else {
@@ -513,7 +513,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"code-audit phase complete",
 					"code", string(LogCodeAuditCodeComplete),
 					"scan_id", scanID,
-					"asset_id", a.ID,
+					"machine_id", a.ID,
 					"hostname", a.Hostname,
 					"findings", len(codeFindings),
 				)
@@ -523,11 +523,11 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	}
 
 	// Container env secret audit phase (RFC-0123): run the container env
-	// secret scanner over every asset whose AssetType is "container". The
+	// secret scanner over every machine whose MachineType is "container". The
 	// auditor lazily fetches all container envs once via the docker source
-	// (ContainerEnvLister) and reuses the cached envs for every asset in
+	// (ContainerEnvLister) and reuses the cached envs for every machine in
 	// this loop, so the Docker socket is consulted only when at least one
-	// container asset exists.
+	// container machine exists.
 	if scanCtx.Err() == nil && cfg.Audit.Enabled && cfg.Audit.EnvSecrets.Enabled {
 		var lister audit.ContainerEnvLister
 		if dsrc := e.registry.Get("docker"); dsrc != nil {
@@ -540,8 +540,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			envAuditor := audit.NewContainerEnvSecrets(
 				lister, dockerCfg, cfg.Audit.EnvSecrets.DenyList,
 			)
-			for _, a := range assets {
-				if a.AssetType != model.AssetTypeContainer {
+			for _, a := range machines {
+				if a.MachineType != model.MachineTypeContainer {
 					continue
 				}
 				envFindings, auditErr := envAuditor.Audit(scanCtx, a)
@@ -550,7 +550,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 						"code", string(LogCodeAuditContainerEnvFailed),
 						"error", auditErr,
 						"scan_id", scanID,
-						"asset_id", a.ID,
+						"machine_id", a.ID,
 						"hostname", a.Hostname)
 					continue
 				}
@@ -565,7 +565,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 						"code", string(LogCodeAuditContainerEnvPersistFailed),
 						"error", fErr,
 						"scan_id", scanID,
-						"asset_id", a.ID,
+						"machine_id", a.ID,
 						"hostname", a.Hostname,
 						"finding_count", len(envFindings))
 					continue
@@ -576,7 +576,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"container-env-secret audit complete",
 					"code", string(LogCodeAuditContainerEnvComplete),
 					"scan_id", scanID,
-					"asset_id", a.ID,
+					"machine_id", a.ID,
 					"hostname", a.Hostname,
 					"findings", len(envFindings),
 				)
@@ -589,8 +589,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	}
 
 	// LDAP / Active Directory audit phase: run the LDAP auditor over every
-	// asset whose discovery source is "ldap". The auditor inspects each
-	// asset's tags JSON for ad.* attributes and emits the RFC-0121 §6
+	// machine whose discovery source is "ldap". The auditor inspects each
+	// machine's tags JSON for ad.* attributes and emits the RFC-0121 §6
 	// findings (stale account, kerberoastable, disabled-in-active-OU,
 	// cleartext bind). We materialise the auditor with the same TLS mode
 	// + stale_threshold the discovery source used so the cleartext finding
@@ -604,7 +604,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		ldapReg := audit.NewRegistry()
 		ldapReg.Register(ldapAuditor)
 
-		for _, a := range assets {
+		for _, a := range machines {
 			if a.DiscoverySource != "ldap" {
 				continue
 			}
@@ -614,7 +614,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"code", string(LogCodeAuditLDAPFailed),
 					"error", auditErr,
 					"scan_id", scanID,
-					"asset_id", a.ID,
+					"machine_id", a.ID,
 					"hostname", a.Hostname,
 					"tls_mode", ldapSrc.TLSMode)
 				continue
@@ -630,7 +630,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"code", string(LogCodeAuditLDAPPersistFailed),
 					"error", fErr,
 					"scan_id", scanID,
-					"asset_id", a.ID,
+					"machine_id", a.ID,
 					"hostname", a.Hostname,
 					"finding_count", len(ldapFindings))
 				continue
@@ -640,8 +640,8 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 	}
 
-	// Microsoft Entra ID audit phase: per-asset ENTRA-005 (non-compliant
-	// device) over assets discovered by the Entra source, plus the
+	// Microsoft Entra ID audit phase: per-machine ENTRA-005 (non-compliant
+	// device) over machines discovered by the Entra source, plus the
 	// tenant-wide ENTRA-001 / 002 / 003 findings derived from the
 	// Snapshot the EntraID source caches at the end of Discover().
 	if scanCtx.Err() == nil && cfg.Audit.Enabled && cfg.Audit.Entra.Enabled {
@@ -650,19 +650,19 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			StaleAccountDays: entraSrcCfg.StaleAccountDays,
 		})
 
-		// Per-asset ENTRA-005: walk the discovered asset set and emit
-		// findings against assets whose discovery source is "entra".
-		for _, a := range assets {
+		// Per-machine ENTRA-005: walk the discovered machine set and emit
+		// findings against machines whose discovery source is "entra".
+		for _, a := range machines {
 			if a.DiscoverySource != entrasrc.SourceName {
 				continue
 			}
 			entraFindings, auditErr := entraAuditor.Audit(scanCtx, a)
 			if auditErr != nil {
-				slog.Warn("entra per-asset audit returned error",
+				slog.Warn("entra per-machine audit returned error",
 					"code", string(LogCodeAuditEntraFailed),
 					"error", auditErr,
 					"scan_id", scanID,
-					"asset_id", a.ID,
+					"machine_id", a.ID,
 					"hostname", a.Hostname)
 				continue
 			}
@@ -677,7 +677,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"code", string(LogCodeAuditEntraPersistFailed),
 					"error", fErr,
 					"scan_id", scanID,
-					"asset_id", a.ID,
+					"machine_id", a.ID,
 					"hostname", a.Hostname,
 					"finding_count", len(entraFindings))
 				continue
@@ -751,57 +751,57 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 	}
 
-	// Stale asset detection and event generation — skip heavy work if
+	// Stale machine detection and event generation — skip heavy work if
 	// the scan deadline already fired.
-	var staleAssets []model.Asset
-	var events []model.AssetEvent
+	var staleMachines []model.Machine
+	var events []model.MachineEvent
 
 	if scanCtx.Err() == nil {
-		staleAssets, err = e.store.GetStaleAssets(ctx, cfg.StaleThresholdDuration())
+		staleMachines, err = e.store.GetStaleMachines(ctx, cfg.StaleThresholdDuration())
 		if err != nil {
-			slog.Warn("stale-asset detection query failed",
+			slog.Warn("stale-machine detection query failed",
 				"code", string(LogCodeStaleDetectFailed),
 				"error", err,
 				"scan_id", scanID,
 				"stale_threshold", cfg.StaleThresholdDuration().String())
-			staleAssets = nil
+			staleMachines = nil
 		}
 	}
 
-	// Classification counters — UpdatedAssets and AnalyzedAssets reflect the
+	// Classification counters — UpdatedMachines and AnalyzedMachines reflect the
 	// post-classification truth (material vs non-material rescans), which
-	// differs from dedupResult.UpdatedCount (every existing asset, regardless
+	// differs from dedupResult.UpdatedCount (every existing machine, regardless
 	// of material delta).
 	var analyzedCount, materialUpdatedCount int
-	for i := range assets {
+	for i := range machines {
 		// Classify the event against the prior-state snapshot taken
-		// before UpsertAssets:
+		// before UpsertMachines:
 		//   - no prior row             -> Discovered (first sighting)
 		//   - prior + material change  -> Updated   (real state delta)
 		//   - prior + no material chg  -> Analyzed  (timestamp-only tick)
 		// Authorization / management overrides still fire after this
 		// initial classification because they are alert-grade signals
 		// that should keep their per-tick visibility.
-		natKey := assets[i].NaturalKey
+		natKey := machines[i].NaturalKey
 		prior, hadPrior := priorByKey[natKey]
 		var evtType model.EventType
 		switch {
 		case !hadPrior:
-			evtType = model.EventAssetDiscovered
-		case prior.MaterialFingerprint() != assets[i].MaterialFingerprint():
-			evtType = model.EventAssetUpdated
+			evtType = model.EventMachineDiscovered
+		case prior.MaterialFingerprint() != machines[i].MaterialFingerprint():
+			evtType = model.EventMachineUpdated
 			materialUpdatedCount++
 		default:
-			evtType = model.EventAssetAnalyzed
+			evtType = model.EventMachineAnalyzed
 			analyzedCount++
 		}
-		if assets[i].IsAuthorized == model.AuthorizationUnauthorized {
-			evtType = model.EventUnauthorizedAssetDetected
-		} else if assets[i].IsManaged == model.ManagedUnmanaged {
-			evtType = model.EventUnmanagedAssetDetected
+		if machines[i].IsAuthorized == model.AuthorizationUnauthorized {
+			evtType = model.EventUnauthorizedMachineDetected
+		} else if machines[i].IsManaged == model.ManagedUnmanaged {
+			evtType = model.EventUnmanagedMachineDetected
 		}
-		severity := e.policy.EvaluateSeverity(assets[i])
-		// AssetAnalyzed events represent rescans with no material delta —
+		severity := e.policy.EvaluateSeverity(machines[i])
+		// MachineAnalyzed events represent rescans with no material delta —
 		// pure noise from a triage perspective. Force severity=low so
 		// downstream backends and dashboards can filter cheaply (e.g.
 		// "severity > low") without needing to know about the event_type
@@ -810,44 +810,44 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		// would touch every caller. Note: authorization / management
 		// overrides above already short-circuited away from Analyzed, so
 		// this only fires on truly noise-grade events.
-		if evtType == model.EventAssetAnalyzed {
+		if evtType == model.EventMachineAnalyzed {
 			severity = model.SeverityLow
 		}
-		evt := model.AssetEvent{
+		evt := model.MachineEvent{
 			ID:        uuid.Must(uuid.NewV7()),
 			EventType: evtType,
 			ScanRunID: scanID,
 			Severity:  severity,
 			Timestamp: time.Now().UTC(),
-			Details:   model.BuildEventDetails(assets[i], evtType),
+			Details:   model.BuildEventDetails(machines[i], evtType),
 		}
-		evt.FromAsset(assets[i])
+		evt.FromMachine(machines[i])
 		events = append(events, evt)
 	}
 
-	for i := range staleAssets {
-		evt := model.AssetEvent{
+	for i := range staleMachines {
+		evt := model.MachineEvent{
 			ID:        uuid.Must(uuid.NewV7()),
-			EventType: model.EventAssetNotSeen,
+			EventType: model.EventMachineNotSeen,
 			ScanRunID: scanID,
-			Severity:  e.policy.EvaluateSeverity(staleAssets[i]),
+			Severity:  e.policy.EvaluateSeverity(staleMachines[i]),
 			Timestamp: time.Now().UTC(),
-			Details:   model.BuildEventDetails(staleAssets[i], model.EventAssetNotSeen),
+			Details:   model.BuildEventDetails(staleMachines[i], model.EventMachineNotSeen),
 		}
-		evt.FromAsset(staleAssets[i])
+		evt.FromMachine(staleMachines[i])
 		events = append(events, evt)
 	}
 
 	if len(events) > 0 {
 		if err := e.store.InsertEvents(ctx, events); err != nil {
-			slog.Warn("asset-event batch persist failed",
+			slog.Warn("machine-event batch persist failed",
 				"code", string(LogCodeEventsPersistFailed),
 				"error", err,
 				"scan_id", scanID,
 				"event_count", len(events))
 		}
 		if err := e.emitter.EmitBatch(ctx, events); err != nil {
-			slog.Warn("asset-event batch emit failed",
+			slog.Warn("machine-event batch emit failed",
 				"code", string(LogCodeEventsEmitFailed),
 				"error", err,
 				"scan_id", scanID,
@@ -856,14 +856,14 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	}
 
 	if e.metrics != nil {
-		e.metrics.StaleAssets.Set(float64(len(staleAssets)))
+		e.metrics.StaleMachines.Set(float64(len(staleMachines)))
 	}
 
-	allAssets, _ := e.store.ListAssets(ctx, store.AssetFilter{})
-	totalKnown := len(allAssets)
+	allMachines, _ := e.store.ListMachines(ctx, store.MachineFilter{})
+	totalKnown := len(allMachines)
 	coveragePct := 0.0
 	if totalKnown > 0 {
-		coveragePct = float64(len(assets)) / float64(totalKnown) * 100.0
+		coveragePct = float64(len(machines)) / float64(totalKnown) * 100.0
 	}
 
 	scanStatus := model.ScanStatusCompleted
@@ -889,19 +889,19 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	}
 
 	result := &model.ScanResult{
-		Status:          string(scanStatus),
-		TotalAssets:     totalKnown,
-		NewAssets:       dedupResult.NewCount,
-		UpdatedAssets:   materialUpdatedCount,
-		AnalyzedAssets:  analyzedCount,
-		StaleAssets:     len(staleAssets),
-		EventsEmitted:   len(events),
-		SoftwareCount:   softwareCount,
-		SoftwareErrors:  softwareErrors,
-		FindingsCount:   findingsCount,
-		PostureCount:    postureCount,
-		ErrorCount:      errorCount,
-		CoveragePercent: coveragePct,
+		Status:           string(scanStatus),
+		TotalMachines:    totalKnown,
+		NewMachines:      dedupResult.NewCount,
+		UpdatedMachines:  materialUpdatedCount,
+		AnalyzedMachines: analyzedCount,
+		StaleMachines:    len(staleMachines),
+		EventsEmitted:    len(events),
+		SoftwareCount:    softwareCount,
+		SoftwareErrors:   softwareErrors,
+		FindingsCount:    findingsCount,
+		PostureCount:     postureCount,
+		ErrorCount:       errorCount,
+		CoveragePercent:  coveragePct,
 	}
 
 	// Reconcile heartbeats: verify every signature, check binary-hash
@@ -935,11 +935,11 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		"scan run complete",
 		"code", string(LogCodeScanRunComplete),
 		"scan_id", scanID,
-		"total", result.TotalAssets,
-		"new", result.NewAssets,
-		"updated", result.UpdatedAssets,
-		"analyzed", result.AnalyzedAssets,
-		"stale", result.StaleAssets,
+		"total", result.TotalMachines,
+		"new", result.NewMachines,
+		"updated", result.UpdatedMachines,
+		"analyzed", result.AnalyzedMachines,
+		"stale", result.StaleMachines,
 		"events", result.EventsEmitted,
 		"findings", result.FindingsCount,
 		"errors", result.ErrorCount,
@@ -979,9 +979,9 @@ func cloudDNSSnapshotSources(registry *discovery.Registry) []cloudDNSSnapshotPro
 	return out
 }
 
-// findAgentAssetID returns the ID of the first asset with DiscoverySource "agent".
-func findAgentAssetID(assets []model.Asset) uuid.UUID {
-	for _, a := range assets {
+// findAgentMachineID returns the ID of the first machine with DiscoverySource "agent".
+func findAgentMachineID(machines []model.Machine) uuid.UUID {
+	for _, a := range machines {
 		if a.DiscoverySource == "agent" {
 			return a.ID
 		}

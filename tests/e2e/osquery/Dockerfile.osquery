@@ -1,0 +1,37 @@
+# A self-contained osquery image built from the official apt repo. There is no
+# official osquery Docker image, so we install the signed package the same way
+# a production host would.
+#
+# OSQUERY_VERSION pins a specific release for reproducible simulations. Set it
+# to "latest" (the daily drift run does) to install whatever the repo currently
+# publishes — that's how a breaking osquery release is caught before adoption.
+FROM ubuntu:24.04
+
+ARG OSQUERY_VERSION=5.15.0
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg jq \
+    && install -d /etc/apt/keyrings \
+    && curl -fsSL https://pkg.osquery.io/deb/pubkey.gpg \
+         | gpg --dearmor -o /etc/apt/keyrings/osquery.gpg \
+    && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/osquery.gpg] https://pkg.osquery.io/deb deb main" \
+         > /etc/apt/sources.list.d/osquery.list \
+    && apt-get update \
+    && if [ "$OSQUERY_VERSION" = "latest" ] || [ -z "$OSQUERY_VERSION" ]; then \
+         apt-get install -y --no-install-recommends osquery; \
+       else \
+         apt-get install -y --no-install-recommends "osquery=${OSQUERY_VERSION}-1.linux"; \
+       fi \
+    && rm -rf /var/lib/apt/lists/*
+
+# Shared location for the Thrift extensions socket (the surface a client binds
+# to). Lives on a compose volume so the probe / a future kite runner can reach
+# it from a sibling container.
+RUN mkdir -p /var/osquery
+
+COPY osquery.conf /etc/osquery/osquery.conf
+COPY probe.sh /usr/local/bin/probe.sh
+COPY checks.sh /usr/local/bin/checks.sh
+RUN chmod +x /usr/local/bin/probe.sh /usr/local/bin/checks.sh

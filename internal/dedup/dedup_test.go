@@ -20,42 +20,42 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockStore struct {
-	assets map[string]model.Asset // keyed by natural_key
-	mu     sync.Mutex
+	machines map[string]model.Machine // keyed by natural_key
+	mu       sync.Mutex
 }
 
 func newMockStore() *mockStore {
-	return &mockStore{assets: make(map[string]model.Asset)}
+	return &mockStore{machines: make(map[string]model.Machine)}
 }
 
-func (m *mockStore) UpsertAsset(_ context.Context, asset model.Asset) error {
+func (m *mockStore) UpsertMachine(_ context.Context, machine model.Machine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	asset.ComputeNaturalKey()
-	m.assets[asset.NaturalKey] = asset
+	machine.ComputeNaturalKey()
+	m.machines[machine.NaturalKey] = machine
 	return nil
 }
 
-func (m *mockStore) UpsertAssets(_ context.Context, assets []model.Asset) (int, int, error) {
+func (m *mockStore) UpsertMachines(_ context.Context, machines []model.Machine) (int, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var inserted, updated int
-	for i := range assets {
-		assets[i].ComputeNaturalKey()
-		if _, exists := m.assets[assets[i].NaturalKey]; exists {
+	for i := range machines {
+		machines[i].ComputeNaturalKey()
+		if _, exists := m.machines[machines[i].NaturalKey]; exists {
 			updated++
 		} else {
 			inserted++
 		}
-		m.assets[assets[i].NaturalKey] = assets[i]
+		m.machines[machines[i].NaturalKey] = machines[i]
 	}
 	return inserted, updated, nil
 }
 
-func (m *mockStore) GetAssetByNaturalKey(_ context.Context, key string) (*model.Asset, error) {
+func (m *mockStore) GetMachineByNaturalKey(_ context.Context, key string) (*model.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	a, ok := m.assets[key]
+	a, ok := m.machines[key]
 	if !ok {
 		return nil, nil
 	}
@@ -63,25 +63,25 @@ func (m *mockStore) GetAssetByNaturalKey(_ context.Context, key string) (*model.
 	return &cp, nil
 }
 
-func (m *mockStore) GetAssetsByNaturalKeys(_ context.Context, keys []string) (map[string]model.Asset, error) {
+func (m *mockStore) GetMachinesByNaturalKeys(_ context.Context, keys []string) (map[string]model.Machine, error) {
 	if len(keys) == 0 {
 		return nil, nil
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make(map[string]model.Asset, len(keys))
+	out := make(map[string]model.Machine, len(keys))
 	for _, k := range keys {
-		if a, ok := m.assets[k]; ok {
+		if a, ok := m.machines[k]; ok {
 			out[k] = a
 		}
 	}
 	return out, nil
 }
 
-func (m *mockStore) GetAssetByID(_ context.Context, id uuid.UUID) (*model.Asset, error) {
+func (m *mockStore) GetMachineByID(_ context.Context, id uuid.UUID) (*model.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, a := range m.assets {
+	for _, a := range m.machines {
 		if a.ID == id {
 			cp := a
 			return &cp, nil
@@ -90,19 +90,19 @@ func (m *mockStore) GetAssetByID(_ context.Context, id uuid.UUID) (*model.Asset,
 	return nil, store.ErrNotFound
 }
 
-func (m *mockStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
+func (m *mockStore) ListMachines(_ context.Context, _ store.MachineFilter) ([]model.Machine, error) {
 	return nil, nil
 }
 
-func (m *mockStore) GetStaleAssets(_ context.Context, _ time.Duration) ([]model.Asset, error) {
+func (m *mockStore) GetStaleMachines(_ context.Context, _ time.Duration) ([]model.Machine, error) {
 	return nil, nil
 }
 
-func (m *mockStore) InsertEvent(_ context.Context, _ model.AssetEvent) error { return nil }
+func (m *mockStore) InsertEvent(_ context.Context, _ model.MachineEvent) error { return nil }
 
-func (m *mockStore) InsertEvents(_ context.Context, _ []model.AssetEvent) error { return nil }
+func (m *mockStore) InsertEvents(_ context.Context, _ []model.MachineEvent) error { return nil }
 
-func (m *mockStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.AssetEvent, error) {
+func (m *mockStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.MachineEvent, error) {
 	return nil, nil
 }
 
@@ -191,53 +191,53 @@ var _ store.Store = (*mockStore)(nil)
 // Tests
 // ---------------------------------------------------------------------------
 
-func TestDedup_NewAssetGetsUUIDv7(t *testing.T) {
+func TestDedup_NewMachineGetsUUIDv7(t *testing.T) {
 	ms := newMockStore()
 	dd := New(ms, nil)
 	ctx := context.Background()
 
-	assets := []model.Asset{
-		{Hostname: "new-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+	machines := []model.Machine{
+		{Hostname: "new-host", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 	}
 
-	res, err := dd.Deduplicate(ctx, assets)
+	res, err := dd.Deduplicate(ctx, machines)
 	require.NoError(t, err)
-	require.Len(t, res.Assets, 1)
+	require.Len(t, res.Machines, 1)
 
-	assert.NotEqual(t, uuid.Nil, res.Assets[0].ID, "new asset must get a UUID assigned")
+	assert.NotEqual(t, uuid.Nil, res.Machines[0].ID, "new machine must get a UUID assigned")
 	assert.Equal(t, 1, res.NewCount)
 	assert.Equal(t, 0, res.UpdatedCount)
 }
 
-func TestDedup_ExistingAssetPreservesID(t *testing.T) {
+func TestDedup_ExistingMachinePreservesID(t *testing.T) {
 	ms := newMockStore()
 	dd := New(ms, nil)
 	ctx := context.Background()
 
-	// Pre-populate the store with an existing asset.
+	// Pre-populate the store with an existing machine.
 	existingID := uuid.Must(uuid.NewV7())
 	firstSeen := time.Now().UTC().Add(-24 * time.Hour)
-	existing := model.Asset{
+	existing := model.Machine{
 		ID:              existingID,
 		Hostname:        "db-01",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		DiscoverySource: "network",
 		FirstSeenAt:     firstSeen,
 		LastSeenAt:      firstSeen,
 	}
 	existing.ComputeNaturalKey()
-	ms.assets[existing.NaturalKey] = existing
+	ms.machines[existing.NaturalKey] = existing
 
-	// Re-discover the same asset.
-	incoming := []model.Asset{
-		{Hostname: "db-01", AssetType: model.AssetTypeServer, DiscoverySource: "network"},
+	// Re-discover the same machine.
+	incoming := []model.Machine{
+		{Hostname: "db-01", MachineType: model.MachineTypeServer, DiscoverySource: "network"},
 	}
 
 	res, err := dd.Deduplicate(ctx, incoming)
 	require.NoError(t, err)
-	require.Len(t, res.Assets, 1)
+	require.Len(t, res.Machines, 1)
 
-	assert.Equal(t, existingID, res.Assets[0].ID, "existing ID must be preserved")
+	assert.Equal(t, existingID, res.Machines[0].ID, "existing ID must be preserved")
 	assert.Equal(t, 0, res.NewCount)
 	assert.Equal(t, 1, res.UpdatedCount)
 }
@@ -248,26 +248,26 @@ func TestDedup_FirstSeenAtPreservedOnUpdate(t *testing.T) {
 	ctx := context.Background()
 
 	firstSeen := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	existing := model.Asset{
+	existing := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "app-01",
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		DiscoverySource: "agent",
 		FirstSeenAt:     firstSeen,
 		LastSeenAt:      firstSeen,
 	}
 	existing.ComputeNaturalKey()
-	ms.assets[existing.NaturalKey] = existing
+	ms.machines[existing.NaturalKey] = existing
 
-	incoming := []model.Asset{
-		{Hostname: "app-01", AssetType: model.AssetTypeContainer, DiscoverySource: "agent"},
+	incoming := []model.Machine{
+		{Hostname: "app-01", MachineType: model.MachineTypeContainer, DiscoverySource: "agent"},
 	}
 
 	res, err := dd.Deduplicate(ctx, incoming)
 	require.NoError(t, err)
-	require.Len(t, res.Assets, 1)
+	require.Len(t, res.Machines, 1)
 
-	assert.Equal(t, firstSeen, res.Assets[0].FirstSeenAt,
+	assert.Equal(t, firstSeen, res.Machines[0].FirstSeenAt,
 		"FirstSeenAt must be preserved from the existing record")
 }
 
@@ -277,27 +277,27 @@ func TestDedup_LastSeenAtUpdatedOnRediscovery(t *testing.T) {
 	ctx := context.Background()
 
 	oldTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	existing := model.Asset{
+	existing := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "app-02",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		DiscoverySource: "network",
 		FirstSeenAt:     oldTime,
 		LastSeenAt:      oldTime,
 	}
 	existing.ComputeNaturalKey()
-	ms.assets[existing.NaturalKey] = existing
+	ms.machines[existing.NaturalKey] = existing
 
 	beforeDedup := time.Now().UTC()
-	incoming := []model.Asset{
-		{Hostname: "app-02", AssetType: model.AssetTypeServer, DiscoverySource: "network"},
+	incoming := []model.Machine{
+		{Hostname: "app-02", MachineType: model.MachineTypeServer, DiscoverySource: "network"},
 	}
 
 	res, err := dd.Deduplicate(ctx, incoming)
 	require.NoError(t, err)
-	require.Len(t, res.Assets, 1)
+	require.Len(t, res.Machines, 1)
 
-	assert.True(t, res.Assets[0].LastSeenAt.After(oldTime) || res.Assets[0].LastSeenAt.Equal(beforeDedup),
+	assert.True(t, res.Machines[0].LastSeenAt.After(oldTime) || res.Machines[0].LastSeenAt.Equal(beforeDedup),
 		"LastSeenAt must be updated to approximately now")
 }
 
@@ -306,16 +306,16 @@ func TestDedup_IntraBatchDedup(t *testing.T) {
 	dd := New(ms, nil)
 	ctx := context.Background()
 
-	// Two assets with the same hostname+type in one batch
-	assets := []model.Asset{
-		{Hostname: "dup-host", AssetType: model.AssetTypeWorkstation, DiscoverySource: "src1"},
-		{Hostname: "dup-host", AssetType: model.AssetTypeWorkstation, DiscoverySource: "src2"},
+	// Two machines with the same hostname+type in one batch
+	machines := []model.Machine{
+		{Hostname: "dup-host", MachineType: model.MachineTypeWorkstation, DiscoverySource: "src1"},
+		{Hostname: "dup-host", MachineType: model.MachineTypeWorkstation, DiscoverySource: "src2"},
 	}
 
-	res, err := dd.Deduplicate(ctx, assets)
+	res, err := dd.Deduplicate(ctx, machines)
 	require.NoError(t, err)
 
-	assert.Len(t, res.Assets, 1, "duplicate within a batch must be collapsed to one")
+	assert.Len(t, res.Machines, 1, "duplicate within a batch must be collapsed to one")
 	assert.Equal(t, 1, res.NewCount)
 	assert.Equal(t, 0, res.UpdatedCount)
 }
@@ -325,16 +325,16 @@ func TestDedup_IntraBatchDedup_DifferentTypes(t *testing.T) {
 	dd := New(ms, nil)
 	ctx := context.Background()
 
-	// Same hostname but different types are distinct assets
-	assets := []model.Asset{
-		{Hostname: "host-01", AssetType: model.AssetTypeServer, DiscoverySource: "net"},
-		{Hostname: "host-01", AssetType: model.AssetTypeContainer, DiscoverySource: "net"},
+	// Same hostname but different types are distinct machines
+	machines := []model.Machine{
+		{Hostname: "host-01", MachineType: model.MachineTypeServer, DiscoverySource: "net"},
+		{Hostname: "host-01", MachineType: model.MachineTypeContainer, DiscoverySource: "net"},
 	}
 
-	res, err := dd.Deduplicate(ctx, assets)
+	res, err := dd.Deduplicate(ctx, machines)
 	require.NoError(t, err)
 
-	assert.Len(t, res.Assets, 2, "same hostname with different types are distinct")
+	assert.Len(t, res.Machines, 2, "same hostname with different types are distinct")
 	assert.Equal(t, 2, res.NewCount)
 }
 
@@ -345,33 +345,33 @@ func TestDedup_EmptyInput(t *testing.T) {
 
 	res, err := dd.Deduplicate(ctx, nil)
 	require.NoError(t, err)
-	assert.Empty(t, res.Assets)
+	assert.Empty(t, res.Machines)
 	assert.Equal(t, 0, res.NewCount)
 	assert.Equal(t, 0, res.UpdatedCount)
 
-	res2, err := dd.Deduplicate(ctx, []model.Asset{})
+	res2, err := dd.Deduplicate(ctx, []model.Machine{})
 	require.NoError(t, err)
-	assert.Empty(t, res2.Assets)
+	assert.Empty(t, res2.Machines)
 	assert.Equal(t, 0, res2.NewCount)
 	assert.Equal(t, 0, res2.UpdatedCount)
 }
 
-func TestDedup_NewAssetFirstSeenEqualsLastSeen(t *testing.T) {
+func TestDedup_NewMachineFirstSeenEqualsLastSeen(t *testing.T) {
 	ms := newMockStore()
 	dd := New(ms, nil)
 	ctx := context.Background()
 
-	assets := []model.Asset{
-		{Hostname: "fresh-host", AssetType: model.AssetTypeWorkstation, DiscoverySource: "test"},
+	machines := []model.Machine{
+		{Hostname: "fresh-host", MachineType: model.MachineTypeWorkstation, DiscoverySource: "test"},
 	}
 
-	res, err := dd.Deduplicate(ctx, assets)
+	res, err := dd.Deduplicate(ctx, machines)
 	require.NoError(t, err)
-	require.Len(t, res.Assets, 1)
+	require.Len(t, res.Machines, 1)
 
-	assert.Equal(t, res.Assets[0].FirstSeenAt, res.Assets[0].LastSeenAt,
-		"for a new asset, FirstSeenAt must equal LastSeenAt")
-	assert.False(t, res.Assets[0].FirstSeenAt.IsZero(), "timestamps must not be zero")
+	assert.Equal(t, res.Machines[0].FirstSeenAt, res.Machines[0].LastSeenAt,
+		"for a new machine, FirstSeenAt must equal LastSeenAt")
+	assert.False(t, res.Machines[0].FirstSeenAt.IsZero(), "timestamps must not be zero")
 }
 
 func TestDedup_MergesOSInfo(t *testing.T) {
@@ -379,22 +379,22 @@ func TestDedup_MergesOSInfo(t *testing.T) {
 	dd := New(ms, nil)
 	ctx := context.Background()
 
-	existing := model.Asset{
+	existing := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "merge-host",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		DiscoverySource: "network",
 		OSFamily:        "",
 		FirstSeenAt:     time.Now().UTC().Add(-time.Hour),
 		LastSeenAt:      time.Now().UTC().Add(-time.Hour),
 	}
 	existing.ComputeNaturalKey()
-	ms.assets[existing.NaturalKey] = existing
+	ms.machines[existing.NaturalKey] = existing
 
-	incoming := []model.Asset{
+	incoming := []model.Machine{
 		{
 			Hostname:        "merge-host",
-			AssetType:       model.AssetTypeServer,
+			MachineType:     model.MachineTypeServer,
 			DiscoverySource: "agent",
 			OSFamily:        "linux",
 			OSVersion:       "6.1",
@@ -403,54 +403,54 @@ func TestDedup_MergesOSInfo(t *testing.T) {
 
 	res, err := dd.Deduplicate(ctx, incoming)
 	require.NoError(t, err)
-	require.Len(t, res.Assets, 1)
+	require.Len(t, res.Machines, 1)
 
-	assert.Equal(t, "linux", res.Assets[0].OSFamily, "OS family must be merged from incoming")
-	assert.Equal(t, "6.1", res.Assets[0].OSVersion, "OS version must be merged from incoming")
+	assert.Equal(t, "linux", res.Machines[0].OSFamily, "OS family must be merged from incoming")
+	assert.Equal(t, "6.1", res.Machines[0].OSVersion, "OS version must be merged from incoming")
 }
 
 // TestDedup_Idempotent verifies that running Deduplicate twice with the same
 // input produces deterministic counts (NewCount=2 then UpdatedCount=2) and
-// preserves asset IDs across runs. Uses a fixed clock for determinism.
+// preserves machine IDs across runs. Uses a fixed clock for determinism.
 func TestDedup_Idempotent(t *testing.T) {
 	ms := newMockStore()
 	fixedTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	dd := New(ms, nil, WithClock(func() time.Time { return fixedTime }))
 	ctx := context.Background()
 
-	assets := []model.Asset{
-		{Hostname: "host-a", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
-		{Hostname: "host-b", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+	machines := []model.Machine{
+		{Hostname: "host-a", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
+		{Hostname: "host-b", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 	}
 
-	// First pass: both assets are new.
-	res1, err := dd.Deduplicate(ctx, assets)
+	// First pass: both machines are new.
+	res1, err := dd.Deduplicate(ctx, machines)
 	require.NoError(t, err)
-	require.Len(t, res1.Assets, 2)
+	require.Len(t, res1.Machines, 2)
 	assert.Equal(t, 2, res1.NewCount)
 	assert.Equal(t, 0, res1.UpdatedCount)
 
 	// Record the IDs + natural keys assigned.
 	idByKey := make(map[string]uuid.UUID, 2)
-	for _, a := range res1.Assets {
+	for _, a := range res1.Machines {
 		idByKey[a.NaturalKey] = a.ID
 		// Persist into the store so the second pass finds them.
-		require.NoError(t, ms.UpsertAsset(ctx, a))
+		require.NoError(t, ms.UpsertMachine(ctx, a))
 	}
 
-	// Second pass: same inputs (new Asset values, no IDs pre-assigned).
-	assets2 := []model.Asset{
-		{Hostname: "host-a", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
-		{Hostname: "host-b", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+	// Second pass: same inputs (new Machine values, no IDs pre-assigned).
+	machines2 := []model.Machine{
+		{Hostname: "host-a", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
+		{Hostname: "host-b", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 	}
-	res2, err := dd.Deduplicate(ctx, assets2)
+	res2, err := dd.Deduplicate(ctx, machines2)
 	require.NoError(t, err)
-	require.Len(t, res2.Assets, 2)
+	require.Len(t, res2.Machines, 2)
 	assert.Equal(t, 0, res2.NewCount)
 	assert.Equal(t, 2, res2.UpdatedCount)
 
 	// Same IDs must be reused.
-	for _, a := range res2.Assets {
+	for _, a := range res2.Machines {
 		assert.Equal(t, idByKey[a.NaturalKey], a.ID,
 			"existing ID must be preserved on re-deduplication")
 	}

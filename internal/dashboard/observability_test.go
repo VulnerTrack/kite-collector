@@ -453,9 +453,9 @@ func TestCollectRuntimeStats_DataTableCountsOnFreshStore(t *testing.T) {
 	// Freshly-migrated store: all data tables exist but are empty.
 	// The COUNT queries must succeed (HasDataRowCounts=true) AND report 0.
 	assert.True(t, stats.HasDataRowCounts,
-		"data-table COUNT queries must succeed on a freshly-migrated store — schema includes assets/events/config_findings")
-	assert.Equal(t, "0", stats.AssetRows,
-		"empty assets table must report 0 — operators see this on a fresh install")
+		"data-table COUNT queries must succeed on a freshly-migrated store — schema includes machines/events/config_findings")
+	assert.Equal(t, "0", stats.MachineRows,
+		"empty machines table must report 0 — operators see this on a fresh install")
 	assert.Equal(t, "0", stats.EventRows,
 		"empty events table must report 0")
 	assert.Equal(t, "0", stats.FindingRows,
@@ -467,8 +467,8 @@ func TestCollectRuntimeStats_DataTableCountsFallbackToPlaceholder(t *testing.T) 
 	// so the template's empty-state copy is consistent across operational
 	// and data-table rows.
 	stats := collectRuntimeStats(context.Background(), onboardingDeps{Store: nil})
-	assert.Equal(t, "—", stats.AssetRows,
-		"nil store must surface the em-dash placeholder for assets")
+	assert.Equal(t, "—", stats.MachineRows,
+		"nil store must surface the em-dash placeholder for machines")
 	assert.Equal(t, "—", stats.EventRows,
 		"nil store must surface the em-dash placeholder for events")
 	assert.Equal(t, "—", stats.FindingRows,
@@ -491,7 +491,7 @@ func TestObservability_RuntimeCardRendersDataTableRows(t *testing.T) {
 
 	// All three data-table rows must render.
 	for _, label := range []string{
-		"assets discovered",
+		"machines discovered",
 		"events emitted",
 		"findings surfaced",
 	} {
@@ -1098,7 +1098,7 @@ func TestAggregateRecentActivity_InterleavesProbesAndScans(t *testing.T) {
 		{
 			ID:        uuid.New(),
 			StartedAt: now.Add(-4 * time.Minute), CompletedAt: &completedAt,
-			Status: model.ScanStatusCompleted, TriggerSource: "cli", TotalAssets: 12,
+			Status: model.ScanStatusCompleted, TriggerSource: "cli", TotalMachines: 12,
 		},
 	}
 	events := aggregateRecentActivity(probes, runs, 20)

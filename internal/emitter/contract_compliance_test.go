@@ -50,11 +50,11 @@ func TestOTLPEmitter_ResourceAttributesMatchContract(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = em.Shutdown(context.Background()) }()
 
-	evt := model.AssetEvent{
+	evt := model.MachineEvent{
 		ID:        uuid.Must(uuid.NewV7()),
-		AssetID:   uuid.Must(uuid.NewV7()),
+		MachineID: uuid.Must(uuid.NewV7()),
 		ScanRunID: uuid.Must(uuid.NewV7()),
-		EventType: model.EventAssetDiscovered,
+		EventType: model.EventMachineDiscovered,
 		Severity:  model.SeverityHigh,
 		Timestamp: time.Now(),
 		Hostname:  "edge-01.acme.example",
@@ -112,11 +112,11 @@ func TestOTLPEmitter_RedactsForbiddenResourceKeys(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = em.Shutdown(context.Background()) }()
 
-	evt := model.AssetEvent{
+	evt := model.MachineEvent{
 		ID:        uuid.Must(uuid.NewV7()),
-		AssetID:   uuid.Must(uuid.NewV7()),
+		MachineID: uuid.Must(uuid.NewV7()),
 		ScanRunID: uuid.Must(uuid.NewV7()),
-		EventType: model.EventAssetDiscovered,
+		EventType: model.EventMachineDiscovered,
 		Severity:  model.SeverityHigh,
 		Timestamp: time.Now(),
 	}

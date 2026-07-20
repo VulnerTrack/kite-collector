@@ -2,42 +2,42 @@ package model
 
 import "strings"
 
-// AssetType classifies the kind of asset discovered on the network.
-type AssetType string
+// MachineType classifies the kind of machine discovered on the network.
+type MachineType string
 
 const (
-	AssetTypeServer          AssetType = "server"
-	AssetTypeWorkstation     AssetType = "workstation"
-	AssetTypeNetworkDevice   AssetType = "network_device"
-	AssetTypeCloudInstance   AssetType = "cloud_instance"
-	AssetTypeContainer       AssetType = "container"
-	AssetTypeVirtualMachine  AssetType = "virtual_machine"
-	AssetTypeIOTDevice       AssetType = "iot_device"
-	AssetTypeAppliance       AssetType = "appliance"
-	AssetTypeSoftwareProject AssetType = "software_project"
-	AssetTypeRepository      AssetType = "repository"
+	MachineTypeServer          MachineType = "server"
+	MachineTypeWorkstation     MachineType = "workstation"
+	MachineTypeNetworkDevice   MachineType = "network_device"
+	MachineTypeCloudInstance   MachineType = "cloud_instance"
+	MachineTypeContainer       MachineType = "container"
+	MachineTypeVirtualMachine  MachineType = "virtual_machine"
+	MachineTypeIOTDevice       MachineType = "iot_device"
+	MachineTypeAppliance       MachineType = "appliance"
+	MachineTypeSoftwareProject MachineType = "software_project"
+	MachineTypeRepository      MachineType = "repository"
 )
 
-// Valid returns true when the AssetType is one of the recognised values.
-func (a AssetType) Valid() bool {
+// Valid returns true when the MachineType is one of the recognised values.
+func (a MachineType) Valid() bool {
 	switch a {
-	case AssetTypeServer,
-		AssetTypeWorkstation,
-		AssetTypeNetworkDevice,
-		AssetTypeCloudInstance,
-		AssetTypeContainer,
-		AssetTypeVirtualMachine,
-		AssetTypeIOTDevice,
-		AssetTypeAppliance,
-		AssetTypeSoftwareProject,
-		AssetTypeRepository:
+	case MachineTypeServer,
+		MachineTypeWorkstation,
+		MachineTypeNetworkDevice,
+		MachineTypeCloudInstance,
+		MachineTypeContainer,
+		MachineTypeVirtualMachine,
+		MachineTypeIOTDevice,
+		MachineTypeAppliance,
+		MachineTypeSoftwareProject,
+		MachineTypeRepository:
 		return true
 	default:
 		return false
 	}
 }
 
-// AuthorizationState indicates whether an asset is authorised to be on the network.
+// AuthorizationState indicates whether an machine is authorised to be on the network.
 type AuthorizationState string
 
 const (
@@ -46,7 +46,7 @@ const (
 	AuthorizationUnauthorized AuthorizationState = "unauthorized"
 )
 
-// ManagedState indicates whether an asset is under management by the organisation.
+// ManagedState indicates whether an machine is under management by the organisation.
 type ManagedState string
 
 const (
@@ -65,45 +65,45 @@ const (
 	SeverityCritical Severity = "critical"
 )
 
-// EventType identifies the kind of lifecycle event recorded for an asset.
+// EventType identifies the kind of lifecycle event recorded for an machine.
 type EventType string
 
 const (
-	EventAssetDiscovered           EventType = "AssetDiscovered"
-	EventAssetUpdated              EventType = "AssetUpdated"
-	EventAssetAnalyzed             EventType = "AssetAnalyzed"
-	EventUnauthorizedAssetDetected EventType = "UnauthorizedAssetDetected"
-	EventUnmanagedAssetDetected    EventType = "UnmanagedAssetDetected"
-	EventAssetNotSeen              EventType = "AssetNotSeen"
-	EventAssetRemoved              EventType = "AssetRemoved"
+	EventMachineDiscovered           EventType = "MachineDiscovered"
+	EventMachineUpdated              EventType = "MachineUpdated"
+	EventMachineAnalyzed             EventType = "MachineAnalyzed"
+	EventUnauthorizedMachineDetected EventType = "UnauthorizedMachineDetected"
+	EventUnmanagedMachineDetected    EventType = "UnmanagedMachineDetected"
+	EventMachineNotSeen              EventType = "MachineNotSeen"
+	EventMachineRemoved              EventType = "MachineRemoved"
 )
 
 // Name returns the stable, namespaced wire name for an event type, suitable
 // for the OpenTelemetry LogRecord.eventName field (proto v1.5+) and for
 // indexing in downstream backends. Unlike String() (which returns the
 // CamelCase constant value), Name() returns a dotted, snake_case identifier
-// in the "kite.asset.*" namespace.
+// in the "kite.machine.*" namespace.
 //
-// Unknown values fall through to a "kite.asset.unknown.<lowercased>" form so
+// Unknown values fall through to a "kite.machine.unknown.<lowercased>" form so
 // that ad-hoc or future event types remain parseable rather than empty.
 func (e EventType) Name() string {
 	switch e {
-	case EventAssetDiscovered:
-		return "kite.asset.discovered"
-	case EventAssetUpdated:
-		return "kite.asset.updated"
-	case EventAssetAnalyzed:
-		return "kite.asset.analyzed"
-	case EventUnauthorizedAssetDetected:
-		return "kite.asset.unauthorized_detected"
-	case EventUnmanagedAssetDetected:
-		return "kite.asset.unmanaged_detected"
-	case EventAssetNotSeen:
-		return "kite.asset.not_seen"
-	case EventAssetRemoved:
-		return "kite.asset.removed"
+	case EventMachineDiscovered:
+		return "kite.machine.discovered"
+	case EventMachineUpdated:
+		return "kite.machine.updated"
+	case EventMachineAnalyzed:
+		return "kite.machine.analyzed"
+	case EventUnauthorizedMachineDetected:
+		return "kite.machine.unauthorized_detected"
+	case EventUnmanagedMachineDetected:
+		return "kite.machine.unmanaged_detected"
+	case EventMachineNotSeen:
+		return "kite.machine.not_seen"
+	case EventMachineRemoved:
+		return "kite.machine.removed"
 	default:
-		return "kite.asset.unknown." + strings.ToLower(string(e))
+		return "kite.machine.unknown." + strings.ToLower(string(e))
 	}
 }
 

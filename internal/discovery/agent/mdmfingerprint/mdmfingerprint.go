@@ -497,7 +497,7 @@ func SortFingerprints(fps []Fingerprint) {
 	})
 }
 
-// TagsFromVendors returns asset-tag map entries representing the
+// TagsFromVendors returns machine-tag map entries representing the
 // observed MDM vendors. The keys are pinned to "mdm" and "mdm.<vendor>"
 // for one-shot lookups in downstream consumers.
 func TagsFromVendors(vs []Vendor) map[string]string {

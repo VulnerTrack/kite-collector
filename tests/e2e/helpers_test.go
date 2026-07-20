@@ -64,12 +64,12 @@ func newTestStore(t *testing.T, dsn string) *postgres.PostgresStore {
 	return st
 }
 
-// makeAsset builds a minimal valid Asset with a computed natural key.
-func makeAsset(hostname string, assetType model.AssetType, ts time.Time) model.Asset {
-	a := model.Asset{
+// makeMachine builds a minimal valid Machine with a computed natural key.
+func makeMachine(hostname string, machineType model.MachineType, ts time.Time) model.Machine {
+	a := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       assetType,
+		MachineType:     machineType,
 		OSFamily:        "linux",
 		OSVersion:       "6.1",
 		Environment:     "e2e-test",
@@ -86,11 +86,11 @@ func makeAsset(hostname string, assetType model.AssetType, ts time.Time) model.A
 	return a
 }
 
-// makeEvent builds a minimal valid AssetEvent.
-func makeEvent(assetID, scanRunID uuid.UUID, eventType model.EventType, ts time.Time) model.AssetEvent {
-	return model.AssetEvent{
+// makeEvent builds a minimal valid MachineEvent.
+func makeEvent(machineID, scanRunID uuid.UUID, eventType model.EventType, ts time.Time) model.MachineEvent {
+	return model.MachineEvent{
 		ID:        uuid.Must(uuid.NewV7()),
-		AssetID:   assetID,
+		MachineID: machineID,
 		ScanRunID: scanRunID,
 		EventType: eventType,
 		Severity:  model.SeverityLow,

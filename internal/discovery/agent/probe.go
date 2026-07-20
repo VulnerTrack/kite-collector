@@ -31,13 +31,13 @@ func New() *Probe {
 func (p *Probe) Name() string { return "agent" }
 
 // Discover collects information about the local host and returns a single
-// Asset representing it.
+// Machine representing it.
 //
 // Supported config keys:
 //
 //	collect_software   – bool; when true, attempt to enumerate installed packages
 //	collect_interfaces – bool; when true (default), enumerate network interfaces
-func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("agent probe: hostname: %w", err)
@@ -48,8 +48,8 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 
 	now := time.Now().UTC()
 
-	asset := model.Asset{
-		AssetType:       assetTypeForOS(osFamily),
+	machine := model.Machine{
+		MachineType:     machineTypeForOS(osFamily),
 		Hostname:        hostname,
 		OSFamily:        osFamily,
 		OSVersion:       osVersion,
@@ -62,7 +62,7 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		IsManaged:       model.ManagedUnknown,
 	}
 
-	assets := []model.Asset{asset}
+	machines := []model.Machine{machine}
 
 	// Collect network interfaces if not explicitly disabled.
 	collectInterfaces := true
@@ -77,7 +77,7 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		} else {
 			slog.Info("agent probe: collected interfaces", "count", len(ifaces))
 			// Store interfaces as a detail we can use after dedup assigns IDs.
-			_ = ifaces // Interfaces are collected but require an asset ID to persist.
+			_ = ifaces // Interfaces are collected but require an machine ID to persist.
 			// Callers should use CollectNetworkInterfaces directly after dedup.
 		}
 	}
@@ -112,7 +112,7 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset
 		}
 	}
 
-	return assets, nil
+	return machines, nil
 }
 
 // CollectLoadedDrivers enumerates loaded kernel modules and PnP device
@@ -132,13 +132,13 @@ func collectLoadedDrivers(ctx context.Context) ([]driver.LoadedDriver, []driver.
 	return res.Drivers, res.Bindings, nil
 }
 
-// assetTypeForOS maps a GOOS value to an AssetType.
-func assetTypeForOS(goos string) model.AssetType {
+// machineTypeForOS maps a GOOS value to an MachineType.
+func machineTypeForOS(goos string) model.MachineType {
 	switch goos {
 	case "darwin", "windows":
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	default:
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
 }
 
@@ -182,7 +182,7 @@ func readKernelVersion() string {
 
 // CollectNetworkInterfaces enumerates the host's network interfaces and
 // returns model objects for each address found. The caller must set the
-// AssetID field on each returned interface.
+// MachineID field on each returned interface.
 func CollectNetworkInterfaces() ([]model.NetworkInterface, error) {
 	return collectNetworkInterfaces()
 }
@@ -259,5 +259,5 @@ func collectInstalledSoftware(ctx context.Context) ([]model.InstalledSoftware, e
 // ensure Probe satisfies the discovery.Source interface at compile time.
 var _ interface {
 	Name() string
-	Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error)
+	Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error)
 } = (*Probe)(nil)

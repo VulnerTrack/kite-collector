@@ -22,9 +22,9 @@ const (
 	LogCodeMiddlewarePanicRecovered    LogCode = "rest.middleware.panic_recovered"
 	LogCodeMiddlewareResponseTruncated LogCode = "rest.middleware.response_truncated"
 
-	// assets surface
-	LogCodeAssetsGetByID LogCode = "rest.assets.get_by_id_failed"
-	LogCodeAssetsList    LogCode = "rest.assets.list_failed"
+	// machines surface
+	LogCodeMachinesGetByID LogCode = "rest.machines.get_by_id_failed"
+	LogCodeMachinesList    LogCode = "rest.machines.list_failed"
 
 	// events surface
 	LogCodeEventsList LogCode = "rest.events.list_failed"

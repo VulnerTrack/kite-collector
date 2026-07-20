@@ -34,7 +34,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 		Use:       "enc",
 	}
 
-	plaintext := []byte(`{"assets":[{"hostname":"web-01","type":"server"}]}`)
+	plaintext := []byte(`{"machines":[{"hostname":"web-01","type":"server"}]}`)
 
 	// Encrypt (agent side).
 	jweCompact, err := Encrypt(plaintext, agentPriv, serverJWK)

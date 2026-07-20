@@ -2,9 +2,9 @@
 // baseline via a PowerShell shim (no go-ole / COM dependency).
 //
 // This is the first table of the MID-Server-aligned Windows track —
-// one row per asset answering "what is this host?" so subsequent
+// one row per machine answering "what is this host?" so subsequent
 // hardware/serial, CPU/memory, NIC, storage iterations can join
-// against it via asset_id.
+// against it via machine_id.
 //
 // The collector shells out to PowerShell with a single inline script
 // that runs three queries (Get-CimInstance Win32_ComputerSystem,
@@ -28,7 +28,7 @@
 // MITRE T1082 (System Information Discovery — defender side):
 // comprehensive baseline that the audit pipeline uses to spot
 // rogue hosts (domain mismatch), unpatched builds (UBR drift), and
-// stale assets (last_boot_up_time vs install_date span).
+// stale machines (last_boot_up_time vs install_date span).
 package windowsinfo
 
 import (
@@ -83,7 +83,7 @@ type Collector interface {
 
 // SortInfos returns a deterministic ordering (by hostname). Used when
 // multiple Info rows accumulate from a multi-host collector chain
-// (the single-asset agent always emits one Info; this helper exists
+// (the single-machine agent always emits one Info; this helper exists
 // for fleet-level aggregation in the audit pipeline).
 func SortInfos(infos []Info) {
 	sort.Slice(infos, func(i, j int) bool {

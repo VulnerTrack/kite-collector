@@ -27,7 +27,7 @@ func (h *Heroku) Name() string { return "heroku" }
 
 // Discover lists all Heroku apps using Range header pagination.
 // Credentials: KITE_HEROKU_TOKEN environment variable.
-func (h *Heroku) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (h *Heroku) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_HEROKU_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -42,13 +42,13 @@ func (h *Heroku) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	client := newClient("heroku", h.baseURL, bearerAuth(token))
 	client.headers["Accept"] = "application/vnd.heroku+json; version=3"
 
-	var assets []model.Asset
+	var machines []model.Machine
 	rangeHeader := "id ..; max=200"
 	guard := safenet.NewPaginationGuardV2WithSource("heroku")
 
 	for {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("heroku: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("heroku: context cancelled: %w", ctx.Err())
 		}
 
 		var apps []herokuApp
@@ -56,15 +56,15 @@ func (h *Heroku) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			"Range": rangeHeader,
 		}, &apps)
 		if err != nil {
-			return assets, fmt.Errorf("heroku: list apps: %w", err)
+			return machines, fmt.Errorf("heroku: list apps: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("heroku: %w", err)
+			return machines, fmt.Errorf("heroku: %w", err)
 		}
 
 		now := time.Now().UTC()
 		for i := range apps {
-			assets = append(assets, herokuToAsset(apps[i], now))
+			machines = append(machines, herokuToMachine(apps[i], now))
 		}
 
 		nextRange := headers.Get("Next-Range")
@@ -76,8 +76,8 @@ func (h *Heroku) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	slog.Info("Heroku PaaS discovery complete",
 		"code", string(LogCodeHerokuComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Heroku API response types ---
@@ -99,9 +99,9 @@ type herokuRef struct {
 	Name string `json:"name"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func herokuToAsset(app herokuApp, now time.Time) model.Asset {
+func herokuToMachine(app herokuApp, now time.Time) model.Machine {
 	tags := map[string]any{
 		"platform":    "heroku",
 		"provider_id": app.ID,
@@ -131,10 +131,10 @@ func herokuToAsset(app herokuApp, now time.Time) model.Asset {
 		}
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        app.Name,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		Environment:     app.Region.Name,
 		DiscoverySource: "heroku",
 		FirstSeenAt:     firstSeen,
@@ -143,6 +143,6 @@ func herokuToAsset(app herokuApp, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

@@ -150,14 +150,14 @@ func TestUniFi_Discover_Success(t *testing.T) {
 	u := New()
 	cfg := map[string]any{"site": "default"}
 
-	assets, err := u.Discover(context.Background(), cfg)
+	machines, err := u.Discover(context.Background(), cfg)
 	require.NoError(t, err)
-	assert.Len(t, assets, 3, "2 clients + 1 device")
+	assert.Len(t, machines, 3, "2 clients + 1 device")
 
 	// Verify workstation client.
-	laptop := findAsset(assets, "laptop-01")
+	laptop := findMachine(machines, "laptop-01")
 	require.NotNil(t, laptop)
-	assert.Equal(t, model.AssetTypeWorkstation, laptop.AssetType)
+	assert.Equal(t, model.MachineTypeWorkstation, laptop.MachineType)
 	assert.Equal(t, "Windows", laptop.OSFamily)
 	assert.Equal(t, "unifi", laptop.DiscoverySource)
 
@@ -170,14 +170,14 @@ func TestUniFi_Discover_Success(t *testing.T) {
 	assert.Equal(t, false, laptopTags["is_wired"])
 
 	// Verify IoT device.
-	iot := findAsset(assets, "iot-sensor")
+	iot := findMachine(machines, "iot-sensor")
 	require.NotNil(t, iot)
-	assert.Equal(t, model.AssetTypeIOTDevice, iot.AssetType)
+	assert.Equal(t, model.MachineTypeIOTDevice, iot.MachineType)
 
 	// Verify network device.
-	sw := findAsset(assets, "US-24-Office")
+	sw := findMachine(machines, "US-24-Office")
 	require.NotNil(t, sw)
-	assert.Equal(t, model.AssetTypeNetworkDevice, sw.AssetType)
+	assert.Equal(t, model.MachineTypeNetworkDevice, sw.MachineType)
 	assert.Equal(t, "6.6.65", sw.OSVersion)
 
 	var swTags map[string]any
@@ -214,7 +214,7 @@ func TestUniFi_Discover_LoginFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "login failed")
 }
 
-func TestUniFi_ClientToAsset_UUIDv7(t *testing.T) {
+func TestUniFi_ClientToMachine_UUIDv7(t *testing.T) {
 	srv := newMockUniFiController(t)
 	defer srv.Close()
 
@@ -223,11 +223,11 @@ func TestUniFi_ClientToAsset_UUIDv7(t *testing.T) {
 	t.Setenv("KITE_UNIFI_PASSWORD", "secret")
 
 	u := New()
-	assets, err := u.Discover(context.Background(), map[string]any{})
+	machines, err := u.Discover(context.Background(), map[string]any{})
 	require.NoError(t, err)
 
-	for _, a := range assets {
-		assert.NotEmpty(t, a.ID, "asset must have a UUID")
+	for _, a := range machines {
+		assert.NotEmpty(t, a.ID, "machine must have a UUID")
 	}
 }
 
@@ -242,18 +242,18 @@ func TestUniFi_ClientFallbackHostname(t *testing.T) {
 	// The mock server returns clients with hostnames, but we test the
 	// fallback logic directly through the mapping function.
 	entry := unifiClientEntry{MAC: "aa:bb:cc:dd:ee:ff"}
-	asset := clientToAsset(entry, fixedTime())
-	assert.Equal(t, "aa:bb:cc:dd:ee:ff", asset.Hostname, "should fall back to MAC when hostname is empty")
+	machine := clientToMachine(entry, fixedTime())
+	assert.Equal(t, "aa:bb:cc:dd:ee:ff", machine.Hostname, "should fall back to MAC when hostname is empty")
 }
 
 // -------------------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------------------
 
-func findAsset(assets []model.Asset, hostname string) *model.Asset {
-	for i := range assets {
-		if assets[i].Hostname == hostname {
-			return &assets[i]
+func findMachine(machines []model.Machine, hostname string) *model.Machine {
+	for i := range machines {
+		if machines[i].Hostname == hostname {
+			return &machines[i]
 		}
 	}
 	return nil

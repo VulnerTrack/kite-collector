@@ -40,7 +40,7 @@ const (
 // ProcessEnvSecrets scans Linux host process environment blocks
 // (`/proc/<pid>/environ`) for hard-coded credentials matching the shared
 // secretPatterns ruleset. It implements Auditor; it is a no-op for any
-// asset whose AssetType is not AssetTypeServer (the agent host) and on
+// machine whose MachineType is not MachineTypeServer (the agent host) and on
 // non-Linux platforms.
 //
 // The agent's own PID and kernel threads are always skipped (R6).
@@ -100,9 +100,9 @@ func (p *ProcessEnvSecrets) Name() string { return processEnvSecretsAuditorName 
 // Audit walks /proc, reads each readable /proc/<pid>/environ, and applies
 // secretPatterns to every env var value. The agent's own process and
 // kernel threads (empty /proc/<pid>/comm) are skipped. Returns nil
-// findings on non-Linux platforms or for non-server assets.
-func (p *ProcessEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
-	if asset.AssetType != model.AssetTypeServer {
+// findings on non-Linux platforms or for non-server machines.
+func (p *ProcessEnvSecrets) Audit(ctx context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
+	if machine.MachineType != model.MachineTypeServer {
 		return nil, nil
 	}
 	if runtime.GOOS != "linux" {
@@ -176,13 +176,13 @@ func (p *ProcessEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]mod
 		}
 
 		findings = append(findings,
-			scanProcessEnv(asset, pid, comm, envBytes, p.denyPrefixes, now)...)
+			scanProcessEnv(machine, pid, comm, envBytes, p.denyPrefixes, now)...)
 	}
 
 	if len(findings) > 0 {
 		slog.Info(
 			"process_env_secrets: findings detected",
-			"asset_id", asset.ID,
+			"machine_id", machine.ID,
 			"count", len(findings),
 			"scanned", scanned,
 		)
@@ -195,7 +195,7 @@ func (p *ProcessEnvSecrets) Audit(ctx context.Context, asset model.Asset) ([]mod
 // KEY=VALUE entry in envBytes and returns one ConfigFinding per
 // (pattern, env_var_name) pair, deduplicated within this PID.
 func scanProcessEnv(
-	asset model.Asset,
+	machine model.Machine,
 	pid int,
 	processName string,
 	envBytes []byte,
@@ -235,11 +235,11 @@ func scanProcessEnv(
 
 			valueHash := fmt.Sprintf("%x", sha256.Sum256([]byte(value)))[:16]
 			// Note: pid is intentionally excluded from the deterministic
-			// finding ID — pids are ephemeral. Identity is asset+pattern
+			// finding ID — pids are ephemeral. Identity is machine+pattern
 			// +name+process_name so a process restart preserves
 			// first_seen_at across scans.
 			seed := fmt.Sprintf("process_env_secrets:%s:%s:%s:%s",
-				asset.ID, pat.ID, processName, name)
+				machine.ID, pat.ID, processName, name)
 			findingID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(seed))
 
 			evidence := fmt.Sprintf("ENV[%s]=<redacted> detected in process:%s (PID %d) hash:%s",
@@ -247,7 +247,7 @@ func scanProcessEnv(
 
 			findings = append(findings, model.ConfigFinding{
 				ID:          findingID,
-				AssetID:     asset.ID,
+				MachineID:   machine.ID,
 				Auditor:     processEnvSecretsAuditorName,
 				CheckID:     pat.ID,
 				Title:       fmt.Sprintf("Process env secret: %s", pat.Name),

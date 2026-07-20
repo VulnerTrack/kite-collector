@@ -30,7 +30,7 @@ func (r *Render) Name() string { return "render" }
 
 // Discover lists all Render services using cursor-based pagination.
 // Credentials: KITE_RENDER_TOKEN environment variable.
-func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	token := os.Getenv("KITE_RENDER_TOKEN")
 	if token == "" {
 		if cfg != nil {
@@ -43,13 +43,13 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		"code", string(LogCodeRenderStarting))
 
 	client := newClient("render", r.baseURL, bearerAuth(token))
-	var assets []model.Asset
+	var machines []model.Machine
 	cursor := ""
 	guard := safenet.NewPaginationGuardV2WithSource("render")
 
 	for {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("render: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("render: context cancelled: %w", ctx.Err())
 		}
 
 		path := fmt.Sprintf("/v1/services?limit=%d", renderPageSize)
@@ -60,10 +60,10 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 		var wrappers []renderServiceWrapper
 		nBytes, err := client.getSized(ctx, path, &wrappers)
 		if err != nil {
-			return assets, fmt.Errorf("render: list services: %w", err)
+			return machines, fmt.Errorf("render: list services: %w", err)
 		}
 		if err := guard.NextPage(nBytes); err != nil {
-			return assets, fmt.Errorf("render: %w", err)
+			return machines, fmt.Errorf("render: %w", err)
 		}
 
 		if len(wrappers) == 0 {
@@ -72,7 +72,7 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 		now := time.Now().UTC()
 		for i := range wrappers {
-			assets = append(assets, renderToAsset(wrappers[i].Service, now))
+			machines = append(machines, renderToMachine(wrappers[i].Service, now))
 		}
 
 		raw := wrappers[len(wrappers)-1].Cursor
@@ -84,7 +84,7 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 			slog.Warn("Render pagination cursor rejected by safenet; stopping pagination",
 				"code", string(LogCodeRenderPaginationRejected),
 				"error", sanErr,
-				"assets_so_far", len(assets))
+				"machines_so_far", len(machines))
 			break
 		}
 		cursor = clean
@@ -92,8 +92,8 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 
 	slog.Info("Render PaaS discovery complete",
 		"code", string(LogCodeRenderComplete),
-		"assets", len(assets))
-	return assets, nil
+		"machines", len(machines))
+	return machines, nil
 }
 
 // --- Render API response types ---
@@ -118,9 +118,9 @@ type renderServiceDetails struct {
 	Region  string `json:"region"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func renderToAsset(svc renderService, now time.Time) model.Asset {
+func renderToMachine(svc renderService, now time.Time) model.Machine {
 	tags := map[string]any{
 		"platform":    "render",
 		"provider_id": svc.ID,
@@ -143,10 +143,10 @@ func renderToAsset(svc renderService, now time.Time) model.Asset {
 		lastSeen = t
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        svc.Name,
-		AssetType:       model.AssetTypeContainer,
+		MachineType:     model.MachineTypeContainer,
 		Environment:     svc.ServiceDetails.Region,
 		DiscoverySource: "render",
 		FirstSeenAt:     firstSeen,
@@ -155,6 +155,6 @@ func renderToAsset(svc renderService, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

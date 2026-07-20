@@ -3,7 +3,7 @@
 // universal root for modern peripheral connectivity (NVMe SSDs,
 // GPUs, NICs, HBAs, USB host controllers, BMCs, accelerators,
 // Thunderbolt-tunneled externals), so enumerating it yields a
-// deterministic hardware-asset snapshot regardless of the
+// deterministic hardware-machine snapshot regardless of the
 // device-specific protocol on top.
 //
 // Per-OS data sources are isolated behind the Source interface

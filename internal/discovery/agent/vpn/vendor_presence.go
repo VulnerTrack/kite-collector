@@ -13,7 +13,7 @@ import (
 //
 // Detection is *evidence of installation*, not connection state.
 // Knowing the client is on the host is itself useful — it widens
-// the asset's egress-tunnel surface area regardless of whether
+// the machine's egress-tunnel surface area regardless of whether
 // the user is currently connected.
 //
 // AutoConnect defaults to true because most enterprise endpoints are

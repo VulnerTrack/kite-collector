@@ -30,10 +30,10 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockStore struct {
-	assets    map[string]model.Asset // keyed by natural_key
+	machines  map[string]model.Machine // keyed by natural_key
 	software  map[uuid.UUID][]model.InstalledSoftware
 	completed map[uuid.UUID]model.ScanResult
-	events    []model.AssetEvent
+	events    []model.MachineEvent
 	incidents []model.RuntimeIncident
 	scanRuns  []model.ScanRun
 	mu        sync.Mutex
@@ -41,40 +41,40 @@ type mockStore struct {
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		assets:    make(map[string]model.Asset),
+		machines:  make(map[string]model.Machine),
 		software:  make(map[uuid.UUID][]model.InstalledSoftware),
 		completed: make(map[uuid.UUID]model.ScanResult),
 	}
 }
 
-func (m *mockStore) UpsertAsset(_ context.Context, asset model.Asset) error {
+func (m *mockStore) UpsertMachine(_ context.Context, machine model.Machine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	asset.ComputeNaturalKey()
-	m.assets[asset.NaturalKey] = asset
+	machine.ComputeNaturalKey()
+	m.machines[machine.NaturalKey] = machine
 	return nil
 }
 
-func (m *mockStore) UpsertAssets(_ context.Context, assets []model.Asset) (int, int, error) {
+func (m *mockStore) UpsertMachines(_ context.Context, machines []model.Machine) (int, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var inserted, updated int
-	for i := range assets {
-		assets[i].ComputeNaturalKey()
-		if _, exists := m.assets[assets[i].NaturalKey]; exists {
+	for i := range machines {
+		machines[i].ComputeNaturalKey()
+		if _, exists := m.machines[machines[i].NaturalKey]; exists {
 			updated++
 		} else {
 			inserted++
 		}
-		m.assets[assets[i].NaturalKey] = assets[i]
+		m.machines[machines[i].NaturalKey] = machines[i]
 	}
 	return inserted, updated, nil
 }
 
-func (m *mockStore) GetAssetByID(_ context.Context, id uuid.UUID) (*model.Asset, error) {
+func (m *mockStore) GetMachineByID(_ context.Context, id uuid.UUID) (*model.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, a := range m.assets {
+	for _, a := range m.machines {
 		if a.ID == id {
 			cp := a
 			return &cp, nil
@@ -83,10 +83,10 @@ func (m *mockStore) GetAssetByID(_ context.Context, id uuid.UUID) (*model.Asset,
 	return nil, store.ErrNotFound
 }
 
-func (m *mockStore) GetAssetByNaturalKey(_ context.Context, key string) (*model.Asset, error) {
+func (m *mockStore) GetMachineByNaturalKey(_ context.Context, key string) (*model.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	a, ok := m.assets[key]
+	a, ok := m.machines[key]
 	if !ok {
 		return nil, nil
 	}
@@ -94,37 +94,37 @@ func (m *mockStore) GetAssetByNaturalKey(_ context.Context, key string) (*model.
 	return &cp, nil
 }
 
-func (m *mockStore) GetAssetsByNaturalKeys(_ context.Context, keys []string) (map[string]model.Asset, error) {
+func (m *mockStore) GetMachinesByNaturalKeys(_ context.Context, keys []string) (map[string]model.Machine, error) {
 	if len(keys) == 0 {
 		return nil, nil
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make(map[string]model.Asset, len(keys))
+	out := make(map[string]model.Machine, len(keys))
 	for _, k := range keys {
-		if a, ok := m.assets[k]; ok {
+		if a, ok := m.machines[k]; ok {
 			out[k] = a
 		}
 	}
 	return out, nil
 }
 
-func (m *mockStore) ListAssets(_ context.Context, _ store.AssetFilter) ([]model.Asset, error) {
+func (m *mockStore) ListMachines(_ context.Context, _ store.MachineFilter) ([]model.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make([]model.Asset, 0, len(m.assets))
-	for _, a := range m.assets {
+	result := make([]model.Machine, 0, len(m.machines))
+	for _, a := range m.machines {
 		result = append(result, a)
 	}
 	return result, nil
 }
 
-func (m *mockStore) GetStaleAssets(_ context.Context, threshold time.Duration) ([]model.Asset, error) {
+func (m *mockStore) GetStaleMachines(_ context.Context, threshold time.Duration) ([]model.Machine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cutoff := time.Now().UTC().Add(-threshold)
-	var stale []model.Asset
-	for _, a := range m.assets {
+	var stale []model.Machine
+	for _, a := range m.machines {
 		if a.LastSeenAt.Before(cutoff) {
 			stale = append(stale, a)
 		}
@@ -132,24 +132,24 @@ func (m *mockStore) GetStaleAssets(_ context.Context, threshold time.Duration) (
 	return stale, nil
 }
 
-func (m *mockStore) InsertEvent(_ context.Context, event model.AssetEvent) error {
+func (m *mockStore) InsertEvent(_ context.Context, event model.MachineEvent) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, event)
 	return nil
 }
 
-func (m *mockStore) InsertEvents(_ context.Context, events []model.AssetEvent) error {
+func (m *mockStore) InsertEvents(_ context.Context, events []model.MachineEvent) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.events = append(m.events, events...)
 	return nil
 }
 
-func (m *mockStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.AssetEvent, error) {
+func (m *mockStore) ListEvents(_ context.Context, _ store.EventFilter) ([]model.MachineEvent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	cp := make([]model.AssetEvent, len(m.events))
+	cp := make([]model.MachineEvent, len(m.events))
 	copy(cp, m.events)
 	return cp, nil
 }
@@ -170,11 +170,11 @@ func (m *mockStore) CompleteScanRun(_ context.Context, id uuid.UUID, result mode
 			m.scanRuns[i].Status = model.ScanStatusCompleted
 			now := time.Now().UTC()
 			m.scanRuns[i].CompletedAt = &now
-			m.scanRuns[i].TotalAssets = result.TotalAssets
-			m.scanRuns[i].NewAssets = result.NewAssets
-			m.scanRuns[i].UpdatedAssets = result.UpdatedAssets
-			m.scanRuns[i].AnalyzedAssets = result.AnalyzedAssets
-			m.scanRuns[i].StaleAssets = result.StaleAssets
+			m.scanRuns[i].TotalMachines = result.TotalMachines
+			m.scanRuns[i].NewMachines = result.NewMachines
+			m.scanRuns[i].UpdatedMachines = result.UpdatedMachines
+			m.scanRuns[i].AnalyzedMachines = result.AnalyzedMachines
+			m.scanRuns[i].StaleMachines = result.StaleMachines
 			m.scanRuns[i].CoveragePercent = result.CoveragePercent
 			break
 		}
@@ -231,17 +231,17 @@ func (m *mockStore) MarkScanCancelRequested(_ context.Context, id uuid.UUID, at 
 	return store.ErrNotFound
 }
 
-func (m *mockStore) UpsertSoftware(_ context.Context, assetID uuid.UUID, sw []model.InstalledSoftware) error {
+func (m *mockStore) UpsertSoftware(_ context.Context, machineID uuid.UUID, sw []model.InstalledSoftware) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.software[assetID] = sw
+	m.software[machineID] = sw
 	return nil
 }
 
-func (m *mockStore) ListSoftware(_ context.Context, assetID uuid.UUID) ([]model.InstalledSoftware, error) {
+func (m *mockStore) ListSoftware(_ context.Context, machineID uuid.UUID) ([]model.InstalledSoftware, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.software[assetID], nil
+	return m.software[machineID], nil
 }
 
 func (m *mockStore) InsertFindings(_ context.Context, _ []model.ConfigFinding) error {
@@ -312,13 +312,13 @@ var _ store.Store = (*mockStore)(nil)
 // ---------------------------------------------------------------------------
 
 type mockSource struct {
-	name   string
-	assets []model.Asset
+	name     string
+	machines []model.Machine
 }
 
 func (s *mockSource) Name() string { return s.name }
-func (s *mockSource) Discover(_ context.Context, _ map[string]any) ([]model.Asset, error) {
-	return s.assets, nil
+func (s *mockSource) Discover(_ context.Context, _ map[string]any) ([]model.Machine, error) {
+	return s.machines, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -326,18 +326,18 @@ func (s *mockSource) Discover(_ context.Context, _ map[string]any) ([]model.Asse
 // ---------------------------------------------------------------------------
 
 type recordingEmitter struct {
-	events []model.AssetEvent
+	events []model.MachineEvent
 	mu     sync.Mutex
 }
 
-func (e *recordingEmitter) Emit(_ context.Context, event model.AssetEvent) error {
+func (e *recordingEmitter) Emit(_ context.Context, event model.MachineEvent) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = append(e.events, event)
 	return nil
 }
 
-func (e *recordingEmitter) EmitBatch(_ context.Context, events []model.AssetEvent) error {
+func (e *recordingEmitter) EmitBatch(_ context.Context, events []model.MachineEvent) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.events = append(e.events, events...)
@@ -384,9 +384,9 @@ func TestEngine_FullScanCycle(t *testing.T) {
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
-			{Hostname: "web-01", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
-			{Hostname: "db-01", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		machines: []model.Machine{
+			{Hostname: "web-01", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
+			{Hostname: "db-01", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 		},
 	})
 
@@ -398,9 +398,9 @@ func TestEngine_FullScanCycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, 2, result.NewAssets)
-	assert.Equal(t, 0, result.UpdatedAssets)
-	assert.Equal(t, 2, result.TotalAssets)
+	assert.Equal(t, 2, result.NewMachines)
+	assert.Equal(t, 0, result.UpdatedMachines)
+	assert.Equal(t, 2, result.TotalMachines)
 	assert.Greater(t, result.EventsEmitted, 0)
 }
 
@@ -409,8 +409,8 @@ func TestEngine_ScanRunCreatedAndCompleted(t *testing.T) {
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
-			{Hostname: "host-01", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		machines: []model.Machine{
+			{Hostname: "host-01", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 		},
 	})
 
@@ -430,13 +430,13 @@ func TestEngine_ScanRunCreatedAndCompleted(t *testing.T) {
 	assert.NotNil(t, run.CompletedAt, "completed_at must be set")
 }
 
-func TestEngine_NewAssetsGenerateDiscoveredEvents(t *testing.T) {
+func TestEngine_NewMachinesGenerateDiscoveredEvents(t *testing.T) {
 	ms := newMockStore()
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
-			{Hostname: "new-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		machines: []model.Machine{
+			{Hostname: "new-host", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 		},
 	})
 
@@ -452,29 +452,29 @@ func TestEngine_NewAssetsGenerateDiscoveredEvents(t *testing.T) {
 
 	var discoveredEvents int
 	for _, evt := range em.events {
-		if evt.EventType == model.EventAssetDiscovered {
+		if evt.EventType == model.EventMachineDiscovered {
 			discoveredEvents++
 		}
 	}
-	assert.Equal(t, 1, discoveredEvents, "one AssetDiscovered event expected for a new asset")
+	assert.Equal(t, 1, discoveredEvents, "one MachineDiscovered event expected for a new machine")
 }
 
-func TestEngine_UnauthorizedAssetsGenerateEvent(t *testing.T) {
+func TestEngine_UnauthorizedMachinesGenerateEvent(t *testing.T) {
 	ms := newMockStore()
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
-			{Hostname: "rogue-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		machines: []model.Machine{
+			{Hostname: "rogue-host", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 		},
 	})
 
 	em := &recordingEmitter{}
 
 	// Use a classifier that always returns unauthorized by writing an
-	// allowlist file that does not match any discovered asset.
+	// allowlist file that does not match any discovered machine.
 	allowlistPath := filepath.Join(t.TempDir(), "allowlist.yaml")
-	err := os.WriteFile(allowlistPath, []byte("assets:\n  - hostname: \"only-this-one\"\n"), 0o644)
+	err := os.WriteFile(allowlistPath, []byte("machines:\n  - hostname: \"only-this-one\"\n"), 0o644)
 	require.NoError(t, err)
 
 	auth, err := classifier.NewAuthorizer(allowlistPath, []string{"hostname"})
@@ -495,36 +495,36 @@ func TestEngine_UnauthorizedAssetsGenerateEvent(t *testing.T) {
 
 	var unauthEvents int
 	for _, evt := range em.events {
-		if evt.EventType == model.EventUnauthorizedAssetDetected {
+		if evt.EventType == model.EventUnauthorizedMachineDetected {
 			unauthEvents++
 		}
 	}
-	assert.Equal(t, 1, unauthEvents, "one UnauthorizedAssetDetected event expected")
+	assert.Equal(t, 1, unauthEvents, "one UnauthorizedMachineDetected event expected")
 }
 
-func TestEngine_StaleAssetsGenerateNotSeenEvents(t *testing.T) {
+func TestEngine_StaleMachinesGenerateNotSeenEvents(t *testing.T) {
 	ms := newMockStore()
 
-	// Pre-populate store with a stale asset.
-	staleAsset := model.Asset{
+	// Pre-populate store with a stale machine.
+	staleMachine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "old-server",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		DiscoverySource: "test",
 		IsAuthorized:    model.AuthorizationUnknown,
 		IsManaged:       model.ManagedUnknown,
 		FirstSeenAt:     time.Now().UTC().Add(-300 * time.Hour),
 		LastSeenAt:      time.Now().UTC().Add(-300 * time.Hour),
 	}
-	staleAsset.ComputeNaturalKey()
-	ms.assets[staleAsset.NaturalKey] = staleAsset
+	staleMachine.ComputeNaturalKey()
+	ms.machines[staleMachine.NaturalKey] = staleMachine
 
-	// Discovery returns only a different asset (the stale one is not rediscovered).
+	// Discovery returns only a different machine (the stale one is not rediscovered).
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
-			{Hostname: "active-server", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		machines: []model.Machine{
+			{Hostname: "active-server", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 		},
 	})
 
@@ -535,18 +535,18 @@ func TestEngine_StaleAssetsGenerateNotSeenEvents(t *testing.T) {
 	result, err := eng.Run(context.Background(), cfg)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, result.StaleAssets, "one stale asset should be detected")
+	assert.Equal(t, 1, result.StaleMachines, "one stale machine should be detected")
 
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
 	var notSeenEvents int
 	for _, evt := range em.events {
-		if evt.EventType == model.EventAssetNotSeen {
+		if evt.EventType == model.EventMachineNotSeen {
 			notSeenEvents++
 		}
 	}
-	assert.Equal(t, 1, notSeenEvents, "one AssetNotSeen event expected for the stale asset")
+	assert.Equal(t, 1, notSeenEvents, "one MachineNotSeen event expected for the stale machine")
 }
 
 // ---------------------------------------------------------------------------
@@ -559,11 +559,11 @@ type slowSource struct {
 }
 
 func (s *slowSource) Name() string { return s.name }
-func (s *slowSource) Discover(ctx context.Context, _ map[string]any) ([]model.Asset, error) {
+func (s *slowSource) Discover(ctx context.Context, _ map[string]any) ([]model.Machine, error) {
 	select {
 	case <-time.After(s.delay):
-		return []model.Asset{
-			{Hostname: "slow-host", AssetType: model.AssetTypeServer, DiscoverySource: s.name},
+		return []model.Machine{
+			{Hostname: "slow-host", MachineType: model.MachineTypeServer, DiscoverySource: s.name},
 		}, nil
 	case <-ctx.Done():
 		return nil, fmt.Errorf("slow source cancelled: %w", ctx.Err())
@@ -602,8 +602,8 @@ func TestEngine_ScanDeadlineNotExceeded(t *testing.T) {
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
-			{Hostname: "fast-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		machines: []model.Machine{
+			{Hostname: "fast-host", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 		},
 	})
 
@@ -620,15 +620,15 @@ func TestEngine_ScanDeadlineNotExceeded(t *testing.T) {
 	assert.Equal(t, 0, result.ErrorCount)
 }
 
-func TestEngine_EmitsEventsWithAssetMetadata(t *testing.T) {
+func TestEngine_EmitsEventsWithMachineMetadata(t *testing.T) {
 	ms := newMockStore()
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
+		machines: []model.Machine{
 			{
 				Hostname:        "web-meta-01",
-				AssetType:       model.AssetTypeServer,
+				MachineType:     model.MachineTypeServer,
 				OSFamily:        "linux",
 				OSVersion:       "ubuntu-22.04",
 				KernelVersion:   "5.15.0-101-generic",
@@ -654,32 +654,32 @@ func TestEngine_EmitsEventsWithAssetMetadata(t *testing.T) {
 	require.NotEmpty(t, em.events, "engine must emit at least one event")
 	var found bool
 	for _, evt := range em.events {
-		if evt.EventType != model.EventAssetDiscovered {
+		if evt.EventType != model.EventMachineDiscovered {
 			continue
 		}
 		found = true
-		assert.Equal(t, "web-meta-01", evt.Hostname, "Hostname must be copied from asset")
-		assert.Equal(t, model.AssetTypeServer, evt.AssetType, "AssetType must be copied from asset")
-		assert.Equal(t, "linux", evt.OSFamily, "OSFamily must be copied from asset")
-		assert.Equal(t, "ubuntu-22.04", evt.OSVersion, "OSVersion must be copied from asset")
-		assert.Equal(t, "5.15.0-101-generic", evt.KernelVersion, "KernelVersion must be copied from asset")
-		assert.Equal(t, "amd64", evt.Architecture, "Architecture must be copied from asset")
-		assert.Equal(t, "production", evt.Environment, "Environment must be copied from asset")
-		assert.Equal(t, "platform-team", evt.Owner, "Owner must be copied from asset")
-		assert.Equal(t, "high", evt.Criticality, "Criticality must be copied from asset")
-		assert.Equal(t, "test", evt.DiscoverySource, "DiscoverySource must be copied from asset")
-		assert.NotEqual(t, uuid.Nil, evt.AssetID, "AssetID must be set")
+		assert.Equal(t, "web-meta-01", evt.Hostname, "Hostname must be copied from machine")
+		assert.Equal(t, model.MachineTypeServer, evt.MachineType, "MachineType must be copied from machine")
+		assert.Equal(t, "linux", evt.OSFamily, "OSFamily must be copied from machine")
+		assert.Equal(t, "ubuntu-22.04", evt.OSVersion, "OSVersion must be copied from machine")
+		assert.Equal(t, "5.15.0-101-generic", evt.KernelVersion, "KernelVersion must be copied from machine")
+		assert.Equal(t, "amd64", evt.Architecture, "Architecture must be copied from machine")
+		assert.Equal(t, "production", evt.Environment, "Environment must be copied from machine")
+		assert.Equal(t, "platform-team", evt.Owner, "Owner must be copied from machine")
+		assert.Equal(t, "high", evt.Criticality, "Criticality must be copied from machine")
+		assert.Equal(t, "test", evt.DiscoverySource, "DiscoverySource must be copied from machine")
+		assert.NotEqual(t, uuid.Nil, evt.MachineID, "MachineID must be set")
 	}
-	assert.True(t, found, "expected an EventAssetDiscovered event in the emitted batch")
+	assert.True(t, found, "expected an EventMachineDiscovered event in the emitted batch")
 }
 
-func TestEngine_StaleAssetEventsIncludeAssetMetadata(t *testing.T) {
+func TestEngine_StaleMachineEventsIncludeMachineMetadata(t *testing.T) {
 	ms := newMockStore()
 
-	staleAsset := model.Asset{
+	staleMachine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "stale-meta-host",
-		AssetType:       model.AssetTypeWorkstation,
+		MachineType:     model.MachineTypeWorkstation,
 		OSFamily:        "darwin",
 		OSVersion:       "14.4",
 		Environment:     "staging",
@@ -691,14 +691,14 @@ func TestEngine_StaleAssetEventsIncludeAssetMetadata(t *testing.T) {
 		FirstSeenAt:     time.Now().UTC().Add(-300 * time.Hour),
 		LastSeenAt:      time.Now().UTC().Add(-300 * time.Hour),
 	}
-	staleAsset.ComputeNaturalKey()
-	ms.assets[staleAsset.NaturalKey] = staleAsset
+	staleMachine.ComputeNaturalKey()
+	ms.machines[staleMachine.NaturalKey] = staleMachine
 
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
-			{Hostname: "current-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		machines: []model.Machine{
+			{Hostname: "current-host", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 		},
 	})
 
@@ -714,37 +714,37 @@ func TestEngine_StaleAssetEventsIncludeAssetMetadata(t *testing.T) {
 
 	var found bool
 	for _, evt := range em.events {
-		if evt.EventType != model.EventAssetNotSeen {
+		if evt.EventType != model.EventMachineNotSeen {
 			continue
 		}
 		found = true
-		assert.Equal(t, "stale-meta-host", evt.Hostname, "Hostname must be propagated for stale-asset events")
-		assert.Equal(t, model.AssetTypeWorkstation, evt.AssetType, "AssetType must be propagated for stale-asset events")
-		assert.Equal(t, "darwin", evt.OSFamily, "OSFamily must be propagated for stale-asset events")
-		assert.Equal(t, "staging", evt.Environment, "Environment must be propagated for stale-asset events")
-		assert.Equal(t, "ops", evt.Owner, "Owner must be propagated for stale-asset events")
-		assert.Equal(t, "medium", evt.Criticality, "Criticality must be propagated for stale-asset events")
-		assert.Equal(t, "test", evt.DiscoverySource, "DiscoverySource must be propagated for stale-asset events")
-		assert.Equal(t, staleAsset.ID, evt.AssetID, "AssetID must reference the stale asset")
+		assert.Equal(t, "stale-meta-host", evt.Hostname, "Hostname must be propagated for stale-machine events")
+		assert.Equal(t, model.MachineTypeWorkstation, evt.MachineType, "MachineType must be propagated for stale-machine events")
+		assert.Equal(t, "darwin", evt.OSFamily, "OSFamily must be propagated for stale-machine events")
+		assert.Equal(t, "staging", evt.Environment, "Environment must be propagated for stale-machine events")
+		assert.Equal(t, "ops", evt.Owner, "Owner must be propagated for stale-machine events")
+		assert.Equal(t, "medium", evt.Criticality, "Criticality must be propagated for stale-machine events")
+		assert.Equal(t, "test", evt.DiscoverySource, "DiscoverySource must be propagated for stale-machine events")
+		assert.Equal(t, staleMachine.ID, evt.MachineID, "MachineID must reference the stale machine")
 	}
-	assert.True(t, found, "expected an EventAssetNotSeen event in the emitted batch")
+	assert.True(t, found, "expected an EventMachineNotSeen event in the emitted batch")
 }
 
 // TestEngine_RepeatedScanWithNoChange_EmitsAnalyzedNotUpdated pins the core
 // behaviour change of this PR: a rescan that brings no material delta MUST
-// produce an AssetAnalyzed event with severity low and the namespaced wire
-// name "kite.asset.analyzed". This guards against a regression where the
+// produce an MachineAnalyzed event with severity low and the namespaced wire
+// name "kite.machine.analyzed". This guards against a regression where the
 // engine slips back to the old "FirstSeenAt != LastSeenAt -> Updated" rule.
 func TestEngine_RepeatedScanWithNoChange_EmitsAnalyzedNotUpdated(t *testing.T) {
 	ms := newMockStore()
 
-	// Pre-seed the asset with FirstSeenAt < LastSeenAt so the merge path
+	// Pre-seed the machine with FirstSeenAt < LastSeenAt so the merge path
 	// in dedup is exercised. Material fields match the discovered copy
 	// below, so the engine must treat the rescan as a noise-grade tick.
-	existing := model.Asset{
+	existing := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "steady-host",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		OSVersion:       "ubuntu-22.04",
 		DiscoverySource: "test",
 		IsAuthorized:    model.AuthorizationUnknown,
@@ -753,15 +753,15 @@ func TestEngine_RepeatedScanWithNoChange_EmitsAnalyzedNotUpdated(t *testing.T) {
 		LastSeenAt:      time.Now().UTC().Add(-72 * time.Hour),
 	}
 	existing.ComputeNaturalKey()
-	ms.assets[existing.NaturalKey] = existing
+	ms.machines[existing.NaturalKey] = existing
 
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
+		machines: []model.Machine{
 			{
 				Hostname:        "steady-host",
-				AssetType:       model.AssetTypeServer,
+				MachineType:     model.MachineTypeServer,
 				OSVersion:       "ubuntu-22.04",
 				DiscoverySource: "test",
 			},
@@ -778,23 +778,23 @@ func TestEngine_RepeatedScanWithNoChange_EmitsAnalyzedNotUpdated(t *testing.T) {
 	defer em.mu.Unlock()
 	require.Len(t, em.events, 1)
 	got := em.events[0]
-	assert.Equal(t, model.EventAssetAnalyzed, got.EventType)
+	assert.Equal(t, model.EventMachineAnalyzed, got.EventType)
 	assert.Equal(t, model.SeverityLow, got.Severity,
 		"Analyzed events must be forced to severity=low (noise-grade)")
-	assert.Equal(t, "kite.asset.analyzed", got.EventType.Name(),
+	assert.Equal(t, "kite.machine.analyzed", got.EventType.Name(),
 		"namespaced wire name must reflect the new event type")
 }
 
 // TestEngine_MaterialChange_EmitsUpdated pins the other side of the
 // classification: when a material field (here OSVersion) actually moves,
-// the engine MUST still emit AssetUpdated so triage gets the signal.
+// the engine MUST still emit MachineUpdated so triage gets the signal.
 func TestEngine_MaterialChange_EmitsUpdated(t *testing.T) {
 	ms := newMockStore()
 
-	existing := model.Asset{
+	existing := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "drift-host",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		OSVersion:       "ubuntu-22.04",
 		DiscoverySource: "test",
 		IsAuthorized:    model.AuthorizationUnknown,
@@ -803,15 +803,15 @@ func TestEngine_MaterialChange_EmitsUpdated(t *testing.T) {
 		LastSeenAt:      time.Now().UTC().Add(-72 * time.Hour),
 	}
 	existing.ComputeNaturalKey()
-	ms.assets[existing.NaturalKey] = existing
+	ms.machines[existing.NaturalKey] = existing
 
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
+		machines: []model.Machine{
 			{
 				Hostname:        "drift-host",
-				AssetType:       model.AssetTypeServer,
+				MachineType:     model.MachineTypeServer,
 				OSVersion:       "ubuntu-24.04",
 				DiscoverySource: "test",
 			},
@@ -827,20 +827,20 @@ func TestEngine_MaterialChange_EmitsUpdated(t *testing.T) {
 	em.mu.Lock()
 	defer em.mu.Unlock()
 	require.Len(t, em.events, 1)
-	assert.Equal(t, model.EventAssetUpdated, em.events[0].EventType)
+	assert.Equal(t, model.EventMachineUpdated, em.events[0].EventType)
 }
 
 // TestEngine_FirstSighting_EmitsDiscovered preserves the original
-// first-sighting contract: an empty store + a single discovered asset
-// yields exactly one AssetDiscovered event, regardless of fingerprint
+// first-sighting contract: an empty store + a single discovered machine
+// yields exactly one MachineDiscovered event, regardless of fingerprint
 // logic added in this PR.
 func TestEngine_FirstSighting_EmitsDiscovered(t *testing.T) {
 	ms := newMockStore()
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
-			{Hostname: "fresh-host", AssetType: model.AssetTypeServer, DiscoverySource: "test"},
+		machines: []model.Machine{
+			{Hostname: "fresh-host", MachineType: model.MachineTypeServer, DiscoverySource: "test"},
 		},
 	})
 
@@ -853,21 +853,21 @@ func TestEngine_FirstSighting_EmitsDiscovered(t *testing.T) {
 	em.mu.Lock()
 	defer em.mu.Unlock()
 	require.Len(t, em.events, 1)
-	assert.Equal(t, model.EventAssetDiscovered, em.events[0].EventType)
+	assert.Equal(t, model.EventMachineDiscovered, em.events[0].EventType)
 }
 
 // TestEngine_UnauthorizedOverride_StillAppliesEvenWhenNoMaterialChange
 // asserts that the alert-grade override still wins over the new Analyzed
-// classification: an unauthorized asset on a no-change tick must still
-// emit UnauthorizedAssetDetected, not Analyzed. This is what keeps
-// rogue-asset detection loud and per-tick visible.
+// classification: an unauthorized machine on a no-change tick must still
+// emit UnauthorizedMachineDetected, not Analyzed. This is what keeps
+// rogue-machine detection loud and per-tick visible.
 func TestEngine_UnauthorizedOverride_StillAppliesEvenWhenNoMaterialChange(t *testing.T) {
 	ms := newMockStore()
 
-	existing := model.Asset{
+	existing := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        "rogue-host",
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		OSVersion:       "ubuntu-22.04",
 		DiscoverySource: "test",
 		IsAuthorized:    model.AuthorizationUnauthorized,
@@ -876,25 +876,25 @@ func TestEngine_UnauthorizedOverride_StillAppliesEvenWhenNoMaterialChange(t *tes
 		LastSeenAt:      time.Now().UTC().Add(-72 * time.Hour),
 	}
 	existing.ComputeNaturalKey()
-	ms.assets[existing.NaturalKey] = existing
+	ms.machines[existing.NaturalKey] = existing
 
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
 		name: "test",
-		assets: []model.Asset{
+		machines: []model.Machine{
 			{
 				Hostname:        "rogue-host",
-				AssetType:       model.AssetTypeServer,
+				MachineType:     model.MachineTypeServer,
 				OSVersion:       "ubuntu-22.04",
 				DiscoverySource: "test",
 			},
 		},
 	})
 
-	// Use a classifier whose allowlist matches no asset so the merged
+	// Use a classifier whose allowlist matches no machine so the merged
 	// result remains unauthorized after classification.
 	allowlistPath := filepath.Join(t.TempDir(), "allowlist.yaml")
-	require.NoError(t, os.WriteFile(allowlistPath, []byte("assets:\n  - hostname: \"only-this-one\"\n"), 0o600))
+	require.NoError(t, os.WriteFile(allowlistPath, []byte("machines:\n  - hostname: \"only-this-one\"\n"), 0o600))
 	auth, err := classifier.NewAuthorizer(allowlistPath, []string{"hostname"})
 	require.NoError(t, err)
 	cls := classifier.New(auth, classifier.NewManager(nil))
@@ -910,7 +910,7 @@ func TestEngine_UnauthorizedOverride_StillAppliesEvenWhenNoMaterialChange(t *tes
 	em.mu.Lock()
 	defer em.mu.Unlock()
 	require.Len(t, em.events, 1)
-	assert.Equal(t, model.EventUnauthorizedAssetDetected, em.events[0].EventType,
+	assert.Equal(t, model.EventUnauthorizedMachineDetected, em.events[0].EventType,
 		"unauthorized override must still fire on no-change ticks")
 }
 
@@ -918,8 +918,8 @@ func TestEngine_EmptyDiscovery(t *testing.T) {
 	ms := newMockStore()
 	reg := discovery.NewRegistry()
 	reg.Register(&mockSource{
-		name:   "test",
-		assets: nil,
+		name:     "test",
+		machines: nil,
 	})
 
 	em := &recordingEmitter{}
@@ -930,7 +930,7 @@ func TestEngine_EmptyDiscovery(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, 0, result.NewAssets)
-	assert.Equal(t, 0, result.UpdatedAssets)
+	assert.Equal(t, 0, result.NewMachines)
+	assert.Equal(t, 0, result.UpdatedMachines)
 	assert.Equal(t, 0, result.EventsEmitted)
 }

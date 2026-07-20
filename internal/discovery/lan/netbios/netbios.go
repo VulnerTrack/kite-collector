@@ -75,7 +75,7 @@ func parseConfig(cfg map[string]any) Config {
 }
 
 // responder accumulates one host. Multiple NBSTAT entries with the same
-// machine name + different service suffixes collapse into one asset.
+// machine name + different service suffixes collapse into one machine.
 type responder struct {
 	lastSeen  time.Time
 	machine   string
@@ -86,7 +86,7 @@ type responder struct {
 }
 
 // Discover sends NBSTAT to the broadcast address of each chosen interface
-// (plus any explicit Targets) and emits one asset per responder.
+// (plus any explicit Targets) and emits one machine per responder.
 //
 // Supported config keys (all optional):
 //
@@ -94,7 +94,7 @@ type responder struct {
 //	interfaces    []string  restrict broadcast to these iface names
 //	listen_window string    response window (default 3s, max 30s)
 //	no_broadcast  bool      probe only `targets`; never broadcast
-func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	parsed := parseConfig(cfg)
 
 	ctx, cancel := context.WithTimeout(ctx, parsed.ListenWindow+2*time.Second)
@@ -162,7 +162,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Asse
 	cancel()
 	wg.Wait()
 
-	return assetsFromResponders(responders), nil
+	return machinesFromResponders(responders), nil
 }
 
 // buildDestinations returns the list of IPs to send NBSTAT to: subnet
@@ -499,23 +499,23 @@ func formatMAC(b []byte) string {
 	return sb.String()
 }
 
-// assetsFromResponders flattens the per-host map into a deterministic
-// asset list, classifying based on observed NetBIOS service suffixes.
-func assetsFromResponders(in map[string]*responder) []model.Asset {
+// machinesFromResponders flattens the per-host map into a deterministic
+// machine list, classifying based on observed NetBIOS service suffixes.
+func machinesFromResponders(in map[string]*responder) []model.Machine {
 	keys := make([]string, 0, len(in))
 	for k := range in {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	out := make([]model.Asset, 0, len(keys))
+	out := make([]model.Machine, 0, len(keys))
 	for _, k := range keys {
 		r := in[k]
 		hostname := r.machine
 		if hostname == "" {
 			hostname = r.addr.String()
 		}
-		a := model.Asset{
-			AssetType:       classify(r.services),
+		a := model.Machine{
+			MachineType:     classify(r.services),
 			Hostname:        hostname,
 			DiscoverySource: "netbios",
 			FirstSeenAt:     r.lastSeen,
@@ -530,20 +530,20 @@ func assetsFromResponders(in map[string]*responder) []model.Asset {
 	return out
 }
 
-// classify maps observed NetBIOS service suffixes to an AssetType.
+// classify maps observed NetBIOS service suffixes to an MachineType.
 // 0x1b/0x1c → domain controller-ish, treat as server; 0x20 → file server;
 // otherwise the host is a workstation by default for NBNS.
-func classify(services []string) model.AssetType {
+func classify(services []string) model.MachineType {
 	for _, s := range services {
 		ls := strings.ToLower(s)
 		switch {
 		case strings.HasSuffix(ls, "<1b>") || strings.HasSuffix(ls, "<1c>"):
-			return model.AssetTypeServer
+			return model.MachineTypeServer
 		case strings.HasSuffix(ls, "<20>"):
-			return model.AssetTypeServer
+			return model.MachineTypeServer
 		}
 	}
-	return model.AssetTypeWorkstation
+	return model.MachineTypeWorkstation
 }
 
 func buildTags(r *responder) string {

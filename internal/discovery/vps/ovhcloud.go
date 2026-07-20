@@ -33,7 +33,7 @@ func (o *OVHcloud) Name() string { return "ovhcloud" }
 // Credentials: KITE_OVHCLOUD_APP_KEY, KITE_OVHCLOUD_APP_SECRET,
 // KITE_OVHCLOUD_CONSUMER_KEY environment variables.
 // Region: KITE_OVHCLOUD_REGION ("eu" or "us", default "eu").
-func (o *OVHcloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Asset, error) {
+func (o *OVHcloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	appKey := os.Getenv("KITE_OVHCLOUD_APP_KEY")
 	appSecret := os.Getenv("KITE_OVHCLOUD_APP_SECRET")
 	consumerKey := os.Getenv("KITE_OVHCLOUD_CONSUMER_KEY")
@@ -67,7 +67,7 @@ func (o *OVHcloud) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 	auth := ovhAuth(appKey, appSecret, consumerKey)
 	client := newClient("ovhcloud", base, auth)
 
-	var assets []model.Asset
+	var machines []model.Machine
 
 	// Discover dedicated servers.
 	dedicated, err := o.discoverDedicated(ctx, client, base, auth)
@@ -76,39 +76,39 @@ func (o *OVHcloud) Discover(ctx context.Context, cfg map[string]any) ([]model.As
 			"code", string(LogCodeOVHCloudDedicatedDiscoverFailed),
 			"error", err)
 	} else {
-		assets = append(assets, dedicated...)
+		machines = append(machines, dedicated...)
 	}
 
 	// Discover VPS instances.
-	vpsAssets, err := o.discoverVPS(ctx, client, base, auth)
+	vpsMachines, err := o.discoverVPS(ctx, client, base, auth)
 	if err != nil {
 		slog.Warn("OVHcloud VPS-instance discovery failed; returning partial results",
 			"code", string(LogCodeOVHCloudVPSDiscoverFailed),
 			"error", err)
 	} else {
-		assets = append(assets, vpsAssets...)
+		machines = append(machines, vpsMachines...)
 	}
 
 	slog.Info("OVHcloud VPS discovery complete",
 		"code", string(LogCodeOVHCloudComplete),
-		"assets", len(assets),
+		"machines", len(machines),
 		"dedicated_count", len(dedicated),
-		"vps_count", len(vpsAssets))
-	return assets, nil
+		"vps_count", len(vpsMachines))
+	return machines, nil
 }
 
-func (o *OVHcloud) discoverDedicated(ctx context.Context, client *apiClient, base string, auth authFunc) ([]model.Asset, error) {
+func (o *OVHcloud) discoverDedicated(ctx context.Context, client *apiClient, base string, auth authFunc) ([]model.Machine, error) {
 	var names []string
 	if err := client.get(ctx, "/dedicated/server", &names); err != nil {
 		return nil, fmt.Errorf("list dedicated servers: %w", err)
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 
 	for _, name := range names {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("ovhcloud dedicated: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("ovhcloud dedicated: context cancelled: %w", ctx.Err())
 		}
 
 		safeName, sErr := safenet.SanitizePathSegment(name)
@@ -128,24 +128,24 @@ func (o *OVHcloud) discoverDedicated(ctx context.Context, client *apiClient, bas
 				"error", err)
 			continue
 		}
-		assets = append(assets, ovhDedicatedToAsset(srv, now))
+		machines = append(machines, ovhDedicatedToMachine(srv, now))
 	}
 
-	return assets, nil
+	return machines, nil
 }
 
-func (o *OVHcloud) discoverVPS(ctx context.Context, client *apiClient, base string, auth authFunc) ([]model.Asset, error) {
+func (o *OVHcloud) discoverVPS(ctx context.Context, client *apiClient, base string, auth authFunc) ([]model.Machine, error) {
 	var names []string
 	if err := client.get(ctx, "/vps", &names); err != nil {
 		return nil, fmt.Errorf("list VPS: %w", err)
 	}
 
 	now := time.Now().UTC()
-	var assets []model.Asset
+	var machines []model.Machine
 
 	for _, name := range names {
 		if ctx.Err() != nil {
-			return assets, fmt.Errorf("ovhcloud vps: context cancelled: %w", ctx.Err())
+			return machines, fmt.Errorf("ovhcloud vps: context cancelled: %w", ctx.Err())
 		}
 
 		safeName, sErr := safenet.SanitizePathSegment(name)
@@ -165,10 +165,10 @@ func (o *OVHcloud) discoverVPS(ctx context.Context, client *apiClient, base stri
 				"error", err)
 			continue
 		}
-		assets = append(assets, ovhVPSToAsset(instance, now))
+		machines = append(machines, ovhVPSToMachine(instance, now))
 	}
 
-	return assets, nil
+	return machines, nil
 }
 
 // --- OVH authentication ---
@@ -220,9 +220,9 @@ type ovhVPSModel struct {
 	Name string `json:"name"`
 }
 
-// --- Asset mapping ---
+// --- Machine mapping ---
 
-func ovhDedicatedToAsset(srv ovhDedicatedServer, now time.Time) model.Asset {
+func ovhDedicatedToMachine(srv ovhDedicatedServer, now time.Time) model.Machine {
 	tags := map[string]any{
 		"ip":               srv.IP,
 		"reverse":          srv.Reverse,
@@ -234,10 +234,10 @@ func ovhDedicatedToAsset(srv ovhDedicatedServer, now time.Time) model.Asset {
 		tags["warning"] = "server not in ok state"
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        srv.Name,
-		AssetType:       model.AssetTypeServer,
+		MachineType:     model.MachineTypeServer,
 		OSFamily:        srv.OS,
 		Environment:     srv.Datacenter,
 		DiscoverySource: "ovhcloud",
@@ -247,11 +247,11 @@ func ovhDedicatedToAsset(srv ovhDedicatedServer, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }
 
-func ovhVPSToAsset(instance ovhVPS, now time.Time) model.Asset {
+func ovhVPSToMachine(instance ovhVPS, now time.Time) model.Machine {
 	hostname := instance.DisplayName
 	if hostname == "" {
 		hostname = instance.Name
@@ -265,10 +265,10 @@ func ovhVPSToAsset(instance ovhVPS, now time.Time) model.Asset {
 		tags["warning"] = "VPS not running - not reachable by network scan"
 	}
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       model.AssetTypeCloudInstance,
+		MachineType:     model.MachineTypeCloudInstance,
 		Environment:     instance.Zone,
 		DiscoverySource: "ovhcloud",
 		FirstSeenAt:     now,
@@ -277,6 +277,6 @@ func ovhVPSToAsset(instance ovhVPS, now time.Time) model.Asset {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            toJSON(tags),
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }

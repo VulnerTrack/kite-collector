@@ -25,7 +25,7 @@ var allowedSensitiveKeys = map[string]struct{}{
 	"host.id":              {},
 	"tenant.id":            {},
 	"security.scan.uid":    {},
-	"security.asset.uid":   {},
+	"security.machine.uid": {},
 	"security.finding.uid": {},
 }
 

@@ -1,0 +1,13 @@
+# Canonical settings for the end-to-end smoke test. These drive a real
+# `kite-collector scan`: enable the docker discovery source and point it at the
+# mounted socket. Kept focused (docker only) so the scan is fast and the JSON is
+# dominated by container assets.
+log_level: info
+output_format: json
+data_dir: /tmp/kite-smoke
+
+discovery:
+  sources:
+    docker:
+      enabled: true
+      host: unix:///var/run/docker.sock

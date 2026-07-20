@@ -31,7 +31,7 @@
 //     modified in the last 90 days. Active install vs.
 //     abandoned residue.
 //   - `is_credential_exposure_risk=1` — readable data dir +
-//     payroll- or asset-declaration-class app.
+//     payroll- or machine-declaration-class app.
 //
 // Read-only by intent — we list directories and stat files;
 // we do NOT open the Foxpro tables. (Project guideline 4.2.)
@@ -170,7 +170,7 @@ func IsPayrollCategory(c ApplicationCategory) bool {
 
 // ExposureCategories returns the set of categories that, if
 // readable, flip is_credential_exposure_risk. Includes payroll
-// + asset declarations (Bienes Personales is unique PII).
+// + machine declarations (Bienes Personales is unique PII).
 func ExposureCategories() []ApplicationCategory {
 	return []ApplicationCategory{
 		CategoryPayroll,

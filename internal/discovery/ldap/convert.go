@@ -17,7 +17,7 @@ import (
 // Active Directory userAccountControl flag bits we care about.
 //
 // MSDN: https://learn.microsoft.com/en-us/windows/win32/api/iads/ne-iads-ads_user_flag_enum
-// Only the subset relevant to RFC-0121 findings/asset classification is decoded.
+// Only the subset relevant to RFC-0121 findings/machine classification is decoded.
 const (
 	uacAccountDisable  uint32 = 0x00000002
 	uacWorkstation     uint32 = 0x00001000
@@ -35,7 +35,7 @@ const windowsTicksPerSecond int64 = 10_000_000
 
 // computerEntry is the typed view of a single Active Directory computer
 // object after extraction from an *ldap.Entry. Field names mirror RFC-0121
-// §5.6.1 so the conversion to model.Asset and contract.AttrAD* tags is
+// §5.6.1 so the conversion to model.Machine and contract.AttrAD* tags is
 // straightforward.
 type computerEntry struct {
 	dn                 string
@@ -93,10 +93,10 @@ func extractComputer(e *ldapv3.Entry, baseDN string) (*computerEntry, error) {
 	return c, nil
 }
 
-// toAsset materialises the discovery-time view of the computer as a
-// model.Asset. The asset's Tags JSON carries the closed AD attribute set
+// toMachine materialises the discovery-time view of the computer as a
+// model.Machine. The machine's Tags JSON carries the closed AD attribute set
 // declared in contract.AttrAD*.
-func (c *computerEntry) toAsset(now time.Time) model.Asset {
+func (c *computerEntry) toMachine(now time.Time) model.Machine {
 	hostname := c.dnsHostName
 	if hostname == "" {
 		hostname = c.samAccountName
@@ -126,10 +126,10 @@ func (c *computerEntry) toAsset(now time.Time) model.Asset {
 
 	tagsJSON, _ := json.Marshal(tags)
 
-	asset := model.Asset{
+	machine := model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
 		Hostname:        hostname,
-		AssetType:       classifyAsset(c.uacFlags, c.operatingSystem),
+		MachineType:     classifyMachine(c.uacFlags, c.operatingSystem),
 		OSFamily:        osFamilyFrom(c.operatingSystem),
 		OSVersion:       c.osVersion,
 		DiscoverySource: SourceName,
@@ -139,30 +139,30 @@ func (c *computerEntry) toAsset(now time.Time) model.Asset {
 		FirstSeenAt:     now,
 		LastSeenAt:      now,
 	}
-	asset.ComputeNaturalKey()
-	return asset
+	machine.ComputeNaturalKey()
+	return machine
 }
 
-// classifyAsset maps the userAccountControl trust bits + operatingSystem
-// label to the kite asset taxonomy. Domain controllers and member servers
+// classifyMachine maps the userAccountControl trust bits + operatingSystem
+// label to the kite machine taxonomy. Domain controllers and member servers
 // are surfaced as servers; workstation-trust accounts as workstations;
 // everything else falls back to server because AD computer accounts are
 // almost always servers/clients (vs. printers, etc.).
-func classifyAsset(uacFlags uint32, os string) model.AssetType {
+func classifyMachine(uacFlags uint32, os string) model.MachineType {
 	if uacFlags&uacWorkstation != 0 {
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	}
 	if uacFlags&uacServerTrust != 0 {
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
 	lower := strings.ToLower(os)
 	if strings.Contains(lower, "server") {
-		return model.AssetTypeServer
+		return model.MachineTypeServer
 	}
 	if strings.Contains(lower, "windows") {
-		return model.AssetTypeWorkstation
+		return model.MachineTypeWorkstation
 	}
-	return model.AssetTypeServer
+	return model.MachineTypeServer
 }
 
 // osFamilyFrom returns the lowercase OS family for the operatingSystem

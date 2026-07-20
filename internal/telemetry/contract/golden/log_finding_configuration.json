@@ -14,6 +14,6 @@
   "security.finding.remediation.desc": "Set PermitRootLogin no in /etc/ssh/sshd_config",
   "security.finding.evidence": "PermitRootLogin yes",
   "security.finding.expected": "PermitRootLogin no",
-  "security.asset.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
-  "security.asset.name": "db-primary-01.prod"
+  "security.machine.uid": "01931cb6-b7c4-7c41-d000-aaaa11112222",
+  "security.machine.name": "db-primary-01.prod"
 }

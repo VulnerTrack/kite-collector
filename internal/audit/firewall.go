@@ -23,12 +23,12 @@ func NewFirewall() *Firewall { return &Firewall{} }
 func (f *Firewall) Name() string { return "firewall" }
 
 // Audit checks firewall status and rule configuration.
-func (f *Firewall) Audit(ctx context.Context, asset model.Asset) ([]model.ConfigFinding, error) {
+func (f *Firewall) Audit(ctx context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
 	iptablesOut, iptablesErr := runCmd(ctx, "iptables", "-L", "-n")
 	nftOut, nftErr := runCmd(ctx, "nft", "list", "ruleset")
 	ufwOut, ufwErr := runCmd(ctx, "ufw", "status")
 
-	return EvaluateFirewall(iptablesOut, iptablesErr, nftOut, nftErr, ufwOut, ufwErr, asset), nil
+	return EvaluateFirewall(iptablesOut, iptablesErr, nftOut, nftErr, ufwOut, ufwErr, machine), nil
 }
 
 // EvaluateFirewall analyzes firewall command outputs and produces findings.
@@ -36,7 +36,7 @@ func EvaluateFirewall(
 	iptablesOut string, iptablesErr error,
 	nftOut string, nftErr error,
 	ufwOut string, ufwErr error,
-	asset model.Asset,
+	machine model.Machine,
 ) []model.ConfigFinding {
 	now := time.Now().UTC()
 	var findings []model.ConfigFinding
@@ -52,7 +52,7 @@ func EvaluateFirewall(
 	if iptablesEmpty && nftEmpty && !hasUfw {
 		findings = append(findings, model.ConfigFinding{
 			ID:          uuid.Must(uuid.NewV7()),
-			AssetID:     asset.ID,
+			MachineID:   machine.ID,
 			Auditor:     "firewall",
 			CheckID:     "fw-001",
 			Title:       "No firewall active",
@@ -71,7 +71,7 @@ func EvaluateFirewall(
 		if defaultInputAccept(iptablesOut) {
 			findings = append(findings, model.ConfigFinding{
 				ID:          uuid.Must(uuid.NewV7()),
-				AssetID:     asset.ID,
+				MachineID:   machine.ID,
 				Auditor:     "firewall",
 				CheckID:     "fw-002",
 				Title:       "Default INPUT policy is ACCEPT",
@@ -88,7 +88,7 @@ func EvaluateFirewall(
 		if defaultForwardAccept(iptablesOut) {
 			findings = append(findings, model.ConfigFinding{
 				ID:          uuid.Must(uuid.NewV7()),
-				AssetID:     asset.ID,
+				MachineID:   machine.ID,
 				Auditor:     "firewall",
 				CheckID:     "fw-003",
 				Title:       "Default FORWARD policy is ACCEPT",
@@ -105,7 +105,7 @@ func EvaluateFirewall(
 		if portOpenToAll(iptablesOut, "22") {
 			findings = append(findings, model.ConfigFinding{
 				ID:          uuid.Must(uuid.NewV7()),
-				AssetID:     asset.ID,
+				MachineID:   machine.ID,
 				Auditor:     "firewall",
 				CheckID:     "fw-004",
 				Title:       "SSH (port 22) open to all without rate limiting",
@@ -123,7 +123,7 @@ func EvaluateFirewall(
 			if portOpenToAll(iptablesOut, port) {
 				findings = append(findings, model.ConfigFinding{
 					ID:          uuid.Must(uuid.NewV7()),
-					AssetID:     asset.ID,
+					MachineID:   machine.ID,
 					Auditor:     "firewall",
 					CheckID:     "fw-005",
 					Title:       fmt.Sprintf("Database port %s open to all", port),

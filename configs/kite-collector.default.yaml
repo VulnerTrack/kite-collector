@@ -13,7 +13,7 @@
 log_level: info          # debug | info | warn | error
 output_format: json
 data_dir: /var/lib/kite-collector
-stale_threshold: 168h    # assets unseen for this long are marked stale (7 days)
+stale_threshold: 168h    # machines unseen for this long are marked stale (7 days)
 
 # ---------------------------------------------------------------------------
 # Identity & credential storage
@@ -98,7 +98,7 @@ discovery:
 
     # JavaScript fingerprinting for S3-compatible storage backends. Probes
     # each target URL once per scan cycle and records discovered buckets as
-    # cloud_instance assets. Disabled by default — listing webapp URLs in
+    # cloud_instance machines. Disabled by default — listing webapp URLs in
     # config implies opt-in to outbound HTTP from the collector.
     storage_fingerprint:
       enabled: false
@@ -151,11 +151,11 @@ discovery:
       # Credentials: KITE_SERVICENOW_USERNAME, KITE_SERVICENOW_PASSWORD
 
 # ---------------------------------------------------------------------------
-# Asset classification
+# Machine classification
 # ---------------------------------------------------------------------------
 classification:
   authorization:
-    # Assets matching any entry in this file are marked "authorized".
+    # Machines matching any entry in this file are marked "authorized".
     # All others remain "unknown" — never default to authorized.
     allowlist_file: ""       # set to an absolute path to enable
     match_fields: [hostname]

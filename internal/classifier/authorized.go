@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AllowlistEntry represents one allowed asset pattern.
+// AllowlistEntry represents one allowed machine pattern.
 type AllowlistEntry struct {
 	Hostname   string `yaml:"hostname"`
 	MACAddress string `yaml:"mac_address"`
@@ -19,10 +19,10 @@ type AllowlistEntry struct {
 
 // allowlistFile is the top-level YAML structure for the allowlist file.
 type allowlistFile struct {
-	Assets []AllowlistEntry `yaml:"assets"`
+	Machines []AllowlistEntry `yaml:"machines"`
 }
 
-// Authorizer checks whether discovered assets are present in an
+// Authorizer checks whether discovered machines are present in an
 // organisation-maintained allowlist.
 type Authorizer struct {
 	entries     []AllowlistEntry
@@ -32,7 +32,7 @@ type Authorizer struct {
 // NewAuthorizer loads the allowlist from a YAML file and returns an Authorizer
 // configured to match on the given fields.  If allowlistPath is empty or the
 // file does not exist, an authorizer with zero entries is returned so that
-// every asset evaluates to "unknown" (no data to decide).
+// every machine evaluates to "unknown" (no data to decide).
 func NewAuthorizer(allowlistPath string, matchFields []string) (*Authorizer, error) {
 	// Validate that all match_fields are currently supported.
 	for _, f := range matchFields {
@@ -66,32 +66,32 @@ func NewAuthorizer(allowlistPath string, matchFields []string) (*Authorizer, err
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parse allowlist YAML: %w", err)
 	}
-	a.entries = f.Assets
+	a.entries = f.Machines
 	return a, nil
 }
 
-// Authorize determines whether an asset matches any allowlist entry.
+// Authorize determines whether an machine matches any allowlist entry.
 //
 // Matching rules:
 //   - If no entries are loaded, return "unknown" (nothing to compare against).
-//   - If entries exist and the asset matches ALL configured matchFields of any
+//   - If entries exist and the machine matches ALL configured matchFields of any
 //     single entry, return "authorized".
 //   - If entries exist but nothing matches, return "unauthorized".
 //
 // Hostname matching supports glob patterns via path.Match.
 //
-// NOTE: model.Asset does not carry ip_address or mac_address directly; those
+// NOTE: model.Machine does not carry ip_address or mac_address directly; those
 // live on model.NetworkInterface.  In Phase 1 the authorizer only matches on
 // hostname.  IP and MAC match fields are accepted but will never produce a
-// positive match until the asset model is extended or the interface is
+// positive match until the machine model is extended or the interface is
 // widened to accept network interfaces.
-func (a *Authorizer) Authorize(asset model.Asset) model.AuthorizationState {
+func (a *Authorizer) Authorize(machine model.Machine) model.AuthorizationState {
 	if len(a.entries) == 0 {
 		return model.AuthorizationUnknown
 	}
 
 	for _, entry := range a.entries {
-		if a.entryMatches(entry, asset) {
+		if a.entryMatches(entry, machine) {
 			return model.AuthorizationAuthorized
 		}
 	}
@@ -99,8 +99,8 @@ func (a *Authorizer) Authorize(asset model.Asset) model.AuthorizationState {
 }
 
 // entryMatches returns true when every configured match field in the entry
-// matches the corresponding value on the asset.
-func (a *Authorizer) entryMatches(entry AllowlistEntry, asset model.Asset) bool {
+// matches the corresponding value on the machine.
+func (a *Authorizer) entryMatches(entry AllowlistEntry, machine model.Machine) bool {
 	if len(a.matchFields) == 0 {
 		return false
 	}
@@ -113,20 +113,20 @@ func (a *Authorizer) entryMatches(entry AllowlistEntry, asset model.Asset) bool 
 			}
 			matched, err := path.Match(
 				strings.ToLower(entry.Hostname),
-				strings.ToLower(asset.Hostname),
+				strings.ToLower(machine.Hostname),
 			)
 			if err != nil || !matched {
 				return false
 			}
 
 		case "mac_address":
-			// Asset struct does not carry MAC; never matches in Phase 1.
+			// Machine struct does not carry MAC; never matches in Phase 1.
 			if entry.MACAddress != "" {
 				return false
 			}
 
 		case "ip_address":
-			// Asset struct does not carry IP; never matches in Phase 1.
+			// Machine struct does not carry IP; never matches in Phase 1.
 			if entry.IPAddress != "" {
 				return false
 			}

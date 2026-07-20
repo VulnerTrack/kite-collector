@@ -23,7 +23,7 @@
 //   - `is_baja=1`     — `estadoCUIT="BAJA"` → defunct entity.
 //   - `has_risky_actividades=1` — at least one CLAE in the
 //     curated AML-high-risk set (financial intermediation,
-//     gambling, crypto-asset services, money transfer).
+//     gambling, crypto-machine services, money transfer).
 //   - `is_credential_exposure_risk=1` — readable file + a
 //     populated denominación or CLAE = Ley 25.326 PII exposure.
 //
