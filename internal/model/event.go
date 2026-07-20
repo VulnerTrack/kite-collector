@@ -27,6 +27,7 @@ type MachineEvent struct {
 	DiscoverySource string             `json:"discovery_source,omitempty"`
 	IsAuthorized    AuthorizationState `json:"is_authorized,omitempty"`
 	IsManaged       ManagedState       `json:"is_managed,omitempty"`
+	FirstSeenAt     time.Time          `json:"first_seen_at,omitempty"`
 	ID              uuid.UUID          `json:"id"`
 	MachineID       uuid.UUID          `json:"machine_id"`
 	ScanRunID       uuid.UUID          `json:"scan_run_id"`
@@ -107,4 +108,5 @@ func (e *MachineEvent) FromMachine(a Machine) {
 	e.DiscoverySource = a.DiscoverySource
 	e.IsAuthorized = a.IsAuthorized
 	e.IsManaged = a.IsManaged
+	e.FirstSeenAt = a.FirstSeenAt
 }
