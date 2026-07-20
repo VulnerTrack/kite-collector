@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,5 +127,68 @@ func TestOTLPEmitter_RedactsForbiddenResourceKeys(t *testing.T) {
 	for _, kv := range got.ResourceLogs[0].Resource.Attributes {
 		assert.NotEqual(t, "db_password", kv.Key, "forbidden key leaked")
 		assert.NotEqual(t, "api_key", kv.Key, "forbidden key leaked")
+	}
+}
+
+// TestOTLPEmitter_RecordAttributesMatchContract asserts the RFC-0115 v1
+// log-record attribute layer: for every legacy lifecycle event type the
+// emitter produces, the record carries an allowed event.name, every
+// security.*/event.* key is inside the event's closed attribute set, and
+// every required key is present. Legacy snake_case keys (event_type,
+// machine_id, ...) ride alongside during the §2.3 dual-emit window and are
+// exempt from the closed-set check.
+func TestOTLPEmitter_RecordAttributesMatchContract(t *testing.T) {
+	machineID := uuid.Must(uuid.NewV7())
+	scanID := uuid.Must(uuid.NewV7())
+
+	for _, eventType := range []model.EventType{
+		model.EventMachineDiscovered,
+		model.EventMachineUpdated,
+		model.EventMachineAnalyzed,
+		model.EventUnauthorizedMachineDetected,
+		model.EventUnmanagedMachineDetected,
+		model.EventMachineNotSeen,
+		model.EventMachineRemoved,
+	} {
+		evt := model.MachineEvent{
+			ID:              uuid.Must(uuid.NewV7()),
+			MachineID:       machineID,
+			ScanRunID:       scanID,
+			EventType:       eventType,
+			Severity:        model.SeverityLow,
+			Timestamp:       time.Now(),
+			Hostname:        "edge-02.acme.example",
+			MachineType:     model.MachineTypeVirtualMachine,
+			OSFamily:        "linux",
+			OSVersion:       "22.04",
+			DiscoverySource: "agent",
+			IsAuthorized:    model.AuthorizationAuthorized,
+			IsManaged:       model.ManagedManaged,
+			FirstSeenAt:     time.Now().Add(-24 * time.Hour),
+		}
+
+		wire := map[string]string{}
+		for _, kv := range buildAttributes(&evt) {
+			require.NotNil(t, kv.Value.StringValue)
+			wire[kv.Key] = *kv.Value.StringValue
+		}
+
+		name := contract.EventName(wire["event.name"])
+		require.Truef(t, contract.IsAllowedEventName(string(name)),
+			"%s: event.name %q not in contract", eventType, name)
+		assert.Equal(t, contract.EventDomain, wire["event.domain"])
+
+		for key := range wire {
+			if !strings.Contains(key, ".") {
+				continue // legacy dual-emit key
+			}
+			assert.Truef(t, contract.IsAllowedEventAttribute(name, key),
+				"%s: attribute %q not allowed on %q", eventType, key, name)
+		}
+		for _, req := range contract.EventRequiredAttributes[name] {
+			assert.Containsf(t, wire, req,
+				"%s: required attribute %q missing", eventType, req)
+		}
+		assert.Equal(t, "vm", wire["security.machine.type"], "closed enum mapping")
 	}
 }

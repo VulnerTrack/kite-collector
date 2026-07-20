@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/redact"
 )
 
@@ -391,6 +392,11 @@ func buildAttributes(e *model.MachineEvent) []otlpKeyValue {
 	add("is_authorized", string(e.IsAuthorized))
 	add("is_managed", string(e.IsManaged))
 
+	// RFC-0115 contract v1 attribute set, emitted ALONGSIDE the legacy keys
+	// above (§2.3 dual-emit window: consumers migrate to the security.*
+	// namespace; the legacy keys are removed in a later major bump).
+	pairs = append(pairs, contractAttributes(e)...)
+
 	attrs := make([]otlpKeyValue, 0, len(pairs))
 	for _, p := range pairs {
 		if redact.IsForbidden(p[0]) {
@@ -399,6 +405,102 @@ func buildAttributes(e *model.MachineEvent) []otlpKeyValue {
 		attrs = append(attrs, stringKV(p[0], p[1]))
 	}
 	return attrs
+}
+
+// contractAttributes maps a machine event onto the RFC-0115 contract v1
+// log-record attribute set (event.domain / event.name / security.*).
+func contractAttributes(e *model.MachineEvent) [][2]string {
+	name := contractEventName(e.EventType)
+	pairs := [][2]string{
+		{contract.AttrEventDomain, contract.EventDomain},
+		{contract.AttrEventName, string(name)},
+		{"security.machine.uid", e.MachineID.String()},
+		{"security.machine.type", contractMachineType(e.MachineType)},
+		{"security.machine.name", e.Hostname},
+		{"security.machine.authorization", orUnknown(string(e.IsAuthorized))},
+		{"security.machine.managed_status", orUnknown(string(e.IsManaged))},
+	}
+	add := func(key, value string) {
+		if value == "" {
+			return
+		}
+		pairs = append(pairs, [2]string{key, value})
+	}
+	if e.ScanRunID != uuid.Nil {
+		add(contract.AttrScanUID, e.ScanRunID.String())
+	}
+	add("security.machine.os.name", e.OSFamily)
+	add("security.machine.os.version", e.OSVersion)
+	add("security.machine.discovery.source", e.DiscoverySource)
+	firstSeen := e.FirstSeenAt
+	if firstSeen.IsZero() {
+		firstSeen = e.Timestamp
+	}
+	if !firstSeen.IsZero() {
+		add("security.machine.first_seen", firstSeen.UTC().Format(time.RFC3339))
+	}
+	if name == contract.EventMachineChanged {
+		add("security.machine.change.field", contractChangeField(e.EventType))
+	}
+	return pairs
+}
+
+// contractEventName folds the legacy lifecycle enum onto the contract's
+// two machine event names: the initial discovery is machine.discovered,
+// every later lifecycle transition is machine.changed.
+func contractEventName(t model.EventType) contract.EventName {
+	if t == model.EventMachineDiscovered {
+		return contract.EventMachineDiscovered
+	}
+	return contract.EventMachineChanged
+}
+
+// contractChangeField names the field a machine.changed record is about,
+// derived from which legacy lifecycle event produced it.
+func contractChangeField(t model.EventType) string {
+	switch t {
+	case model.EventUnauthorizedMachineDetected:
+		return "authorization"
+	case model.EventUnmanagedMachineDetected:
+		return "managed_status"
+	case model.EventMachineNotSeen:
+		return "last_seen"
+	case model.EventMachineRemoved:
+		return "presence"
+	case model.EventMachineAnalyzed:
+		return "analysis"
+	default:
+		return "state"
+	}
+}
+
+// contractMachineType folds the internal machine-type enum onto the
+// contract's closed set (server, workstation, container, vm,
+// network-device, iot, unknown). Types with no contract equivalent
+// (appliance, software_project, repository) map to unknown.
+func contractMachineType(t model.MachineType) string {
+	switch t {
+	case model.MachineTypeServer, model.MachineTypeWorkstation,
+		model.MachineTypeContainer:
+		return string(t)
+	case model.MachineTypeVirtualMachine, model.MachineTypeCloudInstance:
+		return "vm"
+	case model.MachineTypeNetworkDevice:
+		return "network-device"
+	case model.MachineTypeIOTDevice:
+		return "iot"
+	default:
+		return "unknown"
+	}
+}
+
+// orUnknown substitutes the contract's "unknown" enum member for an
+// unset classification value (both are required attributes).
+func orUnknown(v string) string {
+	if v == "" {
+		return "unknown"
+	}
+	return v
 }
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,11 @@ var allowedSensitiveKeys = map[string]struct{}{
 	"security.scan.uid":    {},
 	"security.machine.uid": {},
 	"security.finding.uid": {},
+	// Contract-declared classification enum (authorized/unauthorized/
+	// unknown), not a credential — the "authorization" substring rule
+	// would otherwise strip a REQUIRED machine.* attribute (RFC-0115
+	// §4.4.1).
+	"security.machine.authorization": {},
 }
 
 // forbiddenSubstrings are case-insensitive fragments that, when present in
