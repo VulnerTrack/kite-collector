@@ -8,18 +8,40 @@
 # When `latest` fails but `pinned` passes, a new osquery release broke something
 # (a renamed table/column, changed --connect behavior, a package/repo change) —
 # and you know before adopting it. fail-fast is off so both legs always report.
-name: osquery smoke (daily)
+#
+# RFC-0148 added the `pull_request` trigger: a PR touching the osquery
+# simulation or the discovery sources it exercises now gets the drift battery
+# before merge instead of up to 24h after. The daily cron cadence is unchanged.
+#
+# Only the `pinned` leg runs on a pull request, and only `pinned` belongs in
+# branch protection's required-checks list (R6). The `latest` leg exists to
+# catch an upstream osquery release breaking something, which is nothing a PR
+# author caused and must never block their merge; RFC-0148 Section 7.3 keeps
+# its detection latency at the cron's 24h by design, and Section 11.3 budgets
+# only the pinned leg's minutes per push.
+name: osquery smoke
 
 on:
   schedule:
     - cron: "17 6 * * *" # 06:17 UTC daily
   workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/e2e/osquery/**"
+      - "internal/discovery/**"
+      - ".github/workflows/osquery-smoke.yml"
   push:
     branches: [main]
     paths:
       - "tests/e2e/osquery/**"
       - ".github/workflows/osquery-smoke.yml"
 
+# R3: `pull_request`, never `pull_request_target`; no secret is referenced here.
+permissions:
+  contents: read
+
+# R5: a superseding push to the same PR/branch cancels the in-flight run.
 concurrency:
   group: osquery-smoke-${{ github.ref }}
   cancel-in-progress: true
@@ -31,12 +53,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - label: pinned
-            osquery_version: "5.15.0"
-          - label: latest
-            osquery_version: "latest"
-    name: smoke (${{ matrix.label }} · ${{ matrix.osquery_version }})
+        # Both legs on the cron / a dispatch / a push to main; pinned only on
+        # a pull request. A folded scalar keeps the expression one line, which
+        # is what `fromJSON` needs, without a 200-column source line.
+        # Every continuation line sits at the same indentation on purpose: a
+        # more-indented line in a folded scalar keeps its newline instead of
+        # folding to a space, which would put a raw newline inside the
+        # single-quoted expression string.
+        include: >-
+          ${{ fromJSON(github.event_name == 'pull_request'
+          && '[{"label":"pinned","osquery_version":"5.15.0"}]'
+          || '[{"label":"pinned","osquery_version":"5.15.0"},{"label":"latest","osquery_version":"latest"}]') }}
+    # The osquery version is deliberately NOT in the check-run name: branch
+    # protection matches on this string, so bumping the 5.15.0 pin would
+    # otherwise rename a required check out from under it (R2).
+    name: osquery-smoke (${{ matrix.label }})
     steps:
       - uses: actions/checkout@v7
 
