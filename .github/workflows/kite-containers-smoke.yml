@@ -26,6 +26,12 @@ concurrency:
 
 jobs:
   smoke:
+    # Named explicitly so RFC-0148's result ingest can tell this run apart from
+    # osquery-smoke's, whose job id is also `smoke`. Display only — the daily
+    # cron cadence this suite exists for is untouched, and the pull-request
+    # path for the same suite is kite-collector.yml's `qa-kite-containers`
+    # job, so a PR never runs it twice.
+    name: kite-containers-smoke (daily)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
