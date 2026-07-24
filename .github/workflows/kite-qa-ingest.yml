@@ -1,0 +1,235 @@
+# Trusted-context ingestion of container QA suite results — RFC-0148 Phase 4.
+#
+# THIS JOB MUST NEVER CHECK OUT THE PULL-REQUEST HEAD REF.
+#
+# That single rule is the whole security design (Section 6.1, Elevation of
+# Privilege). `workflow_run` runs the base branch's workflow definition with
+# base-repo permissions and access to KITE_QA_WEBHOOK_SECRET. Adding an
+# `actions/checkout` of the PR head here — the classic
+# pull_request_target-plus-head-checkout anti-pattern — would let a fork PR
+# execute arbitrary code next to that credential. There is no checkout step
+# below, and there must never be one: everything comes from the read-only
+# GitHub REST API.
+#
+# Re-deriving each suite's conclusion from /actions/runs/{id}/jobs rather than
+# trusting anything the PR branch printed is also the Spoofing/Tampering
+# mitigation (Section 6.1): the untrusted job's own stdout is never an input.
+#
+# R7: this is best-effort telemetry, fully decoupled from merge gating. Merge
+# decisions already completed on the PR-triggered required status checks and
+# never depend on this workflow, on the kite_collector service, or on
+# ClickHouse. Every failure path here exits 0.
+#
+# This file lives in VulnerTrack/kite-collector rather than in the monorepo
+# because `workflow_run` only fires for workflows in the SAME repository, and
+# the QA suites it ingests run here. The `workflows:` names below must stay in
+# lockstep with the `name:` of each workflow in this directory.
+#
+# Note: `workflow_run` only ever fires from the copy of this file on the
+# default branch, so it starts working once this lands on main.
+name: Kite QA Result Ingest
+
+on:
+  workflow_run:
+    workflows:
+      - "Kite Collector"
+      - "osquery smoke"
+      - "kite containers + settings smoke (daily)"
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read # list the completed run's jobs + artifacts
+
+concurrency:
+  group: kite-qa-ingest-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  qa-result-ingest:
+    name: qa-result-ingest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Belt and braces for R7: even an unhandled error cannot turn into a red X
+    # someone waits on. This job is never a required status check.
+    continue-on-error: true
+    steps:
+      - name: Forward suite results to kite_collector
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_RUN: ${{ toJSON(github.event.workflow_run) }}
+          INGEST_URL: ${{ vars.KITE_QA_INGEST_URL }}
+          WEBHOOK_SECRET: ${{ secrets.KITE_QA_WEBHOOK_SECRET }}
+        run: |
+          set -uo pipefail
+
+          # Section 7.4: kite_collector has no confirmed ingress yet
+          # (RFC-0134). Unconfigured is the expected steady state until it
+          # does, and it is a notice, not a failure.
+          if [ -z "${INGEST_URL}" ]; then
+            echo "::notice title=QA ingest skipped::vars.KITE_QA_INGEST_URL is unset; nothing to forward."
+            exit 0
+          fi
+          if [ -z "${WEBHOOK_SECRET}" ]; then
+            echo "::warning title=QA ingest skipped::secrets.KITE_QA_WEBHOOK_SECRET is unset; refusing to POST unsigned."
+            exit 0
+          fi
+
+          work="$(mktemp -d)"
+
+          gh api --paginate "/repos/${REPO}/actions/runs/${RUN_ID}/jobs" \
+            --jq '.jobs[]' > "${work}/jobs.ndjson" || {
+              echo "::warning title=QA ingest skipped::could not list jobs for run ${RUN_ID}."
+              exit 0
+            }
+
+          # Artifact listing is optional — a suite with no uploaded log still
+          # produces a valid QASuiteExecution, just without a QAArtifact.
+          gh api --paginate "/repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+            --jq '.artifacts[] | {name: .name, url: .archive_download_url}' \
+            > "${work}/artifacts.ndjson" 2>/dev/null || : > "${work}/artifacts.ndjson"
+
+          # PullRequest is a local cache (Section 4.2); GitHub stays
+          # authoritative. Fork PRs report an empty pull_requests array, in
+          # which case the execution simply has no triggered_by_pr edge.
+          pr_number="$(jq -r '(.pull_requests // [])[0].number // empty' <<<"${WORKFLOW_RUN}")"
+          pr_json='null'
+          if [ -n "${pr_number}" ]; then
+            pr_json="$(gh api "/repos/${REPO}/pulls/${pr_number}" \
+              --jq '{number, title, head_sha: .head.sha, author: .user.login, draft, state, merged}' \
+              2>/dev/null || echo 'null')"
+          fi
+
+          cat > "${work}/payloads.jq" <<'JQ'
+          # Job display name -> (suite_slug, required_for_merge, artifact name).
+          # These strings are the check-run names produced by the workflows in
+          # this directory; they change only when a job's `name:` changes.
+          #
+          # required_for_merge is denormalised onto the execution at execution
+          # time (Section 4.2) precisely so the osquery pinned/latest split can
+          # differ between two executions of the same definition.
+          def suite($n):
+            if   $n == "qa-e2e"                        then {slug:"e2e-testcontainers",    req:true,  art:"qa-e2e-log"}
+            elif $n == "qa-smoke-containers"           then {slug:"containers-smoke",      req:true,  art:"qa-smoke-containers-log"}
+            elif $n == "qa-kite-containers"            then {slug:"kite-containers-smoke", req:true,  art:"qa-kite-containers-log"}
+            elif $n == "osquery-smoke (pinned)"        then {slug:"osquery-smoke",         req:true,  art:"osquery-checks-pinned"}
+            elif $n == "osquery-smoke (latest)"        then {slug:"osquery-smoke",         req:false, art:"osquery-checks-latest"}
+            elif $n == "kite-containers-smoke (daily)" then {slug:"kite-containers-smoke", req:false, art:"kite-containers-smoke-log"}
+            else null end;
+
+          # skipped / neutral / action_required carry no QA signal, so they are
+          # dropped rather than recorded as a misleading terminal status. The
+          # qa-* jobs skip on tag pushes, which is exactly this case.
+          def qa_status($c):
+            if   $c == "success"   then "passed"
+            elif $c == "failure"   then "failed"
+            elif $c == "cancelled" then "cancelled"
+            elif $c == "timed_out" then "timed_out"
+            else null end;
+
+          def pr_sync_state($p):
+            if   $p == null        then null
+            elif $p.merged         then "merged"
+            elif $p.state == "closed" then "closed_unmerged"
+            elif $p.draft          then "draft"
+            else "open" end;
+
+          def art($name): [$arts[] | select(.name == $name)] | first;
+
+          suite(.name) as $s
+          | if $s == null then empty
+            else
+              qa_status(.conclusion) as $st
+              | if $st == null then empty
+                else
+                  art($s.art) as $a
+                  | {
+                      suite_slug: $s.slug,
+                      # The repository the run belongs to, so GitCommit and
+                      # PullRequest natural keys name the repo these SHAs and
+                      # PR numbers actually live in.
+                      repository: $run.repository.full_name,
+                      commit_sha: $run.head_sha,
+                      run_id: $run.id,
+                      run_attempt: ($run.run_attempt // 1),
+                      trigger_event: (
+                        if ($run.event | IN("pull_request","push","schedule","workflow_dispatch"))
+                        then $run.event else "workflow_dispatch" end
+                      ),
+                      status: $st,
+                      required_for_merge: $s.req,
+                      started_at: .started_at,
+                      finished_at: .completed_at,
+                      # duration_seconds is deliberately not sent: the service
+                      # derives it from these two timestamps and clamps at
+                      # zero, so clock skew cannot produce a negative that the
+                      # UInt32 field would reject with a 422.
+                      artifact_url: ($a.url // null),
+                      artifact_name: ($a.name // null),
+                      workflow_path: ($run.path // null),
+                      commit_message_summary: (($run.head_commit.message // "") | split("\n")[0]),
+                      commit_author_login: ($run.actor.login // null),
+                      pull_request_number: ($pr.number // null),
+                      pull_request_title: ($pr.title // null),
+                      pull_request_state: pr_sync_state($pr),
+                      pull_request_head_sha: ($pr.head_sha // null),
+                      pull_request_author_login: ($pr.author // null),
+                      findings: []
+                    }
+                end
+            end
+          JQ
+
+          jq -c \
+            --argjson run "${WORKFLOW_RUN}" \
+            --argjson pr "${pr_json}" \
+            --slurpfile arts "${work}/artifacts.ndjson" \
+            -f "${work}/payloads.jq" \
+            "${work}/jobs.ndjson" > "${work}/payloads.ndjson" || {
+              echo "::warning title=QA ingest skipped::could not build payloads."
+              exit 0
+            }
+
+          posted=0
+          skipped=0
+          while IFS= read -r payload; do
+            [ -z "${payload}" ] && continue
+            slug="$(jq -r '.suite_slug' <<<"${payload}")"
+
+            # Signature is over the exact bytes sent, matching
+            # hmac.compare_digest on the FastAPI side.
+            sig="$(printf '%s' "${payload}" \
+              | openssl dgst -sha256 -hmac "${WEBHOOK_SECRET}" -r \
+              | cut -d' ' -f1)"
+
+            code="$(curl -sS -o "${work}/resp.json" -w '%{http_code}' \
+              --max-time 20 --retry 2 --retry-connrefused \
+              -X POST "${INGEST_URL}" \
+              -H 'Content-Type: application/json' \
+              -H "X-Kite-QA-Signature-256: sha256=${sig}" \
+              --data-binary "${payload}" || echo '000')"
+
+            if [ "${code}" = "202" ] || [ "${code}" = "200" ]; then
+              posted=$((posted + 1))
+              echo "ingested ${slug} (HTTP ${code})"
+            else
+              skipped=$((skipped + 1))
+              echo "::warning title=QA ingest failed for ${slug}::HTTP ${code} from ${INGEST_URL}. Merge gating is unaffected (R7)."
+            fi
+          done < "${work}/payloads.ndjson"
+
+          {
+            echo "### QA result ingest"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Source run | ${RUN_ID} |"
+            echo "| Ingested | ${posted} |"
+            echo "| Failed | ${skipped} |"
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          # R7: never propagate a failure. Ingestion is telemetry.
+          exit 0
