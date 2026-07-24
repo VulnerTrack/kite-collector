@@ -1,5 +1,28 @@
-# CI/CD Pipeline for kite-collector — RFC-0051
+# CI/CD Pipeline for kite-collector — RFC-0051, extended by RFC-0148.
 # Runs on every push/PR to main. Release on v* tags.
+#
+# RFC-0148 added the container QA suites (qa-e2e, qa-smoke-containers,
+# qa-kite-containers) as pull-request gates. Two facts about this repository's
+# layout drive where that wiring lives, and they are worth recording because
+# RFC-0148 was drafted believing the opposite:
+#
+#   * This IS the repository root. `.github/workflows/` here is the directory
+#     GitHub Actions scans for VulnerTrack/kite-collector, so these workflows
+#     do run. They are not the "dead nested directory" RFC-0148 Section 2.1
+#     describes.
+#   * vulnertrack-intelligence-engine does NOT track this module. It was
+#     untracked deliberately (`chore(kite-collector): untrack submodule and
+#     register as sibling repo`) and is listed in that repo's .gitignore under
+#     "Sibling-repo symlinks ... not tracked here", with no .gitmodules.
+#     `git ls-files --error-unmatch apps/kite-collector/go.mod` exits non-zero
+#     there.
+#
+# Together those mean a PR carrying a change to this Go module is opened
+# against THIS repository, so this is the only place a required status check
+# can gate it. Relocating these jobs into the monorepo root — RFC-0148's
+# literal Phase 1 — would produce jobs whose `paths: apps/kite-collector/**`
+# filter can never match and whose `working-directory` would not exist in the
+# checkout. The RFC's intent (R1/R2) is satisfied here instead.
 name: Kite Collector
 
 on:
@@ -10,6 +33,15 @@ on:
   pull_request:
     branches: [main]
 
+# R3: `pull_request`, never `pull_request_target`, so a forked PR branch runs
+# with a read-only, secretless GITHUB_TOKEN. No repository secret is referenced
+# anywhere in this file — the trusted ingestion path lives in
+# kite-qa-ingest.yml, which never checks out PR-branch code.
+permissions:
+  contents: read
+
+# R5: a superseding push to the same PR/branch cancels the in-flight run,
+# including the container QA jobs.
 concurrency:
   group: kite-${{ github.ref }}
   cancel-in-progress: true
@@ -95,13 +127,116 @@ jobs:
           fi
 
   # ──────────────────────────────────────────────
+  # Phase 1b: Container QA suites (parallel) — RFC-0148 R1
+  #
+  # These suites already existed and already worked; the only new thing is
+  # that they now run on a pull request instead of never. Each delegates to
+  # the shared kite-qa-suite action for the infrastructure-classified retry,
+  # the distinguishable annotations (Section 7.4) and the step-summary table
+  # (R9).
+  #
+  # `if: !startsWith(...refs/tags/v)` mirrors `build`: RFC-0148 Section 2.2
+  # keeps the release path untouched, and Section 12 leaves "should the new
+  # required checks also apply to tag-triggered runs" an open question, so a
+  # tag push behaves exactly as it did before this RFC.
+  #
+  # Job ids double as check-run names, which is the namespace GitHub branch
+  # protection matches on. Renaming one silently drops it from the required
+  # list, so treat these three as a stable API (R2).
+  # ──────────────────────────────────────────────
+
+  qa-e2e:
+    name: qa-e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: "!startsWith(github.ref, 'refs/tags/v')"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: ./.github/actions/kite-qa-suite
+        with:
+          suite-slug: e2e-testcontainers
+          make-target: test-e2e
+          log-file: qa-e2e.log
+      # R8: 30 days is the floor RFC-0148 sets for QA logs, deliberately
+      # shorter than build_artifacts' 90-day default.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: qa-e2e-log
+          path: qa-e2e.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  qa-smoke-containers:
+    name: qa-smoke-containers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: "!startsWith(github.ref, 'refs/tags/v')"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: ./.github/actions/kite-qa-suite
+        with:
+          suite-slug: containers-smoke
+          make-target: test-smoke-containers
+          log-file: qa-smoke-containers.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: qa-smoke-containers-log
+          path: qa-smoke-containers.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  qa-kite-containers:
+    name: qa-kite-containers
+    runs-on: ubuntu-24.04
+    # 15, not the 10 the other two use: RFC-0148 Section 11.3 budgets this
+    # suite at ~6 minutes on its own and Section 8.2 also asks for one retry.
+    # 6 + 6 does not fit in 10. Section 8.1 sanctions the 10-20 minute band.
+    timeout-minutes: 15
+    if: "!startsWith(github.ref, 'refs/tags/v')"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: ./.github/actions/kite-qa-suite
+        with:
+          suite-slug: kite-containers-smoke
+          make-target: test-kite-containers
+          log-file: qa-kite-containers.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: qa-kite-containers-log
+          path: qa-kite-containers.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ──────────────────────────────────────────────
   # Phase 2: Build (after all gates pass)
   # ──────────────────────────────────────────────
 
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: [vet, lint, security, test]
+    # RFC-0148 wires the three container QA suites in here as well, so a
+    # binary is never produced from a tree whose container contracts fail.
+    # `release` deliberately keeps the pre-RFC needs list (Section 2.2).
+    needs:
+      - vet
+      - lint
+      - security
+      - test
+      - qa-e2e
+      - qa-smoke-containers
+      - qa-kite-containers
     if: "!startsWith(github.ref, 'refs/tags/v')"
     strategy:
       matrix:
