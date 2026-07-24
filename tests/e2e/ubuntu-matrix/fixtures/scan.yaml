@@ -1,0 +1,34 @@
+# Minimal scan configuration for the Ubuntu package-discovery matrix
+# (RFC-0149). Mirrors scripts/check-parse-errors.sh's fixture: agent source
+# only, software collection on, everything else off.
+#
+# Why so bare: the matrix asserts on the software.Dpkg collector's output, so
+# every other discovery source is noise that would add network egress and
+# wall-clock to each leg without changing the assertion.
+log_level: info
+output_format: json
+data_dir: /out
+stale_threshold: 168h
+
+discovery:
+  sources:
+    agent:
+      enabled: true
+      collect_software: true
+      collect_interfaces: false
+
+classification:
+  authorization:
+    allowlist_file: ""
+    match_fields: [hostname]
+  managed:
+    required_controls: []
+
+audit:
+  enabled: false
+
+posture:
+  enabled: false
+
+metrics:
+  enabled: false

@@ -1,0 +1,50 @@
+{
+  "target": "ubuntu-20.04",
+  "package_manager": "dpkg",
+  "notes": "Informational legacy leg. Same assertions as the supported LTS legs; kept because kite_discovered_assets.os_version may still show 20.04 in client fleets even though Canonical standard support closed on 2025-05-31.",
+  "min_package_count": 80,
+  "max_parse_errors": 0,
+  "known_issues": [],
+  "seed_manifest": [
+    { "name": "vim", "arch": "amd64", "state": "installed" },
+    { "name": "libc6", "arch": "i386", "state": "installed" },
+    { "name": "hello", "arch": "amd64", "state": "purged" }
+  ],
+  "packages": [
+    {
+      "name": "vim",
+      "roles": ["epoch"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]+:",
+      "known_issues": ["epoch_version_mismatch"]
+    },
+    {
+      "name": "bsdutils",
+      "roles": ["epoch", "baseline"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]+:",
+      "known_issues": ["epoch_version_mismatch"]
+    },
+    {
+      "name": "libc6",
+      "roles": ["multiarch"],
+      "architectures": ["amd64", "i386"],
+      "version_pattern": "^[0-9]",
+      "known_issues": []
+    },
+    {
+      "name": "dpkg",
+      "roles": ["baseline"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]",
+      "known_issues": []
+    },
+    {
+      "name": "hello",
+      "roles": ["purged"],
+      "architectures": [],
+      "version_pattern": "",
+      "known_issues": []
+    }
+  ]
+}
