@@ -1,0 +1,155 @@
+# Shared runner for kite-collector's container QA suites — RFC-0148.
+#
+# Wraps one `make <target>` invocation with the three behaviours the RFC asks
+# for but GitHub Actions does not provide natively:
+#
+#   * Section 8.2 — one automatic retry, implemented as a shell loop because
+#     GitHub Actions has no per-job retry.
+#   * Section 7.4 / 8.1 — the retry fires ONLY for infrastructure-classified
+#     failures (image pull, daemon, disk, DNS). A real assertion failure is
+#     never retried: it would just burn six more minutes to fail identically.
+#     Either way the terminal annotation says which kind it was, so a
+#     contributor does not debug their own change over a registry blip.
+#   * R9 — a job summary table, so the outcome is readable from the PR UI
+#     without opening the log.
+#
+# Teardown (Section 8.1) is deliberately NOT duplicated here: every suite's
+# own run.sh already installs `trap cleanup EXIT` running
+# `docker compose down -v --remove-orphans`, the osquery-checks target tears
+# down inline, and testcontainers-go reaps its own containers via Ryuk.
+name: Kite QA suite
+description: >-
+  Run one kite-collector container QA suite with a single
+  infrastructure-classified retry and a PR-visible job summary.
+
+inputs:
+  suite-slug:
+    description: >-
+      Stable slug of the suite, matching kite_qa_suite_definitions.suite_slug.
+    required: true
+  make-target:
+    description: Makefile target that runs the suite.
+    required: true
+  working-directory:
+    description: >-
+      Directory the make target runs from. Defaults to the repository root,
+      which is this Go module's root.
+    required: false
+    default: "."
+  log-file:
+    description: >-
+      Log file written under working-directory; uploaded as the QAArtifact.
+    required: false
+    default: qa-suite.log
+
+outputs:
+  status:
+    description: One of passed | failed | infra_failed.
+    value: ${{ steps.run.outputs.status }}
+  attempts:
+    description: Number of attempts actually executed (1 or 2).
+    value: ${{ steps.run.outputs.attempts }}
+  duration-seconds:
+    description: Wall-clock seconds across all attempts.
+    value: ${{ steps.run.outputs.duration-seconds }}
+
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # Inputs come in through env rather than ${{ }} interpolation directly
+      # into the script body, so the shell never re-parses them.
+      env:
+        SUITE_SLUG: ${{ inputs.suite-slug }}
+        MAKE_TARGET: ${{ inputs.make-target }}
+        LOG_FILE: ${{ inputs.log-file }}
+      run: |
+        set -uo pipefail
+
+        # Signatures that mean "the runner or an upstream registry broke",
+        # not "this change is wrong" (Section 8.1, Failure Mode 1).
+        INFRA_RE='toomanyrequests'
+        INFRA_RE="${INFRA_RE}|too many requests|429 too many requests"
+        INFRA_RE="${INFRA_RE}|rate limit|no space left on device"
+        INFRA_RE="${INFRA_RE}|cannot connect to the docker daemon"
+        INFRA_RE="${INFRA_RE}|error pulling image|failed to (pull|resolve|fetch|solve)"
+        INFRA_RE="${INFRA_RE}|manifest unknown|tls handshake timeout"
+        INFRA_RE="${INFRA_RE}|i/o timeout|connection reset by peer"
+        INFRA_RE="${INFRA_RE}|net/http: request canceled"
+        INFRA_RE="${INFRA_RE}|temporary failure in name resolution"
+        INFRA_RE="${INFRA_RE}|unexpected eof|context deadline exceeded"
+
+        MAX_ATTEMPTS=2
+        : > "${LOG_FILE}"
+        started=$(date +%s)
+        attempts=0
+        status=failed
+        rc=1
+
+        while [ "${attempts}" -lt "${MAX_ATTEMPTS}" ]; do
+          attempts=$((attempts + 1))
+          attempt_log="$(mktemp)"
+
+          echo "::group::${SUITE_SLUG} — make ${MAKE_TARGET} (attempt ${attempts}/${MAX_ATTEMPTS})"
+          make "${MAKE_TARGET}" 2>&1 | tee "${attempt_log}"
+          rc=${PIPESTATUS[0]}
+          echo "::endgroup::"
+
+          cat "${attempt_log}" >> "${LOG_FILE}"
+
+          if [ "${rc}" -eq 0 ]; then
+            status=passed
+            break
+          fi
+
+          # Classify against THIS attempt's output only: once attempt 1 has
+          # logged a pull error, the cumulative log would match forever.
+          if grep -Eqi "${INFRA_RE}" "${attempt_log}"; then
+            status=infra_failed
+          else
+            status=failed
+            break
+          fi
+
+          if [ "${attempts}" -lt "${MAX_ATTEMPTS}" ]; then
+            echo "::warning title=${SUITE_SLUG}: infrastructure blip::Attempt ${attempts} failed on an image pull / daemon / network error rather than an assertion. Retrying once — this is not a defect in your change."
+            sleep 15
+          fi
+        done
+
+        duration=$(( $(date +%s) - started ))
+
+        case "${status}" in
+          passed)       icon='PASS' ;;
+          infra_failed) icon='INFRA' ;;
+          *)            icon='FAIL' ;;
+        esac
+
+        # R9: readable from the PR's Checks tab without opening the log.
+        {
+          echo "### ${icon} — ${SUITE_SLUG}"
+          echo ""
+          echo "| Field | Value |"
+          echo "| --- | --- |"
+          echo "| Make target | \`${MAKE_TARGET}\` |"
+          echo "| Result | \`${status}\` |"
+          echo "| Attempts | ${attempts} |"
+          echo "| Duration | ${duration}s |"
+          echo ""
+        } >> "${GITHUB_STEP_SUMMARY}"
+
+        {
+          echo "status=${status}"
+          echo "attempts=${attempts}"
+          echo "duration-seconds=${duration}"
+        } >> "${GITHUB_OUTPUT}"
+
+        if [ "${status}" = "infra_failed" ]; then
+          echo "::error title=${SUITE_SLUG}: INFRASTRUCTURE FAILURE::Both attempts failed on runner/registry infrastructure, not on a test assertion. Re-run this job before debugging your change (RFC-0148 Section 7.4)."
+        elif [ "${status}" = "failed" ]; then
+          echo "::error title=${SUITE_SLUG} failed::make ${MAKE_TARGET} exited ${rc}. Download the ${LOG_FILE} artifact for the full log."
+        fi
+
+        exit "${rc}"
