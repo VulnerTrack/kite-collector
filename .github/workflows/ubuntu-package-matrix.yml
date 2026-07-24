@@ -1,0 +1,109 @@
+# Ubuntu multi-version package-discovery matrix — RFC-0149 Phase 3.
+#
+# Runs the compiled binary's software.Dpkg collector inside real, unmodified
+# ubuntu:20.04/22.04/24.04/devel images and asserts the discovered packages
+# against per-version fixtures. See tests/e2e/ubuntu-matrix/README.md.
+#
+# PHASE 3 POSTURE: every leg is `continue-on-error: true` and none of them is
+# a required status check. Promotion of the two LTS legs to blocking (Phase 4)
+# is a branch-protection change plus flipping `blocking` in targets.json — and
+# TestShippedBlockingTargetsArePinned makes it impossible to flip that without
+# first pinning the image digest the leg was reviewed against.
+#
+# The legs are path-filtered so an unrelated PR never pays the container cost,
+# and the drift-check runs weekly rather than daily to keep Docker Hub pull
+# pressure low (Section 6.1, Denial of Service).
+name: ubuntu package matrix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "internal/discovery/agent/software/**"
+      - "tests/e2e/ubuntu-matrix/**"
+      - ".github/workflows/ubuntu-package-matrix.yml"
+  schedule:
+    # Weekly. Catches upstream base-image drift even on weeks with no
+    # software/** changes — the whole reason a hardcoded fixture goes stale.
+    - cron: "17 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ubuntu-package-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.26.5"
+
+jobs:
+  qa-ubuntu-package-matrix:
+    # This display name is the PackageDiscoveryTestRun.ci_job_name the Go
+    # suite reports, and the key the ingest workflow matches on. Changing it
+    # means changing JobName() in tests/e2e/ubuntu-matrix/report.go too.
+    name: qa-ubuntu-package-matrix (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - ubuntu-20.04
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - ubuntu-devel
+    env:
+      # Selects one leg. An unknown slug is fatal inside the suite: a `-run`
+      # regex that matches nothing exits 0, and a matrix that silently runs
+      # zero legs while reporting green is worse than no matrix at all.
+      KITE_MATRIX_TARGET: ${{ matrix.target }}
+      KITE_MATRIX_REPORT_DIR: ${{ github.workspace }}/.matrix-reports
+      # Re-resolve each pinned tag on the weekly run only.
+      KITE_MATRIX_DRIFT_CHECK: ${{ github.event_name == 'schedule' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # Reuses the composite action the three existing container suites
+      # already use: one automatic retry on an infrastructure blip, never on
+      # an assertion failure, plus the PR step-summary convention.
+      - uses: ./.github/actions/kite-qa-suite
+        with:
+          suite-slug: ubuntu-package-matrix-${{ matrix.target }}
+          make-target: test-ubuntu-matrix
+          log-file: ubuntu-package-matrix-${{ matrix.target }}.log
+
+      # Always: a failing leg's result JSON is the most useful artifact there
+      # is, and it is what the trusted-zone ingest job consumes.
+      - name: Upload matrix result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ubuntu-package-matrix-${{ matrix.target }}
+          path: |
+            .matrix-reports/*.json
+            ubuntu-package-matrix-${{ matrix.target }}.log
+          if-no-files-found: warn
+          retention-days: 90
+
+  # Read-only supply-chain check: has any pinned tag been repointed since it
+  # was reviewed? Separate from the legs because it needs no containers and
+  # must still report when every leg is skipped.
+  ubuntu-matrix-digest-drift:
+    name: ubuntu-matrix-digest-drift
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Re-resolve pinned base image digests
+        run: make check-ubuntu-matrix-digests

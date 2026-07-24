@@ -1,0 +1,177 @@
+# Trusted-context ingestion of Ubuntu package-matrix results — RFC-0149.
+#
+# THIS JOB MUST NEVER CHECK OUT THE PULL-REQUEST HEAD REF.
+#
+# Same rule, and same reason, as kite-qa-ingest.yml: `workflow_run` runs the
+# base branch's workflow definition with base-repo permissions and access to
+# KITE_PACKAGE_MATRIX_HMAC_SECRET. Adding an `actions/checkout` of the PR head
+# here — the pull_request_target-plus-head-checkout anti-pattern — would let a
+# fork PR execute arbitrary code next to that credential. There is no checkout
+# step below, and there must never be one.
+#
+# The result artifact IS produced by the untrusted job, so its contents are
+# PR-controlled. The mitigation is narrow and specific (Section 6.1,
+# Spoofing): the artifact may never *upgrade* a leg's outcome. Each leg's
+# authoritative outcome is re-derived from the read-only jobs API, and a leg
+# whose steps failed is forced to `fail` no matter what the JSON claims. A
+# forged "pass" therefore cannot survive; a self-reported failure is trusted,
+# because nobody forges a failure into their own PR.
+#
+# Best-effort by design: merge gating already completed on the PR-triggered
+# checks and never depends on this workflow, on kite-collector-worker, or on
+# ClickHouse. Every failure path exits 0.
+#
+# `workflow_run` only fires from the copy of this file on the default branch,
+# so it starts working once this lands on main. The `workflows:` name below
+# must stay in lockstep with `name:` in ubuntu-package-matrix.yml.
+name: Ubuntu Package Matrix Result Ingest
+
+on:
+  workflow_run:
+    workflows:
+      - "ubuntu package matrix"
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read # list the completed run's jobs + download its artifacts
+
+concurrency:
+  group: ubuntu-package-matrix-ingest-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  package-matrix-ingest:
+    name: package-matrix-ingest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Forward matrix results to kite-collector-worker
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          INGEST_URL: ${{ vars.KITE_PACKAGE_MATRIX_INGEST_URL }}
+          HMAC_SECRET: ${{ secrets.KITE_PACKAGE_MATRIX_HMAC_SECRET }}
+        run: |
+          set -uo pipefail
+
+          # kite-collector-worker is internal-network-only today (no published
+          # host port). Unconfigured is the expected steady state until that
+          # reachability question is settled, and it is a notice, not a failure.
+          if [ -z "${INGEST_URL}" ]; then
+            echo "::notice title=Matrix ingest skipped::vars.KITE_PACKAGE_MATRIX_INGEST_URL is unset."
+            exit 0
+          fi
+          if [ -z "${HMAC_SECRET}" ]; then
+            echo "::warning title=Matrix ingest skipped::secrets.KITE_PACKAGE_MATRIX_HMAC_SECRET is unset; refusing to POST unsigned."
+            exit 0
+          fi
+
+          work="$(mktemp -d)"
+
+          # --- authoritative outcome per leg, from the API, not the artifact
+          gh api --paginate "/repos/${REPO}/actions/runs/${RUN_ID}/jobs" \
+            --jq '.jobs[]' > "${work}/jobs.ndjson" || {
+              echo "::warning title=Matrix ingest skipped::could not list jobs for run ${RUN_ID}."
+              exit 0
+            }
+
+          # job display name is "qa-ubuntu-package-matrix (<slug>)", which is
+          # exactly PackageDiscoveryTestRun.ci_job_name. A step-level failure
+          # counts even though the job carries continue-on-error, which makes
+          # the job's own conclusion "success".
+          jq -c '
+            select(.name | startswith("qa-ubuntu-package-matrix ("))
+            | {
+                job_name: .name,
+                failed: ([(.steps // [])[] | select(.conclusion == "failure")] | length > 0),
+                aborted: (.conclusion == "cancelled" or .conclusion == "timed_out")
+              }
+          ' "${work}/jobs.ndjson" > "${work}/outcomes.ndjson" || : > "${work}/outcomes.ndjson"
+
+          # --- result payloads, produced by the untrusted legs
+          mkdir -p "${work}/artifacts"
+          gh run download "${RUN_ID}" --repo "${REPO}" --dir "${work}/artifacts" >/dev/null 2>&1 || {
+            echo "::notice title=Matrix ingest skipped::run ${RUN_ID} uploaded no artifacts."
+            exit 0
+          }
+
+          shopt -s nullglob globstar
+          payloads=("${work}"/artifacts/**/*.json)
+          if [ "${#payloads[@]}" -eq 0 ]; then
+            echo "::notice title=Matrix ingest skipped::no result JSON in run ${RUN_ID}'s artifacts."
+            exit 0
+          fi
+
+          # Merge every leg into one envelope and clamp each run's status to
+          # the API-derived outcome. The first payload supplies the shared
+          # envelope metadata; the per-leg runs arrays concatenate.
+          jq -s -c \
+            --slurpfile outcomes "${work}/outcomes.ndjson" \
+            '
+            def outcome_for($name):
+              [$outcomes[] | select(.job_name == $name)] | first;
+
+            # The artifact may never upgrade a leg: a job whose steps failed
+            # is a fail regardless of what its own JSON claims.
+            def clamp($run):
+              outcome_for($run.ci_job_name) as $o
+              | if   $o == null      then $run
+                elif $o.aborted      then $run + {status: "infra_error"}
+                elif $o.failed and ($run.status == "pass") then $run + {status: "fail"}
+                else $run end;
+
+            (.[0] // {}) as $head
+            | {
+                ci_run_id:              ($head.ci_run_id // ""),
+                workflow_name:          ($head.workflow_name // "ubuntu-package-matrix"),
+                kite_collector_version: ($head.kite_collector_version // ""),
+                policy:                 ($head.policy // {}),
+                runs:                   [ .[] | (.runs // [])[] | clamp(.) ]
+              }
+          ' "${payloads[@]}" > "${work}/payload.json" || {
+              echo "::warning title=Matrix ingest skipped::could not merge result payloads."
+              exit 0
+            }
+
+          run_count="$(jq -r '.runs | length' "${work}/payload.json")"
+          if [ "${run_count}" = "0" ]; then
+            echo "::notice title=Matrix ingest skipped::merged payload carried no runs."
+            exit 0
+          fi
+
+          # Signature is over the exact bytes sent, matching hmac.compare_digest
+          # on the FastAPI side.
+          sig="$(openssl dgst -sha256 -hmac "${HMAC_SECRET}" -r < "${work}/payload.json" \
+            | cut -d' ' -f1)"
+
+          code="$(curl -sS -o "${work}/resp.json" -w '%{http_code}' \
+            --max-time 30 --retry 2 --retry-connrefused \
+            -X POST "${INGEST_URL}" \
+            -H 'Content-Type: application/json' \
+            -H "X-Kite-Signature: sha256=${sig}" \
+            --data-binary "@${work}/payload.json" || echo '000')"
+
+          if [ "${code}" = "202" ] || [ "${code}" = "200" ]; then
+            result="ingested"
+            echo "ingested ${run_count} run(s) (HTTP ${code})"
+          else
+            result="failed (HTTP ${code})"
+            echo "::warning title=Matrix ingest failed::HTTP ${code} from the ingest endpoint. Merge gating is unaffected."
+          fi
+
+          {
+            echo "### Ubuntu package matrix result ingest"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Source run | ${RUN_ID} |"
+            echo "| Runs forwarded | ${run_count} |"
+            echo "| Result | ${result} |"
+            echo ""
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          # Ingestion is telemetry: never propagate a failure.
+          exit 0
