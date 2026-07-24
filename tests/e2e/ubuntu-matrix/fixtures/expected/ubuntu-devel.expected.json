@@ -1,0 +1,50 @@
+{
+  "target": "ubuntu-devel",
+  "package_manager": "dpkg",
+  "notes": "Early-warning leg on the rolling interim tag (R7). Permanently informational: it exists to surface an upstream dpkg/apt output-format change months before it reaches the next LTS, so a red devel leg is a signal to investigate, never a merge blocker. min_package_count is held lower than the LTS legs because a mid-cycle devel image's base package set moves.",
+  "min_package_count": 60,
+  "max_parse_errors": 0,
+  "known_issues": [],
+  "seed_manifest": [
+    { "name": "vim", "arch": "amd64", "state": "installed" },
+    { "name": "libc6", "arch": "i386", "state": "installed" },
+    { "name": "hello", "arch": "amd64", "state": "purged" }
+  ],
+  "packages": [
+    {
+      "name": "vim",
+      "roles": ["epoch"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]+:",
+      "known_issues": ["epoch_version_mismatch"]
+    },
+    {
+      "name": "bsdutils",
+      "roles": ["epoch", "baseline"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]+:",
+      "known_issues": ["epoch_version_mismatch"]
+    },
+    {
+      "name": "libc6",
+      "roles": ["multiarch"],
+      "architectures": ["amd64", "i386"],
+      "version_pattern": "^[0-9]",
+      "known_issues": []
+    },
+    {
+      "name": "dpkg",
+      "roles": ["baseline"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]",
+      "known_issues": []
+    },
+    {
+      "name": "hello",
+      "roles": ["purged"],
+      "architectures": [],
+      "version_pattern": "",
+      "known_issues": []
+    }
+  ]
+}

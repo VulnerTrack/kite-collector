@@ -1,4 +1,4 @@
-.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers sim-osquery osquery-checks test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -133,6 +133,35 @@ test-smoke-containers:
 # + the compose plugin.
 test-kite-containers:
 	./tests/e2e/kite-containers/run.sh
+
+# Ubuntu multi-version package-discovery matrix (RFC-0149). Runs the compiled
+# binary's software.Dpkg collector inside real, unmodified ubuntu:20.04/22.04/
+# 24.04/devel images and asserts the discovered packages against per-version
+# fixtures. Requires docker.
+#
+# The timeout is generous because each leg pulls a base image and runs an
+# apt-get install over the public Ubuntu archive; the assertion work itself is
+# milliseconds. Set KITE_MATRIX_TARGET=ubuntu-22.04 to run a single leg, which
+# is how the CI matrix splits this across four jobs.
+# The go-test timeout sits below the CI job's 30-minute cap on purpose: go
+# test panicking with a goroutine dump is a far better diagnostic than the
+# runner silently killing the job.
+test-ubuntu-matrix:
+	go test -tags e2e -count=1 -timeout 1500s ./tests/e2e/ubuntu-matrix/...
+
+# Re-resolve each matrix target's floating tag and write the current digest
+# into targets.json. The resulting diff is the reviewable supply-chain event
+# a floating tag would otherwise hide (RFC-0149 §6.5).
+#
+# Invoked via `bash <script>` rather than `./script` so the target does not
+# depend on the executable bit surviving a checkout or an archive export.
+pin-ubuntu-matrix:
+	bash tests/e2e/ubuntu-matrix/pin-digests.sh
+
+# Read-only drift check for the weekly schedule: fails when a pinned digest no
+# longer matches what its tag resolves to. Writes nothing.
+check-ubuntu-matrix-digests:
+	bash tests/e2e/ubuntu-matrix/pin-digests.sh --check
 
 # Simulated osquery environment: runs a real osqueryd exposing its extensions
 # socket, then probes it over that socket. Groundwork for an osquery-backed

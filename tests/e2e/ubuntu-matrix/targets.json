@@ -1,0 +1,73 @@
+{
+  "policy": {
+    "policy_name": "matrix-coverage-policy",
+    "vendor": "canonical",
+    "product": "ubuntu_linux",
+    "min_lts_versions_covered": 2,
+    "include_latest_interim": true,
+    "review_cadence_days": 180,
+    "last_reviewed_at": "2026-07-24T00:00:00Z"
+  },
+  "targets": [
+    {
+      "slug": "ubuntu-20.04",
+      "distro_family": "ubuntu",
+      "version": "20.04",
+      "codename": "focal",
+      "architecture": "amd64",
+      "is_lts": true,
+      "eol_date": "2025-05-31",
+      "support_status": "legacy",
+      "base_image_ref": "docker.io/library/ubuntu:20.04",
+      "image_digest": "",
+      "blocking": false,
+      "seed_script": "fixtures/ubuntu-20.04.seed.sh",
+      "expected_file": "fixtures/expected/ubuntu-20.04.expected.json"
+    },
+    {
+      "slug": "ubuntu-22.04",
+      "distro_family": "ubuntu",
+      "version": "22.04",
+      "codename": "jammy",
+      "architecture": "amd64",
+      "is_lts": true,
+      "eol_date": "2027-06-01",
+      "support_status": "active",
+      "base_image_ref": "docker.io/library/ubuntu:22.04",
+      "image_digest": "",
+      "blocking": false,
+      "seed_script": "fixtures/ubuntu-22.04.seed.sh",
+      "expected_file": "fixtures/expected/ubuntu-22.04.expected.json"
+    },
+    {
+      "slug": "ubuntu-24.04",
+      "distro_family": "ubuntu",
+      "version": "24.04",
+      "codename": "noble",
+      "architecture": "amd64",
+      "is_lts": true,
+      "eol_date": "2029-05-31",
+      "support_status": "active",
+      "base_image_ref": "docker.io/library/ubuntu:24.04",
+      "image_digest": "",
+      "blocking": false,
+      "seed_script": "fixtures/ubuntu-24.04.seed.sh",
+      "expected_file": "fixtures/expected/ubuntu-24.04.expected.json"
+    },
+    {
+      "slug": "ubuntu-devel",
+      "distro_family": "ubuntu",
+      "version": "devel",
+      "codename": "",
+      "architecture": "amd64",
+      "is_lts": false,
+      "eol_date": "",
+      "support_status": "interim",
+      "base_image_ref": "docker.io/library/ubuntu:devel",
+      "image_digest": "",
+      "blocking": false,
+      "seed_script": "fixtures/ubuntu-devel.seed.sh",
+      "expected_file": "fixtures/expected/ubuntu-devel.expected.json"
+    }
+  ]
+}
