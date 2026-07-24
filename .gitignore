@@ -55,3 +55,9 @@ cmd/kite-collector/web_fingerprint_test.go:
 # (build-tagged `e2e`, so go test ./... ignores them anyway, but we
 # keep them out of git to avoid tying expectations to a specific host).
 internal/discovery/agent/vpn/source_tailscale_e2e_test.go
+
+# Ubuntu package-matrix run artifacts (RFC-0149). Each leg writes its result
+# payload here; in CI the path is overridden by KITE_MATRIX_REPORT_DIR and the
+# JSON is uploaded as a build artifact, never committed.
+tests/e2e/ubuntu-matrix/.matrix-reports/
+ubuntu-package-matrix-*.log

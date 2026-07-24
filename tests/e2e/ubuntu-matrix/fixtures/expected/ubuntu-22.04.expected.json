@@ -1,0 +1,50 @@
+{
+  "target": "ubuntu-22.04",
+  "package_manager": "dpkg",
+  "notes": "Exact values are asserted where dpkg output is deterministic (name, architecture, package_manager) and patterns where Ubuntu security updates move the value (version). known_issues waive a finding's ability to fail the leg; the finding is still emitted, ingested and shown in the PR summary as `acknowledged`.",
+  "min_package_count": 80,
+  "max_parse_errors": 0,
+  "known_issues": [],
+  "seed_manifest": [
+    { "name": "vim", "arch": "amd64", "state": "installed" },
+    { "name": "libc6", "arch": "i386", "state": "installed" },
+    { "name": "hello", "arch": "amd64", "state": "purged" }
+  ],
+  "packages": [
+    {
+      "name": "vim",
+      "roles": ["epoch"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]+:",
+      "known_issues": ["epoch_version_mismatch"]
+    },
+    {
+      "name": "bsdutils",
+      "roles": ["epoch", "baseline"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]+:",
+      "known_issues": ["epoch_version_mismatch"]
+    },
+    {
+      "name": "libc6",
+      "roles": ["multiarch"],
+      "architectures": ["amd64", "i386"],
+      "version_pattern": "^[0-9]",
+      "known_issues": []
+    },
+    {
+      "name": "dpkg",
+      "roles": ["baseline"],
+      "architectures": ["amd64"],
+      "version_pattern": "^[0-9]",
+      "known_issues": []
+    },
+    {
+      "name": "hello",
+      "roles": ["purged"],
+      "architectures": [],
+      "version_pattern": "",
+      "known_issues": []
+    }
+  ]
+}
