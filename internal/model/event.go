@@ -8,8 +8,14 @@ import (
 )
 
 // MachineEvent records a lifecycle event associated with an machine.
+//
+// Field order is layout-driven (govet fieldalignment): the two time.Time
+// fields — the only ones whose pointer sits at the end of the value — lead,
+// then the strings, then the pointer-free UUIDs. Reordering fields shortens
+// the GC-scanned pointer prefix; the json tags keep the wire form stable.
 type MachineEvent struct {
 	Timestamp       time.Time          `json:"timestamp"`
+	FirstSeenAt     time.Time          `json:"first_seen_at,omitempty"`
 	EventType       EventType          `json:"event_type"`
 	Severity        Severity           `json:"severity"`
 	Details         string             `json:"details"` // JSON
@@ -27,7 +33,6 @@ type MachineEvent struct {
 	DiscoverySource string             `json:"discovery_source,omitempty"`
 	IsAuthorized    AuthorizationState `json:"is_authorized,omitempty"`
 	IsManaged       ManagedState       `json:"is_managed,omitempty"`
-	FirstSeenAt     time.Time          `json:"first_seen_at,omitempty"`
 	ID              uuid.UUID          `json:"id"`
 	MachineID       uuid.UUID          `json:"machine_id"`
 	ScanRunID       uuid.UUID          `json:"scan_run_id"`

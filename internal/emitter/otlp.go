@@ -469,6 +469,10 @@ func contractChangeField(t model.EventType) string {
 		return "presence"
 	case model.EventMachineAnalyzed:
 		return "analysis"
+	case model.EventMachineDiscovered, model.EventMachineUpdated:
+		// Discovery never reaches this helper (it maps to machine.discovered),
+		// and a generic update names no single field.
+		return "state"
 	default:
 		return "state"
 	}
@@ -489,6 +493,9 @@ func contractMachineType(t model.MachineType) string {
 		return "network-device"
 	case model.MachineTypeIOTDevice:
 		return "iot"
+	case model.MachineTypeAppliance, model.MachineTypeSoftwareProject,
+		model.MachineTypeRepository:
+		return "unknown"
 	default:
 		return "unknown"
 	}
