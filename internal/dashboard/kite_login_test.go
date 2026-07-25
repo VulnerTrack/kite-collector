@@ -1,14 +1,40 @@
 package dashboard
 
 import (
+	"context"
 	"errors"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/vulnertrack/kite-collector/internal/enrollment"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
+
+type fakeKitePKIEnroller struct {
+	agentCode string
+	token     string
+}
+
+func (f *fakeKitePKIEnroller) Enroll(_ context.Context, agentCode, token string) (*enrollment.Result, error) {
+	f.agentCode = agentCode
+	f.token = token
+	return &enrollment.Result{
+		Status:             "enrolled",
+		CertificateID:      "cert-1",
+		CACertificate:      []byte("test-ca"),
+		ClientCertificate:  []byte("test-client-cert"),
+		ClientKey:          []byte("test-client-key"),
+		CertificateExpires: time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+	}, nil
+}
 
 // TestFormatKiteOAuthTokenError_CatalogEnvelope pins the structured envelope
 // that the OAuth token endpoint produces: a catalogued KITE-E016 code, a
@@ -55,4 +81,38 @@ func TestFormatKiteOAuthTokenError_AttrsEnvelopeShape(t *testing.T) {
 	for _, key := range []string{"error_code", "error_message", "hint", "error_context"} {
 		assert.Truef(t, got[key], "envelope is missing top-level field %q", key)
 	}
+}
+
+func TestEnrollKiteOAuthToken_EnrollsPKIAndStoresCertificates(t *testing.T) {
+	st, err := sqlite.New(filepath.Join(t.TempDir(), "kite.db"))
+	require.NoError(t, err)
+	require.NoError(t, st.Migrate(context.Background()))
+	t.Cleanup(func() { _ = st.Close() })
+
+	certsDir := t.TempDir()
+	pki := &fakeKitePKIEnroller{}
+	req := httptest.NewRequest("GET", "/oauth/callback", nil)
+	err = enrollKiteOAuthToken(req, kiteOAuthEnrollmentOptions{
+		Store:     st,
+		WrapKey:   []byte("01234567890123456789012345678901"),
+		CertsDir:  certsDir,
+		PKIClient: pki,
+	}, "oauth-access-token")
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(pki.agentCode, "kite-"))
+	assert.Equal(t, "oauth-access-token", pki.token)
+	for name, want := range map[string]string{
+		"ca.pem":        "test-ca",
+		"agent.pem":     "test-client-cert",
+		"agent-key.pem": "test-client-key",
+	} {
+		got, readErr := os.ReadFile(filepath.Join(certsDir, name))
+		require.NoError(t, readErr)
+		assert.Equal(t, want, string(got))
+	}
+	identity, err := st.GetEnrolledIdentity(context.Background())
+	require.NoError(t, err)
+	assert.NotEmpty(t, identity.ApiKeyFingerprint)
+	assert.NotEmpty(t, identity.ApiKeyWrapped)
 }
