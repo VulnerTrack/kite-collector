@@ -759,7 +759,7 @@ func TestOnboardingHeader_StepperMarksCurrentStepWithAriaCurrent(t *testing.T) {
 		NextAction: "enroll",
 		Steps: []stepStatus{
 			{Key: "install", Label: "Install agent", Status: "done", Anchor: "#install-card"},
-			{Key: "enroll", Label: "Enroll token", Status: "current", Anchor: "#enroll-card"},
+			{Key: "enroll", Label: "Enroll PKI", Status: "current", Anchor: "#enroll-card"},
 			{Key: "check", Label: "Connection check", Status: "pending", Anchor: "#check-card"},
 			{Key: "stream", Label: "Streaming", Status: "pending", Anchor: "#stream-card"},
 		},
@@ -783,7 +783,7 @@ func TestOnboardingHeader_StepperOmitsAriaCurrentWhenNoCurrentStep(t *testing.T)
 	view := onboardingHeaderView{
 		Steps: []stepStatus{
 			{Key: "install", Label: "Install agent", Status: "done"},
-			{Key: "enroll", Label: "Enroll token", Status: "done"},
+			{Key: "enroll", Label: "Enroll PKI", Status: "done"},
 			{Key: "check", Label: "Connection check", Status: "done"},
 			{Key: "stream", Label: "Streaming", Status: "done"},
 		},
@@ -1622,7 +1622,7 @@ func TestOnboardingHeaderFragment_AdvisoryInspectorMode(t *testing.T) {
 		"inspector mode chip must surface when no Installer is wired")
 	assert.Contains(t, body, "Install agent",
 		"stepper must list the install step label")
-	assert.Contains(t, body, "Enroll token",
+	assert.Contains(t, body, "Enroll PKI",
 		"stepper must list the enroll step label")
 	assert.Contains(t, body, "Connection check",
 		"stepper must list the check step label")

@@ -16,7 +16,9 @@ import (
 	"sync"
 	"time"
 
+	enrollmentpkg "github.com/vulnertrack/kite-collector/internal/enrollment"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -51,6 +53,12 @@ type kiteOAuthEnrollmentOptions struct {
 	Logger           *slog.Logger
 	PlatformEndpoint string
 	WrapKey          []byte
+	CertsDir         string
+	PKIClient        kitePKIEnroller
+}
+
+type kitePKIEnroller interface {
+	Enroll(ctx context.Context, agentCode, token string) (*enrollmentpkg.Result, error)
 }
 
 // OAuthOptions configures the first-party OAuth client used by Kite.
@@ -736,6 +744,29 @@ func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions
 		return fmt.Errorf("local enrollment wrap key is unavailable")
 	}
 
+	if strings.TrimSpace(enrollment.CertsDir) != "" {
+		pkiClient := enrollment.PKIClient
+		if pkiClient == nil {
+			pkiClient = enrollmentpkg.NewClient(enrollment.Logger)
+		}
+		enrollCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		result, err := pkiClient.Enroll(enrollCtx, kiteAgentCode(), accessToken)
+		if err != nil {
+			return fmt.Errorf("PKI certificate enrollment failed: %w", err)
+		}
+		if result == nil || result.Status != "enrolled" {
+			status := ""
+			if result != nil {
+				status = result.Status
+			}
+			return fmt.Errorf("PKI certificate enrollment returned unexpected status %q", status)
+		}
+		if err := enrollmentpkg.StoreCertificates(enrollment.CertsDir, result); err != nil {
+			return fmt.Errorf("store PKI certificates: %w", err)
+		}
+	}
+
 	fingerprint := sqlite.APIKeyFingerprint(accessToken)
 	wrapped, wrapErr := sqlite.AEADWrap(enrollment.WrapKey, []byte(accessToken))
 	if wrapErr != nil {
@@ -775,6 +806,14 @@ func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions
 			"remote_addr", r.RemoteAddr)
 	}
 	return nil
+}
+
+func kiteAgentCode() string {
+	fingerprint := strings.TrimPrefix(identity.MachineFingerprint(), "sha256:")
+	if len(fingerprint) > 20 {
+		fingerprint = fingerprint[:20]
+	}
+	return "kite-" + fingerprint
 }
 
 func buildKiteOAuthAuthorizationURL(oauth OAuthOptions, collectorURL string) (string, string, string, error) {
