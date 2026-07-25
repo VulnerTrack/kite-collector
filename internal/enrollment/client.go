@@ -5,7 +5,14 @@ package enrollment
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +21,7 @@ import (
 	"path/filepath"
 
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+	"github.com/vulnertrack/kite-collector/internal/identity"
 )
 
 const enrollURL = "https://pki.vulnertrack.io/pki/enroll"
@@ -51,9 +59,15 @@ func NewClient(logger *slog.Logger) *Client {
 
 // Enroll submits an enrollment request to the PKI server.
 func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, error) {
+	csrPEM, keyPEM, signer, err := generateEnrollmentCSR(agentCode)
+	if err != nil {
+		return nil, fmt.Errorf("generate enrollment key and CSR: %w", err)
+	}
+
 	body, err := json.Marshal(map[string]string{
-		"agent_code": agentCode,
-		"token":      token,
+		"agent_code":          agentCode,
+		"csr_pem":             string(csrPEM),
+		"machine_fingerprint": identity.MachineFingerprint(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -64,6 +78,7 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	c.logger.Info("enrollment HTTP request dispatched to PKI server",
 		"code", string(LogCodeEnrollmentStarting),
@@ -99,11 +114,18 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 		JWKSURL            string `json:"jwks_url"`
 		CACertificate      string `json:"ca_certificate"`
 		ClientCertificate  string `json:"client_certificate"`
-		ClientKey          string `json:"client_key"`
 		CertificateExpires string `json:"certificate_expires"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	if err := validateEnrollmentCertificate(
+		agentCode,
+		[]byte(result.ClientCertificate),
+		[]byte(result.CACertificate),
+		signer,
+	); err != nil {
+		return nil, fmt.Errorf("validate enrollment certificate: %w", err)
 	}
 
 	return &Result{
@@ -112,15 +134,98 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 		JWKSURL:            result.JWKSURL,
 		CACertificate:      []byte(result.CACertificate),
 		ClientCertificate:  []byte(result.ClientCertificate),
-		ClientKey:          []byte(result.ClientKey),
+		ClientKey:          keyPEM,
 		CertificateExpires: result.CertificateExpires,
 	}, nil
+}
+
+func generateEnrollmentCSR(agentCode string) ([]byte, []byte, crypto.Signer, error) {
+	if agentCode == "" {
+		return nil, nil, nil, fmt.Errorf("agent code is required")
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("generate ECDSA key: %w", err)
+	}
+	csrDER, err := x509.CreateCertificateRequest(
+		rand.Reader,
+		&x509.CertificateRequest{Subject: pkixName(agentCode)},
+		key,
+	)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create CSR: %w", err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("marshal private key: %w", err)
+	}
+
+	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	if len(csrPEM) == 0 || len(keyPEM) == 0 {
+		return nil, nil, nil, fmt.Errorf("encode enrollment material")
+	}
+	return csrPEM, keyPEM, key, nil
+}
+
+func pkixName(agentCode string) pkix.Name {
+	return pkix.Name{CommonName: agentCode}
+}
+
+func validateEnrollmentCertificate(
+	agentCode string,
+	certPEM, caPEM []byte,
+	signer crypto.Signer,
+) error {
+	certBlock, _ := pem.Decode(certPEM)
+	if certBlock == nil || certBlock.Type != "CERTIFICATE" {
+		return fmt.Errorf("response contains no client certificate")
+	}
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse client certificate: %w", err)
+	}
+	if cert.Subject.CommonName != agentCode {
+		return fmt.Errorf(
+			"certificate common name mismatch: got %q, want %q",
+			cert.Subject.CommonName,
+			agentCode,
+		)
+	}
+
+	certPublicKey, err := x509.MarshalPKIXPublicKey(cert.PublicKey)
+	if err != nil {
+		return fmt.Errorf("marshal certificate public key: %w", err)
+	}
+	localPublicKey, err := x509.MarshalPKIXPublicKey(signer.Public())
+	if err != nil {
+		return fmt.Errorf("marshal local public key: %w", err)
+	}
+	if !bytes.Equal(certPublicKey, localPublicKey) {
+		return fmt.Errorf("certificate public key does not match generated private key")
+	}
+
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return fmt.Errorf("response contains no valid CA certificate")
+	}
+	if _, err := cert.Verify(x509.VerifyOptions{
+		Roots:     roots,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}); err != nil {
+		return fmt.Errorf("verify client certificate chain: %w", err)
+	}
+	return nil
 }
 
 // StoreCertificates persists the enrollment result to dir.
 func StoreCertificates(dir string, result *Result) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return kiteerrors.WrapFileError("create credential dir", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return kiteerrors.WrapFileError("secure credential dir", err)
 	}
 
 	files := map[string]struct {
@@ -134,7 +239,7 @@ func StoreCertificates(dir string, result *Result) error {
 
 	for name, f := range files {
 		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, f.data, f.perm); err != nil {
+		if err := atomicWrite(path, f.data, f.perm); err != nil {
 			return kiteerrors.WrapFileError("write "+name, err)
 		}
 	}
