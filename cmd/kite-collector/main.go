@@ -1008,6 +1008,15 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})).With("run_id", runID)
 	slog.SetDefault(logger)
 
+	// PKI agent lifecycle uses the already-public HTTPS/443 endpoint. It
+	// deliberately starts even before enrollment: once OAuth stores the
+	// certificate files, the next heartbeat discovers them without requiring
+	// an agent restart. No additional public gRPC port is required.
+	if strings.TrimSpace(certsDir) != "" {
+		pkiClient := enrollment.NewClient(logger)
+		go pkiClient.RunHTTPSLifecycle(ctx, certsDir)
+	}
+
 	// Start tunnel if configured. When healthy, the tunnel rewrites endpoint
 	// addresses to route through localhost:local_port transparently.
 	var tunnelMgr *tunnel.Manager
@@ -1314,6 +1323,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			Commit:           commit,
 			PlatformEndpoint: cfg.Streaming.OTLP.Endpoint,
 			OAuth:            dashboardOAuthOptions(cfg),
+			CertsDir:         certsDir,
 		})
 		go func() {
 			slog.Info("dashboard server starting",
@@ -2504,6 +2514,7 @@ installed service uses, so this command Just Works after install.`,
 				Commit:           commit,
 				PlatformEndpoint: platformEndpoint,
 				OAuth:            oauth,
+				CertsDir:         certsDir,
 			}
 			if enableInstall {
 				opts.Installer = newRealInstaller()
@@ -2895,6 +2906,7 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 		Commit:           commit,
 		PlatformEndpoint: platformEndpoint,
 		OAuth:            oauth,
+		CertsDir:         filepath.Dir(dbPath),
 	})
 
 	go func() {

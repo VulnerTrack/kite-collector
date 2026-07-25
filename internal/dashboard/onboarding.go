@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -48,6 +49,7 @@ type onboardingDeps struct {
 	WrapKey          []byte
 	OAuth            OAuthOptions
 	TLSConfig        config.TLSConfig
+	CertsDir         string
 	// ScanEnabled tells the post-completion launcher panel whether to surface
 	// the "Run your first scan" CTA. True when the dashboard was wired with
 	// both a scan.Coordinator and a config.Config (the same condition the
@@ -64,22 +66,6 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
 	}
-	if deps.ProbeClient == nil {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		if deps.TLSConfig.Enabled {
-			tlsCfg, err := buildTLSConfig(deps.TLSConfig)
-			if err == nil {
-				transport.TLSClientConfig = tlsCfg
-			} else {
-				deps.Logger.Warn("onboarding: failed to build TLS config for ProbeClient", "error", err)
-			}
-		}
-		deps.ProbeClient = &http.Client{
-			Transport: transport,
-			Timeout:   8 * time.Second,
-		}
-	}
-
 	mux.HandleFunc("GET /onboarding", serveOnboardingPage)
 	mux.HandleFunc("GET /fragments/enroll-form", func(w http.ResponseWriter, r *http.Request) {
 		renderOnboardingFragment(w, deps.Logger, "enroll-form", func(buf io.Writer) error {
@@ -182,7 +168,7 @@ const onboardingBody = `<div id="onboarding-toasts" class="toasts" aria-live="po
 
     <section class="card onboarding-step-card" id="check-card">
       <h2>3. Connection check</h2>
-      <p class="muted">Six probes verify DNS, TLS, endpoint reach, token auth,
+      <p class="muted">Six probes verify DNS, TLS, endpoint reach, mTLS auth,
          clock skew, and OTLP handshake. Click &ldquo;Run check&rdquo; after
          enrolling.</p>
       <div id="check-fragment"
@@ -913,6 +899,51 @@ type connectionCheckResponse struct {
 	AllPass   bool          `json:"all_pass"`
 }
 
+func onboardingTLSConfig(deps onboardingDeps) (config.TLSConfig, bool) {
+	cfg := deps.TLSConfig
+	certsDir := strings.TrimSpace(deps.CertsDir)
+	if certsDir != "" {
+		certFile := filepath.Join(certsDir, "agent.pem")
+		keyFile := filepath.Join(certsDir, "agent-key.pem")
+		caFile := filepath.Join(certsDir, "ca.pem")
+		_, certErr := os.Stat(certFile)
+		_, keyErr := os.Stat(keyFile)
+		_, caErr := os.Stat(caFile)
+		if certErr == nil && keyErr == nil && caErr == nil {
+			cfg.Enabled = true
+			cfg.CertFile = certFile
+			cfg.KeyFile = keyFile
+			cfg.CAFile = caFile
+		}
+	}
+
+	havePKI := cfg.Enabled && cfg.CertFile != "" && cfg.KeyFile != ""
+	if havePKI {
+		_, certErr := os.Stat(cfg.CertFile)
+		_, keyErr := os.Stat(cfg.KeyFile)
+		havePKI = certErr == nil && keyErr == nil
+	}
+	return cfg, havePKI
+}
+
+func onboardingProbeClient(deps onboardingDeps, tlsSettings config.TLSConfig) (*http.Client, error) {
+	if deps.ProbeClient != nil {
+		return deps.ProbeClient, nil
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if tlsSettings.Enabled {
+		tlsCfg, err := buildTLSConfig(tlsSettings)
+		if err != nil {
+			return nil, err
+		}
+		transport.TLSClientConfig = tlsCfg
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   8 * time.Second,
+	}, nil
+}
+
 // runAllProbes executes the six probes against the enrolled identity. Five
 // of the six (DNS, TLS, reach, auth, OTLP) are independent and run in
 // parallel; clock waits on reach so it can parse the Date header from the
@@ -939,13 +970,16 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 		readOnly    = deps.Store == nil
 		enrolledURL *url.URL
 	)
+	tlsSettings, havePKI := onboardingTLSConfig(deps)
+	probeClient, probeClientErr := onboardingProbeClient(deps, tlsSettings)
 	if endpoint != "" {
 		enrolledURL, _ = url.Parse(endpoint)
 	}
 	if !readOnly {
 		id, err := deps.Store.GetEnrolledIdentity(ctx)
 		if err == nil {
-			if len(deps.WrapKey) == 32 {
+			haveID = havePKI
+			if !havePKI && len(deps.WrapKey) == 32 {
 				if pt, unwrapErr := sqlite.AEADUnwrap(deps.WrapKey, id.ApiKeyWrapped); unwrapErr == nil {
 					apiKey = string(pt)
 					haveID = true
@@ -989,12 +1023,8 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 	}
 
 	var tlsCfg *tls.Config
-	if deps.TLSConfig.Enabled {
-		var err error
-		tlsCfg, err = buildTLSConfig(deps.TLSConfig)
-		if err != nil {
-			deps.Logger.Warn("onboarding: failed to build TLS config for TLS probe", "error", err)
-		}
+	if probeClientErr == nil && tlsSettings.Enabled {
+		tlsCfg, _ = buildTLSConfig(tlsSettings)
 	}
 
 	// reachDone is closed when the reach probe finishes; the clock goroutine
@@ -1025,6 +1055,9 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 			if enrolledURL.Scheme != "https" {
 				return probeResult{Result: "skip", Diagnostic: "endpoint is plain http"}
 			}
+			if probeClientErr != nil {
+				return probeResult{Result: "fail", Diagnostic: "PKI credentials: " + probeClientErr.Error()}
+			}
 			return runTLSProbe(ctx, enrolledURL, tlsCfg)
 		})
 	}()
@@ -1039,7 +1072,10 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 			if !haveID {
 				return probeResult{Result: "skip", Diagnostic: "no identity enrolled"}
 			}
-			res, dateHdr := runReachProbe(ctx, deps.ProbeClient, endpoint)
+			if probeClientErr != nil {
+				return probeResult{Result: "fail", Diagnostic: "PKI credentials: " + probeClientErr.Error()}
+			}
+			res, dateHdr := runReachProbe(ctx, probeClient, endpoint)
 			reachDateHeader = dateHdr
 			return res
 		})
@@ -1054,7 +1090,10 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 			if !haveID {
 				return probeResult{Result: "skip", Diagnostic: "no identity enrolled"}
 			}
-			return runAuthProbe(ctx, deps.ProbeClient, endpoint, apiKey)
+			if probeClientErr != nil {
+				return probeResult{Result: "fail", Diagnostic: "PKI credentials: " + probeClientErr.Error()}
+			}
+			return runAuthProbe(ctx, probeClient, endpoint, apiKey)
 		})
 	}()
 
@@ -1089,7 +1128,10 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 			if !haveID {
 				return probeResult{Result: "skip", Diagnostic: "no identity enrolled"}
 			}
-			return runOTLPProbe(ctx, deps.ProbeClient, endpoint, apiKey)
+			if probeClientErr != nil {
+				return probeResult{Result: "fail", Diagnostic: "PKI credentials: " + probeClientErr.Error()}
+			}
+			return runOTLPProbe(ctx, probeClient, endpoint, apiKey)
 		})
 	}()
 
@@ -1195,7 +1237,7 @@ func remediationFor(name probeName) string {
 	case probeReach:
 		return "endpoint unreachable — check egress firewall and that the platform is up"
 	case probeAuth:
-		return "token rejected — re-issue the API key on the platform console and re-enroll"
+		return "mTLS authentication failed — re-enroll with PKI and verify the client certificate"
 	case probeClock:
 		return "local clock differs from platform by more than 60s — sync with NTP"
 	case probeOTLP:
@@ -1269,14 +1311,17 @@ func runReachProbe(ctx context.Context, client *http.Client, endpoint string) (p
 	}, dateHdr
 }
 
-// runAuthProbe calls GET /v1/auth/echo with X-API-Key and expects a 2xx
-// response whose body contains the fingerprint we computed locally.
+// runAuthProbe calls GET /v1/auth/echo using the ProbeClient's mTLS identity.
+// apiKey is retained only for backward compatibility with legacy enrollments.
 func runAuthProbe(ctx context.Context, client *http.Client, endpoint, apiKey string) probeResult {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/v1/auth/echo", nil)
 	if err != nil {
 		return probeResult{Result: "fail", Diagnostic: "build auth request: " + err.Error()}
 	}
 	req.Header.Set("X-API-Key", apiKey)
+	if apiKey == "" {
+		req.Header.Del("X-API-Key")
+	}
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1290,6 +1335,9 @@ func runAuthProbe(ctx context.Context, client *http.Client, endpoint, apiKey str
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return probeResult{Result: "fail", Diagnostic: fmt.Sprintf("HTTP %d from /v1/auth/echo", resp.StatusCode)}
+	}
+	if apiKey == "" {
+		return probeResult{Result: "pass", Diagnostic: "mTLS authenticated"}
 	}
 	expected := sqlite.APIKeyFingerprint(apiKey)
 	var parsed struct {
@@ -1334,7 +1382,9 @@ func runOTLPProbe(ctx context.Context, client *http.Client, endpoint, apiKey str
 		return probeResult{Result: "fail", Diagnostic: "build otlp request: " + err.Error()}
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", apiKey)
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return probeResult{Result: "fail", Diagnostic: "otlp: " + err.Error()}

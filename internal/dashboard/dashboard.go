@@ -47,6 +47,9 @@ type Options struct {
 	PlatformEndpoint string
 	// OAuth configures the first-party Supabase OAuth flow used by /kite-login.
 	OAuth OAuthOptions
+	// CertsDir is the PKI credential store populated after OAuth sign-in and
+	// used by onboarding probes for mTLS.
+	CertsDir string
 }
 
 // Serve creates and returns an HTTP server for the dashboard.
@@ -84,7 +87,11 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			"complete": kiteOAuthWaitComplete(r.PathValue("id")),
 		})
 	})
-	kiteOAuthEnrollment := kiteOAuthEnrollmentOptions{Logger: logger, PlatformEndpoint: opts.PlatformEndpoint}
+	kiteOAuthEnrollment := kiteOAuthEnrollmentOptions{
+		Logger:           logger,
+		PlatformEndpoint: opts.PlatformEndpoint,
+		CertsDir:         opts.CertsDir,
+	}
 	mux.HandleFunc("GET /oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment, opts.AppVersion)
 	})
@@ -386,6 +393,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				AppVersion:       opts.AppVersion,
 				Commit:           opts.Commit,
 				PlatformEndpoint: opts.PlatformEndpoint,
+				CertsDir:         opts.CertsDir,
 				ProbeDuration:    onboardingProbeDurationHistogram(),
 				Installer:        opts.Installer,
 				ScanEnabled:      opts.Coordinator != nil && opts.BaseConfig != nil,
