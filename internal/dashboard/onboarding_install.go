@@ -980,7 +980,7 @@ func loadLastScanSummary(ctx context.Context, deps onboardingDeps) *lastScanSumm
 func buildStepperSteps(s agentStateView, _ installer.Detected) []stepStatus {
 	steps := []stepStatus{
 		{Key: "install", Label: "Install agent", Anchor: "#install-card"},
-		{Key: "enroll", Label: "Enroll token", Anchor: "#enroll-card"},
+		{Key: "enroll", Label: "Enroll PKI", Anchor: "#enroll-card"},
 		{Key: "check", Label: "Connection check", Anchor: "#check-card"},
 		{Key: "stream", Label: "Streaming", Anchor: "#stream-card"},
 	}
