@@ -1,6 +1,10 @@
 package main
 
 import (
+	"encoding/json"
+	"net"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -62,4 +66,37 @@ func TestDashboardLoginURL_UsesLocalKiteRoute(t *testing.T) {
 	assert.Equal(t,
 		"http://127.0.0.1:9090/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090",
 		dashboardLoginURL("0.0.0.0:9090"))
+}
+
+func TestRunPlatformLoginEnroll_PrintsLocalURLBeforeOAuthRedirect(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if !assert.NoError(t, err) {
+		return
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/kite-login", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(
+			w,
+			r,
+			"https://app.vulnertrack.com/kite/signin/oauth/?authorization_id=test",
+			http.StatusSeeOther,
+		)
+	})
+	mux.HandleFunc("/api/v1/enrollment/wait/{id}", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]bool{"complete": true})
+	})
+	server := &http.Server{Handler: mux}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
+
+	addr := listener.Addr().String()
+	var runErr error
+	output := captureStdout(t, func() {
+		runErr = runPlatformLoginEnroll(addr, "unused.db", "unused.yaml", true)
+	})
+
+	assert.NoError(t, runErr)
+	assert.Contains(t, output, "http://"+addr+"/kite-login?")
+	assert.False(t, strings.Contains(output, "app.vulnertrack.com"),
+		"the CLI must not bypass the local response that sets OAuth state and PKCE cookies")
 }
