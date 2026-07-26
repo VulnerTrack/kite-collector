@@ -51,12 +51,12 @@ type kiteOAuthTokenError struct {
 }
 
 type kiteOAuthEnrollmentOptions struct {
+	PKIClient        kitePKIEnroller
 	Store            *sqlite.SQLiteStore
 	Logger           *slog.Logger
 	PlatformEndpoint string
-	WrapKey          []byte
 	CertsDir         string
-	PKIClient        kitePKIEnroller
+	WrapKey          []byte
 }
 
 type kitePKIEnroller interface {

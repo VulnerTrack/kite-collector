@@ -288,7 +288,7 @@ func LoadMatrix() (Matrix, error) {
 // LoadMatrixFile reads and validates a matrix declaration from an explicit
 // path. Split from LoadMatrix so tests can exercise malformed inputs.
 func LoadMatrixFile(path string) (Matrix, error) {
-	raw, err := os.ReadFile(path) //nolint:gosec // suite-local, non-user-supplied path
+	raw, err := os.ReadFile(path) //#nosec G304 -- suite-local, non-user-supplied fixture path
 	if err != nil {
 		return Matrix{}, fmt.Errorf("read matrix %s: %w", path, err)
 	}

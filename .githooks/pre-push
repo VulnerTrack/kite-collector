@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Pre-push hook — runs the same gates CI runs so failures surface locally
+# before the push instead of ~10 minutes later in Actions.
+#
+# The default profile (fast) runs vet + lint + security + test — everything
+# except the cross-platform `build` matrix, which is redundant when you are
+# not editing platform-guarded code. Set KITE_HOOK_FULL=1 to include it and
+# match `make all` exactly.
+#
+# Escape hatch: set KITE_HOOK_SKIP=1 to bypass the hook for one push (e.g.
+# pushing a doc-only branch or an emergency hotfix that is broken on purpose).
+# `git push --no-verify` also skips it — same effect.
+#
+# Installed via: bash scripts/install-hooks.sh   (one-time per clone).
+
+set -euo pipefail
+
+if [[ "${KITE_HOOK_SKIP:-0}" == "1" ]]; then
+  echo "pre-push: KITE_HOOK_SKIP=1 — skipping local gates"
+  exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "pre-push: running local CI gates (set KITE_HOOK_SKIP=1 to bypass)"
+
+if [[ "${KITE_HOOK_FULL:-0}" == "1" ]]; then
+  target="all"
+else
+  target="vet lint security test"
+fi
+
+# make all uses GOTOOLCHAIN=auto so an older host `go` still works.
+if ! make $target; then
+  echo
+  echo "pre-push: FAIL — a local gate failed; fix or re-push with KITE_HOOK_SKIP=1"
+  exit 1
+fi
+
+echo "pre-push: OK"

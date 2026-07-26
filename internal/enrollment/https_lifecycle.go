@@ -33,18 +33,18 @@ const (
 )
 
 type agentMaterial struct {
-	certificatePEM []byte
-	certificate    *x509.Certificate
 	signer         crypto.Signer
+	certificate    *x509.Certificate
+	certificatePEM []byte
 	agentCode      string
 }
 
 type agentProof struct {
 	AgentCode      string `json:"agent_code"`
 	CertificatePEM string `json:"certificate_pem"`
-	Timestamp      int64  `json:"timestamp"`
 	Nonce          string `json:"nonce"`
 	Signature      string `json:"signature"`
+	Timestamp      int64  `json:"timestamp"`
 }
 
 type agentRenewRequest struct {
@@ -104,11 +104,11 @@ func parsePrivateSigner(keyPEM []byte) (crypto.Signer, error) {
 }
 
 func loadAgentMaterial(certsDir string) (*agentMaterial, error) {
-	certPEM, err := os.ReadFile(filepath.Join(certsDir, "agent.pem"))
+	certPEM, err := os.ReadFile(filepath.Join(certsDir, "agent.pem")) //#nosec G304 -- fixed filename under caller-provided certsDir (config-controlled, not user input)
 	if err != nil {
 		return nil, fmt.Errorf("read agent certificate: %w", err)
 	}
-	keyPEM, err := os.ReadFile(filepath.Join(certsDir, "agent-key.pem"))
+	keyPEM, err := os.ReadFile(filepath.Join(certsDir, "agent-key.pem")) //#nosec G304 -- fixed filename under caller-provided certsDir
 	if err != nil {
 		return nil, fmt.Errorf("read agent private key: %w", err)
 	}

@@ -224,7 +224,7 @@ func StoreCertificates(dir string, result *Result) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return kiteerrors.WrapFileError("create credential dir", err)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, 0o700); err != nil { //#nosec G302 -- directory needs execute bit; 0700 is the tightest owner-only dir perm
 		return kiteerrors.WrapFileError("secure credential dir", err)
 	}
 

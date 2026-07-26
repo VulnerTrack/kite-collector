@@ -34,11 +34,29 @@ func TestParseCPANOutput_UndefVersion(t *testing.T) {
 	assert.Equal(t, "", result.Items[0].Version)
 }
 
-func TestParseCPANOutput_MalformedLine(t *testing.T) {
+// A line that is not a "<module>\t<version>" record is cpan(1) diagnostic
+// chatter, not corrupt data — it must be skipped silently, never reported as
+// a parse error.
+func TestParseCPANOutput_SkipsNonRecordLine(t *testing.T) {
 	result := ParseCPANOutput("notabseparated\n")
 	assert.Empty(t, result.Items)
-	require.Len(t, result.Errs, 1)
-	assert.Equal(t, "cpan", result.Errs[0].Collector)
+	assert.False(t, result.HasErrors())
+}
+
+// Regression for the observed WARN "software-inventory parse error /
+// collector=cpan": cpan writes its logger banner to stdout among the module
+// list. Real records must still be parsed, and the banner must not surface as
+// an error.
+func TestParseCPANOutput_SkipsLoggerBanner(t *testing.T) {
+	raw := "Loading internal logger. Log::Log4perl recommended for better logging\n" +
+		"JSON::XS\t4.03\n" +
+		"Moose\t2.2207\n"
+	result := ParseCPANOutput(raw)
+
+	require.Len(t, result.Items, 2)
+	assert.Equal(t, "JSON::XS", result.Items[0].SoftwareName)
+	assert.Equal(t, "Moose", result.Items[1].SoftwareName)
+	assert.False(t, result.HasErrors())
 }
 
 func TestParseCPANOutput_CPEHasTargetSW(t *testing.T) {
