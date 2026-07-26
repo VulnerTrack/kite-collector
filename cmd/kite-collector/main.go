@@ -2865,7 +2865,11 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 	defer cancel()
 
 	if dashboardReachable(loginURL) {
-		printEnrollmentLaunch(resolveDashboardLaunchLocation(ctx, loginURL), noBrowser)
+		// The browser must visit the local login URL first. That response sets
+		// the HttpOnly OAuth state and PKCE-verifier cookies before redirecting
+		// to VulnerTrack. Resolving the external redirect server-side skips
+		// those browser cookies and guarantees a state mismatch on callback.
+		printEnrollmentLaunch(loginURL, noBrowser)
 		if !noBrowser {
 			dashboard.OpenBrowser(loginURL)
 		}
@@ -2925,7 +2929,9 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 	if !waitForDashboard(loginURL, 3*time.Second) {
 		return fmt.Errorf("dashboard did not become reachable at %s", baseURL)
 	}
-	printEnrollmentLaunch(resolveDashboardLaunchLocation(ctx, loginURL), noBrowser)
+	// Keep the first navigation local so the browser receives the OAuth state
+	// and PKCE cookies before the dashboard redirects it to VulnerTrack.
+	printEnrollmentLaunch(loginURL, noBrowser)
 	if !noBrowser {
 		dashboard.OpenBrowser(loginURL)
 	}
@@ -2985,29 +2991,6 @@ func waitForDashboard(rawURL string, timeout time.Duration) bool {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return false
-}
-
-func resolveDashboardLaunchLocation(ctx context.Context, loginURL string) string {
-	client := http.Client{
-		Timeout: 2 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loginURL, nil)
-	if err != nil {
-		return loginURL
-	}
-	resp, err := client.Do(req) // #nosec G107 -- URL is derived from the local dashboard listen address.
-	if err != nil {
-		return loginURL
-	}
-	defer func() { _ = resp.Body.Close() }()
-	location := strings.TrimSpace(resp.Header.Get("Location"))
-	if location == "" {
-		return loginURL
-	}
-	return location
 }
 
 func waitForDashboardEnrollment(ctx context.Context, baseURL, waitID string) error {
