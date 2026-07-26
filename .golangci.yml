@@ -21,6 +21,13 @@ linters:
       confidence: medium
     govet:
       enable-all: true
+      disable:
+        # fieldalignment is worth chasing in hot-path production structs but
+        # not in integration-test payload/report types where struct-tag order
+        # is stable JSON-contract shape — reordering fields for GC-scan bytes
+        # would obscure the wire schema. Kept off globally; noctx/govet's
+        # correctness checks stay on.
+        - fieldalignment
     wrapcheck:
       # internal/errors is the structured-error construction layer: its helpers
       # (FromCatalog, New, Wrap, WrapFileError) already return the wrapped

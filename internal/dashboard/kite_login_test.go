@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -91,7 +92,7 @@ func TestEnrollKiteOAuthToken_EnrollsPKIAndStoresCertificates(t *testing.T) {
 
 	certsDir := t.TempDir()
 	pki := &fakeKitePKIEnroller{}
-	req := httptest.NewRequest("GET", "/oauth/callback", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/callback", nil)
 	err = enrollKiteOAuthToken(req, kiteOAuthEnrollmentOptions{
 		Store:     st,
 		WrapKey:   []byte("01234567890123456789012345678901"),

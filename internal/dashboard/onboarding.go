@@ -46,10 +46,10 @@ type onboardingDeps struct {
 	AppVersion       string
 	Commit           string
 	PlatformEndpoint string
+	CertsDir         string
 	WrapKey          []byte
 	OAuth            OAuthOptions
 	TLSConfig        config.TLSConfig
-	CertsDir         string
 	// ScanEnabled tells the post-completion launcher panel whether to surface
 	// the "Run your first scan" CTA. True when the dashboard was wired with
 	// both a scan.Coordinator and a config.Config (the same condition the

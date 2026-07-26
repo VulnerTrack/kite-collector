@@ -223,7 +223,7 @@ func AppendStepSummary(markdown string) error {
 	if path == "" {
 		return nil
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // path supplied by the Actions runner
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //#nosec G304 G703 -- path from GITHUB_STEP_SUMMARY env supplied by the Actions runner
 	if err != nil {
 		return fmt.Errorf("open step summary: %w", err)
 	}

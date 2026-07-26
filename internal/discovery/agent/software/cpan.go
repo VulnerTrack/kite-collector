@@ -4,9 +4,9 @@ package software
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -32,33 +32,38 @@ func (c *CPAN) Collect(ctx context.Context) (*Result, error) {
 	return ParseCPANOutput(string(out)), nil
 }
 
-// ParseCPANOutput parses the output of cpan -l.
-// Each line is "Module::Name\tversion".
+// cpanModuleName matches a Perl module name: one or more identifier
+// components joined by "::" (perlmod). It is the discriminator that tells a
+// real "Module::Name\tversion" record apart from the diagnostic text cpan(1)
+// interleaves on stdout, so prose banners are never mistaken for packages.
+var cpanModuleName = regexp.MustCompile(`^\w+(?:::\w+)*$`)
+
+// ParseCPANOutput parses the output of `cpan -l`.
+//
+// `cpan -l` prints one installed module per line as "Module::Name\tversion"
+// (version is the literal "undef" when the module exposes no $VERSION). It
+// also writes diagnostic banners to the same stdout stream — most notably
+// "Loading internal logger. Log::Log4perl recommended for better logging"
+// when CPAN.pm falls back to its built-in logger, plus assorted "Reading
+// '.../Metadata'..." notices. Those banners are not package records; they are
+// expected, benign output that varies by environment, so treating them as
+// parse errors produces spurious warnings on every scan.
+//
+// Therefore a line is accepted only when it is a well-formed
+// "<perl-module-name>\t<version>" record; any other line is cpan's own
+// chatter and is skipped silently rather than reported as an error.
 func ParseCPANOutput(raw string) *Result {
 	result := &Result{}
 	scanner := bufio.NewScanner(strings.NewReader(raw))
-	lineNum := 0
 
 	for scanner.Scan() {
-		lineNum++
 		line := scanner.Text()
-		if line == "" {
+
+		name, version, ok := strings.Cut(line, "\t")
+		if !ok || !cpanModuleName.MatchString(name) {
+			// Diagnostic banner / notice from cpan(1), not a module record.
 			continue
 		}
-
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) < 2 || parts[0] == "" {
-			result.Errs = append(result.Errs, CollectError{
-				Collector: "cpan",
-				Line:      lineNum,
-				RawLine:   line,
-				Err:       errors.New("expected 'Module::Name\\tversion' format"),
-			})
-			continue
-		}
-
-		name := parts[0]
-		version := parts[1]
 
 		if version == "undef" {
 			version = ""
