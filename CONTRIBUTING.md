@@ -22,6 +22,22 @@ make clean        # rm -rf bin/
 
 `make all` must pass before submitting a PR. CI runs the same gates.
 
+### Local pre-push hook
+
+Install the pre-push hook once per clone so `make vet lint security test` runs
+automatically before every `git push` — this catches almost every CI failure
+locally instead of ~10 minutes later in Actions:
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+The hook lives in `.githooks/pre-push` and is version-controlled. Overrides:
+
+- `KITE_HOOK_SKIP=1 git push` — bypass once (or `git push --no-verify`)
+- `KITE_HOOK_FULL=1 git push` — run the whole `make all` (adds the cross-OS
+  build matrix)
+
 ## Project structure
 
 ```

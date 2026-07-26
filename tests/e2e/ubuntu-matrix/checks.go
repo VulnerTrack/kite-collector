@@ -131,7 +131,7 @@ type Expectation struct {
 // LoadExpectation reads a target's expected fixture.
 func LoadExpectation(target Target) (Expectation, error) {
 	path := Path(target.ExpectedFile)
-	raw, err := os.ReadFile(path) //nolint:gosec // suite-local, non-user-supplied path
+	raw, err := os.ReadFile(path) //#nosec G304 -- suite-local, non-user-supplied fixture path
 	if err != nil {
 		return Expectation{}, fmt.Errorf("read expectation %s: %w", path, err)
 	}
@@ -155,9 +155,9 @@ func LoadExpectation(target Target) (Expectation, error) {
 
 // Observation is everything one matrix leg produced, ready for evaluation.
 type Observation struct {
-	Now            time.Time
 	Target         Target
 	Expectation    Expectation
+	Now            time.Time
 	ObservedDigest string
 	Packages       []Package
 	ParseErrors    int
@@ -167,8 +167,8 @@ type Observation struct {
 // cannot produce an unbounded payload — and records what it dropped.
 type findingSet struct {
 	byType   map[string]int
-	findings []Finding
 	now      string
+	findings []Finding
 }
 
 func newFindingSet(now time.Time) *findingSet {
