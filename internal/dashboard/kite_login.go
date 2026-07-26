@@ -436,7 +436,13 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 
 var kiteSuccessTmpl = template.Must(template.New("kiteSuccess").Parse(kiteSuccessTemplate))
 
-var kiteOAuthWaits sync.Map // wait_id -> time.Time
+var kiteOAuthWaits sync.Map      // wait_id -> time.Time
+var kiteOAuthWaitStates sync.Map // OAuth state -> kiteOAuthWaitState
+
+type kiteOAuthWaitState struct {
+	WaitID    string
+	ExpiresAt time.Time
+}
 
 func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions, appVersion string) {
 	collectorURL := collectorBaseURL(r, r.URL.Query().Get("collector"))
@@ -467,6 +473,7 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 		waitID := strings.TrimSpace(r.URL.Query().Get("wait_id"))
 		if waitID != "" {
 			setKiteOAuthCookie(w, r, kiteOAuthWaitCookie, waitID)
+			rememberKiteOAuthWait(state, waitID)
 			// authURL's scheme+host derive from server config (the configured
 			// authorize endpoint, or the api.vulnertrack.com default) — never
 			// from request input; only the URL-encoded redirect_uri query param
@@ -627,7 +634,7 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 		clearKiteOAuthCookie(w, kiteOAuthStateCookie)
 		clearKiteOAuthCookie(w, kiteOAuthVerifierCookie)
 		clearKiteOAuthCookie(w, kiteOAuthDashboardCookie)
-		markKiteOAuthWaitComplete(r)
+		markKiteOAuthWaitComplete(r, state)
 		clearKiteOAuthCookie(w, kiteOAuthWaitCookie)
 		serveKiteSuccessPage(w, r, oauth, appVersion)
 		return
@@ -669,17 +676,55 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 	clearKiteOAuthCookie(w, kiteOAuthStateCookie)
 	clearKiteOAuthCookie(w, kiteOAuthVerifierCookie)
 	clearKiteOAuthCookie(w, kiteOAuthDashboardCookie)
-	markKiteOAuthWaitComplete(r)
+	markKiteOAuthWaitComplete(r, state)
 	clearKiteOAuthCookie(w, kiteOAuthWaitCookie)
 	serveKiteSuccessPage(w, r, oauth, appVersion)
 }
 
-func markKiteOAuthWaitComplete(r *http.Request) {
-	cookie, err := r.Cookie(kiteOAuthWaitCookie)
-	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+func rememberKiteOAuthWait(state, waitID string) {
+	state = strings.TrimSpace(state)
+	waitID = strings.TrimSpace(waitID)
+	if state == "" || waitID == "" {
 		return
 	}
-	kiteOAuthWaits.Store(cookie.Value, time.Now().UTC())
+	entry := kiteOAuthWaitState{
+		WaitID:    waitID,
+		ExpiresAt: time.Now().Add(kiteOAuthCookieTTL),
+	}
+	kiteOAuthWaitStates.Store(state, entry)
+	time.AfterFunc(kiteOAuthCookieTTL, func() {
+		if current, ok := kiteOAuthWaitStates.Load(state); ok &&
+			!time.Now().Before(current.(kiteOAuthWaitState).ExpiresAt) {
+			kiteOAuthWaitStates.Delete(state)
+		}
+	})
+}
+
+func markKiteOAuthWaitComplete(r *http.Request, state string) {
+	waitID := ""
+	cookie, err := r.Cookie(kiteOAuthWaitCookie)
+	if err == nil {
+		waitID = strings.TrimSpace(cookie.Value)
+	}
+
+	// The wait cookie is only a convenience for the terminal command. Some
+	// browser/IdP redirect chains omit that auxiliary cookie even though the
+	// required state and PKCE cookies arrive correctly. Bind wait_id to the
+	// already-validated random OAuth state in server memory so enrollment can
+	// still signal completion without weakening the callback's CSRF check.
+	if stored, ok := kiteOAuthWaitStates.LoadAndDelete(strings.TrimSpace(state)); ok {
+		entry := stored.(kiteOAuthWaitState)
+		if time.Now().Before(entry.ExpiresAt) {
+			waitID = entry.WaitID
+		}
+	}
+	if waitID == "" {
+		return
+	}
+	kiteOAuthWaits.Store(waitID, time.Now().UTC())
+	time.AfterFunc(kiteOAuthCookieTTL, func() {
+		kiteOAuthWaits.Delete(waitID)
+	})
 }
 
 func kiteOAuthWaitComplete(waitID string) bool {

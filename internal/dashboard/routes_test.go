@@ -219,6 +219,61 @@ func TestRoute_GET_KiteLogin_WithWaitIDRedirectsToAuthorize(t *testing.T) {
 	assert.Equal(t, http.SameSiteLaxMode, stateCookie.SameSite)
 }
 
+func TestOAuthWaitCompletesFromValidatedStateWithoutAuxiliaryCookie(t *testing.T) {
+	const (
+		state  = "validated-oauth-state"
+		waitID = "terminal-flow-without-cookie"
+	)
+	kiteOAuthWaitStates.Delete(state)
+	kiteOAuthWaits.Delete(waitID)
+	t.Cleanup(func() {
+		kiteOAuthWaitStates.Delete(state)
+		kiteOAuthWaits.Delete(waitID)
+	})
+
+	rememberKiteOAuthWait(state, waitID)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/oauth/callback?code=test-code&state="+state,
+		nil,
+	)
+	req.AddCookie(&http.Cookie{
+		Name:  kiteOAuthWaitCookie,
+		Value: "stale-terminal-flow",
+	})
+
+	markKiteOAuthWaitComplete(req, state)
+
+	assert.True(t, kiteOAuthWaitComplete(waitID))
+	assert.False(t, kiteOAuthWaitComplete("stale-terminal-flow"))
+}
+
+func TestOAuthWaitDoesNotCompleteForUnknownState(t *testing.T) {
+	const (
+		state  = "expected-state"
+		waitID = "terminal-flow-unknown-state"
+	)
+	kiteOAuthWaitStates.Delete(state)
+	kiteOAuthWaits.Delete(waitID)
+	t.Cleanup(func() {
+		kiteOAuthWaitStates.Delete(state)
+		kiteOAuthWaits.Delete(waitID)
+	})
+	rememberKiteOAuthWait(state, waitID)
+
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/oauth/callback?code=test-code&state=unknown",
+		nil,
+	)
+
+	markKiteOAuthWaitComplete(req, "unknown")
+
+	assert.False(t, kiteOAuthWaitComplete(waitID))
+}
+
 func TestRoute_GET_KiteSuccess_ReturnsAccessGrantedPage(t *testing.T) {
 	handler := newTestHandler(t)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/kite-success", nil)
