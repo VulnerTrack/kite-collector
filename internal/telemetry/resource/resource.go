@@ -24,7 +24,8 @@ type Config struct {
 	// ServiceVersion is the agent build version.
 	ServiceVersion string
 	// TenantID is the tenant the agent enrolled into. Client-asserted; the
-	// Collector overrides this from the mTLS Subject CN per RFC-0115 §5.1.
+	// Collector overrides it with the tenant derived from the mTLS certificate
+	// Organization field (grpcapi.peerTenantID), per RFC-0063 §5.1.
 	TenantID string
 	// Environment is one of production|staging|pilot|development.
 	Environment string
