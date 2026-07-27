@@ -436,8 +436,10 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 
 var kiteSuccessTmpl = template.Must(template.New("kiteSuccess").Parse(kiteSuccessTemplate))
 
-var kiteOAuthWaits sync.Map      // wait_id -> time.Time
-var kiteOAuthWaitStates sync.Map // OAuth state -> kiteOAuthWaitState
+var (
+	kiteOAuthWaits      sync.Map // wait_id -> time.Time
+	kiteOAuthWaitStates sync.Map // OAuth state -> kiteOAuthWaitState
+)
 
 type kiteOAuthWaitState struct {
 	WaitID    string
