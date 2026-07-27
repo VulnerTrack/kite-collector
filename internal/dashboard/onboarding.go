@@ -1170,7 +1170,7 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 	// per-row "retry" buttons.
 	for i := range results {
 		if results[i].Result == "fail" {
-			results[i].Remediation = remediationFor(results[i].Name)
+			results[i].Remediation = remediationFor(results[i])
 			results[i].Action = actionFor(results[i].Name, endpoint)
 		}
 	}
@@ -1226,10 +1226,14 @@ func timeProbe(deps onboardingDeps, name probeName, fn func() probeResult) probe
 	return r
 }
 
-// remediationFor returns a one-line remediation hint per probe. The
-// strings are stable so operator runbooks can grep for them.
-func remediationFor(name probeName) string {
-	switch name {
+// remediationFor returns a one-line remediation hint per probe. The strings
+// are stable so operator runbooks can grep for them. It inspects the result's
+// diagnostic where the same probe can fail for materially different reasons —
+// e.g. an auth 404 (the endpoint has no /v1/auth/echo route: the mTLS handshake
+// succeeded, so it is NOT a certificate problem) must not send the operator to
+// re-enroll, which cannot add a missing route.
+func remediationFor(r probeResult) string {
+	switch r.Name {
 	case probeDNS:
 		return "verify the platform endpoint hostname resolves from this host (check /etc/resolv.conf)"
 	case probeTLS:
@@ -1237,6 +1241,11 @@ func remediationFor(name probeName) string {
 	case probeReach:
 		return "endpoint unreachable — check egress firewall and that the platform is up"
 	case probeAuth:
+		if strings.Contains(r.Diagnostic, "404") {
+			return "endpoint has no /v1/auth/echo route: the mTLS handshake succeeded, " +
+				"so the certificate is fine — point the platform endpoint at the API " +
+				"that implements it (not the OTLP receiver). Re-enrolling will not help."
+		}
 		return "mTLS authentication failed — re-enroll with PKI and verify the client certificate"
 	case probeClock:
 		return "local clock differs from platform by more than 60s — sync with NTP"
@@ -1332,6 +1341,12 @@ func runAuthProbe(ctx context.Context, client *http.Client, endpoint, apiKey str
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return probeResult{Result: "fail", Diagnostic: fmt.Sprintf("HTTP %d — token rejected", resp.StatusCode)}
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		// The mTLS handshake and client-cert check already succeeded (a cert
+		// failure surfaces as a transport error above, not an HTTP status).
+		// A 404 means the endpoint simply has no /v1/auth/echo route.
+		return probeResult{Result: "fail", Diagnostic: "HTTP 404 from /v1/auth/echo — route absent (mTLS handshake succeeded)"}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return probeResult{Result: "fail", Diagnostic: fmt.Sprintf("HTTP %d from /v1/auth/echo", resp.StatusCode)}
@@ -1596,7 +1611,7 @@ func renderConnectionCheckFragment(w io.Writer, r *http.Request, deps onboarding
 					Diagnostic: h.Diagnostic,
 				}
 				if pr.Result == "fail" {
-					pr.Remediation = remediationFor(pr.Name)
+					pr.Remediation = remediationFor(pr)
 				}
 				view.Probes = append(view.Probes, pr)
 			}
