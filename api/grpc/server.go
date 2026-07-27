@@ -49,6 +49,18 @@ type Server struct {
 	tlsConfig       *tls.Config
 	addr            string
 	privacyMode     PrivacyMode
+	// enforceTenant, when set, rejects a peer that presents a client
+	// certificate without a valid tenant Organization (PermissionDenied / 403)
+	// instead of the default permissive behaviour (accept as untenanted). Opt
+	// in for deployments that require every ingested machine to be tenant-scoped.
+	enforceTenant bool
+}
+
+// SetTenantEnforcement toggles strict tenant enforcement (RFC-0063). When
+// enabled, an mTLS peer whose certificate lacks a valid tenant UUID Organization
+// is denied with codes.PermissionDenied rather than accepted untenanted.
+func (s *Server) SetTenantEnforcement(enabled bool) {
+	s.enforceTenant = enabled
 }
 
 // SetPanicsRecovered sets the Prometheus counter used by the gRPC recovery
@@ -171,7 +183,14 @@ func (s *Server) ReportMachines(stream kitev1.CollectorService_ReportMachinesSer
 	}
 
 	ctx := stream.Context()
-	tenantID := peerTenantID(ctx)
+	tenantID, ok := s.certTenant(ctx)
+	if !ok {
+		s.logger.Warn("gRPC: report machines rejected — no valid cert tenant",
+			"code", string(LogCodeServerMachineUpsertFail))
+		return fmt.Errorf("report machines: %w", status.Error(codes.PermissionDenied,
+			"client certificate has no valid tenant Organization (UUID); "+
+				"re-enroll with a tenant-scoped certificate"))
+	}
 	var accepted, rejected int32
 
 	for {
@@ -252,7 +271,8 @@ func (s *Server) ReportFindings(stream kitev1.CollectorService_ReportFindingsSer
 // certificate CN (RFC-0063 §5.4).
 func (s *Server) Heartbeat(ctx context.Context, req *kitev1.HeartbeatRequest) (*kitev1.HeartbeatResponse, error) {
 	if certCN := peerCN(ctx); certCN != "" && req.AgentId != certCN {
-		s.logger.Warn("gRPC: heartbeat agent_id mismatch",
+		s.logger.Warn(
+			"gRPC: heartbeat agent_id mismatch",
 			"code", string(LogCodeServerHeartbeatCNMismatch),
 			"request_agent_id", req.AgentId,
 			"cert_cn", certCN,
@@ -269,7 +289,8 @@ func (s *Server) Heartbeat(ctx context.Context, req *kitev1.HeartbeatRequest) (*
 // server-side implementation; the full enrollment logic is defined by
 // RFC-0063 on the server side.
 func (s *Server) Enroll(ctx context.Context, req *kitev1.EnrollRequest) (*kitev1.EnrollResponse, error) {
-	s.logger.Info("gRPC: enrollment request",
+	s.logger.Info(
+		"gRPC: enrollment request",
 		"agent_id", req.AgentId,
 		"hostname", req.Hostname,
 		"os", req.OsFamily,
@@ -332,6 +353,36 @@ func peerTenantID(ctx context.Context) string {
 		return ""
 	}
 	return tenant.String()
+}
+
+// peerPresentedClientCert reports whether the peer completed an mTLS handshake
+// with a leaf certificate — i.e. this is an authenticated (not plaintext) call.
+func peerPresentedClientCert(ctx context.Context) bool {
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return false
+	}
+	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+	if !ok {
+		return false
+	}
+	return len(tlsInfo.State.PeerCertificates) > 0
+}
+
+// certTenant derives the authoritative tenant from the peer certificate
+// Organization and reports whether the call is allowed. It returns ok=false
+// only when enforcement is on (SetTenantEnforcement(true)) and a presented
+// client certificate carries no valid tenant UUID — the caller maps that to
+// codes.PermissionDenied (gRPC → HTTP 403). With enforcement off (the default,
+// preserving RFC-0063's permissive behaviour) a missing/malformed Organization
+// yields an untenanted ("") scope rather than a denial. A plaintext (no-cert)
+// peer — dev / in-process — is always allowed untenanted.
+func (s *Server) certTenant(ctx context.Context) (tenant string, ok bool) {
+	tenant = peerTenantID(ctx)
+	if s.enforceTenant && peerPresentedClientCert(ctx) && tenant == "" {
+		return "", false
+	}
+	return tenant, true
 }
 
 // snapshotToMachine converts a protobuf MachineSnapshot into a domain model.Machine
