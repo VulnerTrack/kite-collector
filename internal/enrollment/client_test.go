@@ -228,3 +228,52 @@ func TestMachineFingerprint(t *testing.T) {
 	fp := identity.MachineFingerprint()
 	assert.NotEmpty(t, fp)
 }
+
+// EnrollWithToken is the headless / container path: the scoped token
+// authenticates via the request BODY against /pki/enroll/token, with NO
+// Authorization header. Contrast TestEnroll_UsesBearerJWTAndPKIRequestContract,
+// which puts an operator JWT in the header against /pki/enroll.
+func TestEnrollWithToken_PostsTokenInBodyToEnrollTokenEndpoint(t *testing.T) {
+	var (
+		gotURL  string
+		gotAuth string
+		reqBody map[string]string
+	)
+	doer := &callbackDoer{do: func(req *http.Request) (*http.Response, error) {
+		gotURL = req.URL.String()
+		gotAuth = req.Header.Get("Authorization")
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&reqBody))
+		return issueEnrollmentResponse(t, reqBody["csr_pem"], nil), nil
+	}}
+	c := NewClient(nil)
+	c.http = doer
+
+	result, err := c.EnrollWithToken(context.Background(), "kite-machine-1", "scoped-tok-abc")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, gotURL, "/pki/enroll/token")
+	assert.Empty(t, gotAuth, "scoped-token enrollment must not send an Authorization header")
+	assert.Equal(t, "scoped-tok-abc", reqBody["token"])
+	assert.Equal(t, "kite-machine-1", reqBody["agent_code"])
+	assert.Contains(t, reqBody["csr_pem"], "BEGIN CERTIFICATE REQUEST")
+	assert.NotContains(t, reqBody, "machine_fingerprint")
+	// The private key is generated locally and never sent to PKI.
+	assert.NotEmpty(t, result.ClientKey)
+}
+
+// KITE_PKI_ENDPOINT redirects the scoped-token enrollment at a self-hosted PKI.
+func TestEnrollWithToken_HonoursKITEPKIEndpointOverride(t *testing.T) {
+	t.Setenv("KITE_PKI_ENDPOINT", "http://pki.internal:8040")
+	var gotURL string
+	c := NewClient(nil)
+	c.http = &callbackDoer{do: func(req *http.Request) (*http.Response, error) {
+		gotURL = req.URL.String()
+		var body map[string]string
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		return issueEnrollmentResponse(t, body["csr_pem"], nil), nil
+	}}
+	_, err := c.EnrollWithToken(context.Background(), "kite-machine-1", "tok")
+	require.NoError(t, err)
+	assert.Equal(t, "http://pki.internal:8040/pki/enroll/token", gotURL)
+}
