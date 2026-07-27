@@ -311,3 +311,34 @@ func TestSupportBundle_GeneratesGzip(t *testing.T) {
 	assert.Equal(t, byte(0x1f), body[0])
 	assert.Equal(t, byte(0x8b), body[1])
 }
+
+// A 404 from the auth probe means the endpoint has no /v1/auth/echo route —
+// the mTLS handshake already succeeded (a cert failure is a transport error,
+// not an HTTP status). The remediation must NOT tell the operator to re-enroll
+// (which cannot add a missing route); it must point at the endpoint config.
+func TestRemediationForAuth404IsNotReEnroll(t *testing.T) {
+	got := remediationFor(probeResult{
+		Name:       probeAuth,
+		Result:     "fail",
+		Diagnostic: "HTTP 404 from /v1/auth/echo — route absent (mTLS handshake succeeded)",
+	})
+	if strings.Contains(got, "re-enroll") {
+		t.Fatalf("404 auth remediation must not advise re-enrolling: %q", got)
+	}
+	if !strings.Contains(got, "/v1/auth/echo") {
+		t.Fatalf("404 auth remediation should name the missing route: %q", got)
+	}
+}
+
+// A genuine cert rejection (or any non-404 auth failure) keeps the re-enroll
+// guidance — that path really is an mTLS/identity problem.
+func TestRemediationForAuthNon404KeepsReEnroll(t *testing.T) {
+	got := remediationFor(probeResult{
+		Name:       probeAuth,
+		Result:     "fail",
+		Diagnostic: "HTTP 403 — token rejected",
+	})
+	if !strings.Contains(got, "re-enroll") {
+		t.Fatalf("non-404 auth failure should still advise re-enrolling: %q", got)
+	}
+}
