@@ -1203,10 +1203,24 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				"error", idErr,
 				"identity_dir", identityDir)
 		}
+		// Tenant is authoritative from the agent's own client certificate
+		// (Subject Organization, stamped by PKI at enrollment); KITE_TENANT_ID
+		// is only a fallback. Reading it from the cert stops assets landing
+		// with a NULL/"unknown" tenant when the env var is unset.
+		tenantID := telresource.ResolveTenantID(
+			cfg.Streaming.OTLP.TLS.CertFile,
+			os.Getenv("KITE_TENANT_ID"),
+		)
+		if tenantID == "" {
+			slog.Warn("no tenant resolved from certificate or KITE_TENANT_ID; "+
+				"telemetry will be emitted untenanted",
+				"code", string(LogCodeTelemetryIdentityUnavailable),
+				"cert_file", cfg.Streaming.OTLP.TLS.CertFile)
+		}
 		resourceAttrs := telresource.Build(telresource.Config{
 			AgentID:        agentID,
 			ServiceVersion: version,
-			TenantID:       os.Getenv("KITE_TENANT_ID"),
+			TenantID:       tenantID,
 			Environment:    os.Getenv("KITE_DEPLOYMENT_ENVIRONMENT"),
 		})
 
