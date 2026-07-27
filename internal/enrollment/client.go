@@ -19,12 +19,33 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/identity"
 )
 
-const enrollURL = "https://pki.vulnertrack.io/pki/enroll"
+const (
+	defaultPKIBaseURL = "https://pki.vulnertrack.io"
+	enrollPath        = "/pki/enroll" // operator-JWT enrollment (Enroll)
+	// enrollTokenPath is a URL path, not a credential (gosec G101 matches the
+	// "token" in the name).
+	enrollTokenPath = "/pki/enroll/token" //#nosec G101 -- URL path, not a secret
+)
+
+// enrollURL is the operator-JWT enrollment endpoint (kept for the sign-in flow).
+const enrollURL = defaultPKIBaseURL + enrollPath
+
+// pkiBaseURL returns the PKI base URL, overridable via KITE_PKI_ENDPOINT for
+// self-hosted / internal deployments (e.g. http://pki:8040). Defaults to the
+// public PKI. Only the scoped-token path honours this; the legacy const above
+// preserves existing behaviour for the JWT flow.
+func pkiBaseURL() string {
+	if v := strings.TrimSpace(os.Getenv("KITE_PKI_ENDPOINT")); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return defaultPKIBaseURL
+}
 
 // Result holds the outcome of a successful enrollment.
 type Result struct {
@@ -132,6 +153,89 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 		Status:             result.Status,
 		CertificateID:      result.CertificateID,
 		JWKSURL:            result.JWKSURL,
+		CACertificate:      []byte(result.CACertificate),
+		ClientCertificate:  []byte(result.ClientCertificate),
+		ClientKey:          keyPEM,
+		CertificateExpires: result.CertificateExpires,
+	}, nil
+}
+
+// EnrollWithToken enrolls using a scoped PKI enrollment token — the headless /
+// container path. Unlike Enroll (operator JWT in the Authorization header
+// against /pki/enroll), the token authenticates via the request BODY against
+// the public /pki/enroll/token endpoint, so an infra host with no Supabase
+// identity can bootstrap. The agent's private key never leaves this process
+// (CSR flow); the returned cert's SANs/purpose are decided by the token's
+// server-side scope.
+func (c *Client) EnrollWithToken(ctx context.Context, agentCode, enrollmentToken string) (*Result, error) {
+	csrPEM, keyPEM, signer, err := generateEnrollmentCSR(agentCode)
+	if err != nil {
+		return nil, fmt.Errorf("generate enrollment key and CSR: %w", err)
+	}
+
+	url := pkiBaseURL() + enrollTokenPath
+	body, err := json.Marshal(map[string]string{
+		"token":      enrollmentToken,
+		"agent_code": agentCode,
+		"csr_pem":    string(csrPEM),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// No Authorization header: the scoped token authenticates via the body.
+
+	c.logger.Info("scoped-token enrollment request dispatched to PKI server",
+		"code", string(LogCodeEnrollmentStarting),
+		"agent_code", agentCode,
+		"endpoint", url)
+
+	doer := c.http
+	if doer == nil {
+		doer = http.DefaultClient
+	}
+	resp, err := doer.Do(req)
+	if err != nil {
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed, err).With("phase", "connect")
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
+			fmt.Errorf("PKI server returned %s: %s", resp.Status, data)).
+			With("http_status", resp.StatusCode)
+	}
+
+	var result struct {
+		Status             string `json:"status"`
+		CertificateID      string `json:"certificate_id"`
+		CACertificate      string `json:"ca_certificate"`
+		ClientCertificate  string `json:"client_certificate"`
+		CertificateExpires string `json:"certificate_expires"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	if err := validateEnrollmentCertificate(
+		agentCode,
+		[]byte(result.ClientCertificate),
+		[]byte(result.CACertificate),
+		signer,
+	); err != nil {
+		return nil, fmt.Errorf("validate enrollment certificate: %w", err)
+	}
+	return &Result{
+		Status:             result.Status,
+		CertificateID:      result.CertificateID,
 		CACertificate:      []byte(result.CACertificate),
 		ClientCertificate:  []byte(result.ClientCertificate),
 		ClientKey:          keyPEM,

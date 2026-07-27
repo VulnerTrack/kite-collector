@@ -30,6 +30,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/vulnertrack/kite-collector/api/rest"
 	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
@@ -2791,14 +2792,15 @@ func runTrust(endpointName, cfgFile, dataDirOverride string) error {
 
 func newEnrollCmd() *cobra.Command {
 	var (
-		agentCode string
-		token     string
-		certsDir  string
-		dbPath    string
-		addr      string
-		cfgFile   string
-		noBrowser bool
-		userMode  bool
+		agentCode       string
+		token           string
+		enrollmentToken string
+		certsDir        string
+		dbPath          string
+		addr            string
+		cfgFile         string
+		noBrowser       bool
+		userMode        bool
 	)
 
 	defaultDB := filepath.Join(installer.DetectDefaults().Options.CertsDir, "kite.db")
@@ -2806,18 +2808,26 @@ func newEnrollCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "enroll",
 		Short: "Enroll this collector with VulnerTrack",
-		Long: `Start the VulnerTrack login flow for this collector.
+		Long: `Enroll this collector with VulnerTrack.
 
-When run without PKI flags, enroll opens the local browser-based login flow
-and also prints the URL so it can be copied from a terminal or SSH session.
+Enrollment works with or without a browser:
 
-The legacy PKI enrollment flow is still available by passing --agent-code and
---token.
+  • Desktop:  enroll opens the browser sign-in flow.
+  • Headless (server/container/SSH): enroll detects no display and prompts you
+    to choose an input path — paste a browser sign-in code from any device, or
+    paste a scoped enrollment token from your PKI operator. Nothing hangs on a
+    browser that cannot open.
+
+Non-interactive equivalents:
+  --token <jwt>                     operator sign-in JWT (skips the browser)
+  --enrollment-token <tok> --agent-code <code>
+                                    scoped token → POST /pki/enroll/token
+                                    (KITE_PKI_ENDPOINT overrides the PKI URL)
 
 Examples:
-  kite-collector enroll
-  kite-collector enroll --no-browser
-  kite-collector enroll --agent-code kite-agent-prod --token pki_enroll_v1_...`,
+  kite-collector enroll                       # desktop: browser sign-in
+  kite-collector enroll --no-browser          # print URL, paste code
+  kite-collector enroll --agent-code kite-prod --enrollment-token <tok>`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if userMode && !cmd.Flag("db").Changed {
@@ -2825,6 +2835,17 @@ Examples:
 			}
 			hasAgentCode := strings.TrimSpace(agentCode) != ""
 			hasToken := strings.TrimSpace(token) != ""
+			hasEnrollToken := strings.TrimSpace(enrollmentToken) != ""
+
+			// Non-interactive scoped-token path (headless / container):
+			// POST /pki/enroll/token with the token in the body.
+			if hasEnrollToken {
+				if !hasAgentCode {
+					return fmt.Errorf("--enrollment-token requires --agent-code")
+				}
+				return runEnrollWithToken(agentCode, enrollmentToken, certsDir)
+			}
+			// Non-interactive operator-JWT path.
 			if hasAgentCode || hasToken {
 				if !hasAgentCode || !hasToken {
 					return fmt.Errorf("--agent-code and --token must be provided together for PKI enrollment")
@@ -2832,14 +2853,24 @@ Examples:
 				return runEnroll(agentCode, token, certsDir)
 			}
 			if cmd.Flag("certs-dir").Changed {
-				return fmt.Errorf("--certs-dir is only used with --agent-code and --token")
+				return fmt.Errorf("--certs-dir is only used with --agent-code and --token / --enrollment-token")
+			}
+			// No flags: on a headless host (or with --no-browser) give the
+			// operator a clear input path instead of hanging on a browser open.
+			if noBrowser || isHeadless() {
+				return runInteractiveEnroll(cmd, interactiveEnrollDeps{
+					addr: addr, dbPath: dbPath, cfgFile: cfgFile,
+					certsDir: certsDir, noBrowser: noBrowser,
+				})
 			}
 			return runPlatformLoginEnroll(addr, dbPath, cfgFile, noBrowser)
 		},
 	}
 
 	cmd.Flags().StringVar(&agentCode, "agent-code", "", "agent code assigned by the PKI server")
-	cmd.Flags().StringVar(&token, "token", "", "PKI enrollment token")
+	cmd.Flags().StringVar(&token, "token", "", "operator sign-in JWT (skips the browser sign-in flow)")
+	cmd.Flags().StringVar(&enrollmentToken, "enrollment-token", "",
+		"scoped PKI enrollment token (headless; POST /pki/enroll/token). Requires --agent-code")
 	cmd.Flags().StringVar(&certsDir, "certs-dir", defaultKiteDataDir(),
 		fmt.Sprintf("directory to store certificates (e.g. %s/<agent-code>)", defaultKiteDataDir()))
 	cmd.Flags().StringVar(&dbPath, "db", defaultDB,
@@ -3137,11 +3168,106 @@ func runEnroll(agentCode, token, certsDir string) error {
 	return nil
 }
 
+// runEnrollWithToken enrolls using a scoped PKI enrollment token (the headless
+// path: POST /pki/enroll/token, token in the body, no operator JWT). This is
+// the same mechanism the compose kite-enroll service uses; the PKI base URL is
+// overridable via KITE_PKI_ENDPOINT for self-hosted deployments.
+func runEnrollWithToken(agentCode, enrollmentToken, certsDir string) error {
+	runID := uuid.Must(uuid.NewV7()).String()
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{})).With("run_id", runID)
+	slog.SetDefault(logger)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	client := enrollment.NewClient(logger)
+	result, err := client.EnrollWithToken(ctx, agentCode, enrollmentToken)
+	if err != nil {
+		return fmt.Errorf("enrollment failed: %w", err)
+	}
+	if err := enrollment.StoreCertificates(certsDir, result); err != nil {
+		return fmt.Errorf("store certificates: %w", err)
+	}
+	logger.Info(
+		"enrollment complete; certificate issued",
+		"code", string(LogCodeEnrollComplete),
+		"agent_code", agentCode,
+		"status", result.Status,
+		"certificate_id", result.CertificateID,
+		"expires", result.CertificateExpires,
+	)
+	return nil
+}
+
 func envOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
 	}
 	return fallback
+}
+
+// isHeadless reports whether this host likely has no browser to open — a
+// server / container / bare SSH session. On Linux/BSD that is the absence of
+// an X11 or Wayland display; on macOS/Windows a desktop is assumed present.
+// Used to pick the interactive input flow over a browser auto-open.
+func isHeadless() bool {
+	switch runtime.GOOS {
+	case "darwin", "windows":
+		return false
+	default:
+		return os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
+	}
+}
+
+type interactiveEnrollDeps struct {
+	addr      string
+	dbPath    string
+	cfgFile   string
+	certsDir  string
+	noBrowser bool
+}
+
+// runInteractiveEnroll gives a no-browser operator a clear choice between the
+// two enrollment mechanisms and reads the credential from stdin, so a headless
+// box never hangs on a browser that cannot open.
+func runInteractiveEnroll(cmd *cobra.Command, d interactiveEnrollDeps) error {
+	out := cmd.OutOrStdout()
+	in := bufio.NewReader(cmd.InOrStdin())
+
+	// Non-interactive stdin (piped / no TTY): fall back to the browser sign-in
+	// flow in --no-browser mode, which prints the URL rather than prompting.
+	if f, ok := cmd.InOrStdin().(*os.File); !ok || !term.IsTerminal(int(f.Fd())) { //#nosec G115
+		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true)
+	}
+
+	_, _ = fmt.Fprintln(out, "\nNo browser detected on this host. Choose how to enroll:")
+	_, _ = fmt.Fprintln(out, "  [1] Browser sign-in — open a URL on any device, sign in, paste the code")
+	_, _ = fmt.Fprintln(out, "  [2] Enrollment token — paste a scoped token from your PKI operator")
+	_, _ = fmt.Fprint(out, "Enter 1 or 2 (default 1): ")
+
+	choice, _ := in.ReadString('\n')
+	switch strings.TrimSpace(choice) {
+	case "2":
+		agentCode := promptLine(out, in, "Agent code: ")
+		if agentCode == "" {
+			return fmt.Errorf("agent code is required")
+		}
+		tok := promptLine(out, in, "Enrollment token: ")
+		if tok == "" {
+			return fmt.Errorf("enrollment token is required")
+		}
+		return runEnrollWithToken(agentCode, tok, d.certsDir)
+	default:
+		// Browser sign-in, printing the URL for another device (never auto-open
+		// here — the whole point is that this host has no browser).
+		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true)
+	}
+}
+
+func promptLine(out io.Writer, in *bufio.Reader, label string) string {
+	_, _ = fmt.Fprint(out, label)
+	line, _ := in.ReadString('\n')
+	return strings.TrimSpace(line)
 }
 
 // oauthSignIn runs the interactive OAuth authorization-code + PKCE flow
