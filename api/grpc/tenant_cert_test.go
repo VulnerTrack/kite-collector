@@ -12,8 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 
 	kitev1 "github.com/vulnertrack/kite-collector/api/grpc/proto/kite/v1"
 	"github.com/vulnertrack/kite-collector/internal/model"
@@ -228,4 +230,52 @@ func TestPeerTenantID(t *testing.T) {
 	t.Run("cert without Organization", func(t *testing.T) {
 		assert.Equal(t, "", peerTenantID(certPeerContext("cn")))
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Tenant enforcement: a presented client certificate MUST carry a valid tenant
+// Organization, or the call is rejected with PermissionDenied (gRPC → 403).
+// ---------------------------------------------------------------------------
+
+func TestReportMachines_RejectsCertWithNoTenantOrganization(t *testing.T) {
+	srv, cs := newTenancyServer(t)
+	srv.SetTenantEnforcement(true)
+	stream := &fakeReportStream{
+		ctx:   certPeerContext("agent-1"), // cert presented, NO Organization
+		snaps: []*kitev1.MachineSnapshot{snap("web-01")},
+	}
+
+	err := srv.ReportMachines(stream)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err),
+		"a cert without a valid tenant Organization must be denied, not accepted untenanted")
+	assert.Empty(t, cs.captured(), "no machine may be stored under a rejected tenant")
+}
+
+func TestReportMachines_RejectsCertWithMalformedTenantOrganization(t *testing.T) {
+	srv, cs := newTenancyServer(t)
+	srv.SetTenantEnforcement(true)
+	stream := &fakeReportStream{
+		ctx:   certPeerContext("agent-1", "not-a-uuid"),
+		snaps: []*kitev1.MachineSnapshot{snap("web-01")},
+	}
+
+	err := srv.ReportMachines(stream)
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Empty(t, cs.captured())
+}
+
+func TestReportMachines_AllowsPlaintextPeerUntenanted(t *testing.T) {
+	// No mTLS (dev / in-process): untenanted is still allowed, unchanged.
+	srv, cs := newTenancyServer(t)
+	stream := &fakeReportStream{
+		ctx:   context.Background(), // no peer / no cert
+		snaps: []*kitev1.MachineSnapshot{snap("web-01")},
+	}
+
+	require.NoError(t, srv.ReportMachines(stream))
+	got := cs.captured()
+	require.Len(t, got, 1)
+	assert.Empty(t, got[0].TenantID)
 }
