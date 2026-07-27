@@ -303,9 +303,14 @@ func peerCN(ctx context.Context) string {
 	return tlsInfo.State.PeerCertificates[0].Subject.CommonName
 }
 
-// peerTenantID extracts the Organization (tenant_id) from the TLS peer
-// certificate. Returns an empty string when mTLS is not active or the
-// Organization field is empty.
+// peerTenantID extracts the tenant_id from the TLS peer certificate's
+// Organization field (RFC-0063 §5.1). The tenant is the security-critical dedup
+// namespace stamped onto every ingested machine, so it is accepted only when it
+// is a well-formed tenant UUID and is returned in canonical form. A peer that is
+// non-mTLS, presents no certificate, has an empty Organization, or whose
+// Organization is not a UUID is treated as untenanted (empty string) rather than
+// trusted under a bogus scope — a misissued certificate must never silently land
+// in another tenant's (or the global) namespace.
 func peerTenantID(ctx context.Context) string {
 	p, ok := peer.FromContext(ctx)
 	if !ok {
@@ -322,7 +327,11 @@ func peerTenantID(ctx context.Context) string {
 	if len(orgs) == 0 {
 		return ""
 	}
-	return orgs[0]
+	tenant, err := uuid.Parse(orgs[0])
+	if err != nil {
+		return ""
+	}
+	return tenant.String()
 }
 
 // snapshotToMachine converts a protobuf MachineSnapshot into a domain model.Machine
