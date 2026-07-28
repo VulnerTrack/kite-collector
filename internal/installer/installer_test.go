@@ -22,6 +22,22 @@ func TestDetectDefaults_PopulatesSmartFields(t *testing.T) {
 	assert.NotEmpty(t, d.Options.CertsDir, "CertsDir must always be populated")
 }
 
+func TestSnapDefaultsUseRevisionIndependentWritableStorage(t *testing.T) {
+	t.Setenv("SNAP", "/snap/kite-collector/42")
+	t.Setenv("SNAP_COMMON", "/var/snap/kite-collector/common")
+
+	assert.True(t, RunningInSnap())
+	assert.Equal(t, "/snap/kite-collector/42", DefaultBinaryDir(false))
+	assert.Equal(t, "/var/snap/kite-collector/common", DefaultCertsDir(false))
+	assert.Equal(t, "/var/snap/kite-collector/common", DefaultCertsDir(true))
+}
+
+func TestRunningInSnapRequiresCompleteEnvironment(t *testing.T) {
+	t.Setenv("SNAP", "/snap/kite-collector/42")
+	t.Setenv("SNAP_COMMON", "")
+	assert.False(t, RunningInSnap())
+}
+
 // TestProbe_EmptyTempDir asserts that a clean temp directory reports the
 // "nothing installed" baseline that the dashboard renders as
 // NextAction=install.

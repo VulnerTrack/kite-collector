@@ -2826,7 +2826,8 @@ func newEnrollCmd() *cobra.Command {
 
 Enrollment works with or without a browser:
 
-  • Desktop:  enroll opens the browser sign-in flow.
+  • Desktop:  enroll opens the browser sign-in flow and keeps the local
+    dashboard running after enrollment. Press Ctrl+C when you are done.
   • Headless (server/container/SSH): enroll detects no display and prompts you
     to choose an input path — paste a browser sign-in code from any device, or
     paste a scoped enrollment token from your PKI operator. Nothing hangs on a
@@ -2921,8 +2922,7 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 		if err := waitForDashboardEnrollment(ctx, baseURL, waitID); err != nil {
 			return err
 		}
-		fmt.Println()
-		fmt.Println("Enrollment complete.")
+		printPlatformEnrollmentComplete(baseURL, false)
 		return nil
 	}
 
@@ -2981,19 +2981,40 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 		dashboard.OpenBrowser(loginURL)
 	}
 
-	waitErr := waitForDashboardEnrollment(ctx, baseURL, waitID)
+	if waitErr := waitForDashboardEnrollment(ctx, baseURL, waitID); waitErr != nil {
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		_ = srv.Shutdown(shutCtx)
+		return waitErr
+	}
+
+	// In the desktop browser flow the dashboard is the page the operator is
+	// actively using. Keep it alive after OAuth completes so the welcome page,
+	// its assets, and the dashboard link remain available. Headless /
+	// --no-browser flows still return immediately for scripts and remote
+	// sessions.
+	printPlatformEnrollmentComplete(baseURL, !noBrowser)
+	if !noBrowser {
+		<-ctx.Done()
+	}
+
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutCancel()
 	shutErr := srv.Shutdown(shutCtx)
-	if waitErr != nil {
-		return waitErr
-	}
 	if shutErr != nil {
 		return fmt.Errorf("shutdown dashboard: %w", shutErr)
 	}
+	return nil
+}
+
+func printPlatformEnrollmentComplete(baseURL string, keepRunning bool) {
 	fmt.Println()
 	fmt.Println("Enrollment complete.")
-	return nil
+	fmt.Println("Welcome to Kite!")
+	if keepRunning {
+		fmt.Printf("Kite is running at %s\n", strings.TrimRight(baseURL, "/"))
+		fmt.Println("Press Ctrl+C to stop.")
+	}
 }
 
 func printEnrollmentLaunch(launchURL string, noBrowser bool) {
