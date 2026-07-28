@@ -273,6 +273,9 @@ func BinaryName() string {
 //   - Unix system:    /usr/local/bin
 //   - Unix user:      ~/.local/bin
 func DefaultBinaryDir(userMode bool) string {
+	if RunningInSnap() {
+		return filepath.Clean(os.Getenv("SNAP"))
+	}
 	if runtime.GOOS == "windows" {
 		if userMode {
 			if v := os.Getenv("LOCALAPPDATA"); v != "" {
@@ -299,6 +302,9 @@ func DefaultBinaryDir(userMode bool) string {
 //   - Unix system:    /var/lib/kite-collector
 //   - Unix user:      $XDG_DATA_HOME/kite-collector  (or ~/.local/share/kite-collector)
 func DefaultCertsDir(userMode bool) string {
+	if RunningInSnap() {
+		return SnapCommonDir()
+	}
 	if runtime.GOOS == "windows" {
 		if userMode {
 			if v := os.Getenv("LOCALAPPDATA"); v != "" {

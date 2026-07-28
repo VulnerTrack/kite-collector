@@ -102,3 +102,24 @@ func TestRunPlatformLoginEnroll_PrintsLocalURLBeforeOAuthRedirect(t *testing.T) 
 	assert.False(t, strings.Contains(output, "app.vulnertrack.com"),
 		"the CLI must not bypass the local response that sets OAuth state and PKCE cookies")
 }
+
+func TestPrintPlatformEnrollmentComplete_DesktopKeepsKiteRunning(t *testing.T) {
+	output := captureStdout(t, func() {
+		printPlatformEnrollmentComplete("http://127.0.0.1:9090/", true)
+	})
+
+	assert.Contains(t, output, "Enrollment complete.")
+	assert.Contains(t, output, "Welcome to Kite!")
+	assert.Contains(t, output, "Kite is running at http://127.0.0.1:9090")
+	assert.Contains(t, output, "Press Ctrl+C to stop.")
+}
+
+func TestPrintPlatformEnrollmentComplete_HeadlessReturnsWithoutKeepAliveHint(t *testing.T) {
+	output := captureStdout(t, func() {
+		printPlatformEnrollmentComplete("http://127.0.0.1:9090", false)
+	})
+
+	assert.Contains(t, output, "Enrollment complete.")
+	assert.Contains(t, output, "Welcome to Kite!")
+	assert.NotContains(t, output, "Press Ctrl+C to stop.")
+}
