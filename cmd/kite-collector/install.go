@@ -418,6 +418,10 @@ type installArgs struct {
 }
 
 func runInstall(cmd *cobra.Command, a installArgs) error {
+	if installer.RunningInSnap() {
+		return runSnapInstall(cmd, a)
+	}
+
 	out := cmd.OutOrStdout()
 
 	src, err := os.Executable()
@@ -516,29 +520,7 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	// still leaves the service registered (the operator can re-run
 	// `install --agent-code` later) — the defer'd post-install report
 	// will explain the state either way.
-	enrolled := false
-	if a.agentCode != "" {
-		credential := a.token
-		if credential == "" {
-			// Default path: interactive sign-in. The short-lived JWT rides
-			// the same enrollment token field as the legacy HMAC tokens.
-			jwt, signErr := oauthSignIn(cmd, a.oauth)
-			if signErr != nil {
-				_, _ = fmt.Fprintf(out, "  ✗  sign-in failed: %v\n", signErr)
-			}
-			credential = jwt
-		}
-		if credential != "" {
-			if err := runEnroll(a.agentCode, credential, a.certsDir); err != nil {
-				_, _ = fmt.Fprintf(out, "  ✗  enrollment failed: %v\n", err)
-				// Don't propagate — service is registered; the operator can
-				// re-run `install --agent-code` without losing anything.
-			} else {
-				_, _ = fmt.Fprintf(out, "  ✓  enrolled agent %q\n", a.agentCode)
-				enrolled = true
-			}
-		}
-	}
+	enrolled := enrollDuringInstall(cmd, a)
 
 	// Auto-start when the service has something to do — i.e. enrollment
 	// just succeeded OR certs were already present from a prior install.
@@ -564,6 +546,111 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  service %q started\n", cfg.Name)
 	return nil
+}
+
+// runSnapInstall performs only the mutable setup that belongs inside a snap.
+// snapd already installed the immutable binary under /snap and owns service
+// registration, so copying into /usr/local/bin or writing a systemd unit is
+// both unnecessary and forbidden by strict confinement.
+func runSnapInstall(cmd *cobra.Command, a installArgs) error {
+	out := cmd.OutOrStdout()
+	certsDir := installer.SnapCommonDir()
+	a.certsDir = certsDir
+
+	if a.dryRun {
+		_, _ = fmt.Fprintln(out, "-- dry-run: no files will be written --")
+		_, _ = fmt.Fprintln(out, "  binary and service are managed by snapd")
+		_, _ = fmt.Fprintf(out, "  mkdir  %s\n", certsDir)
+		if a.agentCode != "" {
+			_, _ = fmt.Fprintf(out, "  enroll agent_code=%s → %s\n", a.agentCode, certsDir)
+		}
+		_, _ = fmt.Fprintf(out, "  enable service %s after enrollment\n", installer.SnapServiceName)
+		return nil
+	}
+
+	if err := os.MkdirAll(certsDir, 0o750); err != nil {
+		return fmt.Errorf("create snap certs dir %s: %w", certsDir, err)
+	}
+	_, _ = fmt.Fprintln(out, "  ✓  binary installed and updates managed by snapd")
+	_, _ = fmt.Fprintf(out, "  ✓  %s\n", certsDir)
+	_, _ = fmt.Fprintf(out, "  ✓  service %q registered by snapd\n", installer.SnapServiceName)
+
+	enrolled := enrollDuringInstall(cmd, a)
+	if !enrolled {
+		enrolled = enrollmentPresent(certsDir)
+	}
+	if enrolled && !a.noStart {
+		control := exec.Command("snapctl", "start", "--enable", installer.SnapServiceName)
+		if controlOut, err := control.CombinedOutput(); err != nil {
+			_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v (%s)\n", err, trimOutput(controlOut))
+		} else {
+			_, _ = fmt.Fprintf(out, "  ✓  service %q enabled and started\n", installer.SnapServiceName)
+		}
+	}
+
+	printSnapPostInstall(out, certsDir, enrolled)
+	return nil
+}
+
+func enrollDuringInstall(cmd *cobra.Command, a installArgs) bool {
+	if a.agentCode == "" {
+		return false
+	}
+	out := cmd.OutOrStdout()
+	credential := a.token
+	if credential == "" {
+		jwt, err := oauthSignIn(cmd, a.oauth)
+		if err != nil {
+			_, _ = fmt.Fprintf(out, "  ✗  sign-in failed: %v\n", err)
+		}
+		credential = jwt
+	}
+	if credential == "" {
+		return false
+	}
+	if err := runEnroll(a.agentCode, credential, a.certsDir); err != nil {
+		_, _ = fmt.Fprintf(out, "  ✗  enrollment failed: %v\n", err)
+		return false
+	}
+	_, _ = fmt.Fprintf(out, "  ✓  enrolled agent %q\n", a.agentCode)
+	return true
+}
+
+func enrollmentPresent(certsDir string) bool {
+	for _, name := range installer.EnrollmentFiles {
+		if _, err := os.Stat(filepath.Join(certsDir, name)); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func printSnapPostInstall(out io.Writer, certsDir string, enrolled bool) {
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Current state:")
+	_, _ = fmt.Fprintln(out, "  ✓  binary       /snap/bin/kite-collector")
+	_, _ = fmt.Fprintf(out, "  ✓  certs dir    %s\n", certsDir)
+	if enrolled {
+		_, _ = fmt.Fprintln(out, "  ✓  enrollment   ca.pem + agent.pem + agent-key.pem present")
+	} else {
+		_, _ = fmt.Fprintln(out, "  ✗  enrollment   certs missing")
+	}
+	_, _ = fmt.Fprintf(out, "  -  service      managed by snapd (%s)\n", installer.SnapServiceName)
+
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Next steps:")
+	step := 1
+	if !enrolled {
+		_, _ = fmt.Fprintf(out, "  %d. Enroll this collector (one-time):\n       sudo kite-collector enroll --certs-dir %s\n\n", step, certsDir)
+		step++
+	}
+	_, _ = fmt.Fprintf(out, "  %d. Enable and start the snap service:\n       sudo snap start --enable %s\n\n", step, installer.SnapServiceName)
+	step++
+	_, _ = fmt.Fprintf(out, "  %d. Verify OTLP connectivity:\n       sudo kite-collector check --certs-dir %s\n\n", step, certsDir)
+	step++
+	_, _ = fmt.Fprintf(out, "  %d. View logs:\n       sudo snap logs -f %s\n\n", step, installer.SnapServiceName)
+	step++
+	_, _ = fmt.Fprintf(out, "  %d. Open the dashboard:\n       sudo kite-collector dashboard --certs-dir %s\n\n", step, certsDir)
 }
 
 // ---------------------------------------------------------------------------

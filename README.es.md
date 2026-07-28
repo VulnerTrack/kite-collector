@@ -33,7 +33,16 @@ Para cualquier distribución de Linux compatible con Snap (incluyendo Ubuntu, De
 
 ```bash
 sudo snap install kite-collector
+sudo kite-collector install
+sudo kite-collector enroll
+sudo snap start --enable kite-collector.kite-collector-daemon
 ```
+
+En la edición Snap, `install` prepara el almacenamiento persistente en
+`/var/snap/kite-collector/common`; snapd ya administra el binario, el servicio
+y las actualizaciones. Consulta el estado con
+`snap services kite-collector` y los logs con
+`sudo snap logs -f kite-collector.kite-collector-daemon`.
 
 ### Otras distribuciones Linux (Fedora, Red Hat, Arch Linux, etc.)
 
