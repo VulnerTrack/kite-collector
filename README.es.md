@@ -39,9 +39,10 @@ sudo snap start --enable kite-collector.kite-collector-daemon
 ```
 
 En la edición Snap, `install` prepara el almacenamiento persistente en
-`/var/snap/kite-collector/common`; snapd ya administra el binario, el servicio
-y las actualizaciones. Consulta el estado con
-`snap services kite-collector` y los logs con
+`/var/snap/kite-collector/common/certs`; el directorio padre `common` permanece
+bajo control de snapd, mientras el collector puede proteger el subdirectorio
+`certs`. snapd ya administra el binario, el servicio y las actualizaciones.
+Consulta el estado con `snap services kite-collector` y los logs con
 `sudo snap logs -f kite-collector.kite-collector-daemon`.
 
 ### Otras distribuciones Linux (Fedora, Red Hat, Arch Linux, etc.)

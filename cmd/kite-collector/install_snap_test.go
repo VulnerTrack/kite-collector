@@ -27,9 +27,10 @@ func TestRunInstallInsideSnapDoesNotCopyToHost(t *testing.T) {
 		noStart:   true,
 	}))
 
-	assert.DirExists(t, commonDir)
+	certsDir := filepath.Join(commonDir, "certs")
+	assert.DirExists(t, certsDir)
 	assert.Contains(t, out.String(), "binary installed and updates managed by snapd")
-	assert.Contains(t, out.String(), commonDir)
+	assert.Contains(t, out.String(), certsDir)
 	assert.Contains(t, out.String(), installer.SnapServiceName)
 	assert.NotContains(t, out.String(), "/usr/local/bin")
 	assert.NotContains(t, out.String(), "/var/lib/kite-collector")
@@ -50,10 +51,10 @@ func TestRunInstallInsideSnapDryRunIsNonMutating(t *testing.T) {
 	assert.Contains(t, out.String(), "enable service "+installer.SnapServiceName)
 }
 
-func TestDefaultKiteDataDirUsesSnapCommon(t *testing.T) {
+func TestDefaultKiteDataDirUsesSnapCertsSubdirectory(t *testing.T) {
 	t.Setenv("SNAP", "/snap/kite-collector/42")
 	t.Setenv("SNAP_COMMON", "/var/snap/kite-collector/common")
 	t.Setenv("XDG_DATA_HOME", "")
 
-	assert.Equal(t, "/var/snap/kite-collector/common", defaultKiteDataDir())
+	assert.Equal(t, "/var/snap/kite-collector/common/certs", defaultKiteDataDir())
 }

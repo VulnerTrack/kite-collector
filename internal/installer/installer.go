@@ -297,13 +297,17 @@ func DefaultBinaryDir(userMode bool) string {
 
 // DefaultCertsDir returns the conventional certificate store directory.
 //
+//   - Snap:             $SNAP_COMMON/certs
 //   - Windows system: %ProgramData%\kite-collector
 //   - Windows user:   %LOCALAPPDATA%\kite-collector\data
 //   - Unix system:    /var/lib/kite-collector
 //   - Unix user:      $XDG_DATA_HOME/kite-collector  (or ~/.local/share/kite-collector)
 func DefaultCertsDir(userMode bool) string {
 	if RunningInSnap() {
-		return SnapCommonDir()
+		// snapd owns SNAP_COMMON itself and strict confinement denies chmod on
+		// that root directory. Keep credentials in an app-owned child so the
+		// enrollment flow can enforce its required 0700 permissions.
+		return filepath.Join(SnapCommonDir(), "certs")
 	}
 	if runtime.GOOS == "windows" {
 		if userMode {
