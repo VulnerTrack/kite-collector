@@ -554,7 +554,7 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 // both unnecessary and forbidden by strict confinement.
 func runSnapInstall(cmd *cobra.Command, a installArgs) error {
 	out := cmd.OutOrStdout()
-	certsDir := installer.SnapCommonDir()
+	certsDir := installer.DefaultCertsDir(false)
 	a.certsDir = certsDir
 
 	if a.dryRun {

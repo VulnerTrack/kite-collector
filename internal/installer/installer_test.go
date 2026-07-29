@@ -28,8 +28,18 @@ func TestSnapDefaultsUseRevisionIndependentWritableStorage(t *testing.T) {
 
 	assert.True(t, RunningInSnap())
 	assert.Equal(t, "/snap/kite-collector/42", DefaultBinaryDir(false))
-	assert.Equal(t, "/var/snap/kite-collector/common", DefaultCertsDir(false))
-	assert.Equal(t, "/var/snap/kite-collector/common", DefaultCertsDir(true))
+	assert.Equal(t, "/var/snap/kite-collector/common/certs", DefaultCertsDir(false))
+	assert.Equal(t, "/var/snap/kite-collector/common/certs", DefaultCertsDir(true))
+}
+
+func TestLinuxSystemDefaultCertsDirRemainsCompatibleWithAPT(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("APT system path is Linux-specific")
+	}
+	t.Setenv("SNAP", "")
+	t.Setenv("SNAP_COMMON", "")
+
+	assert.Equal(t, "/var/lib/kite-collector", DefaultCertsDir(false))
 }
 
 func TestRunningInSnapRequiresCompleteEnvironment(t *testing.T) {
