@@ -36,6 +36,7 @@ go.work.sum
 
 # Build output
 bin/
+dist/
 
 # Runtime data
 data/
