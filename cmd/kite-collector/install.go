@@ -580,7 +580,7 @@ func runSnapInstall(cmd *cobra.Command, a installArgs) error {
 		enrolled = enrollmentPresent(certsDir)
 	}
 	if enrolled && !a.noStart {
-		control := exec.Command("snapctl", "start", "--enable", installer.SnapServiceName)
+		control := exec.CommandContext(cmd.Context(), "snapctl", "start", "--enable", installer.SnapServiceName) // #nosec G204 -- executable and arguments are fixed constants
 		if controlOut, err := control.CombinedOutput(); err != nil {
 			_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v (%s)\n", err, trimOutput(controlOut))
 		} else {
