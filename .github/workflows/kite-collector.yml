@@ -303,14 +303,9 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      # wixl is the WiX toolset's Linux-native MSI builder. On Ubuntu 24.04
-      # (noble) and later, wixl ships as a standalone package separate from
-      # msitools; install both so the build works on older releases too.
-      # Used by scripts/build-msi.sh in the post-goreleaser step below.
-      # Without wixl, the MSI build step fails with "wixl: command not found".
-      - name: Install dependencies (wixl, dpkg-dev, snapcraft)
+      - name: Install dependencies (dpkg-dev, snapcraft)
         run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends wixl msitools dpkg-dev
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends dpkg-dev
           sudo snap install snapcraft --classic
 
       # Embed the Windows app manifest (UAC requireAdministrator +
@@ -363,31 +358,6 @@ jobs:
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           # Token para publicar automáticamente en la Snap Store:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-
-      # Build the Windows MSI from the .exe goreleaser just produced and
-      # attach it to the GitHub Release as an additional asset. Runs after
-      # goreleaser publishes so the release already exists for `gh release
-      # upload` to target. Pure OSS path — no goreleaser Pro license needed.
-      - name: Build MSI and attach to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          COMMIT="${GITHUB_SHA:0:7}"
-          ./scripts/build-msi.sh "$VERSION" "$COMMIT"
-          gh release upload "$GITHUB_REF_NAME" \
-            "dist/kite-collector_${VERSION}_amd64.msi" \
-            --clobber
-
-      - name: Publish to WinGet
-        if: env.WINGET_TOKEN != ''
-        uses: vedantmgoyal9/winget-releaser@v2
-        with:
-          identifier: VulnerTrack.KiteCollector
-          max-retries: 3
-          token: ${{ secrets.WINGET_TOKEN }}
-        env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
