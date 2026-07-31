@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -2830,8 +2832,9 @@ func newEnrollCmd() *cobra.Command {
 
 Enrollment works with or without a browser:
 
-  • Desktop:  enroll opens the browser sign-in flow and keeps the local
-    dashboard running after enrollment. Press Ctrl+C when you are done.
+  • Desktop:  enroll opens the browser sign-in flow. After enrollment it
+    closes the temporary dashboard and starts (or restarts) the installed
+    collector service automatically.
   • Headless (server/container/SSH): enroll detects no display and prompts you
     to choose an input path — paste a browser sign-in code from any device, or
     paste a scoped enrollment token from your PKI operator. Nothing hangs on a
@@ -2879,10 +2882,10 @@ Examples:
 			if noBrowser || isHeadless() {
 				return runInteractiveEnroll(cmd, interactiveEnrollDeps{
 					addr: addr, dbPath: dbPath, cfgFile: cfgFile,
-					certsDir: certsDir, noBrowser: noBrowser,
+					certsDir: certsDir, noBrowser: noBrowser, userMode: userMode,
 				})
 			}
-			return runPlatformLoginEnroll(addr, dbPath, cfgFile, noBrowser)
+			return runPlatformLoginEnroll(addr, dbPath, cfgFile, noBrowser, userMode)
 		},
 	}
 
@@ -2902,7 +2905,23 @@ Examples:
 	return cmd
 }
 
-func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error {
+type platformEnrollDeps struct {
+	transitionService func(bool) (string, error)
+	openBrowser       func(string)
+}
+
+func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser, userMode bool) error {
+	return runPlatformLoginEnrollWithDeps(addr, dbPath, cfgFile, noBrowser, userMode, platformEnrollDeps{
+		transitionService: transitionEnrolledService,
+		openBrowser:       dashboard.OpenBrowser,
+	})
+}
+
+func runPlatformLoginEnrollWithDeps(
+	addr, dbPath, cfgFile string,
+	noBrowser, userMode bool,
+	deps platformEnrollDeps,
+) error {
 	previousLogger := slog.Default()
 	quietLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	slog.SetDefault(quietLogger)
@@ -2926,8 +2945,7 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 		if err := waitForDashboardEnrollment(ctx, baseURL, waitID); err != nil {
 			return err
 		}
-		printPlatformEnrollmentComplete(baseURL, false)
-		return nil
+		return completePlatformEnrollment(baseURL, noBrowser, userMode, deps)
 	}
 
 	sqlite.WarnIfPathIsSuspect(slog.Default(), dbPath)
@@ -2935,7 +2953,12 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}
-	defer func() { _ = encStore.Close() }()
+	storeOpen := true
+	defer func() {
+		if storeOpen {
+			_ = encStore.Close()
+		}
+	}()
 
 	st := encStore.Store
 	if err := st.Migrate(ctx); err != nil {
@@ -2992,32 +3015,72 @@ func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser bool) error 
 		return waitErr
 	}
 
-	// In the desktop browser flow the dashboard is the page the operator is
-	// actively using. Keep it alive after OAuth completes so the welcome page,
-	// its assets, and the dashboard link remain available. Headless /
-	// --no-browser flows still return immediately for scripts and remote
-	// sessions.
-	printPlatformEnrollmentComplete(baseURL, !noBrowser)
-	if !noBrowser {
-		<-ctx.Done()
-	}
-
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutCancel()
-	shutErr := srv.Shutdown(shutCtx)
-	if shutErr != nil {
-		return fmt.Errorf("shutdown dashboard: %w", shutErr)
+	if shutErr := srv.Shutdown(shutCtx); shutErr != nil {
+		return fmt.Errorf("shutdown temporary enrollment dashboard: %w", shutErr)
+	}
+	if closeErr := encStore.Close(); closeErr != nil {
+		return fmt.Errorf("close enrollment store before service start: %w", closeErr)
+	}
+	storeOpen = false
+
+	return completePlatformEnrollment(baseURL, noBrowser, userMode, deps)
+}
+
+func completePlatformEnrollment(
+	baseURL string,
+	noBrowser, userMode bool,
+	deps platformEnrollDeps,
+) error {
+	action, err := deps.transitionService(userMode)
+	if err != nil {
+		return fmt.Errorf("enrollment succeeded but service transition failed: %w", err)
+	}
+
+	printPlatformEnrollmentComplete(baseURL, action)
+	if action != "" && !noBrowser &&
+		waitForDashboard(strings.TrimRight(baseURL, "/")+"/machines", 10*time.Second) {
+		deps.openBrowser(strings.TrimRight(baseURL, "/") + "/machines")
 	}
 	return nil
 }
 
-func printPlatformEnrollmentComplete(baseURL string, keepRunning bool) {
+func transitionEnrolledService(userMode bool) (string, error) {
+	svc, _, err := newProgramService(svcOpts{userService: userMode})
+	if err != nil {
+		return "", fmt.Errorf("create service handle: %w", err)
+	}
+
+	status, statusErr := svc.Status()
+	if errors.Is(statusErr, service.ErrNotInstalled) {
+		return "", nil
+	}
+	if statusErr != nil {
+		return "", fmt.Errorf("query installed service: %w", statusErr)
+	}
+
+	if status == service.StatusRunning {
+		if err := service.Control(svc, "restart"); err != nil {
+			return "", fmt.Errorf("restart service: %w", err)
+		}
+		return "restarted", nil
+	}
+	if err := svc.Start(); err != nil {
+		return "", fmt.Errorf("start service: %w", err)
+	}
+	return "started", nil
+}
+
+func printPlatformEnrollmentComplete(baseURL, serviceAction string) {
 	fmt.Println()
 	fmt.Println("Enrollment complete.")
 	fmt.Println("Welcome to Kite!")
-	if keepRunning {
+	if serviceAction != "" {
+		fmt.Printf("Collector service %s automatically.\n", serviceAction)
 		fmt.Printf("Kite is running at %s\n", strings.TrimRight(baseURL, "/"))
-		fmt.Println("Press Ctrl+C to stop.")
+	} else {
+		fmt.Println("No installed collector service was found; enrollment credentials were saved.")
 	}
 }
 
@@ -3264,6 +3327,7 @@ type interactiveEnrollDeps struct {
 	cfgFile   string
 	certsDir  string
 	noBrowser bool
+	userMode  bool
 }
 
 // runInteractiveEnroll gives a no-browser operator a clear choice between the
@@ -3276,7 +3340,7 @@ func runInteractiveEnroll(cmd *cobra.Command, d interactiveEnrollDeps) error {
 	// Non-interactive stdin (piped / no TTY): fall back to the browser sign-in
 	// flow in --no-browser mode, which prints the URL rather than prompting.
 	if f, ok := cmd.InOrStdin().(*os.File); !ok || !term.IsTerminal(int(f.Fd())) { //#nosec G115
-		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true)
+		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true, d.userMode)
 	}
 
 	_, _ = fmt.Fprintln(out, "\nNo browser detected on this host. Choose how to enroll:")
@@ -3299,7 +3363,7 @@ func runInteractiveEnroll(cmd *cobra.Command, d interactiveEnrollDeps) error {
 	default:
 		// Browser sign-in, printing the URL for another device (never auto-open
 		// here — the whole point is that this host has no browser).
-		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true)
+		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true, d.userMode)
 	}
 }
 
