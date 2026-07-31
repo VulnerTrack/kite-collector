@@ -22,11 +22,19 @@ import (
 type fakeKitePKIEnroller struct {
 	agentCode string
 	token     string
+	result    *enrollment.Result
+	err       error
 }
 
 func (f *fakeKitePKIEnroller) Enroll(_ context.Context, agentCode, token string) (*enrollment.Result, error) {
 	f.agentCode = agentCode
 	f.token = token
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.result != nil {
+		return f.result, nil
+	}
 	return &enrollment.Result{
 		Status:             "enrolled",
 		CertificateID:      "cert-1",
@@ -116,4 +124,69 @@ func TestEnrollKiteOAuthToken_EnrollsPKIAndStoresCertificates(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, identity.ApiKeyFingerprint)
 	assert.NotEmpty(t, identity.ApiKeyWrapped)
+}
+
+func TestEnrollKiteOAuthToken_PKIFailureDoesNotPersistIdentity(t *testing.T) {
+	st, err := sqlite.New(filepath.Join(t.TempDir(), "kite.db"))
+	require.NoError(t, err)
+	require.NoError(t, st.Migrate(context.Background()))
+	t.Cleanup(func() { _ = st.Close() })
+
+	pkiErr := errors.New("PKI unavailable")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/callback", nil)
+	err = enrollKiteOAuthToken(req, kiteOAuthEnrollmentOptions{
+		Store:     st,
+		WrapKey:   []byte("01234567890123456789012345678901"),
+		CertsDir:  t.TempDir(),
+		PKIClient: &fakeKitePKIEnroller{err: pkiErr},
+	}, "oauth-access-token")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pkiErr)
+	_, identityErr := st.GetEnrolledIdentity(context.Background())
+	require.Error(t, identityErr, "PKI failure must not leave the collector marked as enrolled")
+}
+
+func TestEnrollKiteOAuthToken_CertificateWriteFailureDoesNotPersistIdentity(t *testing.T) {
+	st, err := sqlite.New(filepath.Join(t.TempDir(), "kite.db"))
+	require.NoError(t, err)
+	require.NoError(t, st.Migrate(context.Background()))
+	t.Cleanup(func() { _ = st.Close() })
+
+	notDirectory := filepath.Join(t.TempDir(), "certs-file")
+	require.NoError(t, os.WriteFile(notDirectory, []byte("not a directory"), 0o600))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/callback", nil)
+	err = enrollKiteOAuthToken(req, kiteOAuthEnrollmentOptions{
+		Store:     st,
+		WrapKey:   []byte("01234567890123456789012345678901"),
+		CertsDir:  notDirectory,
+		PKIClient: &fakeKitePKIEnroller{},
+	}, "oauth-access-token")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "store PKI certificates")
+	_, identityErr := st.GetEnrolledIdentity(context.Background())
+	require.Error(t, identityErr, "certificate persistence failure must not mark enrollment complete")
+}
+
+func TestEnrollKiteOAuthToken_UnexpectedPKIStatusDoesNotPersistIdentity(t *testing.T) {
+	st, err := sqlite.New(filepath.Join(t.TempDir(), "kite.db"))
+	require.NoError(t, err)
+	require.NoError(t, st.Migrate(context.Background()))
+	t.Cleanup(func() { _ = st.Close() })
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/callback", nil)
+	err = enrollKiteOAuthToken(req, kiteOAuthEnrollmentOptions{
+		Store:    st,
+		WrapKey:  []byte("01234567890123456789012345678901"),
+		CertsDir: t.TempDir(),
+		PKIClient: &fakeKitePKIEnroller{result: &enrollment.Result{
+			Status: "pending",
+		}},
+	}, "oauth-access-token")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `unexpected status "pending"`)
+	_, identityErr := st.GetEnrolledIdentity(context.Background())
+	require.Error(t, identityErr, "non-enrolled PKI response must not mark enrollment complete")
 }
