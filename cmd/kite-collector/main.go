@@ -2908,12 +2908,14 @@ Examples:
 type platformEnrollDeps struct {
 	transitionService func(bool) (string, error)
 	openBrowser       func(string)
+	waitDashboard     func(string, time.Duration) bool
 }
 
 func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser, userMode bool) error {
 	return runPlatformLoginEnrollWithDeps(addr, dbPath, cfgFile, noBrowser, userMode, platformEnrollDeps{
 		transitionService: transitionEnrolledService,
 		openBrowser:       dashboard.OpenBrowser,
+		waitDashboard:     waitForDashboard,
 	})
 }
 
@@ -3015,17 +3017,37 @@ func runPlatformLoginEnrollWithDeps(
 		return waitErr
 	}
 
-	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutCancel()
-	if shutErr := srv.Shutdown(shutCtx); shutErr != nil {
-		return fmt.Errorf("shutdown temporary enrollment dashboard: %w", shutErr)
-	}
-	if closeErr := encStore.Close(); closeErr != nil {
-		return fmt.Errorf("close enrollment store before service start: %w", closeErr)
-	}
+	closeErr := closeTemporaryEnrollmentResources(srv.Shutdown, encStore.Close)
 	storeOpen = false
+	if closeErr != nil {
+		return closeErr
+	}
 
 	return completePlatformEnrollment(baseURL, noBrowser, userMode, deps)
+}
+
+func closeTemporaryEnrollmentResources(
+	shutdown func(context.Context) error,
+	closeStore func() error,
+) error {
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutCancel()
+
+	shutErr := shutdown(shutCtx)
+	closeErr := closeStore()
+	switch {
+	case shutErr != nil && closeErr != nil:
+		return fmt.Errorf(
+			"shutdown temporary enrollment dashboard: %w",
+			errors.Join(shutErr, fmt.Errorf("close enrollment store: %w", closeErr)),
+		)
+	case shutErr != nil:
+		return fmt.Errorf("shutdown temporary enrollment dashboard: %w", shutErr)
+	case closeErr != nil:
+		return fmt.Errorf("close enrollment store before service start: %w", closeErr)
+	default:
+		return nil
+	}
 }
 
 func completePlatformEnrollment(
@@ -3040,10 +3062,16 @@ func completePlatformEnrollment(
 
 	printPlatformEnrollmentComplete(baseURL, action)
 	if action != "" && !noBrowser &&
-		waitForDashboard(strings.TrimRight(baseURL, "/")+"/machines", 10*time.Second) {
+		deps.waitDashboard(strings.TrimRight(baseURL, "/")+"/machines", 10*time.Second) {
 		deps.openBrowser(strings.TrimRight(baseURL, "/") + "/machines")
 	}
 	return nil
+}
+
+type enrolledServiceOps struct {
+	status  func() (service.Status, error)
+	start   func() error
+	restart func() error
 }
 
 func transitionEnrolledService(userMode bool) (string, error) {
@@ -3051,8 +3079,15 @@ func transitionEnrolledService(userMode bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create service handle: %w", err)
 	}
+	return transitionEnrolledServiceWithOps(enrolledServiceOps{
+		status:  svc.Status,
+		start:   svc.Start,
+		restart: func() error { return service.Control(svc, "restart") },
+	})
+}
 
-	status, statusErr := svc.Status()
+func transitionEnrolledServiceWithOps(ops enrolledServiceOps) (string, error) {
+	status, statusErr := ops.status()
 	if errors.Is(statusErr, service.ErrNotInstalled) {
 		return "", nil
 	}
@@ -3061,12 +3096,12 @@ func transitionEnrolledService(userMode bool) (string, error) {
 	}
 
 	if status == service.StatusRunning {
-		if err := service.Control(svc, "restart"); err != nil {
+		if err := ops.restart(); err != nil {
 			return "", fmt.Errorf("restart service: %w", err)
 		}
 		return "restarted", nil
 	}
-	if err := svc.Start(); err != nil {
+	if err := ops.start(); err != nil {
 		return "", fmt.Errorf("start service: %w", err)
 	}
 	return "started", nil
