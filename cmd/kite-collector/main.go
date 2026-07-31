@@ -906,7 +906,7 @@ and no config file is required:
 			printBrandBanner(cmd.ErrOrStderr(), version, commit)
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
-			return runAgent(ctx, cfgFile, dbPath, interval, certsDir, endpoint, dashboardAddr, verbose, stream)
+			return runAgent(ctx, cfgFile, dbPath, interval, certsDir, endpoint, dashboardAddr, verbose, stream, false)
 		},
 	}
 
@@ -952,7 +952,7 @@ automatically and no config file is needed:
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
-			return runAgent(ctx, cfgFile, dbPath, interval, certsDir, endpoint, "", verbose, true)
+			return runAgent(ctx, cfgFile, dbPath, interval, certsDir, endpoint, "", verbose, true, false)
 		},
 	}
 
@@ -968,8 +968,9 @@ automatically and no config file is needed:
 	return cmd
 }
 
-func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAddr string, verbose, stream bool) error {
+func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpointOverride, dashboardAddr string, verbose, stream, enableDashboardInstall bool) error {
 	runID := uuid.Must(uuid.NewV7()).String()
+	dbPath = resolveAgentDBPath(dbPath, certsDir)
 
 	var cfg *config.Config
 	if _, err := os.Stat(cfgFile); os.IsNotExist(err) {
@@ -1329,17 +1330,20 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	var dashSrv *http.Server
 	if dashboardAddr != "" {
 		rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
-		dashSrv = dashboard.Serve(dashboardAddr, st, rc, logger, dashboard.Options{
+		dashOpts := dashboard.Options{
 			Coordinator:      coord,
 			BaseConfig:       cfg,
 			StreamController: dashboardStreamAdapter{streamCtrl},
-			Installer:        newRealInstaller(),
 			AppVersion:       version,
 			Commit:           commit,
 			PlatformEndpoint: cfg.Streaming.OTLP.Endpoint,
 			OAuth:            dashboardOAuthOptions(cfg),
 			CertsDir:         certsDir,
-		})
+		}
+		if enableDashboardInstall {
+			dashOpts.Installer = newRealInstaller()
+		}
+		dashSrv = dashboard.Serve(dashboardAddr, st, rc, logger, dashOpts)
 		go func() {
 			slog.Info("dashboard server starting",
 				"code", string(LogCodeDashboardStarting),
@@ -2488,7 +2492,7 @@ installed service uses, so this command Just Works after install.`,
 				if !noBrowser {
 					go dashboard.OpenBrowser(dashboardLoginURL(addr))
 				}
-				return runAgent(ctx, cfgFile, dbPath, "", certsDir, "", addr, false, true)
+				return runAgent(ctx, cfgFile, dbPath, "", certsDir, "", addr, false, true, enableInstall)
 			}
 
 			// --with-agent=false: standalone inspector. We still inject the
@@ -3393,6 +3397,20 @@ func defaultKiteDataDir() string {
 		return defaultCertsDir(true)
 	}
 	return defaultCertsDir(false)
+}
+
+// resolveAgentDBPath keeps managed-service invocations safe when an older
+// service registration omitted --db. An empty SQLite path otherwise resolves
+// to the process working directory and leaves the encrypted working database
+// in tmpfs without a valid persistent destination.
+func resolveAgentDBPath(dbPath, certsDir string) string {
+	if strings.TrimSpace(dbPath) != "" {
+		return dbPath
+	}
+	if strings.TrimSpace(certsDir) != "" {
+		return filepath.Join(certsDir, "kite.db")
+	}
+	return "kite.db"
 }
 
 // currentOSUser returns the login username stamped into scan_runs.triggered_by
