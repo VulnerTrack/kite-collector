@@ -105,33 +105,50 @@ func TestRunPlatformLoginEnroll_PrintsLocalURLBeforeOAuthRedirect(t *testing.T) 
 
 	addr := listener.Addr().String()
 	var runErr error
+	var transitioned bool
 	output := captureStdout(t, func() {
-		runErr = runPlatformLoginEnroll(addr, "unused.db", "unused.yaml", true)
+		runErr = runPlatformLoginEnrollWithDeps(
+			addr,
+			"unused.db",
+			"unused.yaml",
+			true,
+			false,
+			platformEnrollDeps{
+				transitionService: func(bool) (string, error) {
+					transitioned = true
+					return "restarted", nil
+				},
+				openBrowser: func(string) {},
+			},
+		)
 	})
 
 	assert.NoError(t, runErr)
+	assert.True(t, transitioned)
 	assert.Contains(t, output, "http://"+addr+"/kite-login?")
 	assert.False(t, strings.Contains(output, "app.vulnertrack.com"),
 		"the CLI must not bypass the local response that sets OAuth state and PKCE cookies")
 }
 
-func TestPrintPlatformEnrollmentComplete_DesktopKeepsKiteRunning(t *testing.T) {
+func TestPrintPlatformEnrollmentComplete_ServiceStarted(t *testing.T) {
 	output := captureStdout(t, func() {
-		printPlatformEnrollmentComplete("http://127.0.0.1:9090/", true)
+		printPlatformEnrollmentComplete("http://127.0.0.1:9090/", "started")
 	})
 
 	assert.Contains(t, output, "Enrollment complete.")
 	assert.Contains(t, output, "Welcome to Kite!")
+	assert.Contains(t, output, "Collector service started automatically.")
 	assert.Contains(t, output, "Kite is running at http://127.0.0.1:9090")
-	assert.Contains(t, output, "Press Ctrl+C to stop.")
+	assert.NotContains(t, output, "Press Ctrl+C to stop.")
 }
 
-func TestPrintPlatformEnrollmentComplete_HeadlessReturnsWithoutKeepAliveHint(t *testing.T) {
+func TestPrintPlatformEnrollmentComplete_NoInstalledService(t *testing.T) {
 	output := captureStdout(t, func() {
-		printPlatformEnrollmentComplete("http://127.0.0.1:9090", false)
+		printPlatformEnrollmentComplete("http://127.0.0.1:9090", "")
 	})
 
 	assert.Contains(t, output, "Enrollment complete.")
 	assert.Contains(t, output, "Welcome to Kite!")
+	assert.Contains(t, output, "No installed collector service was found")
 	assert.NotContains(t, output, "Press Ctrl+C to stop.")
 }
