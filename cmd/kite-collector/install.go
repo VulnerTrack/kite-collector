@@ -35,13 +35,14 @@ const (
 // program is the service.Interface implementation the OS service manager
 // drives. Start spawns runAgent in a goroutine, Stop cancels its context.
 type program struct {
-	cancel   context.CancelFunc
-	done     chan struct{}
-	certsDir string
-	cfgFile  string
-	dbPath   string
-	endpoint string
-	verbose  bool
+	cancel        context.CancelFunc
+	done          chan struct{}
+	certsDir      string
+	cfgFile       string
+	dbPath        string
+	endpoint      string
+	dashboardAddr string
+	verbose       bool
 }
 
 func (p *program) Start(_ service.Service) error {
@@ -53,7 +54,7 @@ func (p *program) Start(_ service.Service) error {
 		// runAgent's error is intentionally swallowed here: the service
 		// manager only cares about the process exit code, and unrecoverable
 		// errors will already have been logged by runAgent itself.
-		_ = runAgent(ctx, p.cfgFile, p.dbPath, "", p.certsDir, p.endpoint, "", p.verbose, true)
+		_ = runAgent(ctx, p.cfgFile, p.dbPath, "", p.certsDir, p.endpoint, p.dashboardAddr, p.verbose, true, false)
 	}()
 	return nil
 }
@@ -74,13 +75,14 @@ func (p *program) Stop(_ service.Service) error {
 // ---------------------------------------------------------------------------
 
 type svcOpts struct {
-	executable  string
-	certsDir    string
-	cfgFile     string
-	dbPath      string
-	endpoint    string
-	userService bool
-	verbose     bool
+	executable    string
+	certsDir      string
+	cfgFile       string
+	dbPath        string
+	endpoint      string
+	dashboardAddr string
+	userService   bool
+	verbose       bool
 }
 
 // toInstallerOptions adapts the cmd-layer svcOpts to the installer package's
@@ -88,13 +90,14 @@ type svcOpts struct {
 // BuildSvcConfig produces the same Executable string we used in v1.
 func (o svcOpts) toInstallerOptions() installer.Options {
 	return installer.Options{
-		UserMode:  o.userService,
-		BinaryDir: filepath.Dir(o.executable),
-		CertsDir:  o.certsDir,
-		CfgFile:   o.cfgFile,
-		DbPath:    o.dbPath,
-		Endpoint:  o.endpoint,
-		Verbose:   o.verbose,
+		UserMode:      o.userService,
+		BinaryDir:     filepath.Dir(o.executable),
+		CertsDir:      o.certsDir,
+		CfgFile:       o.cfgFile,
+		DbPath:        o.dbPath,
+		Endpoint:      o.endpoint,
+		DashboardAddr: o.dashboardAddr,
+		Verbose:       o.verbose,
 	}
 }
 
@@ -108,11 +111,12 @@ func buildSvcConfig(o svcOpts) *service.Config {
 // flags off its own command line.
 func newProgramService(o svcOpts) (service.Service, *program, error) {
 	prg := &program{
-		certsDir: o.certsDir,
-		cfgFile:  o.cfgFile,
-		dbPath:   o.dbPath,
-		endpoint: o.endpoint,
-		verbose:  o.verbose,
+		certsDir:      o.certsDir,
+		cfgFile:       o.cfgFile,
+		dbPath:        o.dbPath,
+		endpoint:      o.endpoint,
+		dashboardAddr: o.dashboardAddr,
+		verbose:       o.verbose,
 	}
 	svc, err := service.New(prg, buildSvcConfig(o))
 	if err != nil {
@@ -352,12 +356,13 @@ func newServiceStatusCmd() *cobra.Command {
 // the user-facing surface clean, but remains discoverable via direct lookup.
 func newServiceRunCmd() *cobra.Command {
 	var (
-		certsDir string
-		cfgFile  string
-		dbPath   string
-		endpoint string
-		verbose  bool
-		userMode bool
+		certsDir      string
+		cfgFile       string
+		dbPath        string
+		endpoint      string
+		dashboardAddr string
+		verbose       bool
+		userMode      bool
 	)
 	cmd := &cobra.Command{
 		Use:    "run",
@@ -376,12 +381,13 @@ func newServiceRunCmd() *cobra.Command {
 				return fmt.Errorf("ensure certs dir %s: %w", certsDir, err)
 			}
 			svc, _, err := newProgramService(svcOpts{
-				userService: userMode,
-				certsDir:    certsDir,
-				cfgFile:     cfgFile,
-				dbPath:      dbPath,
-				endpoint:    endpoint,
-				verbose:     verbose,
+				userService:   userMode,
+				certsDir:      certsDir,
+				cfgFile:       cfgFile,
+				dbPath:        dbPath,
+				endpoint:      endpoint,
+				dashboardAddr: dashboardAddr,
+				verbose:       verbose,
 			})
 			if err != nil {
 				return fmt.Errorf("create service: %w", err)
@@ -393,6 +399,8 @@ func newServiceRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&cfgFile, "config", "", "path to configuration file")
 	cmd.Flags().StringVar(&dbPath, "db", "", "path to SQLite database")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "OTLP endpoint override")
+	cmd.Flags().StringVar(&dashboardAddr, "dashboard-addr", installer.DefaultDashboardAddr,
+		"local dashboard listen address")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "debug logging")
 	cmd.Flags().BoolVar(&userMode, "user", false, "service was installed in user mode")
 	return cmd

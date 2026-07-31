@@ -20,6 +20,10 @@ func TestDetectDefaults_PopulatesSmartFields(t *testing.T) {
 	assert.Equal(t, runtime.GOARCH, d.Detected.Arch, "Detected.Arch must match runtime.GOARCH")
 	assert.NotEmpty(t, d.Options.BinaryDir, "BinaryDir must always be populated")
 	assert.NotEmpty(t, d.Options.CertsDir, "CertsDir must always be populated")
+	assert.Equal(t, filepath.Join(d.Options.CertsDir, "kite.db"), d.Options.DbPath,
+		"service defaults must keep SQLite beside the enrollment credentials")
+	assert.Equal(t, DefaultDashboardAddr, d.Options.DashboardAddr,
+		"the managed service must expose its live store through the local dashboard")
 }
 
 func TestSnapDefaultsUseRevisionIndependentWritableStorage(t *testing.T) {
@@ -195,6 +199,22 @@ func TestBuildSvcConfig_PropagatesOptions(t *testing.T) {
 	assert.Contains(t, cfg.Arguments, "/var/kc")
 	assert.Contains(t, cfg.Arguments, "--config")
 	assert.Contains(t, cfg.Arguments, "--endpoint")
+	assert.Contains(t, cfg.Arguments, "--dashboard-addr")
+	assert.Contains(t, cfg.Arguments, DefaultDashboardAddr)
 	assert.Contains(t, cfg.Arguments, "--verbose")
 	assert.Equal(t, true, cfg.Option["UserService"])
+}
+
+func TestBuildSvcConfig_DefaultsDBBesideCerts(t *testing.T) {
+	opts := Options{
+		BinaryDir: "/opt/kc",
+		CertsDir:  "/var/lib/kite-collector",
+	}
+
+	cfg := BuildSvcConfig(opts)
+
+	assert.Contains(t, cfg.Arguments, "--db")
+	assert.Contains(t, cfg.Arguments, "/var/lib/kite-collector/kite.db")
+	assert.Contains(t, cfg.Arguments, "--dashboard-addr")
+	assert.Contains(t, cfg.Arguments, DefaultDashboardAddr)
 }

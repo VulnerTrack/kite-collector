@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -67,6 +68,17 @@ func TestDashboardLoginURL_UsesLocalKiteRoute(t *testing.T) {
 	assert.Equal(t,
 		"http://127.0.0.1:9090/kite-login?collector=http%3A%2F%2F127.0.0.1%3A9090",
 		dashboardLoginURL("0.0.0.0:9090"))
+}
+
+func TestResolveAgentDBPath(t *testing.T) {
+	assert.Equal(t,
+		filepath.Join("/var/lib/kite-collector", "kite.db"),
+		resolveAgentDBPath("", "/var/lib/kite-collector"),
+	)
+	assert.Equal(t, "/custom/inventory.db",
+		resolveAgentDBPath("/custom/inventory.db", "/var/lib/kite-collector"),
+	)
+	assert.Equal(t, "kite.db", resolveAgentDBPath("", ""))
 }
 
 func TestRunPlatformLoginEnroll_PrintsLocalURLBeforeOAuthRedirect(t *testing.T) {
