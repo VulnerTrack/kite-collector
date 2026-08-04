@@ -239,6 +239,28 @@ func TestRenewHTTPSRejectsOrganizationChangeBeforeWriting(t *testing.T) {
 	assert.Equal(t, currentCA, afterCA)
 }
 
+func TestRunHTTPSLifecycle_CancelledContextReturnsAfterInitialChecks(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := NewClient(nil)
+	client.http = &callbackDoer{do: func(*http.Request) (*http.Response, error) {
+		t.Fatal("missing credential files must prevent outbound lifecycle requests")
+		return nil, nil
+	}}
+
+	done := make(chan struct{})
+	go func() {
+		client.RunHTTPSLifecycle(ctx, t.TempDir())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("HTTPS lifecycle did not honor context cancellation")
+	}
+}
+
 func assertReader(value string) io.Reader {
 	return &stringReader{value: []byte(value)}
 }
