@@ -204,7 +204,7 @@ func TestPlatformUnenroll_RemovesOnlyLocalIdentity(t *testing.T) {
 
 	encStore, err := openSQLiteStore(dbPath, config.IdentityConfig{DataDir: identityDir})
 	require.NoError(t, err)
-	require.NoError(t, encStore.Store.Migrate(ctx))
+	require.NoError(t, encStore.Migrate(ctx))
 	st, ok := encStore.Store.(*sqlite.SQLiteStore)
 	require.True(t, ok)
 	require.NoError(t, st.UpsertEnrolledIdentity(ctx, sqlite.EnrolledIdentity{
