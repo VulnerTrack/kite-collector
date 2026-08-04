@@ -277,3 +277,127 @@ func TestEnrollWithToken_HonoursKITEPKIEndpointOverride(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "http://pki.internal:8040/pki/enroll/token", gotURL)
 }
+
+func TestEnrollWithToken_FailureContracts(t *testing.T) {
+	tests := []struct {
+		name       string
+		doer       httpDoer
+		wantText   string
+		wantCode   string
+		wantStatus any
+	}{
+		{
+			name:     "network failure",
+			doer:     &stubDoer{err: errors.New("dial tcp: connection refused")},
+			wantText: "connection refused",
+			wantCode: "KITE-E017",
+		},
+		{
+			name: "PKI rejection",
+			doer: &stubDoer{resp: &http.Response{
+				StatusCode: http.StatusForbidden,
+				Status:     "403 Forbidden",
+				Body:       io.NopCloser(strings.NewReader(`{"error":"token scope mismatch"}`)),
+			}},
+			wantText:   "token scope mismatch",
+			wantCode:   "KITE-E017",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name: "malformed success response",
+			doer: &stubDoer{resp: &http.Response{
+				StatusCode: http.StatusCreated,
+				Status:     "201 Created",
+				Body:       io.NopCloser(strings.NewReader(`{"status":`)),
+			}},
+			wantText: "decode response",
+		},
+		{
+			name: "success response without certificate",
+			doer: &stubDoer{resp: &http.Response{
+				StatusCode: http.StatusCreated,
+				Status:     "201 Created",
+				Body:       io.NopCloser(strings.NewReader(`{"status":"enrolled"}`)),
+			}},
+			wantText: "response contains no client certificate",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := NewClient(nil)
+			c.http = tc.doer
+
+			result, err := c.EnrollWithToken(context.Background(), "kite-machine-1", "scoped-token")
+
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.Contains(t, err.Error(), tc.wantText)
+			if tc.wantCode != "" {
+				var ke *kiteerrors.Error
+				require.True(t, errors.As(err, &ke))
+				assert.Equal(t, tc.wantCode, ke.Code)
+				if tc.wantStatus != nil {
+					assert.Equal(t, tc.wantStatus, ke.Context["http_status"])
+				}
+			}
+		})
+	}
+}
+
+func TestEnrollmentRejectsEmptyAgentCodeBeforeNetwork(t *testing.T) {
+	for _, enroll := range []struct {
+		name string
+		run  func(*Client) (*Result, error)
+	}{
+		{name: "operator JWT", run: func(c *Client) (*Result, error) {
+			return c.Enroll(context.Background(), "", "jwt")
+		}},
+		{name: "scoped token", run: func(c *Client) (*Result, error) {
+			return c.EnrollWithToken(context.Background(), "", "token")
+		}},
+	} {
+		t.Run(enroll.name, func(t *testing.T) {
+			doer := &stubDoer{}
+			c := NewClient(nil)
+			c.http = doer
+
+			result, err := enroll.run(c)
+
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.Contains(t, err.Error(), "agent code is required")
+			assert.Nil(t, doer.req, "validation must happen before the PKI request")
+		})
+	}
+}
+
+func TestStoreCertificates_ReplacesExistingFilesAndPreservesModes(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "ca.pem"), []byte("old-ca"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent.pem"), []byte("old-cert"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "agent-key.pem"), []byte("old-key"), 0o644))
+
+	result := &Result{
+		CACertificate:     []byte("new-ca"),
+		ClientCertificate: []byte("new-cert"),
+		ClientKey:         []byte("new-key"),
+	}
+	require.NoError(t, StoreCertificates(dir, result))
+
+	for name, want := range map[string]struct {
+		body string
+		mode os.FileMode
+	}{
+		"ca.pem":        {body: "new-ca", mode: 0o644},
+		"agent.pem":     {body: "new-cert", mode: 0o644},
+		"agent-key.pem": {body: "new-key", mode: 0o600},
+	} {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		require.NoError(t, err)
+		assert.Equal(t, want.body, string(body))
+		info, err := os.Stat(filepath.Join(dir, name))
+		require.NoError(t, err)
+		assert.Equal(t, want.mode, info.Mode().Perm())
+	}
+}
