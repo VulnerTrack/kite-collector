@@ -1,0 +1,124 @@
+---
+- name: Deploy and enroll Kite Collector on Windows
+  hosts: kite_windows
+  gather_facts: false
+
+  # Canary first, then bounded batches. Override the host set with --limit.
+  serial:
+    - 5
+    - 25
+  max_fail_percentage: 10
+
+  pre_tasks:
+    - name: Validate deployment variables
+      ansible.builtin.assert:
+        that:
+          # Windows Installer ProductVersion is numeric major.minor.patch.
+          - kite_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+          - kite_msi_sha256 is match('^[0-9a-fA-F]{64}$')
+          - not kite_msi_sha256.startswith('REPLACE_')
+          - kite_pki_endpoint is match('^https://')
+          - vault_kite_enrollment_token | length > 20
+        fail_msg: >-
+          Set a valid version, MSI SHA-256, HTTPS PKI endpoint and encrypted
+          enrollment token before running this playbook.
+      run_once: true
+      no_log: true
+
+    - name: Check WinRM connectivity
+      ansible.windows.win_ping:
+
+  tasks:
+    - name: Create the package staging directory
+      ansible.windows.win_file:
+        path: "{{ kite_package_dir }}"
+        state: directory
+
+    - name: Download the versioned MSI from GitHub Releases
+      ansible.windows.win_get_url:
+        url: "{{ kite_msi_url }}"
+        dest: "{{ kite_remote_msi }}"
+        checksum: "{{ kite_msi_sha256 }}"
+        checksum_algorithm: sha256
+        force: false
+
+    - name: Install or upgrade Kite Collector
+      ansible.windows.win_package:
+        path: "{{ kite_remote_msi }}"
+        provider: msi
+        state: present
+        verify_signature: "{{ kite_verify_authenticode }}"
+
+    # The MSI starts the service immediately. Stop it while first-time
+    # enrollment writes the machine-specific key and client certificate.
+    - name: Stop Kite Collector while enrollment is checked
+      ansible.windows.win_service:
+        name: kite-collector
+        state: stopped
+
+    - name: Check whether this machine is already enrolled
+      ansible.windows.win_stat:
+        path: '{{ kite_data_dir }}\agent.pem'
+      register: kite_certificate_before
+
+    - name: Enroll this machine with a scoped fleet token
+      ansible.windows.win_command:
+        argv:
+          - "{{ kite_executable }}"
+          - enroll
+          - --agent-code
+          - "{{ kite_agent_code }}"
+          - --enrollment-token
+          - "{{ vault_kite_enrollment_token }}"
+          - --certs-dir
+          - "{{ kite_data_dir }}"
+        creates: '{{ kite_data_dir }}\agent.pem'
+      environment:
+        KITE_PKI_ENDPOINT: "{{ kite_pki_endpoint }}"
+      when: not kite_certificate_before.stat.exists
+      no_log: true
+
+    - name: Start Kite Collector automatically
+      ansible.windows.win_service:
+        name: kite-collector
+        start_mode: auto
+        state: started
+
+    - name: Read the installed version
+      ansible.windows.win_command:
+        argv:
+          - "{{ kite_executable }}"
+          - version
+      register: kite_version_result
+      changed_when: false
+
+    - name: Check the enrolled certificate
+      ansible.windows.win_stat:
+        path: '{{ kite_data_dir }}\agent.pem'
+      register: kite_certificate_after
+
+    - name: Read service state
+      ansible.windows.win_service_info:
+        name: kite-collector
+      register: kite_service
+
+    - name: Require a certificate and a running service
+      ansible.builtin.assert:
+        that:
+          - kite_certificate_after.stat.exists
+          - kite_service.exists
+          - kite_service.services | length == 1
+          - kite_service.services[0].state == 'started'
+        fail_msg: >-
+          Kite Collector did not finish in the enrolled/running state on
+          {{ inventory_hostname }}.
+
+    - name: Report the installed version
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ kite_version_result.stdout | trim }}"
+
+  post_tasks:
+    - name: Remove the staged MSI after a successful deployment
+      ansible.windows.win_file:
+        path: "{{ kite_remote_msi }}"
+        state: absent

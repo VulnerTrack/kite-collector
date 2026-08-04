@@ -64,6 +64,9 @@ Download the latest `kite-collector_<version>_amd64.msi` package from the [GitHu
 msiexec /i kite-collector_amd64.msi /quiet
 ```
 
+For a version-pinned, rolling deployment to hundreds of domain-joined Windows
+computers, use the included [Ansible fleet deployment](deploy/ansible/README.md).
+
 #### 2. Standalone GUI Wizard
 Download the Windows binary `kite-collector_windows_amd64.exe` and double-click it from File Explorer. The binary will automatically detect the double-click launch and open the built-in graphical installation wizard.
 

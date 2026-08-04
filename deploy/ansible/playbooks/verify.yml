@@ -1,0 +1,41 @@
+---
+- name: Verify Kite Collector fleet state
+  hosts: kite_windows
+  gather_facts: false
+  serial: 50
+
+  tasks:
+    - name: Check WinRM connectivity
+      ansible.windows.win_ping:
+
+    - name: Read installed version
+      ansible.windows.win_command:
+        argv:
+          - "{{ kite_executable }}"
+          - version
+      register: kite_version_result
+      changed_when: false
+
+    - name: Check client certificate
+      ansible.windows.win_stat:
+        path: '{{ kite_data_dir }}\agent.pem'
+      register: kite_certificate
+
+    - name: Read service state
+      ansible.windows.win_service_info:
+        name: kite-collector
+      register: kite_service
+
+    - name: Validate host state
+      ansible.builtin.assert:
+        that:
+          - kite_certificate.stat.exists
+          - kite_service.exists
+          - kite_service.services | length == 1
+          - kite_service.services[0].state == 'started'
+
+    - name: Report host state
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: {{ kite_version_result.stdout | trim }},
+          enrolled, service started

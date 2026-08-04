@@ -1,0 +1,3 @@
+inventory/production/group_vars/kite_windows/vault.yml
+.venv/
+*.retry

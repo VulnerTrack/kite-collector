@@ -1,0 +1,52 @@
+---
+- name: Uninstall Kite Collector from Windows
+  hosts: kite_windows
+  gather_facts: false
+  serial: 25
+  max_fail_percentage: 10
+
+  vars_prompt:
+    - name: confirm_uninstall
+      prompt: >-
+        Type UNINSTALL to remove Kite Collector. Its ProgramData directory may
+        also be removed; back it up first if credentials must be preserved
+      private: false
+
+  pre_tasks:
+    - name: Require explicit confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm_uninstall == 'UNINSTALL'
+        fail_msg: "Uninstall cancelled."
+      run_once: true
+
+    - name: Validate the MSI checksum
+      ansible.builtin.assert:
+        that:
+          - kite_msi_sha256 is match('^[0-9a-fA-F]{64}$')
+      run_once: true
+
+  tasks:
+    - name: Create the package staging directory
+      ansible.windows.win_file:
+        path: "{{ kite_package_dir }}"
+        state: directory
+
+    - name: Download the exact installed-version MSI
+      ansible.windows.win_get_url:
+        url: "{{ kite_msi_url }}"
+        dest: "{{ kite_remote_msi }}"
+        checksum: "{{ kite_msi_sha256 }}"
+        checksum_algorithm: sha256
+        force: false
+
+    - name: Uninstall Kite Collector
+      ansible.windows.win_package:
+        path: "{{ kite_remote_msi }}"
+        provider: msi
+        state: absent
+
+    - name: Remove the staged MSI
+      ansible.windows.win_file:
+        path: "{{ kite_remote_msi }}"
+        state: absent
