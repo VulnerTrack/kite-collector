@@ -1,0 +1,34 @@
+---
+# WinRM transport. Kerberos provides authentication and message encryption
+# over the domain-managed WinRM HTTP listener.
+ansible_connection: winrm
+ansible_winrm_transport: kerberos
+ansible_winrm_message_encryption: always
+ansible_port: 5985
+ansible_user: "svc-ansible@CORP.EXAMPLE.COM"
+ansible_password: "{{ vault_ansible_password }}"
+
+# Release tag and MSI naming convention:
+#   tag:  v1.2.3
+#   file: kite-collector_1.2.3_amd64.msi
+kite_version: "1.2.3"
+kite_release_tag: "v{{ kite_version }}"
+kite_msi_filename: "kite-collector_{{ kite_version }}_amd64.msi"
+kite_msi_url: >-
+  https://github.com/VulnerTrack/kite-collector/releases/download/{{ kite_release_tag }}/{{ kite_msi_filename }}
+
+# Mandatory supply-chain check. Obtain it locally with:
+#   sha256sum dist/kite-collector_1.2.3_amd64.msi
+kite_msi_sha256: "REPLACE_WITH_THE_64_CHARACTER_SHA256"
+
+# Enable only after the MSI is Authenticode-signed in the release process.
+kite_verify_authenticode: false
+
+# Fleet enrollment. The scoped token belongs in vault.yml, never here.
+kite_agent_code: "kite-collector"
+kite_pki_endpoint: "https://pki.example.com"
+
+kite_executable: 'C:\Program Files\Kite Collector\kite-collector.exe'
+kite_data_dir: 'C:\ProgramData\kite-collector'
+kite_package_dir: 'C:\ProgramData\VulnerTrack\packages'
+kite_remote_msi: "{{ kite_package_dir }}\\{{ kite_msi_filename }}"

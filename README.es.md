@@ -62,6 +62,9 @@ Descarga el último instalador `kite-collector_<version>_amd64.msi` desde la pá
 msiexec /i kite-collector_amd64.msi /quiet
 ```
 
+Para desplegar una versión fija por lotes en cientos de computadoras Windows
+unidas al dominio, utiliza el [despliegue de flota con Ansible](deploy/ansible/README.md).
+
 #### 2. Asistente Gráfico Integrado
 Descarga el binario para Windows `kite-collector_windows_amd64.exe` y haz doble clic sobre él en el Explorador de Archivos. El binario detectará el doble clic y abrirá automáticamente el asistente gráfico de instalación para registrar el servicio.
 

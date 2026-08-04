@@ -367,10 +367,17 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           short_commit="$(git rev-parse --short HEAD)"
           ./scripts/build-msi.sh "$version" "$short_commit"
-          cp "dist/kite-collector_${version}_amd64.msi" \
-             dist/kite-collector_amd64.msi
+          versioned_msi="kite-collector_${version}_amd64.msi"
+          cp "dist/${versioned_msi}" dist/kite-collector_amd64.msi
+          (
+            cd dist
+            sha256sum "${versioned_msi}" > "${versioned_msi}.sha256"
+          )
           gh release upload "$GITHUB_REF_NAME" \
-             dist/kite-collector_amd64.msi --clobber
+             "dist/${versioned_msi}" \
+             "dist/${versioned_msi}.sha256" \
+             dist/kite-collector_amd64.msi \
+             --clobber
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
