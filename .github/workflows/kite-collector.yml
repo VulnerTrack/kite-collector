@@ -303,9 +303,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Install dependencies (dpkg-dev, snapcraft)
+      - name: Install dependencies (dpkg-dev, WiX, snapcraft)
         run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends dpkg-dev
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dpkg-dev msitools wixl
           sudo snap install snapcraft --classic
 
       # Embed the Windows app manifest (UAC requireAdministrator +
@@ -358,6 +359,18 @@ jobs:
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           # Token para publicar automáticamente en la Snap Store:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+
+      - name: Build and upload Windows MSI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          short_commit="$(git rev-parse --short HEAD)"
+          ./scripts/build-msi.sh "$version" "$short_commit"
+          cp "dist/kite-collector_${version}_amd64.msi" \
+             dist/kite-collector_amd64.msi
+          gh release upload "$GITHUB_REF_NAME" \
+             dist/kite-collector_amd64.msi --clobber
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
