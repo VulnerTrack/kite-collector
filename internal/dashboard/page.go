@@ -61,6 +61,9 @@ const indexPageTemplate = `<!DOCTYPE html>
     <a href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true"
        class="btn btn-ghost {{ if eq .ActiveTab "onboarding" }}active{{ end }}"
        onclick="setActive(this)">Onboarding</a>
+    <a href="/fleet" hx-get="/fleet" hx-target="#content" hx-push-url="true"
+       class="btn btn-ghost {{ if eq .ActiveTab "fleet" }}active{{ end }}"
+       onclick="setActive(this)">Mass deployment</a>
     <span id="onboarding-status-badge"
           hx-get="/fragments/onboarding-status-badge"
           hx-trigger="load, every 30s, refresh-agent-state from:body"
@@ -97,6 +100,8 @@ const indexPageTemplate = `<!DOCTYPE html>
          onclick="setActive(this)">All Tables</a>
       <a href="/observability" hx-get="/observability" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "observability" }}active{{ end }}"
          onclick="setActive(this)">Observability</a>
+      <a href="/fleet" hx-get="/fleet" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "fleet" }}active{{ end }}"
+         onclick="setActive(this)">Fleet deployment</a>
     </div>
     <div class="sidenav-section">
       <h4>Tables</h4>

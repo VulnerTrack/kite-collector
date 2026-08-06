@@ -187,3 +187,35 @@ func TestScanner_Discover_AllowLinkLocalConfig(t *testing.T) {
 func TestScanner_Name(t *testing.T) {
 	assert.Equal(t, "network", New().Name())
 }
+
+func TestInferDeploymentMetadata(t *testing.T) {
+	osFamily, arch, tags := inferDeploymentMetadata([]int{443, 5985, 22})
+	assert.Equal(t, "windows", osFamily, "WinRM must take precedence over SSH")
+	assert.Equal(t, "amd64", arch)
+	assert.Contains(t, tags, `"deployment_os_inferred":true`)
+
+	osFamily, arch, tags = inferDeploymentMetadata([]int{22, 80})
+	assert.Empty(t, osFamily, "SSH alone may be a router, appliance, Linux, macOS, or Windows")
+	assert.Empty(t, arch)
+	assert.Contains(t, tags, `"deployment_os_inferred":false`)
+
+	osFamily, arch, tags = inferDeploymentMetadata([]int{80, 443})
+	assert.Empty(t, osFamily)
+	assert.Empty(t, arch)
+	assert.Contains(t, tags, `"deployment_os_inferred":false`)
+
+	osFamily, arch, tags = inferDeploymentMetadata([]int{22}, map[int]string{
+		22: "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.8\r\n",
+	})
+	assert.Equal(t, "linux", osFamily)
+	assert.Equal(t, "amd64", arch)
+	assert.Contains(t, tags, `"deployment_os_confidence":"high"`)
+	assert.Contains(t, tags, `"ssh_banner":"SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.8"`)
+
+	osFamily, arch, tags = inferDeploymentMetadata([]int{22}, map[int]string{
+		22: "SSH-2.0-dropbear_2024.86\r\n",
+	})
+	assert.Empty(t, osFamily, "Dropbear commonly identifies routers and must not be called Linux")
+	assert.Empty(t, arch)
+	assert.Contains(t, tags, `"deployment_os_confidence":"unknown"`)
+}
