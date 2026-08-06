@@ -42,6 +42,10 @@ const (
 	// support-bundle surface — GET /support-bundle.zip
 	LogCodeSupportBundleManifest LogCode = "dashboard.support_bundle.manifest_failed"
 
+	// fleet deployment surface — POST /api/v1/fleet/package
+	LogCodeFleetPackageBuild LogCode = "dashboard.fleet.package_build_failed"
+	LogCodeFleetDiscovery    LogCode = "dashboard.fleet.discovery_failed"
+
 	// install surface — POST /api/v1/agent/install + /uninstall
 	LogCodeAgentInstall           LogCode = "dashboard.install.agent_install_failed"
 	LogCodeInstallStatusRender    LogCode = "dashboard.install.status_render_failed"

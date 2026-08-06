@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -98,6 +99,7 @@ type ScannerConfig struct {
 	MaxConcurrent  int
 	ScanTimeout    time.Duration
 	AllowLinkLocal bool
+	InferOS        bool
 }
 
 // parseScannerConfig translates the loose YAML map into a ScannerConfig.
@@ -134,6 +136,9 @@ func parseScannerConfig(cfg map[string]any) ScannerConfig {
 		out.AllowLinkLocal = al
 	case string:
 		out.AllowLinkLocal = al == "true"
+	}
+	if infer, ok := cfg["infer_os"].(bool); ok {
+		out.InferOS = infer
 	}
 	if !out.AllowLinkLocal && safenet.AllowLinkLocalFromEnv() {
 		out.AllowLinkLocal = true
@@ -210,6 +215,7 @@ func (s *Scanner) validateAndClamp(ctx context.Context, c *ScannerConfig) (int, 
 //	max_concurrent    – float64 concurrency limit (default 256, capped 512)
 //	scan_timeout      – string duration overall deadline (default 30m)
 //	allow_link_local  – bool; opt-in to scanning RFC-3927/loopback ranges
+//	infer_os          – bool; infer a deployment OS from WinRM/SSH ports
 func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	scanID := uuid.Must(uuid.NewV7()).String()
 	startedAt := time.Now().UTC()
@@ -280,12 +286,16 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 		go func(ip netip.Addr) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			open := s.probeIP(ctx, ip, parsed.TCPPorts, parsed.Timeout)
+			open, banners := s.probeIP(ctx, ip, parsed.TCPPorts, parsed.Timeout, parsed.InferOS)
 			mu.Lock()
 			probed++
 			if len(open) > 0 {
 				now := time.Now().UTC()
 				ipStr := ip.String()
+				osFamily, architecture, tags := "", "", ""
+				if parsed.InferOS {
+					osFamily, architecture, tags = inferDeploymentMetadata(open, banners)
+				}
 				machines = append(machines, model.Machine{
 					MachineType:     model.MachineTypeServer,
 					Hostname:        ipStr,
@@ -294,6 +304,9 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 					LastSeenAt:      now,
 					IsAuthorized:    model.AuthorizationUnknown,
 					IsManaged:       model.ManagedUnknown,
+					OSFamily:        osFamily,
+					Architecture:    architecture,
+					Tags:            tags,
 				})
 				for _, p := range open {
 					openPorts = append(openPorts, OpenPort{
@@ -344,6 +357,79 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 	s.recordOpenPorts(ctx, scanID, openPorts)
 
 	return machines, nil
+}
+
+func inferDeploymentMetadata(openPorts []int, observedBanners ...map[int]string) (osFamily, architecture, tags string) {
+	ports := append([]int(nil), openPorts...)
+	sort.Ints(ports)
+	banners := map[int]string{}
+	if len(observedBanners) > 0 && observedBanners[0] != nil {
+		banners = observedBanners[0]
+	}
+	hasWinRM := false
+	for _, port := range ports {
+		switch port {
+		case 5985, 5986:
+			hasWinRM = true
+		}
+	}
+	confidence, evidence := "unknown", "No conclusive operating-system signal"
+	switch {
+	case hasWinRM:
+		osFamily, architecture = "windows", "amd64"
+		confidence, evidence = "high", "WinRM service is reachable"
+	default:
+		sshBanner := strings.ToLower(banners[22])
+		switch {
+		case containsAny(sshBanner, "openssh_for_windows", "microsoft"):
+			osFamily, architecture = "windows", "amd64"
+			confidence, evidence = "high", "SSH identified Microsoft Windows"
+		case containsAny(sshBanner, "darwin", "macos", "mac os"):
+			osFamily, architecture = "macos", ""
+			confidence, evidence = "high", "SSH identified macOS"
+		case containsAny(sshBanner,
+			"ubuntu", "debian", "raspbian", "centos", "red hat", "rhel",
+			"fedora", "alpine", "opensuse", "suse", "arch linux", "gentoo", " linux"):
+			osFamily, architecture = "linux", "amd64"
+			confidence, evidence = "high", "SSH identified a Linux distribution"
+		}
+	}
+	tagPayload := map[string]any{
+		"network_scan_open_ports":  ports,
+		"deployment_os_inferred":   osFamily != "",
+		"deployment_os_confidence": confidence,
+		"deployment_os_evidence":   evidence,
+	}
+	if banner := sanitizeServiceBanner(banners[22]); banner != "" {
+		tagPayload["ssh_banner"] = banner
+	}
+	payload, err := json.Marshal(tagPayload)
+	if err == nil {
+		tags = string(payload)
+	}
+	return osFamily, architecture, tags
+}
+
+func containsAny(value string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(value, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeServiceBanner(value string) string {
+	value = strings.TrimSpace(strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return ' '
+		}
+		return r
+	}, value))
+	if len(value) > 240 {
+		value = value[:240]
+	}
+	return strings.TrimSpace(value)
 }
 
 // recordGuardEvent persists a guard event when a sink is wired. Failures to
@@ -422,23 +508,31 @@ func enumerateIPs(cidrs []string) []netip.Addr {
 	return ips
 }
 
-// probeIP attempts to TCP-connect to each port on the given IP. It returns
-// the list of ports that responded successfully.
-func (s *Scanner) probeIP(ctx context.Context, ip netip.Addr, ports []int, timeout time.Duration) []int {
+// probeIP attempts to TCP-connect to each port. When OS inference is enabled,
+// it also reads bounded, unauthenticated service greetings that servers send
+// before login. No credentials or exploit-style probes are used.
+func (s *Scanner) probeIP(ctx context.Context, ip netip.Addr, ports []int, timeout time.Duration, readBanners bool) ([]int, map[int]string) {
 	var open []int
+	banners := make(map[int]string)
 	for _, port := range ports {
 		if ctx.Err() != nil {
-			return open
+			return open, banners
 		}
 		addr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
 		conn, err := (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", addr)
 		if err != nil {
 			continue
 		}
+		if readBanners && port == 22 {
+			_ = conn.SetReadDeadline(time.Now().Add(timeout))
+			if raw, readErr := io.ReadAll(io.LimitReader(conn, 512)); readErr == nil || len(raw) > 0 {
+				banners[port] = string(raw)
+			}
+		}
 		_ = conn.Close()
 		open = append(open, port)
 	}
-	return open
+	return open, banners
 }
 
 // broadcastAddr returns the broadcast address for the given IPv4 prefix.
@@ -514,6 +608,7 @@ func scopeHash(c ScannerConfig) string {
 		ScanTimeoutMS  int64    `json:"scan_timeout_ms"`
 		PerIPTimeoutMS int64    `json:"per_ip_timeout_ms"`
 		AllowLinkLocal bool     `json:"allow_link_local"`
+		InferOS        bool     `json:"infer_os"`
 	}{
 		Scope:          cidrs,
 		TCPPorts:       ports,
@@ -521,6 +616,7 @@ func scopeHash(c ScannerConfig) string {
 		ScanTimeoutMS:  c.ScanTimeout.Milliseconds(),
 		PerIPTimeoutMS: c.Timeout.Milliseconds(),
 		AllowLinkLocal: c.AllowLinkLocal,
+		InferOS:        c.InferOS,
 	}
 	b, _ := json.Marshal(&payload)
 	sum := sha256.Sum256(b)

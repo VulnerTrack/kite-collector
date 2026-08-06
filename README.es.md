@@ -52,6 +52,44 @@ Para aquellas distribuciones que NO utilizan el gestor de paquetes `apt` (como F
 - **Fedora / Red Hat / CentOS**: Puedes descargar el paquete `.rpm` directamente desde la pestaña de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) e instalarlo usando tu gestor de paquetes (por ejemplo, `sudo dnf install ./kite-collector-*.rpm`).
 - **Arch Linux / Otras distribuciones**: Descarga el binario precompilado dentro del archivo `.tar.gz` desde la página de Releases, extráelo y colócalo en tu `PATH`. Alternativamente, puedes compilarlo desde el código fuente.
 
+### Despliegue masivo desde el dashboard
+
+El dashboard local de kite-collector incluye la opción **Mass deployment**.
+Desde allí se genera un único paquete Ansible temporal para computadoras
+Windows, Linux y macOS:
+
+1. Abre el dashboard y selecciona **Mass deployment**.
+2. Presiona **Discover computers**. Con un solo clic Kite combina escaneo TCP,
+   banners SSH, Bonjour/mDNS, NetBIOS, SSDP y WS-Discovery. Muestra la IP local
+   detectada y sólo consulta su red `/24` después de la confirmación explícita.
+3. Selecciona las computadoras compatibles que Kite ya descubrió en
+   **Machines**. Kite obtiene automáticamente su sistema operativo y
+   arquitectura. También puedes agregar hosts o IP adicionales con el formato
+   `hostname,os,arch`.
+4. Presiona **Generate deployment package**. Kite solicita automáticamente al
+   PKI un token distinto, de un solo uso y dos horas, para cada computadora y
+   descarga el ZIP. El operador no copia ni escribe credenciales de enrolamiento.
+5. Lleva el ZIP a una computadora de control Linux que tenga acceso de red a
+   los equipos, descomprímelo y ejecuta `./deploy.sh`.
+
+El script solicita las credenciales de AD/WinRM y SSH al ejecutarse; las
+contraseñas de infraestructura no se guardan en el paquete. Windows requiere
+WinRM y Linux/macOS requieren SSH y elevación de privilegios. El token de
+credenciales de enrolamiento están dentro del ZIP y son confidenciales: elimina
+el ZIP cuando termine el despliegue o expiren.
+La versión del collector, el endpoint PKI y los códigos únicos de cada equipo
+se completan automáticamente desde el controlador; el operador no debe
+ingresarlos.
+
+La detección del sistema operativo usa evidencia de alta confianza, como WinRM
+o un banner SSH que identifica la distribución. Si la red o el firewall no
+ofrecen una señal concluyente, Kite deja el sistema sin seleccionar para evitar
+instalar por error en un router, una impresora u otro dispositivo.
+Cuando un equipo anuncia OpenSSH pero no permite distinguir Linux de macOS, el
+paquete ejecuta esa comprobación automáticamente al conectarse, detecta también
+`amd64`/`arm64` y guarda el resultado en `detected-platforms.csv`. El operador
+no necesita escribir esos comandos.
+
 ### Windows
 
 Para Windows, puedes instalar `kite-collector` usando cualquiera de estos métodos rápidos y sencillos:
