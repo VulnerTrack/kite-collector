@@ -50,6 +50,13 @@ type Options struct {
 	// CertsDir is the PKI credential store populated after OAuth sign-in and
 	// used by onboarding probes for mTLS.
 	CertsDir string
+	// FleetTokenIssuer mints per-computer, single-use PKI credentials for mass
+	// deployment. nil uses the production PKI HTTP client.
+	FleetTokenIssuer FleetEnrollmentTokenIssuer
+	// FleetOperatorToken supplies the current operator OAuth credential. It is
+	// injectable for non-browser embedding and tests; normal dashboards derive
+	// it from the encrypted enrolled identity.
+	FleetOperatorToken func(context.Context) (string, error)
 }
 
 // Serve creates and returns an HTTP server for the dashboard.
@@ -65,6 +72,10 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	}
 
 	mux := http.NewServeMux()
+	fleetDiscovery := newFleetDiscoveryController()
+	fleetPackages := &fleetPackageService{
+		issuer: opts.FleetTokenIssuer, operatorToken: opts.FleetOperatorToken,
+	}
 
 	// Serve static files (embedded or from disk in dev mode).
 	staticSub, err := fs.Sub(staticFS, "static")
@@ -186,6 +197,15 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("GET /tables", serveTabRoute("tables", func(w io.Writer, ctx context.Context) error {
 		return renderTablesFragment(w, ctx, st, rc)
 	}))
+	mux.HandleFunc("GET /fleet", serveTabRoute("fleet", func(w io.Writer, ctx context.Context) error {
+		return renderFleetDeploymentFragment(w, ctx, st, opts, fleetDiscovery)
+	}))
+	mux.HandleFunc("POST /api/v1/fleet/discover", func(w http.ResponseWriter, r *http.Request) {
+		handleFleetDiscovery(w, r, st, logger, fleetDiscovery)
+	})
+	mux.HandleFunc("POST /api/v1/fleet/package", func(w http.ResponseWriter, r *http.Request) {
+		handleFleetPackage(w, r, logger, opts, fleetPackages)
+	})
 
 	// /tables/{name} mirrors the per-tab pattern. Same HX-Request branch
 	// (fragment-only) vs. plain GET (full shell) split, with ActiveTab
@@ -402,6 +422,23 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			})
 			kiteOAuthEnrollment.Store = sqliteStore
 			kiteOAuthEnrollment.WrapKey = wrapKey
+			if fleetPackages.operatorToken == nil {
+				fleetPackages.operatorToken = func(ctx context.Context) (string, error) {
+					identity, identityErr := sqliteStore.GetEnrolledIdentity(ctx)
+					if identityErr != nil {
+						return "", fmt.Errorf("sign in to VulnerTrack before generating a deployment package")
+					}
+					plaintext, unwrapErr := sqlite.AEADUnwrap(wrapKey, identity.ApiKeyWrapped)
+					if unwrapErr != nil {
+						return "", fmt.Errorf("VulnerTrack session is unavailable; sign in again")
+					}
+					token := strings.TrimSpace(string(plaintext))
+					if token == "" {
+						return "", fmt.Errorf("VulnerTrack session is unavailable; sign in again")
+					}
+					return token, nil
+				}
+			}
 		}
 	} else {
 		logger.Warn("dashboard: onboarding disabled — store is not sqlite-backed",

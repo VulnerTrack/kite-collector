@@ -1056,6 +1056,155 @@ select {
 }
 .card p { margin: 4px 0 12px; }
 
+/* Fleet controller — local package generator and deployment handoff. */
+.fleet-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(255, 49, 49, 0.2);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 49, 49, 0.1), rgba(99, 115, 129, 0.05));
+}
+.fleet-hero h1 { margin: 10px 0 6px; font-size: 1.55rem; }
+.fleet-hero p { max-width: 780px; margin: 0; }
+.fleet-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
+  gap: 18px;
+  align-items: start;
+}
+.fleet-form-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.fleet-network-discovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 14px 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 184, 217, 0.3);
+  border-radius: 12px;
+  background: rgba(0, 184, 217, 0.06);
+}
+.fleet-network-copy { display: flex; flex-direction: column; gap: 4px; }
+.fleet-discovery-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 168px; }
+.fleet-discovery-spinner { display: none; width: 14px; height: 14px; border: 2px solid rgba(255, 255, 255, .45); border-top-color: #fff; border-radius: 50%; }
+.fleet-discovery-button.is-loading .fleet-discovery-spinner { display: inline-block; animation: fleet-spin .75s linear infinite; }
+.fleet-discovery-button.is-loading { cursor: wait; opacity: .82; }
+@keyframes fleet-spin { to { transform: rotate(360deg); } }
+.fleet-network-discovery form { flex: 0 0 auto; }
+.fleet-discovery-result {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.07);
+  font-size: 0.82rem;
+}
+.fleet-discovery-error {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.07);
+}
+.fleet-discovered {
+  margin: 14px 0 18px;
+  border: 1px solid var(--palette-divider);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.fleet-discovered-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--palette-grey-100);
+  border-bottom: 1px solid var(--palette-divider);
+}
+.fleet-discovered-heading h3 { margin: 0 0 3px; font-size: 0.95rem; }
+.fleet-selection-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fleet-machine-list {
+  max-height: 360px;
+  overflow: auto;
+}
+.fleet-machine {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--palette-divider);
+  cursor: pointer;
+}
+.fleet-machine:last-child { border-bottom: 0; }
+.fleet-machine:hover { background: rgba(255, 49, 49, 0.035); }
+.fleet-machine-checkbox { width: 17px; height: 17px; accent-color: var(--palette-primary-main); }
+.fleet-machine-unknown {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: rgba(255, 171, 0, 0.16);
+  color: #9a6700;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+.fleet-os-select {
+  min-width: 160px;
+  padding: 6px 28px 6px 9px;
+  border: 1px solid var(--palette-divider);
+  border-radius: 8px;
+  background: var(--palette-background-paper);
+  color: var(--palette-text-primary);
+  font-size: 0.78rem;
+}
+.fleet-machine-main { display: flex; flex-direction: column; min-width: 0; }
+.fleet-machine-main strong { overflow: hidden; text-overflow: ellipsis; }
+.fleet-detection-hint { color: #9a6700; font-size: 0.74rem; }
+.fleet-machine-disabled { cursor: not-allowed; opacity: 0.62; background: var(--palette-grey-100); }
+.fleet-machine-disabled:hover { background: var(--palette-grey-100); }
+.fleet-machine-reason { font-size: 0.74rem; color: var(--palette-text-secondary); text-align: right; }
+.fleet-empty-machines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 14px 0 18px;
+  padding: 14px 16px;
+  border: 1px dashed var(--palette-divider);
+  border-radius: 10px;
+  background: var(--palette-grey-100);
+}
+.fleet-how-it-works pre {
+  overflow-x: auto;
+  padding: 14px;
+  border: 1px solid var(--palette-divider);
+  border-radius: 10px;
+  background: var(--palette-grey-100);
+}
+.fleet-how-it-works ol { padding-left: 1.25rem; color: var(--palette-text-secondary); }
+.fleet-how-it-works li { margin-bottom: 8px; }
+.fleet-warning {
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 171, 0, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 171, 0, 0.08);
+  color: var(--palette-text-secondary);
+  font-size: 0.82rem;
+}
+@media (max-width: 900px) {
+  .fleet-grid, .fleet-form-columns { grid-template-columns: 1fr; }
+  .fleet-discovered-heading { align-items: flex-start; flex-direction: column; }
+  .fleet-network-discovery { align-items: stretch; flex-direction: column; }
+  .fleet-network-discovery form .btn-primary { width: 100%; }
+  .fleet-machine { grid-template-columns: auto minmax(0, 1fr); }
+  .fleet-machine .badge, .fleet-machine-reason { grid-column: 2; justify-self: start; text-align: left; }
+}
+
 /* Toasts — onboarding's flash-message strip. */
 .toasts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .toasts:empty { display: none; }
