@@ -109,10 +109,14 @@ RUN_ID="$$-$(date +%s)"
 CANARY="${YARA_DIR}/canary-${RUN_ID}.txt"
 CLEAN="${YARA_DIR}/clean-${RUN_ID}.txt"
 FIM_CANARY="${FIM_DIR}/fim-canary-${RUN_ID}.txt"
+# A file matching BOTH baked rules (marker string + the "KITEHEX" bytes the
+# hex rule keys on), used to pin that yara.count counts distinct RULES.
+BOTH="${YARA_DIR}/both-${RUN_ID}.txt"
 if mkdir -p "$FIM_DIR" "$YARA_DIR" 2>/dev/null \
    && printf 'kite sim yara canary: %s\n' "$MARKER" > "$CANARY" \
    && printf 'kite sim clean file: no marker here\n' > "$CLEAN" \
-   && printf 'kite sim fim canary: %s\n' "$MARKER" > "$FIM_CANARY"; then
+   && printf 'kite sim fim canary: %s\n' "$MARKER" > "$FIM_CANARY" \
+   && printf '%s and KITEHEX\n' "$MARKER" > "$BOTH"; then
   pass "watch dirs writable (canaries planted)" "$FIM_DIR + $YARA_DIR"
 else
   fail "watch dirs writable (canaries planted)" "cannot write under $WATCH_DIR"
@@ -212,6 +216,24 @@ if [ "$N_COUNT" = "0" ]; then
   pass "yara: clean file does not match"
 else
   fail "yara: clean file does not match" "count='${N_COUNT:-no row}' (expected 0)"
+fi
+# yara.count counts distinct matching RULES, not string hits (osquery
+# YARACallback increments once per CALLBACK_MSG_RULE_MATCHING). A file
+# matching BOTH baked rules must report count=2 with both rule names. Kite
+# reads this as yara_match_count, so a drift to "count = string matches"
+# would silently change that number's meaning — pin it here.
+B_COUNT=$(osq "SELECT count AS c FROM yara
+               WHERE path='${BOTH}' AND sigfile='${SIGFILE}';" \
+            | jq -r '.[0].c // empty')
+B_MATCHES=$(osq "SELECT matches FROM yara
+                 WHERE path='${BOTH}' AND sigfile='${SIGFILE}';" \
+              | jq -r '.[0].matches // empty')
+if [ "$B_COUNT" = "2" ] \
+   && printf '%s' "$B_MATCHES" | grep -q 'kite_sim_canary' \
+   && printf '%s' "$B_MATCHES" | grep -q 'kite_sim_hex_canary'; then
+  pass "yara: count = distinct rules (2)" "matches=${B_MATCHES}"
+else
+  fail "yara: count = distinct rules (2)" "count='${B_COUNT:-}' matches='${B_MATCHES:-}'"
 fi
 
 # 9. hash table agrees with coreutils on the same bytes (data quality — the

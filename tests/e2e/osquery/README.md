@@ -24,7 +24,7 @@ Make targets (each tears the stack down afterwards):
 | Target | What it runs |
 |--------|--------------|
 | `make sim-osquery` | the one-shot probe (liveness + YARA demo) |
-| `make osquery-checks` | the 47-check drift battery (`checks.sh`) |
+| `make osquery-checks` | the 48-check drift battery (`checks.sh`) |
 | `make osquery-edge` | the 20-check edge-case / error-state battery (`edge.sh`) |
 | `make test-osquery-kite` | the collector's osquery source (`go test -tags osquerysim`) against the live daemon |
 
@@ -46,6 +46,7 @@ names *which* failure mode hit:
 | columns (×11) | a column a collector reads was removed/renamed |
 | events subsystem (×3) | the inotify publisher or a subscriber went inactive |
 | YARA on-demand (+ negative) | rules stopped compiling or started matching everything |
+| YARA count = distinct rules | `yara.count` changed meaning (e.g. to string-hits), which would silently reskew `yara_match_count` |
 | hash vs sha256sum | the hash table disagrees with coreutils |
 | FIM delivery | file_events stopped seeing writes under `file_paths` |
 | YARA events | yara_events stopped scanning on change |
@@ -91,7 +92,7 @@ YARA-event categories disjoint for the same reason.
 |-----------|------|
 | `osquery` | `osqueryd --ephemeral` in the foreground, events ON, extensions socket at `/var/osquery/osquery.em` on the `osq-socket` volume, canary YARA rules at `/etc/osquery/yara/kite.yar`, FIM+YARA watches over the shared `osq-watch` volume. |
 | `probe`   | Attaches with `osqueryi --connect`, runs identity queries plus an on-demand YARA canary scan. Green = daemon + socket work. |
-| `checks`  | The 47-check drift battery. |
+| `checks`  | The 48-check drift battery. |
 | `edge`    | The 20-check edge-case / error-state battery. |
 | `kite-runner` | `golang` image running `go test -tags osquerysim ./tests/e2e/osquery/...` — the collector's real discovery source against the live daemon over the shared socket volume. |
 
