@@ -139,6 +139,17 @@ func TestLive_Discover_HostIdentity(t *testing.T) {
 	assert.Contains(t, []string{"amd64", "arm64", "386", "arm"}, m.Architecture,
 		"Architecture must be a GOARCH value, got %q", m.Architecture)
 
+	// Hostname must be the short name (computer_name = gethostname), the same
+	// vocabulary the agent probe's os.Hostname uses — never the FQDN — so a
+	// dual-discovered host is one record, not two. Pin that computer_name
+	// exists on the real daemon and is what the source used.
+	cn, err := osquerydisc.NewClient(socketPath(t)).QueryOne(ctxWithTimeout(t),
+		"SELECT computer_name FROM system_info;")
+	require.NoError(t, err)
+	require.NotNil(t, cn)
+	assert.Equal(t, cn["computer_name"], m.Hostname,
+		"Machine.Hostname must come from system_info.computer_name (short name)")
+
 	var tags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(m.Tags), &tags))
 	assert.NotEmpty(t, tags["osquery_version"])
