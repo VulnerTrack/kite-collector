@@ -224,3 +224,44 @@ func TestLive_FileEvents_CanaryEventuallyVisible(t *testing.T) {
 		time.Sleep(time.Second)
 	}
 }
+
+// TestLive_Discover_InlineRules exercises the sigrule path against the live
+// daemon: an inline YARA rule (no daemon-side file) matches a planted canary,
+// and a malformed inline rule is caught by the compile probe and skipped.
+func TestLive_Discover_InlineRules(t *testing.T) {
+	canary := filepath.Join(watchDir(t), "yara",
+		fmt.Sprintf("e2e-inline-%d.txt", time.Now().UnixNano()))
+	require.NoError(t, os.MkdirAll(filepath.Dir(canary), 0o755))
+	require.NoError(t, os.WriteFile(canary,
+		[]byte("inline probe: KITE-INLINE-CANARY\n"), 0o644))
+	t.Cleanup(func() { _ = os.Remove(canary) })
+
+	rule := `rule kite_inline { strings: $m = "KITE-INLINE-CANARY" condition: $m }`
+	src := osquerydisc.New()
+	machines, err := src.Discover(ctxWithTimeout(t), map[string]any{
+		"socket":     socketPath(t),
+		"yara_rules": rule,
+		"yara_paths": []any{canary},
+	})
+	require.NoError(t, err)
+
+	var tags map[string]any
+	require.NoError(t, json.Unmarshal([]byte(machines[0].Tags), &tags))
+	assert.Equal(t, true, tags["yara_scanned"], "inline rule needs no sigfile; scan must run")
+	assert.Equal(t, float64(1), tags["yara_match_count"])
+}
+
+func TestLive_Discover_MalformedInlineRuleSkips(t *testing.T) {
+	src := osquerydisc.New()
+	machines, err := src.Discover(ctxWithTimeout(t), map[string]any{
+		"socket":     socketPath(t),
+		"yara_rules": "rule broken {", // does not compile
+		"yara_paths": []any{"/etc/hostname"},
+	})
+	require.NoError(t, err)
+
+	var tags map[string]any
+	require.NoError(t, json.Unmarshal([]byte(machines[0].Tags), &tags))
+	_, scanned := tags["yara_scanned"]
+	assert.False(t, scanned, "malformed inline rule must be caught by the compile probe and skipped")
+}

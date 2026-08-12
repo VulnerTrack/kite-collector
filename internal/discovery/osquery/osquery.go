@@ -75,6 +75,8 @@ type FileEvent struct {
 //
 //	socket        – string; extensions socket path (unix socket / \\.\pipe\...)
 //	yara_sigfile  – string; rules file path AS SEEN BY THE DAEMON
+//	yara_rules    – []string or string; inline YARA rule text (no daemon-side
+//	                file needed; takes precedence over yara_sigfile)
 //	yara_paths    – []string; file paths for the daemon to scan on demand
 func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	socket := resolveSocket(cfg)
@@ -160,41 +162,66 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 }
 
 // yaraScan runs the configured on-demand scans. Returns (matches, scanned):
-// scanned is false when YARA was not configured or the sigfile could not be
-// PROVEN visible to the daemon — the silent-zero contract means an unproven
-// sigfile yields rows indistinguishable from "clean", so we refuse to report
-// a clean result we cannot stand behind.
+// scanned is false when YARA was not configured or the rule credential could
+// not be PROVEN usable by the daemon — the silent-zero contract means an
+// unproven credential yields rows indistinguishable from "clean", so we
+// refuse to report a clean result we cannot stand behind.
+//
+// Two credential forms, chosen by config (yara_rules wins if both are set,
+// since inline rules need no daemon-side file):
+//
+//	yara_sigfile – a rules file path the daemon reads. Fragile: the daemon's
+//	               mount namespace may differ from ours, so we prove the file
+//	               is visible via the `file` table before trusting a scan.
+//	yara_rules   – inline YARA rule text sent in the query itself (sigrule).
+//	               No file dependency, so no visibility problem — but a
+//	               malformed rule is silently dropped (0 rows, same shape as
+//	               "no match"), so we prove it COMPILES via a probe scan
+//	               against the daemon's own binary before trusting a scan.
 func (s *Source) yaraScan(ctx context.Context, client querier, cfg map[string]any) ([]YaraMatch, bool) {
-	sigfile := toString(cfg["yara_sigfile"])
 	paths := toStrings(cfg["yara_paths"])
-	if sigfile == "" || len(paths) == 0 {
+	if len(paths) == 0 {
 		return nil, false
 	}
 
-	// Prove the sigfile exists in the DAEMON's mount namespace (which may not
-	// be ours). osquery's `file` table errors without a path constraint, so
-	// this is a constrained probe. The two ways it can refuse are DIFFERENT
-	// failure modes with different remediations, so they get distinct codes:
-	// a probe error means the daemon/table is broken (fix the daemon); zero
-	// rows means the daemon genuinely cannot see the rules file (fix the
-	// sigfile path or its mount).
-	vis, err := client.Query(ctx, fmt.Sprintf("SELECT path FROM file WHERE path = '%s';", sqlEscape(sigfile)))
-	if err != nil {
-		slog.Warn("osquery: yara sigfile visibility probe failed; scan skipped",
-			"code", string(LogCodeYaraSigfileProbeFailed), "sigfile", sigfile, "error", err)
+	sigfile := toString(cfg["yara_sigfile"])
+	rules := joinRules(cfg["yara_rules"])
+
+	switch {
+	case rules != "":
+		return s.yaraScanWith(ctx, client, paths, "sigrule", rules, s.proveRulesCompile)
+	case sigfile != "":
+		return s.yaraScanWith(ctx, client, paths, "sigfile", sigfile, s.proveSigfileVisible)
+	default:
 		return nil, false
 	}
-	if len(vis) == 0 {
-		slog.Warn("osquery: yara sigfile not visible to daemon; scan skipped",
-			"code", string(LogCodeYaraSigfileInvisible), "sigfile", sigfile)
+}
+
+// credentialProof establishes that a scan credential (a sigfile path or an
+// inline rule set) is actually usable by the daemon. Returns false to skip
+// the scan rather than report a clean result that a silent zero-row answer
+// cannot back.
+type credentialProof func(ctx context.Context, client querier, value string) bool
+
+// yaraScanWith runs the path loop for one credential form after its proof
+// passes. constraint is the WHERE column osquery keys on ("sigfile" or
+// "sigrule").
+func (s *Source) yaraScanWith(
+	ctx context.Context,
+	client querier,
+	paths []string,
+	constraint, value string,
+	prove credentialProof,
+) ([]YaraMatch, bool) {
+	if !prove(ctx, client, value) {
 		return nil, false
 	}
 
 	var matches []YaraMatch
 	for _, p := range paths {
 		rows, err := client.Query(ctx, fmt.Sprintf(
-			"SELECT path, matches, count FROM yara WHERE path = '%s' AND sigfile = '%s';",
-			sqlEscape(p), sqlEscape(sigfile)))
+			"SELECT path, matches, count FROM yara WHERE path = '%s' AND %s = '%s';",
+			sqlEscape(p), constraint, sqlEscape(value)))
 		if err != nil {
 			slog.Warn("osquery: yara scan failed",
 				"code", string(LogCodeYaraScanFailed), "path", p, "error", err)
@@ -207,6 +234,55 @@ func (s *Source) yaraScan(ctx context.Context, client querier, cfg map[string]an
 		}
 	}
 	return matches, true
+}
+
+// proveSigfileVisible confirms the daemon can see the sigfile. osquery's
+// `file` table errors without a path constraint, so this is a constrained
+// probe. The two ways it can refuse are DIFFERENT failure modes with
+// different remediations, so they get distinct codes: a probe error means
+// the daemon/table is broken (fix the daemon); zero rows means the daemon
+// genuinely cannot see the rules file (fix the sigfile path or its mount).
+func (s *Source) proveSigfileVisible(ctx context.Context, client querier, sigfile string) bool {
+	vis, err := client.Query(ctx, fmt.Sprintf("SELECT path FROM file WHERE path = '%s';", sqlEscape(sigfile)))
+	if err != nil {
+		slog.Warn("osquery: yara sigfile visibility probe failed; scan skipped",
+			"code", string(LogCodeYaraSigfileProbeFailed), "sigfile", sigfile, "error", err)
+		return false
+	}
+	if len(vis) == 0 {
+		slog.Warn("osquery: yara sigfile not visible to daemon; scan skipped",
+			"code", string(LogCodeYaraSigfileInvisible), "sigfile", sigfile)
+		return false
+	}
+	return true
+}
+
+// proveRulesCompile confirms inline rules compile before trusting a scan.
+// osquery drops a malformed rule silently (0 rows, indistinguishable from
+// "no match"), so we scan the rules against the daemon's OWN binary — a path
+// guaranteed to exist and be readable in the daemon's namespace: a compiled
+// rule yields exactly one row there (count 0), a broken rule yields none.
+func (s *Source) proveRulesCompile(ctx context.Context, client querier, rules string) bool {
+	self, err := client.Query(ctx, "SELECT p.path AS path FROM processes p, osquery_info i WHERE p.pid = i.pid;")
+	if err != nil || len(self) == 0 || self[0]["path"] == "" {
+		slog.Warn("osquery: could not resolve daemon binary for yara compile probe; scan skipped",
+			"code", string(LogCodeYaraCompileProbeFailed), "error", err)
+		return false
+	}
+	probe, err := client.Query(ctx, fmt.Sprintf(
+		"SELECT count FROM yara WHERE path = '%s' AND sigrule = '%s';",
+		sqlEscape(self[0]["path"]), sqlEscape(rules)))
+	if err != nil {
+		slog.Warn("osquery: yara rule compile probe failed; scan skipped",
+			"code", string(LogCodeYaraCompileProbeFailed), "error", err)
+		return false
+	}
+	if len(probe) == 0 {
+		slog.Warn("osquery: inline yara rules did not compile; scan skipped",
+			"code", string(LogCodeYaraRulesUncompilable))
+		return false
+	}
+	return true
 }
 
 // FileEvents returns FIM records newer than sinceUnix from the daemon's
@@ -356,6 +432,20 @@ func first(rows []map[string]string) map[string]string {
 func toString(v any) string {
 	if s, ok := v.(string); ok {
 		return s
+	}
+	return ""
+}
+
+// joinRules coalesces the yara_rules config value into a single rule text
+// block. Accepts a bare string (one rule) or a list of rule strings (joined
+// with newlines, as YARA concatenates rules), so operators can express rules
+// either way in config.
+func joinRules(v any) string {
+	if s := toString(v); s != "" {
+		return s
+	}
+	if list := toStrings(v); len(list) > 0 {
+		return strings.Join(list, "\n")
 	}
 	return ""
 }
