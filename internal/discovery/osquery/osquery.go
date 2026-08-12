@@ -96,7 +96,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 
 	slog.Info("osquery: connected", "socket", socket, "version", info[0]["version"]) //#nosec G706 -- structured slog
 
-	sys, err := client.Query(ctx, "SELECT hostname, uuid, hardware_vendor, hardware_model, cpu_type, physical_memory FROM system_info;")
+	sys, err := client.Query(ctx, "SELECT hostname, computer_name, uuid, hardware_vendor, hardware_model, cpu_type, physical_memory FROM system_info;")
 	if err != nil {
 		slog.Warn("osquery: system_info failed", "code", string(LogCodeDiscoverSystemInfoFailed), "error", err)
 	}
@@ -135,6 +135,13 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		if bytes := atoi(v); bytes > 0 {
 			tags["physical_memory_bytes"] = bytes
 		}
+	}
+	// system_info.hostname is the FQDN (getFqdn: gethostname + a DNS
+	// AI_CANONNAME lookup). The Machine.Hostname used for dedup comes from
+	// computer_name (= gethostname) to match the agent probe's os.Hostname,
+	// so keep the FQDN here as a reference attribute when it actually differs.
+	if fqdn := first(sys)["hostname"]; fqdn != "" && fqdn != machine.Hostname {
+		tags["fqdn"] = fqdn
 	}
 
 	// Optional on-demand YARA sweep.
@@ -501,6 +508,21 @@ func normalizeArch(raw string) string {
 	return a
 }
 
+// hostname picks the Machine.Hostname used for dedup. osquery's
+// system_info.hostname is the FQDN (getFqdn = gethostname + a DNS
+// AI_CANONNAME lookup), which on a domain-joined host differs from the short
+// name the agent probe reports via os.Hostname (= gethostname). Since the
+// central deduper keys NaturalKey on raw Hostname, an FQDN here would split
+// the same host into two records. computer_name is exactly gethostname, so
+// prefer it; fall back to the FQDN only when computer_name is absent (older
+// daemons / partial rows) so we never end up with an empty hostname.
+func hostname(sys map[string]string) string {
+	if cn := sys["computer_name"]; cn != "" {
+		return cn
+	}
+	return sys["hostname"]
+}
+
 // buildMachine maps osquery identity rows onto the Machine model.
 func buildMachine(info, sys, osv, kern map[string]string, now time.Time) model.Machine {
 	// osquery reports the distro slug (ubuntu, rhel, arch...) as platform on
@@ -524,7 +546,7 @@ func buildMachine(info, sys, osv, kern map[string]string, now time.Time) model.M
 
 	return model.Machine{
 		ID:              uuid.Must(uuid.NewV7()),
-		Hostname:        sys["hostname"],
+		Hostname:        hostname(sys),
 		MachineType:     machineType,
 		OSFamily:        osFamily,
 		OSVersion:       osVersion,

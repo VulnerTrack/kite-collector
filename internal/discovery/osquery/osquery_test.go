@@ -1067,3 +1067,55 @@ func TestYara_NoUnscannableTag_WhenAllPathsScan(t *testing.T) {
 	_, present := tags["yara_paths_unscannable"]
 	assert.False(t, present, "no coverage gaps -> no unscannable tag")
 }
+
+// ---------------------------------------------------------------------------
+// Hostname consistency: osquery's system_info.hostname is the FQDN
+// (getFqdn = gethostname + DNS AI_CANONNAME), while the agent probe reports
+// the short name via os.Hostname (= gethostname). The dedup NaturalKey keys
+// on raw Hostname, so the source must use computer_name (= gethostname) to
+// avoid splitting one host into two records. Verified against osquery HEAD
+// (tables/system/*/system_info.cpp + core getFqdn/getHostname).
+// ---------------------------------------------------------------------------
+
+func TestHostname_PrefersComputerNameOverFQDN(t *testing.T) {
+	got := hostname(map[string]string{
+		"hostname":      "web01.corp.local", // FQDN
+		"computer_name": "web01",            // gethostname == os.Hostname
+	})
+	assert.Equal(t, "web01", got, "must match the agent probe's os.Hostname, not the FQDN")
+}
+
+func TestHostname_FallsBackToHostnameWhenNoComputerName(t *testing.T) {
+	got := hostname(map[string]string{"hostname": "web01", "computer_name": ""})
+	assert.Equal(t, "web01", got, "no computer_name -> never an empty hostname")
+}
+
+func TestDiscover_DomainJoinedHost_HostnameIsShortName(t *testing.T) {
+	stub := healthyStub()
+	stub.responses["system_info"] = []map[string]string{{
+		"hostname": "web01.corp.local", "computer_name": "web01",
+		"uuid": "u", "cpu_type": "x86_64", "physical_memory": "0",
+	}}
+	s, cfg := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	m := machines[0]
+	assert.Equal(t, "web01", m.Hostname, "dedup identity must be the short name shared with the agent probe")
+	// The FQDN is preserved as a reference attribute since it genuinely differs.
+	assert.Equal(t, "web01.corp.local", tagsOf(t, m)["fqdn"])
+}
+
+func TestDiscover_NonDomainHost_NoFQDNTag(t *testing.T) {
+	// When hostname == computer_name there is no distinct FQDN to record.
+	stub := healthyStub()
+	stub.responses["system_info"] = []map[string]string{{
+		"hostname": "laptop", "computer_name": "laptop", "uuid": "u",
+	}}
+	s, cfg := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	m := machines[0]
+	assert.Equal(t, "laptop", m.Hostname)
+	_, present := tagsOf(t, m)["fqdn"]
+	assert.False(t, present, "no fqdn tag when it equals the short hostname")
+}
