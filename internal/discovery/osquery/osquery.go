@@ -148,13 +148,20 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		}
 	}
 
-	// FIM summary: recent file_events through the daemon's watch config. An
-	// empty count with no file_paths configured is normal — but a FAILED
-	// query is not an empty count, so it must not be silent: without the
-	// warning, "0 events" and "events subsystem broken" are indistinguishable
-	// to an operator.
-	if events, err := fileEventsWith(ctx, client, now.Add(-24*time.Hour).Unix()); err == nil {
-		tags["file_events_24h"] = len(events)
+	// FIM summary: file_events the daemon still retains. The window is the
+	// daemon's own events_expiry (default 3600s), NOT a fixed 24h: osquery
+	// purges evented rows older than events_expiry (eventsubscriberplugin.cpp
+	// expireEventBatches), so a longer window can never return more — naming
+	// the count "24h" would overstate coverage, since hundreds of events may
+	// have already expired. The window is tagged alongside the count so the
+	// number is self-describing. An empty count with no file_paths configured
+	// is normal; a FAILED query is not — without the warning, "0 events" and
+	// "events subsystem broken" are indistinguishable to an operator.
+	windowSecs := eventsExpiryWindow(ctx, client)
+	since := now.Add(-time.Duration(windowSecs) * time.Second).Unix()
+	if events, err := fileEventsWith(ctx, client, since); err == nil {
+		tags["file_events_recent"] = len(events)
+		tags["file_events_window_secs"] = windowSecs
 	} else {
 		slog.Warn("osquery: file_events summary failed",
 			"code", string(LogCodeDiscoverFileEventsFailed), "error", err)
@@ -342,8 +349,32 @@ func (s *Source) FileEvents(ctx context.Context, cfg map[string]any, sinceUnix i
 	return fileEventsWith(ctx, s.newClient(socket), sinceUnix)
 }
 
+// eventsExpiryWindow returns the daemon's events_expiry (seconds), the true
+// retention horizon for evented tables. Falls back to osquery's 3600s default
+// when the flag can't be read, so the caller always has a sane window.
+func eventsExpiryWindow(ctx context.Context, client querier) int64 {
+	const defaultExpiry = 3600
+	rows, err := client.Query(ctx, "SELECT value FROM osquery_flags WHERE name = 'events_expiry';")
+	if err != nil || len(rows) == 0 {
+		return defaultExpiry
+	}
+	if v := atoi(rows[0]["value"]); v > 0 {
+		return v
+	}
+	return defaultExpiry
+}
+
 // fileEventsWith is FileEvents against an already-connected client, so
 // Discover reuses its session instead of re-resolving and re-dialing.
+//
+// The `WHERE time > N` constraint is load-bearing beyond filtering: osquery's
+// events framework runs a differential "optimize" mode
+// (shouldOptimize = isDaemon() && events_optimize, both defaults on) that
+// returns only events since the query last ran — but ONLY when the query
+// carries no `time` constraint (genTable sets can_optimize=false as soon as a
+// time predicate is present). Keeping the constraint pins snapshot semantics,
+// so repeated scans see a consistent window instead of a shrinking
+// differential. Do not drop it.
 //
 // file_events is POSIX-only in osquery's table specs; a Windows daemon (the
 // MSI's kite-osqueryd) serves the NTFS USN journal as ntfs_journal_events
