@@ -2,8 +2,10 @@ package dedup
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,32 +72,45 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, machines []model.Machine
 		Machines: make([]model.Machine, 0, len(machines)),
 	}
 
-	// Deduplicate within the incoming batch itself by natural key so we
-	// don't process the same hostname|type combination twice.
-	seen := make(map[string]struct{}, len(machines))
-
+	// Group the batch by natural key, preserving first-appearance order, then
+	// fold each group's intra-batch duplicates into a single machine BEFORE
+	// touching the store. Two local sources (e.g. the osquery source and the
+	// agent probe) both emit a machine for the same host every scan; folding
+	// them — rather than dropping all but the first — keeps each source's
+	// unique data (osquery's Tags, the agent's fields) instead of losing the
+	// loser's, and the fold is order-independent so the persisted record does
+	// not flip between scans (RFC-0151 OQ4).
+	order := make([]string, 0, len(machines))
+	groups := make(map[string][]model.Machine, len(machines))
 	for i := range machines {
-		machine := &machines[i]
-		machine.ComputeNaturalKey()
+		machines[i].ComputeNaturalKey()
+		key := machines[i].NaturalKey
+		if _, ok := groups[key]; !ok {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], machines[i])
+	}
 
-		if _, dup := seen[machine.NaturalKey]; dup {
+	for _, key := range order {
+		members := groups[key]
+		machine := foldIntraBatch(members, now)
+		if collapsed := len(members) - 1; collapsed > 0 {
 			slog.Info(
-				"intra-batch duplicate skipped",
-				"code", string(LogCodeDedupSkipIntraBatch),
+				"intra-batch duplicates merged",
+				"code", string(LogCodeDedupMergeIntraBatch),
 				"hostname", machine.Hostname,
 				"machine_type", machine.MachineType,
-				"natural_key", machine.NaturalKey,
+				"natural_key", key,
+				"merged", collapsed,
 			)
 			if d.metrics != nil {
-				d.metrics.DedupSkipped.Inc()
+				d.metrics.DedupSkipped.Add(float64(collapsed))
 			}
-			continue
 		}
-		seen[machine.NaturalKey] = struct{}{}
 
-		existing, err := d.store.GetMachineByNaturalKey(ctx, machine.NaturalKey)
+		existing, err := d.store.GetMachineByNaturalKey(ctx, key)
 		if err != nil {
-			return nil, fmt.Errorf("dedup: lookup natural key %s: %w", machine.NaturalKey, err)
+			return nil, fmt.Errorf("dedup: lookup natural key %s: %w", key, err)
 		}
 		// Dual-key grace window: rows written before the natural-key
 		// separator migration carry the legacy '|' digest. Look those
@@ -103,7 +118,7 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, machines []model.Machine
 		// duplicate row that the operator has to reconcile later.
 		if existing == nil {
 			legacy := machine.LegacyNaturalKey()
-			if legacy != machine.NaturalKey {
+			if legacy != key {
 				existing, err = d.store.GetMachineByNaturalKey(ctx, legacy)
 				if err != nil {
 					return nil, fmt.Errorf("dedup: lookup legacy key %s: %w", legacy, err)
@@ -113,7 +128,7 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, machines []model.Machine
 
 		if existing != nil {
 			// Merge: preserve identity, update volatile fields.
-			merged := mergeMachine(existing, machine, now)
+			merged := mergeMachine(existing, &machine, now)
 			result.Machines = append(result.Machines, merged)
 			result.UpdatedCount++
 
@@ -129,7 +144,7 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, machines []model.Machine
 			machine.ID = uuid.Must(uuid.NewV7())
 			machine.FirstSeenAt = now
 			machine.LastSeenAt = now
-			result.Machines = append(result.Machines, *machine)
+			result.Machines = append(result.Machines, machine)
 			result.NewCount++
 
 			slog.Debug(
@@ -152,6 +167,41 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, machines []model.Machine
 	)
 
 	return result, nil
+}
+
+// foldIntraBatch merges every same-natural-key machine from one scan batch
+// into a single machine in a DETERMINISTIC order, so the result does not
+// depend on the nondeterministic order discovery sources finish in.
+//
+// Members are ordered by DiscoverySource (then by material content as a
+// stable tiebreak) and folded left-to-right through mergeMachine. Because
+// mergeMachine's volatile fields are last-writer-wins, the highest-sorted
+// source wins them — and it wins them the SAME way on every scan, so a host
+// discovered by more than one local source no longer flips OSVersion (and
+// friends) batch to batch. The lowest-sorted source is the base, so its
+// sticky fields (identity-adjacent: DiscoverySource, Architecture) are
+// likewise stable. Nothing is dropped: each source contributes its non-empty
+// fields per the merge rules.
+func foldIntraBatch(members []model.Machine, now time.Time) model.Machine {
+	if len(members) == 1 {
+		return members[0]
+	}
+	sorted := make([]model.Machine, len(members))
+	copy(sorted, members)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].DiscoverySource != sorted[j].DiscoverySource {
+			return sorted[i].DiscoverySource < sorted[j].DiscoverySource
+		}
+		// Same source AND same natural key: a pathological duplicate. Break
+		// the tie on material content so the fold stays deterministic even
+		// then, rather than depending on batch arrival order.
+		return sorted[i].MaterialFingerprint() < sorted[j].MaterialFingerprint()
+	})
+	acc := sorted[0]
+	for i := 1; i < len(sorted); i++ {
+		acc = mergeMachine(&acc, &sorted[i], now)
+	}
+	return acc
 }
 
 // mergeMachine creates a merged Machine that preserves the existing identity
@@ -178,10 +228,13 @@ func mergeMachine(existing *model.Machine, incoming *model.Machine, now time.Tim
 		merged.DiscoverySource = incoming.DiscoverySource
 	}
 
-	// Merge tags: prefer incoming if non-empty.
-	if incoming.Tags != "" && incoming.Tags != "null" {
-		merged.Tags = incoming.Tags
-	}
+	// Merge tags by UNION, not overwrite. Two sources discovering the same
+	// host (e.g. the local agent and osquery) each contribute distinct tag
+	// keys — hardware_uuid and file_events_24h from osquery, software facts
+	// from the agent. Overwriting with incoming would silently drop whichever
+	// source lost the dedup race, so union the JSON objects with incoming
+	// winning on key conflicts.
+	merged.Tags = mergeTagsJSON(existing.Tags, incoming.Tags)
 
 	// Mutable fields: always prefer incoming non-empty values.
 	if incoming.Environment != "" {
@@ -195,4 +248,56 @@ func mergeMachine(existing *model.Machine, incoming *model.Machine, now time.Tim
 	}
 
 	return merged
+}
+
+// mergeTagsJSON unions two JSON tag objects, incoming keys winning on
+// conflict. Empty/"null"/non-object inputs are treated as no tags. If both
+// sides carry tags but either fails to parse as an object, the non-empty
+// input is preferred (incoming first) rather than dropping data — a merge
+// must never lose more than the overwrite it replaces.
+func mergeTagsJSON(existing, incoming string) string {
+	ex := parseTagObject(existing)
+	in := parseTagObject(incoming)
+
+	switch {
+	case ex == nil && in == nil:
+		// Neither parsed as an object: keep whichever raw string has content,
+		// incoming preferred (matches the prior overwrite semantics).
+		if incoming != "" && incoming != "null" {
+			return incoming
+		}
+		return existing
+	case ex == nil:
+		return incoming
+	case in == nil:
+		return existing
+	}
+
+	for k, v := range in {
+		ex[k] = v // incoming wins on conflict
+	}
+	out, err := json.Marshal(ex)
+	if err != nil {
+		// Marshalling a map[string]json.RawMessage should not fail; if it
+		// somehow does, fall back to the incoming raw string rather than
+		// emitting a broken merge.
+		if incoming != "" && incoming != "null" {
+			return incoming
+		}
+		return existing
+	}
+	return string(out)
+}
+
+// parseTagObject decodes s into a JSON object map, or returns nil if s is
+// empty, "null", or not a JSON object.
+func parseTagObject(s string) map[string]json.RawMessage {
+	if s == "" || s == "null" {
+		return nil
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(s), &m); err != nil || m == nil {
+		return nil
+	}
+	return m
 }

@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 470 codes across 58 packages.
+**Catalog size:** 473 codes across 58 packages.
 
 ---
 
@@ -340,13 +340,14 @@ Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) ·
 
 ## `dedup` (internal/dedup)
 
-Source: [`internal/dedup/logcodes.go`](../internal/dedup/logcodes.go) · 4 codes
+Source: [`internal/dedup/logcodes.go`](../internal/dedup/logcodes.go) · 5 codes
 
-**batch surface — per-batch deduplication telemetry**
+**batch surface — per-batch deduplication telemetry Deprecated: LogCodeDedupSkipIntraBatch was emitted when an intra-batch duplicate was DROPPED. Duplicates are now folded together instead of skipped; use LogCodeDedupMergeIntraBatch. The constant is retained so dashboards filtering the old code do not error.**
 
 | Code | Constant | Description |
 |---|---|---|
 | `dedup.batch.skip_intra_batch` | `LogCodeDedupSkipIntraBatch` | — |
+| `dedup.batch.merge_intra_batch` | `LogCodeDedupMergeIntraBatch` | — |
 | `dedup.batch.updated` | `LogCodeDedupUpdated` | — |
 | `dedup.batch.new` | `LogCodeDedupNew` | — |
 | `dedup.batch.completed` | `LogCodeDedupCompleted` | — |
@@ -1421,7 +1422,7 @@ Source: [`internal/scan/logcodes.go`](../internal/scan/logcodes.go) · 3 codes
 
 ## `sqlite` (internal/store/sqlite)
 
-Source: [`internal/store/sqlite/logcodes.go`](../internal/store/sqlite/logcodes.go) · 17 codes
+Source: [`internal/store/sqlite/logcodes.go`](../internal/store/sqlite/logcodes.go) · 19 codes
 
 **preflight surface — db_path sanity warnings before opening**
 
@@ -1442,6 +1443,8 @@ Source: [`internal/store/sqlite/logcodes.go`](../internal/store/sqlite/logcodes.
 | `sqlitestore.encrypted.decrypting` | `LogCodeEncryptedDecrypting` | — |
 | `sqlitestore.encrypted.migrating_unencrypted` | `LogCodeEncryptedMigratingUnencrypted` | — |
 | `sqlitestore.encrypted.encrypting_at_rest` | `LogCodeEncryptedEncryptingAtRest` | — |
+| `sqlitestore.encrypted.snapshot` | `LogCodeEncryptedSnapshot` | — |
+| `sqlitestore.encrypted.snapshot_failed` | `LogCodeEncryptedSnapshotFailed` | — |
 | `sqlitestore.encrypted.remove_working_file_failed` | `LogCodeEncryptedRemoveWorkingFile` | — |
 | `sqlitestore.encrypted.remove_workdir_failed` | `LogCodeEncryptedRemoveWorkdir` | — |
 

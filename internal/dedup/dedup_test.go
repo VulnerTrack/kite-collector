@@ -2,6 +2,7 @@ package dedup
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -320,6 +321,88 @@ func TestDedup_IntraBatchDedup(t *testing.T) {
 	assert.Equal(t, 0, res.UpdatedCount)
 }
 
+// TestDedup_IntraBatchMerge_OrderIndependent is the RFC-0151 OQ4 regression:
+// a host discovered by two local sources in the same scan must fold to the
+// SAME merged machine regardless of the order the sources arrive in, so the
+// persisted record (and its MaterialFingerprint) does not flip between scans.
+func TestDedup_IntraBatchMerge_OrderIndependent(t *testing.T) {
+	ctx := context.Background()
+
+	// Same host, two sources, differing on the volatile OSVersion and on the
+	// data each uniquely carries (osquery has Tags, the agent does not).
+	agent := model.Machine{
+		Hostname: "web01", MachineType: model.MachineTypeServer,
+		DiscoverySource: "agent", OSFamily: "linux",
+		OSVersion: "Ubuntu 24.04.2 LTS", Architecture: "amd64",
+	}
+	osq := model.Machine{
+		Hostname: "web01", MachineType: model.MachineTypeServer,
+		DiscoverySource: "osquery", OSFamily: "linux",
+		OSVersion: "Ubuntu 24.04.2 LTS (Noble Numbat)", Architecture: "amd64",
+		Tags: `{"osquery_version":"5.15.0"}`,
+	}
+
+	fold := func(order []model.Machine) model.Machine {
+		dd := New(newMockStore(), nil, WithClock(func() time.Time {
+			return time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
+		}))
+		res, err := dd.Deduplicate(ctx, order)
+		require.NoError(t, err)
+		require.Len(t, res.Machines, 1, "one host -> one record")
+		return res.Machines[0]
+	}
+
+	a := fold([]model.Machine{agent, osq})
+	b := fold([]model.Machine{osq, agent}) // reversed arrival order
+
+	// Identity aside (random UUID), the material content must be identical
+	// regardless of arrival order — that is what stops the per-scan churn.
+	assert.Equal(t, a.MaterialFingerprint(), b.MaterialFingerprint(),
+		"folded machine must be order-independent")
+
+	// And the deterministic winner is well-defined: osquery sorts after agent,
+	// so it wins the last-writer-wins fields; nothing is dropped.
+	assert.Equal(t, "Ubuntu 24.04.2 LTS (Noble Numbat)", a.OSVersion,
+		"osquery (later source) wins OSVersion deterministically")
+	assert.Equal(t, `{"osquery_version":"5.15.0"}`, a.Tags,
+		"osquery's Tags must survive the fold, not be dropped")
+	assert.Equal(t, "amd64", a.Architecture)
+}
+
+// TestDedup_IntraBatchMerge_NoChurnAcrossScans proves the fold is stable
+// across repeated scans with shuffled arrival order (the churn symptom).
+func TestDedup_IntraBatchMerge_NoChurnAcrossScans(t *testing.T) {
+	ctx := context.Background()
+	ms := newMockStore()
+	clk := func() time.Time { return time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC) }
+	dd := New(ms, nil, WithClock(clk))
+
+	agent := model.Machine{
+		Hostname: "db01", MachineType: model.MachineTypeServer,
+		DiscoverySource: "agent", OSVersion: "Debian GNU/Linux 12",
+	}
+	osq := model.Machine{
+		Hostname: "db01", MachineType: model.MachineTypeServer,
+		DiscoverySource: "osquery", OSVersion: "Debian GNU/Linux 12 (bookworm)",
+		Tags: `{"osquery_version":"5.15.0"}`,
+	}
+
+	batches := [][]model.Machine{{agent, osq}, {osq, agent}, {agent, osq}, {osq, agent}}
+	fps := make([]string, 0, len(batches))
+	for _, batch := range batches {
+		res, err := dd.Deduplicate(ctx, batch)
+		require.NoError(t, err)
+		require.Len(t, res.Machines, 1)
+		// Persist so the next scan's dedup sees it (as production does).
+		require.NoError(t, ms.UpsertMachine(ctx, res.Machines[0]))
+		fps = append(fps, res.Machines[0].MaterialFingerprint())
+	}
+	for i := 1; i < len(fps); i++ {
+		assert.Equal(t, fps[0], fps[i],
+			"fingerprint must not change across scans despite shuffled arrival order (scan %d)", i)
+	}
+}
+
 func TestDedup_IntraBatchDedup_DifferentTypes(t *testing.T) {
 	ms := newMockStore()
 	dd := New(ms, nil)
@@ -372,6 +455,92 @@ func TestDedup_NewMachineFirstSeenEqualsLastSeen(t *testing.T) {
 	assert.Equal(t, res.Machines[0].FirstSeenAt, res.Machines[0].LastSeenAt,
 		"for a new machine, FirstSeenAt must equal LastSeenAt")
 	assert.False(t, res.Machines[0].FirstSeenAt.IsZero(), "timestamps must not be zero")
+}
+
+func TestMergeTagsJSON(t *testing.T) {
+	cases := []struct {
+		name               string
+		existing, incoming string
+		wantKeys           map[string]string // key -> expected raw value substring
+	}{
+		{
+			name:     "union of disjoint keys (agent + osquery)",
+			existing: `{"software_count":"92"}`,
+			incoming: `{"hardware_uuid":"abc","file_events_24h":9}`,
+			wantKeys: map[string]string{"software_count": "92", "hardware_uuid": "abc", "file_events_24h": "9"},
+		},
+		{
+			name:     "incoming wins on key conflict",
+			existing: `{"osquery_version":"5.14.0"}`,
+			incoming: `{"osquery_version":"5.15.0"}`,
+			wantKeys: map[string]string{"osquery_version": "5.15.0"},
+		},
+		{
+			name:     "empty existing keeps incoming",
+			existing: "",
+			incoming: `{"a":"1"}`,
+			wantKeys: map[string]string{"a": "1"},
+		},
+		{
+			name:     "null incoming keeps existing",
+			existing: `{"a":"1"}`,
+			incoming: "null",
+			wantKeys: map[string]string{"a": "1"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mergeTagsJSON(tc.existing, tc.incoming)
+			var m map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal([]byte(got), &m), "merged tags must be valid JSON: %s", got)
+			assert.Len(t, m, len(tc.wantKeys), "unexpected key count in %s", got)
+			for k, want := range tc.wantKeys {
+				require.Contains(t, m, k, "missing key %q in %s", k, got)
+				assert.Contains(t, string(m[k]), want, "key %q value in %s", k, got)
+			}
+		})
+	}
+}
+
+// TestDedup_UnionsTagsAcrossSources is the end-to-end guard for finding 1:
+// the local agent and osquery both discover the same host with DISJOINT tag
+// keys. The merge must keep BOTH sets, not overwrite one with the other.
+func TestDedup_UnionsTagsAcrossSources(t *testing.T) {
+	ms := newMockStore()
+	dd := New(ms, nil)
+	ctx := context.Background()
+
+	existing := model.Machine{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        "dual-source-host",
+		MachineType:     model.MachineTypeServer,
+		DiscoverySource: "agent",
+		Tags:            `{"software_count":"92"}`,
+		FirstSeenAt:     time.Now().UTC().Add(-time.Hour),
+		LastSeenAt:      time.Now().UTC().Add(-time.Hour),
+	}
+	existing.ComputeNaturalKey()
+	ms.machines[existing.NaturalKey] = existing
+
+	incoming := []model.Machine{{
+		Hostname:        "dual-source-host",
+		MachineType:     model.MachineTypeServer,
+		DiscoverySource: "osquery",
+		Tags:            `{"hardware_uuid":"03c00218","osquery_version":"5.15.0","file_events_24h":9}`,
+	}}
+
+	res, err := dd.Deduplicate(ctx, incoming)
+	require.NoError(t, err)
+	require.Len(t, res.Machines, 1)
+
+	var m map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(res.Machines[0].Tags), &m))
+	// Agent's contribution must survive the osquery merge...
+	assert.Contains(t, m, "software_count", "agent tag dropped by osquery merge")
+	// ...alongside all of osquery's.
+	assert.Contains(t, m, "hardware_uuid")
+	assert.Contains(t, m, "osquery_version")
+	assert.Contains(t, m, "file_events_24h")
 }
 
 func TestDedup_MergesOSInfo(t *testing.T) {
