@@ -48,6 +48,21 @@ func TestInferFleetProtocolOS_UsesStrongProtocolEvidence(t *testing.T) {
 	assert.Equal(t, "windows", windows.OSFamily)
 	assert.Equal(t, "amd64", windows.Architecture)
 
+	functionDiscoveryWindows := model.Machine{
+		DiscoverySource: "wsdiscovery",
+		Tags:            `{"wsd_types":"wsdp:Device pub:Computer","wsd_xaddrs":["http://192.0.2.20:5357/device/"]}`,
+	}
+	inferFleetProtocolOS(&functionDiscoveryWindows)
+	assert.Equal(t, "windows", functionDiscoveryWindows.OSFamily)
+	assert.Equal(t, "amd64", functionDiscoveryWindows.Architecture)
+
+	genericWSDDevice := model.Machine{
+		DiscoverySource: "wsdiscovery",
+		Tags:            `{"wsd_types":"dn:NetworkVideoTransmitter","wsd_xaddrs":["http://192.0.2.30:5357/device/"]}`,
+	}
+	inferFleetProtocolOS(&genericWSDDevice)
+	assert.Empty(t, genericWSDDevice.OSFamily)
+
 	linux := model.Machine{
 		DiscoverySource: "ssdp",
 		Tags:            `{"ssdp_server":"Linux/6.8 UPnP/1.0"}`,
@@ -59,6 +74,68 @@ func TestInferFleetProtocolOS_UsesStrongProtocolEvidence(t *testing.T) {
 	unknown := model.Machine{DiscoverySource: "netbios", Tags: `{"nbns_machine":"NAS"}`}
 	inferFleetProtocolOS(&unknown)
 	assert.Empty(t, unknown.OSFamily, "NetBIOS can also be Samba and is not conclusive")
+}
+
+func TestInferFleetCombinedOS_UsesEvidenceCascade(t *testing.T) {
+	tests := []struct {
+		name     string
+		tags     string
+		wantOS   string
+		wantText string
+	}{
+		{
+			name:     "rpc and smb imply windows",
+			tags:     `{"network_scan_open_ports":[135,445]}`,
+			wantOS:   "windows",
+			wantText: "Windows RPC and SMB",
+		},
+		{
+			name:     "rdp and netbios imply windows",
+			tags:     `{"network_scan_open_ports":[3389],"nbns_machine":"OFFICE-PC"}`,
+			wantOS:   "windows",
+			wantText: "RDP plus SMB or NetBIOS",
+		},
+		{
+			name:   "netbios alone remains unknown",
+			tags:   `{"nbns_machine":"SAMBA-SERVER"}`,
+			wantOS: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			machine := model.Machine{Tags: tt.tags}
+			inferFleetCombinedOS(&machine)
+			assert.Equal(t, tt.wantOS, machine.OSFamily)
+			if tt.wantText != "" {
+				assert.Contains(t, machine.Tags, tt.wantText)
+				assert.Contains(t, machine.Tags, `"deployment_os_confidence":"medium"`)
+			}
+		})
+	}
+}
+
+func TestMergeFleetMachinesByIP_UsesProtocolHostnameAndTCPEvidence(t *testing.T) {
+	now := time.Now().UTC()
+	machines := mergeFleetMachinesByIP([]model.Machine{
+		{
+			Hostname: "192.0.2.20", MachineType: model.MachineTypeServer,
+			OSFamily: "windows", Architecture: "amd64", DiscoverySource: "network_scan",
+			Tags: `{"network_scan_open_ports":[445,5985]}`, LastSeenAt: now,
+		},
+		{
+			Hostname: "WIN-OFFICE", MachineType: model.MachineTypeWorkstation,
+			DiscoverySource: "netbios", Tags: `{"nbns_ip":"192.0.2.20","nbns_machine":"WIN-OFFICE"}`,
+			LastSeenAt: now,
+		},
+	})
+
+	require.Len(t, machines, 1)
+	assert.Equal(t, "WIN-OFFICE", machines[0].Hostname)
+	assert.Equal(t, "windows", machines[0].OSFamily)
+	assert.Equal(t, "amd64", machines[0].Architecture)
+	assert.Equal(t, "network_scan", machines[0].DiscoverySource)
+	assert.Contains(t, machines[0].Tags, `"nbns_machine":"WIN-OFFICE"`)
+	assert.Contains(t, machines[0].Tags, `"network_scan_open_ports":[445,5985]`)
 }
 
 func TestFleetVirtualInterfaceFilter(t *testing.T) {
