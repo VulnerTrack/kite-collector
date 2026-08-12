@@ -27,11 +27,20 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Shared location for the Thrift extensions socket (the surface a client binds
-# to). Lives on a compose volume so the probe / a future kite runner can reach
-# it from a sibling container.
-RUN mkdir -p /var/osquery
+# to). Lives on a compose volume so the probe / a kite runner can reach it from
+# a sibling container. /var/kite/watch is the FIM+YARA watch root (also a
+# shared volume): files planted there by a sibling container generate inotify
+# events inside the daemon, feeding file_events and yara_events.
+#
+# The fim/ and yara/ subtrees MUST exist before osqueryd starts: the daemon
+# resolves file_paths globs to inotify watches at configure time, and a glob
+# that matches nothing adds no watch — events for directories created later
+# would be lost. The named volume inherits this layout on first mount. The
+# two subtrees are deliberately disjoint; see osquery.conf.
+RUN mkdir -p /var/osquery /var/kite/watch/fim /var/kite/watch/yara
 
 COPY osquery.conf /etc/osquery/osquery.conf
+COPY yara/kite.yar /etc/osquery/yara/kite.yar
 COPY probe.sh /usr/local/bin/probe.sh
 COPY checks.sh /usr/local/bin/checks.sh
 RUN chmod +x /usr/local/bin/probe.sh /usr/local/bin/checks.sh

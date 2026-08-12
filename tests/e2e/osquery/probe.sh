@@ -37,6 +37,15 @@ q "SELECT pid, name FROM processes ORDER BY pid LIMIT 5;"
 echo "==> os_version"
 q "SELECT name, version, platform FROM os_version;"
 
+# Informational YARA demo: plant a canary in the shared watch volume and scan
+# it on demand. The probe stays a liveness gate — the hard YARA/FIM assertions
+# live in checks.sh — so a missing watch volume only skips the demo.
+if printf 'probe canary: KITE-OSQUERY-SIM-YARA-CANARY\n' \
+     > "/var/kite/watch/probe-canary-$$.txt" 2>/dev/null; then
+  echo "==> yara (on-demand scan of a planted canary)"
+  q "SELECT path, matches, count FROM yara WHERE path='/var/kite/watch/probe-canary-$$.txt' AND sigfile='/etc/osquery/yara/kite.yar';"
+fi
+
 # Assert osquery_info returns exactly one row with a non-empty version — a
 # minimal data-quality gate so the probe fails loudly if the socket answers
 # but returns garbage.

@@ -23,18 +23,24 @@ services:
     build: *osq-build
     # Foreground osqueryd. --ephemeral keeps the RocksDB in memory so the
     # container is fully throwaway. The socket + config come from the image.
+    # Events are ON (inotify FIM + YARA event scanning): file_paths in
+    # osquery.conf watches /var/kite/watch, a volume shared with the sibling
+    # probe/checks containers — a file planted from a sibling hits the same
+    # inodes, so the daemon's inotify subscription sees it.
     command:
       - osqueryd
       - --ephemeral
       - --disable_logging
       - --disable_watchdog
-      - --disable_events
+      - --disable_events=false
+      - --enable_file_events=true
       - --config_path=/etc/osquery/osquery.conf
       - --extensions_socket=/var/osquery/osquery.em
       - --extensions_timeout=10
       - --pidfile=/var/osquery/osqueryd.pid
     volumes:
       - osq-socket:/var/osquery
+      - osq-watch:/var/kite/watch
     healthcheck:
       # Green only when the daemon answers a query over the extensions socket.
       # `--connect <socket>` takes the path as its argument.
@@ -55,6 +61,7 @@ services:
       OSQUERY_SOCKET: "/var/osquery/osquery.em"
     volumes:
       - osq-socket:/var/osquery
+      - osq-watch:/var/kite/watch
     entrypoint: ["/usr/local/bin/probe.sh"]
     restart: "no"
 
@@ -69,6 +76,7 @@ services:
       OSQUERY_SOCKET: "/var/osquery/osquery.em"
     volumes:
       - osq-socket:/var/osquery
+      - osq-watch:/var/kite/watch
     entrypoint: ["/usr/local/bin/checks.sh"]
     restart: "no"
 
@@ -77,3 +85,7 @@ volumes:
   # kite runner and point it at unix:///var/osquery/osquery.em to consume the
   # simulated osquery from Go.
   osq-socket:
+  # The FIM/YARA watch root. osqueryd watches it via inotify (file_paths in
+  # osquery.conf); sibling containers plant files here to trigger file_events
+  # and yara_events.
+  osq-watch:
