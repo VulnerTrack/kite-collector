@@ -80,6 +80,23 @@ services:
     entrypoint: ["/usr/local/bin/checks.sh"]
     restart: "no"
 
+  # Edge-case / error-state battery: pins how osquery FAILS (loud errors,
+  # silent zero-row traps, async event delivery) so a collector's error
+  # handling is designed against verified behavior. Run:
+  #   docker compose -f docker-compose.osquery.yml run --rm --build edge
+  edge:
+    build: *osq-build
+    depends_on:
+      osquery:
+        condition: service_healthy
+    environment:
+      OSQUERY_SOCKET: "/var/osquery/osquery.em"
+    volumes:
+      - osq-socket:/var/osquery
+      - osq-watch:/var/kite/watch
+    entrypoint: ["/usr/local/bin/edge.sh"]
+    restart: "no"
+
 volumes:
   # The shared extensions socket. Mount this same volume (read-only) into a
   # kite runner and point it at unix:///var/osquery/osquery.em to consume the

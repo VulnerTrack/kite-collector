@@ -43,4 +43,5 @@ COPY osquery.conf /etc/osquery/osquery.conf
 COPY yara/kite.yar /etc/osquery/yara/kite.yar
 COPY probe.sh /usr/local/bin/probe.sh
 COPY checks.sh /usr/local/bin/checks.sh
-RUN chmod +x /usr/local/bin/probe.sh /usr/local/bin/checks.sh
+COPY edge.sh /usr/local/bin/edge.sh
+RUN chmod +x /usr/local/bin/probe.sh /usr/local/bin/checks.sh /usr/local/bin/edge.sh
