@@ -645,3 +645,56 @@ func TestMatchedRuleNames_Empty(t *testing.T) {
 	assert.Empty(t, matchedRuleNames(nil))
 	assert.Empty(t, matchedRuleNames([]YaraMatch{{Matches: ""}}))
 }
+
+// ---------------------------------------------------------------------------
+// Windows FIM fallback: file_events is POSIX-only (specs/posix/); a Windows
+// daemon serves ntfs_journal_events. Verified against osquery HEAD specs.
+// ---------------------------------------------------------------------------
+
+func TestFileEvents_WindowsDaemon_FallsBackToNTFSJournal(t *testing.T) {
+	stub := healthyStub()
+	stub.errs["file_events"] = &queryError{method: "query", code: 1, message: "no such table: file_events"}
+	stub.responses["ntfs_journal_events"] = []map[string]string{
+		{"path": `C:\Users\a\secret.txt`, "category": "kite_fim", "action": "Write", "time": "1754955600"},
+	}
+	s, cfg := sourceWith(stub)
+	events, err := s.FileEvents(context.Background(), cfg, 0)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, `C:\Users\a\secret.txt`, events[0].TargetPath)
+	assert.Equal(t, "Write", events[0].Action)
+	assert.Equal(t, "", events[0].SHA256, "NTFS journal has no sha256 column")
+	assert.Equal(t, int64(1754955600), events[0].Time)
+}
+
+func TestFileEvents_TransportError_DoesNotFallBack(t *testing.T) {
+	// Only an unknown-table REJECTION means "wrong platform table"; a
+	// transport failure means the daemon is unreachable and retrying a
+	// different table would just mask it.
+	stub := healthyStub()
+	stub.errs["file_events"] = errors.New("dial unix: connection refused")
+	s, cfg := sourceWith(stub)
+	_, err := s.FileEvents(context.Background(), cfg, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "file_events")
+	assert.NotContains(t, err.Error(), "ntfs_journal_events")
+}
+
+func TestFileEvents_OtherRejection_DoesNotFallBack(t *testing.T) {
+	stub := healthyStub()
+	stub.errs["file_events"] = &queryError{method: "query", code: 1, message: "Table file_events was queried without a required column"}
+	s, cfg := sourceWith(stub)
+	_, err := s.FileEvents(context.Background(), cfg, 0)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "ntfs_journal_events")
+}
+
+func TestFileEvents_NTFSAlsoMissing_SurfacesNTFSError(t *testing.T) {
+	stub := healthyStub()
+	stub.errs["file_events"] = &queryError{method: "query", code: 1, message: "no such table: file_events"}
+	stub.errs["ntfs_journal_events"] = &queryError{method: "query", code: 1, message: "no such table: ntfs_journal_events"}
+	s, cfg := sourceWith(stub)
+	_, err := s.FileEvents(context.Background(), cfg, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ntfs_journal_events")
+}

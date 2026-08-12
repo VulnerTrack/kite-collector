@@ -122,12 +122,27 @@ Design decisions verified by this sim:
   which feed the circuit breaker).
 - **FIM is eventually consistent**: consumers poll `file_events` with a
   budget; single-shot reads are wrong by design.
+- **FIM is platform-split**: `file_events` is POSIX-only in osquery's specs;
+  a Windows daemon serves `ntfs_journal_events` (no sha256, `path` instead of
+  `target_path`). The source falls back automatically on an unknown-table
+  rejection.
 
-### Windows: the deployment surface already exists
+### The deployment surface already exists (Windows MSI + Debian deb)
 
-The `kite-collector-osquery` Windows MSI (built by
-`scripts/build-msi.sh --with-osquery` from `cmd/kite-collector/wix.wxs`,
-`-D OSQUERY`) already ships osqueryd 5.15.0 as the `kite-osqueryd` service.
+Two release artifacts ship osqueryd 5.15.0 bundled with the collector, both
+pinned to the same version this sim tracks:
+
+- **Windows**: `kite-collector-osquery_<v>_amd64.msi`
+  (`scripts/build-msi.sh --with-osquery`, `cmd/kite-collector/wix.wxs`
+  with `-D OSQUERY`) — service `kite-osqueryd`, details below.
+- **Debian**: `kite-collector-osquery_<v>_amd64.deb`
+  (`scripts/build-deb-osquery.sh`, `packaging/deb/nfpm-osquery.yaml`) —
+  systemd unit `kite-osqueryd.service`, daemon under
+  `/opt/kite-collector/osquery`, extensions socket at
+  `/run/kite-osquery/kite-osquery.em` (first entry in
+  `internal/discovery/osquery/socket_unix.go` defaults) and a
+  `kite-collector.service.d` drop-in exporting `KITE_OSQUERY_SOCKET`.
+  `make test-deb-osquery` runs its container install/run battery.
 On Windows the Thrift endpoint is a **named pipe**, not a unix socket, and
 the MSI fixes the contract the client honors:
 

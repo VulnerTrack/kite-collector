@@ -223,10 +223,21 @@ func (s *Source) FileEvents(ctx context.Context, cfg map[string]any, sinceUnix i
 
 // fileEventsWith is FileEvents against an already-connected client, so
 // Discover reuses its session instead of re-resolving and re-dialing.
+//
+// file_events is POSIX-only in osquery's table specs; a Windows daemon (the
+// MSI's kite-osqueryd) serves the NTFS USN journal as ntfs_journal_events
+// instead. An unknown-table rejection therefore falls back to the NTFS shape
+// mapped onto the same FileEvent struct — platform-correct without a
+// platform probe, and only ever an extra round-trip on Windows daemons.
+// Action strings pass through in the daemon's own vocabulary (CREATED /
+// UPDATED on POSIX, Write / Delete / rename pairs on Windows).
 func fileEventsWith(ctx context.Context, client querier, sinceUnix int64) ([]FileEvent, error) {
 	rows, err := client.Query(ctx, fmt.Sprintf(
 		"SELECT target_path, category, action, sha256, time FROM file_events WHERE time > %d;", sinceUnix))
 	if err != nil {
+		if IsQueryError(err) && strings.Contains(err.Error(), "no such table") {
+			return ntfsJournalEventsWith(ctx, client, sinceUnix)
+		}
 		return nil, fmt.Errorf("osquery: file_events: %w", err)
 	}
 	events := make([]FileEvent, 0, len(rows))
@@ -236,6 +247,27 @@ func fileEventsWith(ctx context.Context, client querier, sinceUnix int64) ([]Fil
 			Category:   r["category"],
 			Action:     r["action"],
 			SHA256:     r["sha256"],
+			Time:       atoi(r["time"]),
+		})
+	}
+	return events, nil
+}
+
+// ntfsJournalEventsWith reads Windows FIM records. ntfs_journal_events has no
+// sha256 column and names the changed file `path`, not `target_path`
+// (specs/windows/ntfs_journal_events.table).
+func ntfsJournalEventsWith(ctx context.Context, client querier, sinceUnix int64) ([]FileEvent, error) {
+	rows, err := client.Query(ctx, fmt.Sprintf(
+		"SELECT path, category, action, time FROM ntfs_journal_events WHERE time > %d;", sinceUnix))
+	if err != nil {
+		return nil, fmt.Errorf("osquery: ntfs_journal_events: %w", err)
+	}
+	events := make([]FileEvent, 0, len(rows))
+	for _, r := range rows {
+		events = append(events, FileEvent{
+			TargetPath: r["path"],
+			Category:   r["category"],
+			Action:     r["action"],
 			Time:       atoi(r["time"]),
 		})
 	}
