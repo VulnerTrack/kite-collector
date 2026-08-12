@@ -135,6 +135,28 @@ func TestDiscover_TagsCarryOsqueryIdentity(t *testing.T) {
 	assert.Equal(t, "9c0d0e6a-1111-2222-3333-444455556666", tags["hardware_uuid"])
 	assert.Equal(t, "QEMU", tags["hardware_vendor"])
 	assert.Equal(t, "Standard PC", tags["hardware_model"])
+	// cpu_type and physical_memory are fetched by the system_info query and
+	// must be surfaced, not discarded.
+	assert.Equal(t, "x86_64", tags["cpu_type"])
+	assert.Equal(t, float64(2147483648), tags["physical_memory_bytes"])
+}
+
+func TestDiscover_PartialSystemInfo_OmitsEmptyHardwareTags(t *testing.T) {
+	// A daemon that returns system_info without hardware fields (VMs,
+	// containers) must not emit empty/zero tags for them.
+	stub := healthyStub()
+	stub.responses["system_info"] = []map[string]string{{
+		"hostname": "vm-01", "uuid": "", "hardware_vendor": "",
+		"hardware_model": "", "cpu_type": "", "physical_memory": "0",
+	}}
+	s, cfg := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	tags := tagsOf(t, machines[0])
+	for _, k := range []string{"hardware_uuid", "hardware_vendor", "hardware_model", "cpu_type", "physical_memory_bytes"} {
+		_, present := tags[k]
+		assert.False(t, present, "empty/zero %q must be omitted, not tagged", k)
+	}
 }
 
 func TestDiscover_TimestampsAreUTCAndRecent(t *testing.T) {

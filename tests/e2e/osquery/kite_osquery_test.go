@@ -134,6 +134,13 @@ func TestLive_Discover_HostIdentity(t *testing.T) {
 	var tags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(m.Tags), &tags))
 	assert.NotEmpty(t, tags["osquery_version"])
+	// Hardware inventory the system_info query fetches must reach the tags.
+	assert.NotEmpty(t, tags["cpu_type"], "cpu_type must be surfaced from system_info")
+	if mem, ok := tags["physical_memory_bytes"].(float64); ok {
+		assert.Greater(t, mem, float64(0), "physical_memory_bytes must be a real byte count")
+	} else {
+		t.Errorf("physical_memory_bytes missing or wrong type: %v", tags["physical_memory_bytes"])
+	}
 }
 
 func TestLive_Discover_YaraMatchOnPlantedCanary(t *testing.T) {
