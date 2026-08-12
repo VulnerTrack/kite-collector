@@ -1,0 +1,19 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-server samba \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /run/sshd \
+    && useradd --create-home --shell /bin/bash kite \
+    && echo 'kite:kite-test' | chpasswd \
+    && printf '\nPasswordAuthentication yes\nPermitRootLogin no\n' >> /etc/ssh/sshd_config
+
+COPY ubuntu-smb.conf /etc/samba/smb.conf
+COPY ubuntu-entrypoint.sh /usr/local/bin/ubuntu-entrypoint
+RUN chmod 0755 /usr/local/bin/ubuntu-entrypoint
+
+EXPOSE 22 137/udp 138/udp 139 445
+
+CMD ["/usr/local/bin/ubuntu-entrypoint"]

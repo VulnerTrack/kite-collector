@@ -1,4 +1,4 @@
-.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host build-windows7 test test-e2e test-smoke-containers test-kite-containers test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -26,7 +26,7 @@ RELEASE_TARGETS = \
 # target in the matrix. The Go toolchain links *.syso next to the entry
 # package automatically when GOOS=windows, so a single syso covers all
 # windows/* builds.
-build: windows-resources
+build: windows-resources build-windows7
 	@mkdir -p bin
 	@for target in $(RELEASE_TARGETS); do \
 		os=$${target%%/*}; arch=$${target##*/}; \
@@ -104,6 +104,14 @@ validate-wxs:
 # use `build` before pushing to catch cross-OS regressions.
 build-host:
 	CGO_ENABLED=0 go build -o bin/kite-collector ./cmd/kite-collector
+
+# Windows 7 uses the pinned Go 1.17 toolchain and a 32-bit binary. This intentionally builds
+# the isolated legacy module instead of weakening the modern collector.
+build-windows7:
+	@mkdir -p bin
+	cd legacy/windows7 && GOTOOLCHAIN=go1.17.13 CGO_ENABLED=0 GOOS=windows GOARCH=386 GO386=softfloat \
+		go build -trimpath -ldflags="-X main.version=$${VERSION:-dev}" \
+		-o ../../bin/kite-collector_windows_386_legacy.exe .
 
 run:
 	CGO_ENABLED=0 go run ./cmd/kite-collector

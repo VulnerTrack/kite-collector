@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -51,6 +52,10 @@ type fleetDiscoveryStatus struct {
 	WSDFound     int
 	Running      bool
 	HasRun       bool
+	// CurrentMachineKeys identifies only the computers that answered during the
+	// latest discovery run. The Machines inventory is historical, so the fleet
+	// deployment page must not treat every stored row as currently reachable.
+	CurrentMachineKeys []string
 }
 
 type fleetDiscoveryController struct {
@@ -199,6 +204,11 @@ func (c *fleetDiscoveryController) run(ctx context.Context, st store.Store) erro
 			machines = append(machines, local)
 		}
 	}
+	machines = mergeFleetMachinesByIP(machines)
+	for i := range machines {
+		inferFleetCombinedOS(&machines[i])
+	}
+	status.CurrentMachineKeys = fleetMachineKeys(machines)
 	status.Found = len(machines)
 	for i := range machines {
 		machines[i].ID = uuid.Must(uuid.NewV7())
@@ -213,6 +223,106 @@ func (c *fleetDiscoveryController) run(ctx context.Context, st store.Store) erro
 	}
 	c.finish(status)
 	return nil
+}
+
+func fleetMachineKeys(machines []model.Machine) []string {
+	seen := make(map[string]struct{}, len(machines)*2)
+	keys := make([]string, 0, len(machines)*2)
+	for _, machine := range machines {
+		for _, value := range []string{machine.Hostname, fleetMachineIP(machine)} {
+			key := strings.ToLower(strings.TrimSpace(value))
+			if key == "" {
+				continue
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+// mergeFleetMachinesByIP joins protocol observations for the same address.
+// The TCP scanner intentionally uses the IP as hostname, while protocols such
+// as NetBIOS provide a human-readable name. Keeping both rows would make one
+// computer look like two and would strand the OS evidence on the IP-only row.
+func mergeFleetMachinesByIP(machines []model.Machine) []model.Machine {
+	byIP := make(map[string]int, len(machines))
+	dropped := make([]bool, len(machines))
+	for i := range machines {
+		if ip := fleetMachineIP(machines[i]); ip != "" && net.ParseIP(strings.TrimSpace(machines[i].Hostname)) != nil {
+			byIP[ip] = i
+		}
+	}
+	for i := range machines {
+		ip := fleetMachineIP(machines[i])
+		base, ok := byIP[ip]
+		if !ok || base == i || net.ParseIP(strings.TrimSpace(machines[i].Hostname)) != nil {
+			continue
+		}
+		mergeFleetMachine(&machines[base], machines[i])
+		dropped[i] = true
+	}
+	out := make([]model.Machine, 0, len(machines))
+	for i := range machines {
+		if !dropped[i] {
+			out = append(out, machines[i])
+		}
+	}
+	return out
+}
+
+func fleetMachineIP(machine model.Machine) string {
+	host := strings.TrimSpace(machine.Hostname)
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.String()
+	}
+	var tags map[string]any
+	if json.Unmarshal([]byte(machine.Tags), &tags) != nil {
+		return ""
+	}
+	for _, key := range []string{"nbns_ip", "local_ip"} {
+		if value, ok := tags[key].(string); ok {
+			if ip := net.ParseIP(strings.TrimSpace(value)); ip != nil {
+				return ip.String()
+			}
+		}
+	}
+	return ""
+}
+
+func mergeFleetMachine(dst *model.Machine, src model.Machine) {
+	if host := strings.TrimSpace(src.Hostname); host != "" && net.ParseIP(host) == nil {
+		dst.Hostname = host
+	}
+	if dst.OSFamily == "" {
+		dst.OSFamily = src.OSFamily
+	}
+	if dst.Architecture == "" {
+		dst.Architecture = src.Architecture
+	}
+	if dst.MachineType == "" {
+		dst.MachineType = src.MachineType
+	}
+	dst.Tags = mergeFleetTags(dst.Tags, src.Tags)
+}
+
+func mergeFleetTags(left, right string) string {
+	merged := map[string]any{}
+	_ = json.Unmarshal([]byte(left), &merged)
+	var extra map[string]any
+	if json.Unmarshal([]byte(right), &extra) == nil {
+		for key, value := range extra {
+			merged[key] = value
+		}
+	}
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		return left
+	}
+	return string(raw)
 }
 
 func discoverFleetControllerMachine(network fleetLocalNetwork) (model.Machine, error) {
@@ -248,15 +358,83 @@ func inferFleetProtocolOS(machine *model.Machine) {
 	switch strings.ToLower(strings.TrimSpace(machine.DiscoverySource)) {
 	case "wsdiscovery":
 		if strings.Contains(lowerTags, "microsoft.com/windows") ||
-			strings.Contains(lowerTags, "pkitypes.microsoft.com") {
-			machine.OSFamily = "windows"
-			machine.Architecture = "amd64"
+			strings.Contains(lowerTags, "pkitypes.microsoft.com") ||
+			fleetWSDIdentifiesWindowsComputer(lowerTags) {
+			setFleetOSInference(machine, "windows", "amd64", "high",
+				"Windows Function Discovery computer profile is reachable")
 		}
 	case "ssdp":
 		if strings.Contains(lowerTags, `"ssdp_server":"linux`) {
-			machine.OSFamily = "linux"
-			machine.Architecture = "amd64"
+			setFleetOSInference(machine, "linux", "amd64", "high",
+				"SSDP server identified Linux")
 		}
+	}
+}
+
+func fleetWSDIdentifiesWindowsComputer(lowerTags string) bool {
+	// Windows Function Discovery publishes the Computer device profile and
+	// exposes its HTTP metadata endpoint on TCP 5357. Requiring both avoids
+	// classifying generic WSD cameras and printers as Windows computers.
+	return strings.Contains(lowerTags, "pub:computer") &&
+		strings.Contains(lowerTags, ":5357/")
+}
+
+func inferFleetCombinedOS(machine *model.Machine) {
+	if machine == nil || strings.TrimSpace(machine.OSFamily) != "" {
+		return
+	}
+	var tags map[string]any
+	if json.Unmarshal([]byte(machine.Tags), &tags) != nil {
+		return
+	}
+	ports := fleetTagPorts(tags["network_scan_open_ports"])
+	hasPort := func(port int) bool { return ports[port] }
+	_, hasNetBIOS := tags["nbns_machine"]
+	types, _ := tags["wsd_types"].(string)
+	hasWSDComputer := strings.Contains(strings.ToLower(types), "pub:computer")
+
+	switch {
+	case hasPort(135) && hasPort(445):
+		setFleetOSInference(machine, "windows", "amd64", "medium",
+			"Windows RPC and SMB ports are both reachable")
+	case hasPort(3389) && (hasPort(445) || hasNetBIOS):
+		setFleetOSInference(machine, "windows", "amd64", "medium",
+			"RDP plus SMB or NetBIOS identity is reachable")
+	case hasWSDComputer && (hasPort(445) || hasNetBIOS):
+		setFleetOSInference(machine, "windows", "amd64", "medium",
+			"WS-Discovery computer profile plus SMB or NetBIOS identity was found")
+	}
+}
+
+func fleetTagPorts(raw any) map[int]bool {
+	ports := map[int]bool{}
+	switch values := raw.(type) {
+	case []any:
+		for _, value := range values {
+			if number, ok := value.(float64); ok {
+				ports[int(number)] = true
+			}
+		}
+	case []int:
+		for _, value := range values {
+			ports[value] = true
+		}
+	}
+	return ports
+}
+
+func setFleetOSInference(machine *model.Machine, osFamily, architecture, confidence, evidence string) {
+	machine.OSFamily = osFamily
+	machine.Architecture = architecture
+	var tags map[string]any
+	if json.Unmarshal([]byte(machine.Tags), &tags) != nil || tags == nil {
+		tags = map[string]any{}
+	}
+	tags["deployment_os_inferred"] = true
+	tags["deployment_os_confidence"] = confidence
+	tags["deployment_os_evidence"] = evidence
+	if raw, err := json.Marshal(tags); err == nil {
+		machine.Tags = string(raw)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +45,21 @@ func TestParseFleetTargets_AcceptsGeneratedLocalConnection(t *testing.T) {
 	assert.Equal(t, "controller.example.test", targets[0].Hostname)
 }
 
+func TestParseFleetTargets_AcceptsWindows7X86(t *testing.T) {
+	targets, err := parseFleetTargets("roberto-pc,windows,x86\n")
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	assert.Equal(t, fleetTarget{Hostname: "roberto-pc", OS: "windows", Arch: "386"}, targets[0])
+}
+
+func TestParseFleetTargets_DeduplicatesRawIPAndDiscoveredHostname(t *testing.T) {
+	targets, err := parseFleetTargets("192.168.1.75,windows,amd64\nROBERTO-PC,windows,amd64,192.168.1.75\n")
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	assert.Equal(t, "ROBERTO-PC", targets[0].Hostname)
+	assert.Equal(t, "192.168.1.75", targets[0].Address)
+}
+
 func TestParseFleetTargets_RejectsDuplicateAndUnsupportedTargets(t *testing.T) {
 	_, err := parseFleetTargets("pc-001,windows,amd64\nPC-001,windows,amd64\n")
 	require.Error(t, err)
@@ -55,12 +71,15 @@ func TestParseFleetTargets_RejectsDuplicateAndUnsupportedTargets(t *testing.T) {
 
 	_, err = parseFleetTargets("pc-arm,windows,arm64\n")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Windows releases currently support amd64 only")
+	assert.Contains(t, err.Error(), "Windows deployment supports amd64 and legacy 386")
 }
 
 func TestFleetCandidatesFromMachines_SelectsOnlyDeployableComputers(t *testing.T) {
 	now := time.Date(2026, time.August, 5, 12, 0, 0, 0, time.UTC)
 	machines := []model.Machine{
+		{Hostname: "asteroid-redis-1", MachineType: model.MachineTypeContainer, OSFamily: "linux", LastSeenAt: now},
+		// A container sharing a host name must not hide the deployable computer.
+		{Hostname: "pc-01", MachineType: model.MachineTypeContainer, OSFamily: "linux", LastSeenAt: now},
 		{Hostname: "router-01", MachineType: model.MachineTypeNetworkDevice, OSFamily: "linux", LastSeenAt: now},
 		{Hostname: "pc-01", MachineType: model.MachineTypeWorkstation, OSFamily: "Windows 11", LastSeenAt: now},
 		{Hostname: "srv-arm", MachineType: model.MachineTypeServer, OSFamily: "Ubuntu Linux", Architecture: "aarch64", LastSeenAt: now},
@@ -69,16 +88,19 @@ func TestFleetCandidatesFromMachines_SelectsOnlyDeployableComputers(t *testing.T
 		{Hostname: "blocked-01", MachineType: model.MachineTypeWorkstation, OSFamily: "Windows", IsAuthorized: model.AuthorizationUnauthorized, LastSeenAt: now},
 		{Hostname: "192.0.2.25", MachineType: model.MachineTypeServer, DiscoverySource: "network_scan", LastSeenAt: now},
 		{Hostname: "192.0.2.26", MachineType: model.MachineTypeServer, DiscoverySource: "network_scan", Tags: `{"network_scan_open_ports":[22],"ssh_banner":"SSH-2.0-OpenSSH_9.9"}`, LastSeenAt: now},
+		{Hostname: "ROBERTO-PC", MachineType: model.MachineTypeServer, DiscoverySource: "netbios", Tags: `{"nbns_ip":"192.0.2.27"}`, LastSeenAt: now},
+		{Hostname: "OFFICE-PC", MachineType: model.MachineTypeWorkstation, DiscoverySource: "wsdiscovery", LastSeenAt: now},
 	}
 
 	candidates := fleetCandidatesFromMachines(machines)
-	require.Len(t, candidates, 8)
+	require.Len(t, candidates, 10)
 	byHostname := make(map[string]fleetMachineCandidate, len(candidates))
 	for _, candidate := range candidates {
 		byHostname[candidate.Hostname] = candidate
 	}
 
 	assert.True(t, byHostname["pc-01"].Compatible)
+	assert.NotContains(t, byHostname, "asteroid-redis-1")
 	assert.Equal(t, "windows", byHostname["pc-01"].OS)
 	assert.Equal(t, "amd64", byHostname["pc-01"].Arch)
 	assert.True(t, byHostname["pc-01"].ArchInferred)
@@ -95,6 +117,30 @@ func TestFleetCandidatesFromMachines_SelectsOnlyDeployableComputers(t *testing.T
 	assert.Equal(t, "192.0.2.25,linux,amd64", byHostname["192.0.2.25"].TargetLinuxAMD64)
 	assert.False(t, byHostname["192.0.2.26"].Compatible)
 	assert.True(t, byHostname["192.0.2.26"].NeedsOSSelection)
+	assert.False(t, byHostname["ROBERTO-PC"].Compatible)
+	assert.True(t, byHostname["ROBERTO-PC"].NeedsOSSelection)
+	assert.Equal(t, "ROBERTO-PC,windows,amd64,192.0.2.27", byHostname["ROBERTO-PC"].TargetWindows)
+	assert.Contains(t, byHostname["ROBERTO-PC"].Reason, "Windows probable")
+	assert.True(t, byHostname["OFFICE-PC"].NeedsOSSelection)
+	assert.Equal(t, "OFFICE-PC,windows,amd64", byHostname["OFFICE-PC"].TargetWindows)
+}
+
+func TestFleetMachinesFromLatestDiscovery_ExcludesHistoricalMachines(t *testing.T) {
+	machines := []model.Machine{
+		{Hostname: "controller", DiscoverySource: "local_controller"},
+		{Hostname: "ROBERTO-PC", DiscoverySource: "wsdiscovery", Tags: `{"local_ip":"192.0.2.27"}`},
+		{Hostname: "CURRENT-PC", DiscoverySource: "wsdiscovery", Tags: `{"local_ip":"192.0.2.28"}`},
+	}
+
+	current := fleetMachinesFromLatestDiscovery(machines, []string{"controller", "192.0.2.28"})
+	require.Len(t, current, 2)
+	assert.Equal(t, "controller", current[0].Hostname)
+	assert.Equal(t, "CURRENT-PC", current[1].Hostname)
+}
+
+func TestFleetMachinesFromLatestDiscovery_IsEmptyBeforeFirstScan(t *testing.T) {
+	machines := []model.Machine{{Hostname: "ROBERTO-PC", DiscoverySource: "wsdiscovery"}}
+	assert.Empty(t, fleetMachinesFromLatestDiscovery(machines, nil))
 }
 
 func TestMergeFleetTargetInputs_CombinesSelectionsAndManualTargets(t *testing.T) {
@@ -107,6 +153,19 @@ func TestMergeFleetTargetInputs_CombinesSelectionsAndManualTargets(t *testing.T)
 		merged)
 }
 
+func TestFleetInventory_UsesDiscoveredIPAddressWithoutLosingHostname(t *testing.T) {
+	targets, err := parseFleetTargets("ROBERTO-PC,windows,amd64,192.0.2.27\n")
+	require.NoError(t, err)
+	require.Len(t, targets, 1)
+	assert.Equal(t, "ROBERTO-PC", targets[0].Hostname)
+	assert.Equal(t, "192.0.2.27", targets[0].Address)
+
+	req := fleetBundleRequest{EnrollmentTokens: map[string]string{"ROBERTO-PC": "token-value"}}
+	inventory := fleetInventoryYAML(req, targets)
+	assert.Contains(t, inventory, `"ROBERTO-PC":`)
+	assert.Contains(t, inventory, `ansible_host: "192.0.2.27"`)
+}
+
 func TestFleetCanAutoDetectUnix_UsesOpenSSHAndRejectsApplianceBanners(t *testing.T) {
 	assert.False(t, fleetCanAutoDetectUnix("192.0.2.20", `{"network_scan_open_ports":[22],"ssh_banner":"SSH-2.0-OpenSSH_9.9"}`))
 	assert.False(t, fleetCanAutoDetectUnix("192.0.2.1", `{"network_scan_open_ports":[22,53,80],"ssh_banner":"SSH-2.0-OpenSSH_9.9"}`))
@@ -114,8 +173,17 @@ func TestFleetCanAutoDetectUnix_UsesOpenSSHAndRejectsApplianceBanners(t *testing
 	assert.False(t, fleetCanAutoDetectUnix("192.0.2.20", `{"network_scan_open_ports":[22],"ssh_banner":"SSH-2.0-dropbear"}`))
 }
 
+func TestFleetDetectionDescription_ShowsConfidenceLevels(t *testing.T) {
+	assert.Equal(t,
+		"OS inferred with medium confidence · Windows RPC and SMB ports are both reachable",
+		fleetDetectionDescription(`{"deployment_os_confidence":"medium","deployment_os_evidence":"Windows RPC and SMB ports are both reachable"}`))
+	assert.Equal(t,
+		"OS estimate with low confidence · NetBIOS identity only",
+		fleetDetectionDescription(`{"deployment_os_confidence":"low","deployment_os_evidence":"NetBIOS identity only"}`))
+}
+
 func TestFleetDeployScript_LocalUnixDoesNotRequestSSH(t *testing.T) {
-	script := fleetDeployScript([]fleetTarget{{
+	script := fleetDeployScript(fleetBundleRequest{Version: "0.42.0"}, []fleetTarget{{
 		Hostname: "controller.example.test", OS: "linux", Arch: "amd64", Local: true,
 	}})
 	assert.Contains(t, script, "if false; then\n  read -r -p \"SSH user")
@@ -128,6 +196,32 @@ func TestFleetDeployScript_LocalUnixDoesNotRequestSSH(t *testing.T) {
 	assert.Contains(t, script, "docker rm -f kite-collector-local")
 	assert.Contains(t, script, "Waiting for the initial machine and software inventory")
 	assert.Contains(t, script, "http://127.0.0.1:9090/machines")
+}
+
+func TestFleetDeployScript_WindowsCredentialsAreAlwaysRequired(t *testing.T) {
+	script := fleetDeployScript(fleetBundleRequest{Version: "0.42.0"}, []fleetTarget{{
+		Hostname: "ROBERTO-PC", OS: "windows", Arch: "amd64",
+	}})
+	assert.Contains(t, script, `windows_targets=("ROBERTO-PC")`)
+	assert.Contains(t, script, `KITE_WINDOWS_USER_DEFAULT="${windows_target}\\Administrador"`)
+	assert.Contains(t, script, `Windows administrator [${KITE_WINDOWS_USER_DEFAULT}]`)
+	assert.Contains(t, script, `artifact_name="kite-collector_0.42.0_amd64.msi"`)
+	assert.Contains(t, script, `legacy_name="kite-collector_windows_386_legacy.exe"`)
+	assert.Contains(t, script, `legacy_url="https://github.com/VulnerTrack/kite-collector/releases/download/v0.42.0/${legacy_name}"`)
+	assert.Contains(t, script, `KITE_WINDOWS_USER="${KITE_WINDOWS_USER:-$KITE_WINDOWS_USER_DEFAULT}"`)
+	assert.Contains(t, script, `while [ -z "$KITE_WINDOWS_PASSWORD" ]`)
+	assert.Contains(t, script, "Windows password is required")
+	assert.Contains(t, script, `--limit "$windows_target"`)
+}
+
+func TestFleetDeployScript_MultipleWindowsTargetsPromptPerComputer(t *testing.T) {
+	script := fleetDeployScript(fleetBundleRequest{Version: "0.42.0"}, []fleetTarget{
+		{Hostname: "ALEJO-PC", OS: "windows", Arch: "amd64"},
+		{Hostname: "ROBERTO-PC", OS: "windows", Arch: "amd64"},
+	})
+	assert.Contains(t, script, `windows_targets=("ALEJO-PC" "ROBERTO-PC")`)
+	assert.Contains(t, script, `for windows_target in "${windows_targets[@]}"`)
+	assert.Contains(t, script, `Windows password for ${KITE_WINDOWS_USER}:`)
 }
 
 func TestFleetInventory_LocalConnectionSurvivesPlayDefaults(t *testing.T) {
@@ -165,6 +259,9 @@ func TestResolveFleetReleaseVersion_UsesServerConfiguration(t *testing.T) {
 }
 
 func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
+	legacyPath := t.TempDir() + "/kite-collector_windows_386_legacy.exe"
+	require.NoError(t, os.WriteFile(legacyPath, []byte("test-pe32-artifact"), 0o600))
+	t.Setenv("KITE_FLEET_LEGACY_ARTIFACT", legacyPath)
 	req := fleetBundleRequest{
 		Version:     "0.42.0",
 		PKIEndpoint: "https://pki.example.test",
@@ -200,11 +297,13 @@ func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
 
 	for _, name := range []string{
 		"README.md", "ansible.cfg", "deploy.sh", "deployment.json",
+		"artifacts/kite-collector_windows_386_legacy.exe",
 		"inventory/hosts.yml", "inventory/group_vars/all.yml",
 		"playbooks/deploy.yml", "targets.csv",
 	} {
 		assert.Contains(t, files, name)
 	}
+	assert.Equal(t, "test-pe32-artifact", files["artifacts/kite-collector_windows_386_legacy.exe"])
 	assert.Contains(t, files["inventory/hosts.yml"], `"pc-001.example.test"`)
 	assert.Contains(t, files["inventory/hosts.yml"], `"srv-001.example.test"`)
 	assert.Contains(t, files["inventory/hosts.yml"], `"mac-001.example.test"`)
@@ -213,7 +312,14 @@ func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
 	assert.Contains(t, files["inventory/hosts.yml"], "kite_agent_code:")
 	assert.NotEqual(t, fleetAgentCode("pc-001.example.test"), fleetAgentCode("srv-001.example.test"))
 	assert.Contains(t, files["inventory/hosts.yml"], fleetAgentCode("pc-001.example.test"))
-	assert.Contains(t, files["playbooks/deploy.yml"], "ansible.windows.win_package")
+	assert.Contains(t, files["playbooks/deploy.yml"], "Detect Windows version and processor architecture")
+	assert.Contains(t, files["playbooks/deploy.yml"], "kite_windows_legacy")
+	assert.Contains(t, files["playbooks/deploy.yml"], "kite-collector_windows_386_legacy.exe")
+	assert.Contains(t, files["playbooks/deploy.yml"], "ansible_winrm_read_timeout_sec: 120")
+	assert.Contains(t, files["playbooks/deploy.yml"], "Read sanitized enrollment diagnostic")
+	assert.Contains(t, files["playbooks/deploy.yml"], "[REDACTED]")
+	assert.Contains(t, files["playbooks/deploy.yml"], "& $exe install --certs-dir")
+	assert.NotContains(t, files["playbooks/deploy.yml"], "& sc.exe create kite-collector-legacy")
 	assert.Contains(t, files["playbooks/deploy.yml"], "ansible.builtin.unarchive")
 	assert.Contains(t, files["playbooks/deploy.yml"], "uname -s")
 	assert.Contains(t, files["playbooks/deploy.yml"], "detected-platforms.csv")
@@ -311,12 +417,14 @@ func TestRoute_POST_FleetPackage_ReturnsZip(t *testing.T) {
 	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
 	require.NoError(t, err)
+	bundleFiles := make(map[string]string, len(zr.File))
 	for _, file := range zr.File {
 		rc, openErr := file.Open()
 		require.NoError(t, openErr)
 		body, readErr := io.ReadAll(rc)
 		require.NoError(t, readErr)
 		require.NoError(t, rc.Close())
+		bundleFiles[file.Name] = string(body)
 		assert.NotContains(t, string(body), "pki_enroll_v1_test-secret-value",
 			"a manually submitted credential must be ignored")
 		if file.Name != "inventory/group_vars/all.yml" {
@@ -327,6 +435,27 @@ func TestRoute_POST_FleetPackage_ReturnsZip(t *testing.T) {
 		assert.NotContains(t, string(body), "untrusted.example.test")
 		assert.NotContains(t, string(body), "attacker-controlled")
 	}
+	assert.Contains(t, bundleFiles, "bootstrap/windows/Enable-KiteWinRM.ps1")
+	assert.Contains(t, bundleFiles, "bootstrap/windows/GPO-SETUP.md")
+	assert.Contains(t, bundleFiles, "bootstrap/windows/WINDOWS-COMMAND.txt")
+	assert.Contains(t, bundleFiles, "preflight.py")
+	assert.Contains(t, bundleFiles["deploy.sh"], "python3 preflight.py")
+	assert.Contains(t, bundleFiles["deploy.sh"], `windows_targets=("pc-001.example.test")`)
+	assert.Contains(t, bundleFiles["deploy.sh"], `KITE_WINDOWS_USER_DEFAULT="${windows_target}\\Administrador"`)
+	assert.Contains(t, bundleFiles["deploy.sh"], "press Enter if this is the correct user")
+	assert.Contains(t, bundleFiles["deploy.sh"], `KITE_WINDOWS_USER="${KITE_WINDOWS_USER:-$KITE_WINDOWS_USER_DEFAULT}"`)
+	assert.Contains(t, bundleFiles["deploy.sh"], `KITE_WINDOWS_USER="${KITE_WINDOWS_USER//\//\\}"`)
+	assert.Contains(t, bundleFiles["deploy.sh"], `for windows_target in`)
+	assert.Contains(t, bundleFiles["deploy.sh"], `--limit "$windows_target"`)
+	assert.Contains(t, bundleFiles["preflight.py"], "ThreadPoolExecutor")
+	assert.Contains(t, bundleFiles["playbooks/deploy.yml"], "ansible.builtin.raw")
+	assert.NotContains(t, bundleFiles["playbooks/deploy.yml"], "Ansible requires PowerShell v5.1")
+	assert.NotContains(t, bundleFiles["playbooks/deploy.yml"], "ansible.windows.win_file")
+	assert.Contains(t, bundleFiles["bootstrap/windows/Enable-KiteWinRM.ps1"], "Enable-PSRemoting")
+	assert.Contains(t, bundleFiles["bootstrap/windows/WINDOWS-COMMAND.txt"], "remoteip=localsubnet")
+	assert.Contains(t, bundleFiles["bootstrap/windows/WINDOWS-COMMAND.txt"], `findstr ":5985"`)
+	assert.Contains(t, bundleFiles["preflight.py"], "No file needs to be copied to Windows")
+	assert.Contains(t, bundleFiles["targets.csv"], "hostname,os,arch,connection,address")
 }
 
 func TestRoute_POST_FleetPackage_AcceptsDiscoveredSelectionWithoutManualCSV(t *testing.T) {
