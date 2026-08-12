@@ -117,7 +117,7 @@ func TestDiscover_MapsIdentityFields(t *testing.T) {
 	assert.Equal(t, "linux", m.OSFamily)
 	assert.Equal(t, "Ubuntu 24.04.2 LTS (Noble Numbat)", m.OSVersion)
 	assert.Equal(t, "6.8.0-51-generic", m.KernelVersion)
-	assert.Equal(t, "x86_64", m.Architecture)
+	assert.Equal(t, "amd64", m.Architecture, "os_version.arch x86_64 must normalize to GOARCH amd64")
 	assert.Equal(t, "osquery", m.DiscoverySource)
 	assert.Equal(t, model.MachineTypeServer, m.MachineType)
 	assert.Equal(t, model.AuthorizationUnknown, m.IsAuthorized)
@@ -548,6 +548,43 @@ func TestBuildMachine_PlatformMapping(t *testing.T) {
 			assert.Equal(t, tc.wantMachine, m.MachineType)
 		})
 	}
+}
+
+func TestNormalizeArch_MatchesGOARCHVocabulary(t *testing.T) {
+	cases := map[string]string{
+		// Linux/macOS uname machine strings.
+		"x86_64":  "amd64",
+		"amd64":   "amd64",
+		"x64":     "amd64",
+		"aarch64": "arm64",
+		"arm64":   "arm64",
+		"i686":    "386",
+		"i386":    "386",
+		"x86":     "386",
+		"armv7l":  "arm",
+		"arm":     "arm",
+		// Windows WMI OSArchitecture phrases.
+		"64-bit":               "amd64",
+		"32-bit":               "386",
+		"ARM 64-bit Processor": "arm64",
+		// Case / whitespace tolerance.
+		"  X86_64 ": "amd64",
+		// Empty and unknown pass through (lowercased), never dropped.
+		"":        "",
+		"ppc64le": "ppc64le",
+		"riscv64": "riscv64",
+		"s390x":   "s390x",
+	}
+	for in, want := range cases {
+		assert.Equal(t, want, normalizeArch(in), "normalizeArch(%q)", in)
+	}
+}
+
+func TestNormalizeArch_AgreesWithAgentProbeForSimHost(t *testing.T) {
+	// The agent probe reports runtime.GOARCH; on the amd64 CI host that is
+	// "amd64". osquery's os_version.arch on the same host is "x86_64". They
+	// must reconcile so a dual-discovered host does not churn the fingerprint.
+	assert.Equal(t, "amd64", normalizeArch("x86_64"))
 }
 
 func TestBuildMachine_EmptyRowsProduceEmptyMachine(t *testing.T) {

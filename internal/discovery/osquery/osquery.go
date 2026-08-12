@@ -454,6 +454,53 @@ func matchedRuleNames(matches []YaraMatch) []string {
 	return names
 }
 
+// normalizeArch maps an osquery arch string to the GOARCH vocabulary the
+// agent probe uses (runtime.GOARCH: amd64, arm64, 386, arm). A host with
+// osquery installed is discovered by BOTH this source and the local agent
+// probe; both produce a Machine with the same NaturalKey, so they must agree
+// on Architecture or the two records churn the MaterialFingerprint (which
+// includes Architecture) on every scan.
+//
+// osquery's arch is a uname machine string on Linux/macOS (x86_64, aarch64,
+// armv7l, ...) and a WMI OSArchitecture string on Windows ("64-bit",
+// "32-bit", "ARM 64-bit Processor"). Unknown values pass through lowercased
+// so nothing is discarded — only the families that diverge are reconciled.
+// The Windows "64-bit" → amd64 mapping is best-effort (it can't tell amd64
+// from a 64-bit non-ARM edge case), but ARM is disambiguated first.
+func normalizeArch(raw string) string {
+	a := strings.ToLower(strings.TrimSpace(raw))
+	switch a {
+	case "x86_64", "amd64", "x64":
+		return "amd64"
+	case "aarch64", "arm64":
+		return "arm64"
+	case "i386", "i486", "i586", "i686", "x86":
+		return "386"
+	case "armv6l", "armv7l", "armv8l", "arm":
+		return "arm"
+	case "":
+		return ""
+	}
+	// Windows WMI OSArchitecture phrases ("64-bit", "32-bit", "ARM 64-bit
+	// Processor"). Gate on "bit" so real GOARCH names that merely contain a
+	// width digit — ppc64le, riscv64, s390x, mips64 — pass through untouched
+	// instead of being swept into amd64. ARM is checked first so "ARM 64-bit"
+	// does not fall into amd64.
+	if strings.Contains(a, "bit") {
+		switch {
+		case strings.Contains(a, "arm") && strings.Contains(a, "32"):
+			return "arm"
+		case strings.Contains(a, "arm"):
+			return "arm64"
+		case strings.Contains(a, "64"):
+			return "amd64"
+		case strings.Contains(a, "32"):
+			return "386"
+		}
+	}
+	return a
+}
+
 // buildMachine maps osquery identity rows onto the Machine model.
 func buildMachine(info, sys, osv, kern map[string]string, now time.Time) model.Machine {
 	// osquery reports the distro slug (ubuntu, rhel, arch...) as platform on
@@ -482,7 +529,7 @@ func buildMachine(info, sys, osv, kern map[string]string, now time.Time) model.M
 		OSFamily:        osFamily,
 		OSVersion:       osVersion,
 		KernelVersion:   kern["version"],
-		Architecture:    osv["arch"],
+		Architecture:    normalizeArch(osv["arch"]),
 		DiscoverySource: "osquery",
 		IsAuthorized:    model.AuthorizationUnknown,
 		IsManaged:       model.ManagedUnknown,
