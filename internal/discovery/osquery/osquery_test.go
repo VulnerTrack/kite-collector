@@ -27,17 +27,40 @@ type stubQuerier struct {
 
 func (s *stubQuerier) Query(_ context.Context, sql string) ([]map[string]string, error) {
 	s.queries = append(s.queries, sql)
-	for kw, err := range s.errs {
-		if strings.Contains(sql, kw) {
-			return nil, err
-		}
+	// Longest matching keyword wins so a specific key (e.g. the daemon-binary
+	// self-lookup "FROM processes p, osquery_info i") beats a broader one it
+	// happens to contain ("osquery_info"). Without this, map iteration order
+	// makes the match non-deterministic when several keys are substrings.
+	if kw := longestMatch(sql, s.errs); kw != "" {
+		return nil, s.errs[kw]
 	}
-	for kw, rows := range s.responses {
-		if strings.Contains(sql, kw) {
-			return rows, nil
-		}
+	if kw := longestMatchRows(sql, s.responses); kw != "" {
+		return s.responses[kw], nil
 	}
 	return nil, nil
+}
+
+func longestMatch(sql string, m map[string]error) string {
+	best := ""
+	for kw := range m {
+		if strings.Contains(sql, kw) && len(kw) > len(best) {
+			best = kw
+		}
+	}
+	return best
+}
+
+func longestMatchRows(sql string, m map[string][]map[string]string) string {
+	best, found := "", false
+	for kw := range m {
+		if strings.Contains(sql, kw) && (!found || len(kw) > len(best)) {
+			best, found = kw, true
+		}
+	}
+	if !found {
+		return ""
+	}
+	return best
 }
 
 func (s *stubQuerier) Ping(context.Context) error { return s.pingErr }
@@ -697,4 +720,146 @@ func TestFileEvents_NTFSAlsoMissing_SurfacesNTFSError(t *testing.T) {
 	_, err := s.FileEvents(context.Background(), cfg, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ntfs_journal_events")
+}
+
+// ---------------------------------------------------------------------------
+// Inline YARA rules (sigrule): no daemon-side file, compile-proof guard.
+// Verified against osquery HEAD (specs/yara_file.table sigrule column,
+// tables/yara/yara.cpp compile path) and the 5.15.0 sim.
+// ---------------------------------------------------------------------------
+
+const inlineRule = `rule inline_canary { strings: $m = "X" condition: $m }`
+
+// selfProbeStub extends healthyStub to answer the daemon-binary lookup and to
+// route yara queries by whether they carry sigrule/sigfile. rulesCompile
+// controls whether the compile probe (yara vs the daemon binary) returns a
+// row.
+func rulesStub(rulesCompile bool, scan map[string][]map[string]string) *stubQuerier {
+	stub := healthyStub()
+	stub.responses["FROM processes p, osquery_info i"] = []map[string]string{{"path": "/opt/osquery/bin/osqueryd"}}
+	stub.responses["/opt/osquery/bin/osqueryd"] = func() []map[string]string {
+		if rulesCompile {
+			return []map[string]string{{"count": "0"}}
+		}
+		return nil // broken rule -> zero rows
+	}()
+	for k, v := range scan {
+		stub.responses[k] = v
+	}
+	return stub
+}
+
+func TestYaraInline_CompiledRule_Scans(t *testing.T) {
+	stub := rulesStub(true, map[string][]map[string]string{
+		"/opt/payload.bin": {{"path": "/opt/payload.bin", "matches": "inline_canary", "count": "1"}},
+	})
+	s, _ := sourceWith(stub)
+	cfg := map[string]any{"socket": "/tmp/t.em", "yara_rules": inlineRule, "yara_paths": []any{"/opt/payload.bin"}}
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	tags := tagsOf(t, machines[0])
+	assert.Equal(t, true, tags["yara_scanned"])
+	assert.Equal(t, float64(1), tags["yara_match_count"])
+}
+
+func TestYaraInline_UncompilableRule_SkipsNotClean(t *testing.T) {
+	// A malformed inline rule is silently dropped by osquery (0 rows). The
+	// compile probe against the daemon binary catches it, and the scan is
+	// SKIPPED — never reported as a clean result.
+	buf := captureLogs(t)
+	stub := rulesStub(false, map[string][]map[string]string{
+		// Even if the daemon would answer the real scan, we must not reach it.
+		"/opt/payload.bin": {{"path": "/opt/payload.bin", "matches": "", "count": "0"}},
+	})
+	s, _ := sourceWith(stub)
+	cfg := map[string]any{"socket": "/tmp/t.em", "yara_rules": "rule broken {", "yara_paths": []any{"/opt/payload.bin"}}
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	_, scanned := tagsOf(t, machines[0])["yara_scanned"]
+	assert.False(t, scanned)
+	assert.Contains(t, buf.String(), string(LogCodeYaraRulesUncompilable))
+}
+
+func TestYaraInline_DaemonBinaryUnresolved_Skips(t *testing.T) {
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.responses["FROM processes p, osquery_info i"] = nil // cannot resolve self
+	s, _ := sourceWith(stub)
+	cfg := map[string]any{"socket": "/tmp/t.em", "yara_rules": inlineRule, "yara_paths": []any{"/x"}}
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	_, scanned := tagsOf(t, machines[0])["yara_scanned"]
+	assert.False(t, scanned)
+	assert.Contains(t, buf.String(), string(LogCodeYaraCompileProbeFailed))
+}
+
+func TestYaraInline_ProbeQueryError_Skips(t *testing.T) {
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.responses["FROM processes p, osquery_info i"] = []map[string]string{{"path": "/opt/osquery/bin/osqueryd"}}
+	stub.errs["/opt/osquery/bin/osqueryd"] = errors.New("yara table wedged")
+	s, _ := sourceWith(stub)
+	cfg := map[string]any{"socket": "/tmp/t.em", "yara_rules": inlineRule, "yara_paths": []any{"/x"}}
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	_, scanned := tagsOf(t, machines[0])["yara_scanned"]
+	assert.False(t, scanned)
+	assert.Contains(t, buf.String(), string(LogCodeYaraCompileProbeFailed))
+}
+
+func TestYaraInline_TakesPrecedenceOverSigfile(t *testing.T) {
+	// When both are configured, inline rules win: no `file` visibility probe
+	// should run (no daemon-side file is involved).
+	stub := rulesStub(true, map[string][]map[string]string{
+		"/opt/x": {{"path": "/opt/x", "matches": "inline_canary", "count": "1"}},
+	})
+	s, _ := sourceWith(stub)
+	cfg := map[string]any{
+		"socket": "/tmp/t.em", "yara_rules": inlineRule,
+		"yara_sigfile": "/etc/osquery/yara/kite.yar", "yara_paths": []any{"/opt/x"},
+	}
+	_, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	for _, q := range stub.queries {
+		assert.NotContains(t, q, "FROM file WHERE", "sigfile visibility probe must not run in rule mode")
+		assert.NotContains(t, q, "sigfile =", "scan must use sigrule, not sigfile")
+	}
+}
+
+func TestYaraInline_RuleReachesDaemonViaSigrule(t *testing.T) {
+	stub := rulesStub(true, map[string][]map[string]string{
+		"/opt/x": {{"path": "/opt/x", "matches": "", "count": "0"}},
+	})
+	s, _ := sourceWith(stub)
+	cfg := map[string]any{"socket": "/tmp/t.em", "yara_rules": inlineRule, "yara_paths": []any{"/opt/x"}}
+	_, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	var scanSQL string
+	for _, q := range stub.queries {
+		if strings.Contains(q, "path = '/opt/x'") {
+			scanSQL = q
+		}
+	}
+	require.NotEmpty(t, scanSQL)
+	assert.Contains(t, scanSQL, "sigrule = ")
+	assert.Contains(t, scanSQL, "inline_canary")
+}
+
+func TestJoinRules_StringAndList(t *testing.T) {
+	assert.Equal(t, "rule a {}", joinRules("rule a {}"))
+	assert.Equal(t, "rule a {}\nrule b {}", joinRules([]any{"rule a {}", "rule b {}"}))
+	assert.Equal(t, "rule a {}\nrule b {}", joinRules([]string{"rule a {}", "rule b {}"}))
+	assert.Equal(t, "", joinRules(nil))
+	assert.Equal(t, "", joinRules([]any{}))
+	assert.Equal(t, "", joinRules(42))
+}
+
+func TestYaraInline_NoPaths_NotScanned(t *testing.T) {
+	stub := rulesStub(true, nil)
+	s, _ := sourceWith(stub)
+	cfg := map[string]any{"socket": "/tmp/t.em", "yara_rules": inlineRule}
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	_, scanned := tagsOf(t, machines[0])["yara_scanned"]
+	assert.False(t, scanned)
 }
