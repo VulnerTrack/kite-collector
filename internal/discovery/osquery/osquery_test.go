@@ -166,7 +166,45 @@ func TestDiscover_FileEventsCountTagged(t *testing.T) {
 	machines, err := s.Discover(context.Background(), cfg)
 	require.NoError(t, err)
 	tags := tagsOf(t, machines[0])
-	assert.Equal(t, float64(2), tags["file_events_24h"])
+	assert.Equal(t, float64(2), tags["file_events_recent"])
+	// No events_expiry flag response -> honest default window, not a bogus 24h.
+	assert.Equal(t, float64(3600), tags["file_events_window_secs"])
+	_, old := tags["file_events_24h"]
+	assert.False(t, old, "the misleading 24h tag must be gone")
+}
+
+func TestDiscover_FileEventsWindow_UsesDaemonEventsExpiry(t *testing.T) {
+	stub := healthyStub()
+	stub.responses["events_expiry"] = []map[string]string{{"value": "600"}}
+	s, cfg := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	tags := tagsOf(t, machines[0])
+	assert.Equal(t, float64(600), tags["file_events_window_secs"],
+		"the window must track the daemon's events_expiry, not a hardcoded value")
+	// And the file_events query must have used the matching floor.
+	var feSQL string
+	for _, q := range stub.queries {
+		if strings.Contains(q, "FROM file_events") {
+			feSQL = q
+		}
+	}
+	require.NotEmpty(t, feSQL)
+	assert.Contains(t, feSQL, "time > ", "the query must carry a time constraint (disables events_optimize differential)")
+}
+
+func TestEventsExpiryWindow_FallsBackOnMissingOrBadFlag(t *testing.T) {
+	// Flag absent -> default.
+	stub := healthyStub()
+	assert.Equal(t, int64(3600), eventsExpiryWindow(context.Background(), stub))
+	// Flag present but non-positive -> default.
+	stub2 := healthyStub()
+	stub2.responses["events_expiry"] = []map[string]string{{"value": "0"}}
+	assert.Equal(t, int64(3600), eventsExpiryWindow(context.Background(), stub2))
+	// Flag query errors -> default.
+	stub3 := healthyStub()
+	stub3.errs["events_expiry"] = errors.New("flags table wedged")
+	assert.Equal(t, int64(3600), eventsExpiryWindow(context.Background(), stub3))
 }
 
 func TestName_IsStable(t *testing.T) {

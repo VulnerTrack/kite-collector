@@ -309,3 +309,56 @@ func TestLive_Discover_MixedPresentAndMissingPaths(t *testing.T) {
 	assert.Equal(t, true, tags["yara_scanned"], "the present path scanned")
 	assert.Equal(t, float64(1), tags["yara_paths_unscannable"], "the absent path is a reported coverage gap")
 }
+
+// TestLive_FileEventsWindow_TracksEventsExpiry proves the FIM summary window
+// tracks the daemon's real retention (events_expiry, 3600s in the sim) rather
+// than a hardcoded 24h the daemon can never fill.
+func TestLive_FileEventsWindow_TracksEventsExpiry(t *testing.T) {
+	src := osquerydisc.New()
+	machines, err := src.Discover(ctxWithTimeout(t), map[string]any{"socket": socketPath(t)})
+	require.NoError(t, err)
+	var tags map[string]any
+	require.NoError(t, json.Unmarshal([]byte(machines[0].Tags), &tags))
+	assert.Equal(t, float64(3600), tags["file_events_window_secs"], "sim events_expiry default")
+	_, old := tags["file_events_24h"]
+	assert.False(t, old, "the misleading 24h tag must be gone")
+}
+
+// TestLive_FileEvents_RepeatedCallsAreConsistent guards the events_optimize
+// landmine: with the load-bearing `time >` constraint, repeated file_events
+// reads over the socket return a stable window, NOT a shrinking differential.
+func TestLive_FileEvents_RepeatedCallsAreConsistent(t *testing.T) {
+	fim := filepath.Join(watchDir(t), "fim",
+		fmt.Sprintf("e2e-consistent-%d.txt", time.Now().UnixNano()))
+	require.NoError(t, os.MkdirAll(filepath.Dir(fim), 0o755))
+	require.NoError(t, os.WriteFile(fim, []byte("consistency canary\n"), 0o644))
+	t.Cleanup(func() { _ = os.Remove(fim) })
+
+	src := osquerydisc.New()
+	cfg := map[string]any{"socket": socketPath(t)}
+	since := time.Now().Add(-time.Hour).Unix()
+
+	// Wait for the canary to appear.
+	deadline := time.Now().Add(60 * time.Second)
+	seen := func() bool {
+		ev, err := src.FileEvents(ctxWithTimeout(t), cfg, since)
+		require.NoError(t, err)
+		for _, e := range ev {
+			if e.TargetPath == fim {
+				return true
+			}
+		}
+		return false
+	}
+	for !seen() {
+		if time.Now().After(deadline) {
+			t.Fatalf("canary never appeared")
+		}
+		time.Sleep(time.Second)
+	}
+	// Now query several more times: the canary must remain visible every time
+	// (a differential would drop it after the first read).
+	for i := 0; i < 4; i++ {
+		assert.True(t, seen(), "repeated read %d lost the event — events_optimize differential leaked in", i)
+	}
+}
