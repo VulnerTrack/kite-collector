@@ -23,5 +23,6 @@ const (
 	LogCodeYaraCompileProbeFailed LogCode = "osquery.yara.compile_probe_failed" // could not run the inline-rule compile probe (daemon binary unresolved or probe query errored); scan SKIPPED
 	LogCodeYaraRulesUncompilable  LogCode = "osquery.yara.rules_uncompilable"   // inline yara_rules failed to compile (malformed rule text); scan SKIPPED, never reported clean
 	LogCodeYaraScanFailed         LogCode = "osquery.yara.scan_failed"          // one configured path's yara-table scan errored; remaining paths still scan
+	LogCodeYaraAllPathsFailed     LogCode = "osquery.yara.all_paths_failed"     // EVERY path errored (yara table absent/all unreadable); scan NOT reported, so a false clean is not emitted
 	LogCodeYaraMatchesFound       LogCode = "osquery.yara.matches_found"        // YARA rules matched on the host — the alert line names the rules
 )

@@ -863,3 +863,55 @@ func TestYaraInline_NoPaths_NotScanned(t *testing.T) {
 	_, scanned := tagsOf(t, machines[0])["yara_scanned"]
 	assert.False(t, scanned)
 }
+
+// ---------------------------------------------------------------------------
+// False-clean guard: the credential proof does not exercise the yara table,
+// so if every scan path errors (yara table absent — e.g. a FreeBSD daemon —
+// or all paths unreadable) the scan must NOT be reported as clean.
+// ---------------------------------------------------------------------------
+
+func TestYara_AllPathsError_SigfileMode_NotReportedClean(t *testing.T) {
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.responses["FROM file"] = []map[string]string{{"path": "/etc/osquery/yara/kite.yar"}} // sigfile visible
+	stub.errs["FROM yara"] = &queryError{method: "query", code: 1, message: "no such table: yara"}
+	s, _ := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), yaraCfg("/a", "/b"))
+	require.NoError(t, err)
+	tags := tagsOf(t, machines[0])
+	_, scanned := tags["yara_scanned"]
+	assert.False(t, scanned, "sigfile visible but yara table absent must not report a clean scan")
+	assert.Contains(t, buf.String(), string(LogCodeYaraAllPathsFailed))
+}
+
+func TestYara_AllPathsError_RuleMode_NotReportedClean(t *testing.T) {
+	buf := captureLogs(t)
+	stub := rulesStub(true, nil) // compile probe passes
+	// Path names chosen not to collide as substrings with the daemon binary
+	// path the compile probe scans (/opt/osquery/bin/osqueryd).
+	stub.errs["/scan/target-one"] = &queryError{method: "query", code: 1, message: "scan errored"}
+	stub.errs["/scan/target-two"] = &queryError{method: "query", code: 1, message: "scan errored"}
+	s, _ := sourceWith(stub)
+	cfg := map[string]any{"socket": "/tmp/t.em", "yara_rules": inlineRule, "yara_paths": []any{"/scan/target-one", "/scan/target-two"}}
+	machines, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	_, scanned := tagsOf(t, machines[0])["yara_scanned"]
+	assert.False(t, scanned)
+	assert.Contains(t, buf.String(), string(LogCodeYaraAllPathsFailed))
+}
+
+func TestYara_SomePathsError_StillReportsScan(t *testing.T) {
+	// As long as at least one path scanned, the result stands — the errored
+	// paths are logged per-path but the scan is real.
+	stub := healthyStub()
+	stub.responses["FROM file"] = []map[string]string{{"path": "/etc/osquery/yara/kite.yar"}}
+	// /good scans (returns a clean row); /bad errors.
+	stub.responses["/good"] = []map[string]string{{"path": "/good", "matches": "", "count": "0"}}
+	stub.errs["/bad"] = &queryError{method: "query", code: 1, message: "unreadable"}
+	s, _ := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), yaraCfg("/good", "/bad"))
+	require.NoError(t, err)
+	tags := tagsOf(t, machines[0])
+	assert.Equal(t, true, tags["yara_scanned"], "one good path means the scan really ran")
+	assert.Equal(t, float64(0), tags["yara_match_count"])
+}
