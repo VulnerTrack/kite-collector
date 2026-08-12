@@ -70,7 +70,7 @@ func New() *Metrics {
 
 	dedupSkipped := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "kite_dedup_skipped_total",
-		Help: "Total number of duplicate machines skipped during deduplication.",
+		Help: "Total number of intra-batch duplicate machines collapsed (merged) during deduplication.",
 	})
 
 	panicsRecovered := prometheus.NewCounterVec(prometheus.CounterOpts{

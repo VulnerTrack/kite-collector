@@ -12,8 +12,14 @@ type LogCode string
 
 const (
 	// batch surface — per-batch deduplication telemetry
-	LogCodeDedupSkipIntraBatch LogCode = "dedup.batch.skip_intra_batch"
-	LogCodeDedupUpdated        LogCode = "dedup.batch.updated"
-	LogCodeDedupNew            LogCode = "dedup.batch.new"
-	LogCodeDedupCompleted      LogCode = "dedup.batch.completed"
+	//
+	// Deprecated: LogCodeDedupSkipIntraBatch was emitted when an intra-batch
+	// duplicate was DROPPED. Duplicates are now folded together instead of
+	// skipped; use LogCodeDedupMergeIntraBatch. The constant is retained so
+	// dashboards filtering the old code do not error.
+	LogCodeDedupSkipIntraBatch  LogCode = "dedup.batch.skip_intra_batch"
+	LogCodeDedupMergeIntraBatch LogCode = "dedup.batch.merge_intra_batch"
+	LogCodeDedupUpdated         LogCode = "dedup.batch.updated"
+	LogCodeDedupNew             LogCode = "dedup.batch.new"
+	LogCodeDedupCompleted       LogCode = "dedup.batch.completed"
 )

@@ -11,6 +11,7 @@ import (
 func TestLogCodes_FollowConvention(t *testing.T) {
 	codes := []LogCode{
 		LogCodeDedupSkipIntraBatch,
+		LogCodeDedupMergeIntraBatch,
 		LogCodeDedupUpdated,
 		LogCodeDedupNew,
 		LogCodeDedupCompleted,
@@ -34,6 +35,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 	seen := map[LogCode]bool{}
 	for _, c := range []LogCode{
 		LogCodeDedupSkipIntraBatch,
+		LogCodeDedupMergeIntraBatch,
 		LogCodeDedupUpdated,
 		LogCodeDedupNew,
 		LogCodeDedupCompleted,
