@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"html/template"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -39,11 +41,15 @@ var (
 	fleetVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 )
 
+//go:embed assets/kite-collector_windows_386_legacy.exe
+var embeddedFleetWindowsLegacyArtifact []byte
+
 type fleetTarget struct {
 	Hostname string
 	OS       string
 	Arch     string
 	Local    bool
+	Address  string
 }
 
 type fleetBundleRequest struct {
@@ -63,6 +69,7 @@ type fleetPageView struct {
 
 type fleetMachineCandidate struct {
 	Hostname         string
+	Address          string
 	OS               string
 	Arch             string
 	MachineType      string
@@ -184,7 +191,7 @@ const fleetDeploymentTemplate = `<div class="fleet-hero">
       <div class="form-row">
         <label for="fleet-targets">Additional computers <span class="muted small">(optional)</span></label>
         <textarea id="fleet-targets" name="targets" rows="5"
-                  spellcheck="false" placeholder="hostname,os,arch&#10;pc-001.corp.example.com,windows,amd64&#10;srv-001.corp.example.com,linux,amd64&#10;mac-001.corp.example.com,macos,arm64"></textarea>
+                  spellcheck="false" placeholder="hostname,os,arch&#10;pc-001.corp.example.com,windows,386&#10;srv-001.corp.example.com,linux,amd64&#10;mac-001.corp.example.com,macos,arm64"></textarea>
         <span class="muted small">One computer per line using <code>hostname,os,arch</code>. This is useful for an IP or host not present in Machines.</span>
       </div>
       <div class="cta-bar">
@@ -201,13 +208,14 @@ cd kite-deployment
 ./deploy.sh</code></pre>
     <ol>
       <li>Installs an isolated Ansible runtime.</li>
-      <li>Prompts for Windows and/or SSH credentials.</li>
+      <li>Checks every management port concurrently before requesting credentials.</li>
+      <li>Prompts once for the Windows domain account and/or SSH credentials.</li>
       <li>Automatically distinguishes Linux from macOS and detects CPU architecture.</li>
       <li>Downloads versioned release artifacts and validates checksums.</li>
       <li>Installs, enrolls, and starts each collector.</li>
       <li>Saves detection results without storing infrastructure passwords.</li>
     </ol>
-    <div class="fleet-warning"><strong>Network prerequisites:</strong> Windows targets need WinRM; Linux/macOS targets need SSH and sudo access.</div>
+    <div class="fleet-warning"><strong>Windows at scale:</strong> the ZIP includes an idempotent WinRM bootstrap for GPO, Intune, SCCM, or RMM. Apply it centrally once—never computer by computer. Linux/macOS targets need SSH and sudo access.</div>
   </aside>
 </div>`
 
@@ -243,6 +251,8 @@ func renderFleetDeploymentFragment(
 	if err != nil {
 		return fmt.Errorf("list machines for fleet deployment: %w", err)
 	}
+	discoveryStatus := discovery.snapshot()
+	machines = fleetMachinesFromLatestDiscovery(machines, discoveryStatus.CurrentMachineKeys)
 	candidates := fleetCandidatesFromMachines(machines)
 	compatibleCount := 0
 	for _, candidate := range candidates {
@@ -259,7 +269,7 @@ func renderFleetDeploymentFragment(
 		CompatibleCount: compatibleCount,
 		SkippedCount:    len(candidates) - compatibleCount,
 		LocalNetwork:    localNetwork,
-		Discovery:       discovery.snapshot(),
+		Discovery:       discoveryStatus,
 	}); err != nil {
 		return fmt.Errorf("render fleet deployment template: %w", err)
 	}
@@ -268,6 +278,24 @@ func renderFleetDeploymentFragment(
 		return fmt.Errorf("render fleet selection script: %w", err)
 	}
 	return nil
+}
+
+func fleetMachinesFromLatestDiscovery(machines []model.Machine, currentKeys []string) []model.Machine {
+	current := make(map[string]struct{}, len(currentKeys))
+	for _, key := range currentKeys {
+		current[strings.ToLower(strings.TrimSpace(key))] = struct{}{}
+	}
+	result := make([]model.Machine, 0, len(machines))
+	for _, machine := range machines {
+		hostKey := strings.ToLower(strings.TrimSpace(machine.Hostname))
+		ipKey := strings.ToLower(strings.TrimSpace(fleetMachineIP(machine)))
+		_, hostFound := current[hostKey]
+		_, ipFound := current[ipKey]
+		if hostFound || (ipKey != "" && ipFound) {
+			result = append(result, machine)
+		}
+	}
+	return result
 }
 
 func handleFleetPackage(
@@ -389,6 +417,12 @@ func fleetCandidatesFromMachines(machines []model.Machine) []fleetMachineCandida
 	candidates := make([]fleetMachineCandidate, 0, len(machines))
 	byHostname := make(map[string]int, len(machines))
 	for _, machine := range machines {
+		// Containers belong in the general asset inventory, but they are not
+		// computers that can receive the fleet agent. Keep them out of this UI
+		// entirely instead of displaying a long list of disabled candidates.
+		if machine.MachineType == model.MachineTypeContainer {
+			continue
+		}
 		candidate := fleetCandidateFromMachine(machine)
 		key := strings.ToLower(strings.TrimSpace(candidate.Hostname))
 		if index, exists := byHostname[key]; exists {
@@ -416,6 +450,7 @@ func fleetCandidateFromMachine(machine model.Machine) fleetMachineCandidate {
 	hostname := strings.TrimSpace(machine.Hostname)
 	candidate := fleetMachineCandidate{
 		Hostname:        hostname,
+		Address:         fleetMachineIP(machine),
 		MachineType:     string(machine.MachineType),
 		DiscoverySource: strings.TrimSpace(machine.DiscoverySource),
 		LastSeen:        "never",
@@ -454,13 +489,14 @@ func fleetCandidateFromMachine(machine model.Machine) fleetMachineCandidate {
 				candidate.Detection = "Linux or macOS will be detected automatically over SSH"
 				return candidate
 			}
-			candidate.NeedsOSSelection = true
-			candidate.Reason = fleetUnknownOSReason(machine.Tags)
-			candidate.TargetWindows = hostname + ",windows,amd64"
-			candidate.TargetLinuxAMD64 = hostname + ",linux,amd64"
-			candidate.TargetLinuxARM64 = hostname + ",linux,arm64"
-			candidate.TargetMacAMD64 = hostname + ",macos,amd64"
-			candidate.TargetMacARM64 = hostname + ",macos,arm64"
+			configureFleetOSSelection(&candidate, fleetUnknownOSReason(machine.Tags))
+			return candidate
+		}
+		discoverySource := strings.ToLower(strings.TrimSpace(machine.DiscoverySource))
+		if discoverySource == "netbios" || discoverySource == "wsdiscovery" {
+			configureFleetOSSelection(&candidate,
+				"Windows probable · local discovery found; confirm the OS to continue")
+			candidate.Detection = "Probable Windows based on local network identity"
 			return candidate
 		}
 		candidate.Reason = "unsupported or unknown OS"
@@ -483,16 +519,34 @@ func fleetCandidateFromMachine(machine model.Machine) fleetMachineCandidate {
 			return candidate
 		}
 	}
-	if osName == "windows" && candidate.Arch != "amd64" {
-		candidate.Reason = "Windows release requires amd64"
+	if osName == "windows" && candidate.Arch != "amd64" && candidate.Arch != "386" {
+		candidate.Reason = "Windows deployment supports amd64 and legacy 386"
 		return candidate
 	}
-	candidate.TargetLine = strings.Join([]string{hostname, candidate.OS, candidate.Arch}, ",")
+	candidate.TargetLine = fleetCandidateTargetLine(candidate, candidate.OS, candidate.Arch)
 	if strings.EqualFold(candidate.DiscoverySource, "local_controller") {
-		candidate.TargetLine += ",local"
+		candidate.TargetLine = strings.Join([]string{hostname, candidate.OS, candidate.Arch, "local"}, ",")
 	}
 	candidate.Compatible = true
 	return candidate
+}
+
+func configureFleetOSSelection(candidate *fleetMachineCandidate, reason string) {
+	candidate.NeedsOSSelection = true
+	candidate.Reason = reason
+	candidate.TargetWindows = fleetCandidateTargetLine(*candidate, "windows", "amd64")
+	candidate.TargetLinuxAMD64 = fleetCandidateTargetLine(*candidate, "linux", "amd64")
+	candidate.TargetLinuxARM64 = fleetCandidateTargetLine(*candidate, "linux", "arm64")
+	candidate.TargetMacAMD64 = fleetCandidateTargetLine(*candidate, "macos", "amd64")
+	candidate.TargetMacARM64 = fleetCandidateTargetLine(*candidate, "macos", "arm64")
+}
+
+func fleetCandidateTargetLine(candidate fleetMachineCandidate, osName, arch string) string {
+	fields := []string{candidate.Hostname, osName, arch}
+	if candidate.Address != "" && !strings.EqualFold(candidate.Address, candidate.Hostname) {
+		fields = append(fields, candidate.Address)
+	}
+	return strings.Join(fields, ",")
 }
 
 type fleetDetectionTags struct {
@@ -527,10 +581,19 @@ func fleetCanAutoDetectUnix(_ string, raw string) bool {
 
 func fleetDetectionDescription(raw string) string {
 	tags := parseFleetDetectionTags(raw)
-	if tags.Confidence == "high" && tags.Evidence != "" {
-		return "OS detected with high confidence · " + tags.Evidence
+	if tags.Evidence == "" {
+		return ""
 	}
-	return ""
+	switch strings.ToLower(strings.TrimSpace(tags.Confidence)) {
+	case "high":
+		return "OS detected with high confidence · " + tags.Evidence
+	case "medium":
+		return "OS inferred with medium confidence · " + tags.Evidence
+	case "low":
+		return "OS estimate with low confidence · " + tags.Evidence
+	default:
+		return "OS evidence · " + tags.Evidence
+	}
 }
 
 func fleetUnknownOSReason(raw string) string {
@@ -593,6 +656,7 @@ func parseFleetTargets(raw string) ([]fleetTarget, error) {
 	reader.FieldsPerRecord = -1
 
 	seen := make(map[string]struct{})
+	seenAddress := make(map[string]int)
 	targets := make([]fleetTarget, 0)
 	for line := 1; ; line++ {
 		record, err := reader.Read()
@@ -629,29 +693,52 @@ func parseFleetTargets(raw string) ([]fleetTarget, error) {
 		if osName == "auto" {
 			arch = "auto"
 		}
-		if len(record) == 3 && strings.TrimSpace(record[2]) != "" {
+		if len(record) >= 3 && strings.TrimSpace(record[2]) != "" {
 			arch, err = normalizeFleetArch(record[2])
 			if err != nil {
 				return nil, fmt.Errorf("targets line %d: %w", line, err)
 			}
 		}
-		if osName == "windows" && arch != "amd64" {
-			return nil, fmt.Errorf("targets line %d: Windows releases currently support amd64 only", line)
+		if osName == "windows" && arch != "amd64" && arch != "386" {
+			return nil, fmt.Errorf("targets line %d: Windows deployment supports amd64 and legacy 386", line)
 		}
 		if osName == "auto" && arch != "auto" {
 			return nil, fmt.Errorf("targets line %d: automatic Unix detection requires automatic architecture", line)
 		}
 		local := false
+		address := ""
 		if len(record) == 4 {
-			switch strings.ToLower(strings.TrimSpace(record[3])) {
+			connection := strings.TrimSpace(record[3])
+			switch strings.ToLower(connection) {
 			case "", "remote":
 			case "local":
 				local = true
 			default:
-				return nil, fmt.Errorf("targets line %d has an invalid connection mode", line)
+				if net.ParseIP(connection) == nil {
+					return nil, fmt.Errorf("targets line %d has an invalid connection address", line)
+				}
+				address = connection
 			}
 		}
-		targets = append(targets, fleetTarget{Hostname: hostname, OS: osName, Arch: arch, Local: local})
+		target := fleetTarget{Hostname: hostname, OS: osName, Arch: arch, Local: local, Address: address}
+		addressKey := strings.ToLower(address)
+		if addressKey == "" && net.ParseIP(hostname) != nil {
+			addressKey = strings.ToLower(hostname)
+		}
+		if existingIndex, exists := seenAddress[addressKey]; addressKey != "" && exists {
+			existing := targets[existingIndex]
+			// Discovery can report one computer once by raw IP and once by its
+			// NetBIOS/DNS name plus that same IP. Keep the meaningful hostname so
+			// preflight and Ansible never race against the same machine twice.
+			if net.ParseIP(existing.Hostname) != nil && net.ParseIP(target.Hostname) == nil {
+				targets[existingIndex] = target
+			}
+			continue
+		}
+		targets = append(targets, target)
+		if addressKey != "" {
+			seenAddress[addressKey] = len(targets) - 1
+		}
 		if len(targets) > maxFleetTargets {
 			return nil, fmt.Errorf("a deployment package supports at most %d targets", maxFleetTargets)
 		}
@@ -686,6 +773,8 @@ func normalizeFleetArch(value string) (string, error) {
 		return "auto", nil
 	case "amd64", "x86_64", "x64":
 		return "amd64", nil
+	case "386", "i386", "i686", "x86", "x32":
+		return "386", nil
 	case "arm64", "aarch64":
 		return "arm64", nil
 	default:
@@ -701,13 +790,29 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 	}
 	zw := zip.NewWriter(w)
 	files := map[string]string{
-		"README.md":                    fleetBundleReadme(req, targets),
-		"ansible.cfg":                  fleetAnsibleConfig,
-		"deploy.sh":                    fleetDeployScript(targets),
-		"inventory/hosts.yml":          fleetInventoryYAML(req, targets),
-		"inventory/group_vars/all.yml": fleetAllVarsYAML(req),
-		"playbooks/deploy.yml":         fleetPlaybookYAML,
-		"targets.csv":                  fleetTargetsCSV(targets),
+		"README.md":                              fleetBundleReadme(req, targets),
+		"ansible.cfg":                            fleetAnsibleConfig,
+		"bootstrap/windows/Enable-KiteWinRM.ps1": fleetWindowsBootstrapPowerShell,
+		"bootstrap/windows/GPO-SETUP.md":         fleetWindowsGPOReadme,
+		"bootstrap/windows/WINDOWS-COMMAND.txt":  fleetWindowsBootstrapCommand + "\n",
+		"deploy.sh":                              fleetDeployScript(req, targets),
+		"inventory/hosts.yml":                    fleetInventoryYAML(req, targets),
+		"inventory/group_vars/all.yml":           fleetAllVarsYAML(req),
+		"playbooks/deploy.yml":                   fleetPlaybookYAML,
+		"preflight.py":                           fleetPreflightPython,
+		"targets.csv":                            fleetTargetsCSV(targets),
+	}
+	// The compatibility executable is embedded in the dashboard binary so a
+	// package downloaded from a systemd service is complete regardless of its
+	// working directory or internet access. Developers can explicitly override
+	// it to exercise a locally rebuilt legacy artifact.
+	legacyArtifact := embeddedFleetWindowsLegacyArtifact
+	if legacyArtifactPath := strings.TrimSpace(os.Getenv("KITE_FLEET_LEGACY_ARTIFACT")); legacyArtifactPath != "" {
+		var legacyArtifactErr error
+		legacyArtifact, legacyArtifactErr = os.ReadFile(legacyArtifactPath) //#nosec G304 -- explicit operator override
+		if legacyArtifactErr != nil {
+			return fmt.Errorf("read Windows 7 artifact override: %w", legacyArtifactErr)
+		}
 	}
 	manifest, err := json.MarshalIndent(map[string]any{
 		"created_at":    time.Now().UTC().Format(time.RFC3339),
@@ -735,7 +840,7 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		// makes generated bundles reproducible without showing a misleading
 		// 1969 date in time zones west of UTC.
 		header.SetModTime(time.Date(1980, time.January, 1, 12, 0, 0, 0, time.UTC))
-		if name == "deploy.sh" {
+		if name == "deploy.sh" || name == "preflight.py" {
 			header.SetMode(0o700)
 		} else {
 			header.SetMode(0o600)
@@ -746,6 +851,18 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		}
 		if _, writeErr := io.WriteString(entry, files[name]); writeErr != nil {
 			return fmt.Errorf("write bundle entry %s: %w", name, writeErr)
+		}
+	}
+	if len(legacyArtifact) > 0 {
+		header := &zip.FileHeader{Name: "artifacts/kite-collector_windows_386_legacy.exe", Method: zip.Deflate}
+		header.SetModTime(time.Date(1980, time.January, 1, 12, 0, 0, 0, time.UTC))
+		header.SetMode(0o600)
+		entry, createErr := zw.CreateHeader(header)
+		if createErr != nil {
+			return fmt.Errorf("create bundled Windows 7 artifact: %w", createErr)
+		}
+		if _, writeErr := entry.Write(legacyArtifact); writeErr != nil {
+			return fmt.Errorf("write bundled Windows 7 artifact: %w", writeErr)
 		}
 	}
 	if err := zw.Close(); err != nil {
@@ -775,6 +892,9 @@ func fleetInventoryYAML(req fleetBundleRequest, targets []fleetTarget) string {
 			if target.Local {
 				b.WriteString("          kite_connection: local\n")
 			}
+			if target.Address != "" {
+				b.WriteString("          ansible_host: " + strconv.Quote(target.Address) + "\n")
+			}
 			tokenB64 := base64.StdEncoding.EncodeToString([]byte(req.EnrollmentTokens[target.Hostname]))
 			b.WriteString("          kite_enrollment_token_b64: " + strconv.Quote(tokenB64) + "\n")
 		}
@@ -802,13 +922,17 @@ kite_pki_endpoint: %s
 
 func fleetTargetsCSV(targets []fleetTarget) string {
 	var b strings.Builder
-	b.WriteString("hostname,os,arch,connection\n")
+	b.WriteString("hostname,os,arch,connection,address\n")
 	for _, target := range targets {
 		connection := "remote"
 		if target.Local {
 			connection = "local"
 		}
-		fmt.Fprintf(&b, "%s,%s,%s,%s\n", target.Hostname, target.OS, target.Arch, connection)
+		address := target.Address
+		if address == "" {
+			address = target.Hostname
+		}
+		fmt.Fprintf(&b, "%s,%s,%s,%s,%s\n", target.Hostname, target.OS, target.Arch, connection, address)
 	}
 	return b.String()
 }
@@ -826,14 +950,139 @@ The script prompts for infrastructure credentials at runtime. Those credentials 
 Each target receives a deterministic, unique agent code derived from its hostname or IP.
 For SSH targets marked automatic, the playbook runs uname itself, validates Linux/macOS and CPU architecture, and saves the result to detected-platforms.csv. The operator does not run detection commands manually.
 
+Windows preparation without copying files:
+
+1. On every selected Windows computer, open Command Prompt (CMD) as Administrator.
+2. Paste the same command on each computer:
+
+    %s
+
+This command only enables WinRM and limits the firewall rule to the local subnet. It contains no enrollment token, credential, or computer-specific value and does not install Kite. A line containing :5985 confirms the listener. After it succeeds, run ./deploy.sh once from Linux to install and enroll the complete batch. For every Windows target, the script dynamically suggests COMPUTER-NAME\Administrator; press Enter to accept it or type another administrative account.
+
+Windows 7 compatibility is automatic: the playbook reads the remote Windows version and processor architecture. Windows 7 or 32-bit computers receive the isolated `+"`kite-collector-legacy`"+` service; supported 64-bit Windows versions continue to receive the full MSI. The legacy service writes its transactional inventory to C:\ProgramData\kite-collector\kite.db, scans at startup and every six hours, exposes a loopback-only dashboard at http://127.0.0.1:9090, and synchronizes the asset summary plus every complete inventory category through the enrolled mTLS OTLP connection. Failed upstream deliveries remain pending locally and retry every five minutes. No operator selection or PowerShell upgrade is required.
+
 Security:
 
 - This ZIP contains one single-use, two-hour enrollment credential per computer. Do not email it or commit it.
 - Delete the extracted directory and ZIP after the run.
 - Unused credentials expire automatically; revoke the deployment if the ZIP is exposed.
+- For hundreds of domain computers, deploy bootstrap/windows/Enable-KiteWinRM.ps1 once through Group Policy or Intune. See bootstrap/windows/GPO-SETUP.md. Do not configure computers one by one.
+- deploy.sh checks every target concurrently before asking for credentials and writes preflight-results.csv if a management channel is unavailable.
 - Windows targets require WinRM; Linux/macOS targets require SSH and sudo.
-`, req.Version, len(targets))
+- Windows 7 is end-of-life. Its compatibility inventory uses only read-only inbox Windows interfaces and intentionally excludes secret values and process command lines.
+`, req.Version, len(targets), fleetWindowsBootstrapCommand)
 }
+
+const fleetWindowsBootstrapPowerShell = `#Requires -RunAsAdministrator
+$ErrorActionPreference = 'Stop'
+
+# Intended for Computer Configuration startup scripts, Intune device scripts,
+# SCCM, or an existing RMM. It is idempotent and does not enable Basic auth or
+# AllowUnencrypted. WinRM traffic remains encrypted by NTLM/Kerberos message
+# encryption even though the listener uses the standard HTTP transport.
+Set-Service -Name WinRM -StartupType Automatic
+Start-Service -Name WinRM
+Enable-PSRemoting -SkipNetworkProfileCheck -Force
+
+$ruleName = 'Kite Fleet Controller (WinRM HTTP-In)'
+$existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+if ($null -eq $existing) {
+    $firewallParams = @{
+        DisplayName = $ruleName
+        Direction = 'Inbound'
+        Action = 'Allow'
+        Protocol = 'TCP'
+        LocalPort = 5985
+        Profile = 'Domain', 'Private'
+    }
+    New-NetFirewallRule @firewallParams | Out-Null
+} else {
+    $firewallParams = @{
+        DisplayName = $ruleName
+        Enabled = 'True'
+        Direction = 'Inbound'
+        Action = 'Allow'
+        Profile = 'Domain', 'Private'
+    }
+    Set-NetFirewallRule @firewallParams | Out-Null
+}
+
+Set-Item -Path WSMan:\localhost\Service\Auth\Basic -Value $false
+Set-Item -Path WSMan:\localhost\Service\AllowUnencrypted -Value $false
+Restart-Service -Name WinRM
+Write-Output 'Kite WinRM bootstrap complete.'
+`
+
+const fleetWindowsBootstrapCommand = `reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f & sc.exe config WinRM start= auto & sc.exe start WinRM & winrm quickconfig -quiet & netsh advfirewall firewall add rule name="Kite WinRM HTTP 5985" dir=in action=allow protocol=TCP localport=5985 profile=any remoteip=localsubnet & netstat -ano | findstr ":5985"`
+
+const fleetWindowsGPOReadme = `# Enable WinRM centrally (one-time)
+
+Do not visit each computer. Distribute Enable-KiteWinRM.ps1 with the management system the organization already trusts.
+
+## Active Directory Group Policy
+
+1. Copy Enable-KiteWinRM.ps1 to a domain-readable SYSVOL/NETLOGON path.
+2. In Group Policy Management, create a GPO named **Kite Fleet Bootstrap** and link it to a pilot computer OU.
+3. Open **Computer Configuration > Policies > Windows Settings > Scripts (Startup/Shutdown) > Startup** and add:
+       powershell.exe -NoProfile -ExecutionPolicy Bypass -File \\DOMAIN\NETLOGON\Kite\Enable-KiteWinRM.ps1
+4. Apply the GPO to the full computer OU after the pilot succeeds. Computers apply it at startup or their normal policy refresh.
+5. Run ./deploy.sh again. Its preflight checks all computers concurrently before asking for the domain credential.
+
+Use a dedicated domain deployment account that is a local administrator on the target computers. Restrict the firewall rule's RemoteAddress in the GPO when the controller has a stable IP.
+
+## Intune / SCCM / RMM
+
+Upload Enable-KiteWinRM.ps1 as a device-context PowerShell script and run it as SYSTEM/administrator. Assign it first to a pilot device group, then to the fleet.
+
+If preflight reports every management port closed, verify VLAN routing, Wi-Fi client isolation, host power state, and current IP/DNS records before changing credentials.
+`
+
+var fleetPreflightPython = fmt.Sprintf(`#!/usr/bin/env python3
+import csv
+import socket
+import sys
+from concurrent.futures import ThreadPoolExecutor
+
+TIMEOUT_SECONDS = 3
+MAX_WORKERS = 64
+
+with open("targets.csv", newline="", encoding="utf-8") as source:
+    targets = list(csv.DictReader(source))
+
+def check(target):
+    if target["connection"] == "local":
+        return target, "local", "ready"
+    port = 5985 if target["os"] == "windows" else 22
+    try:
+        with socket.create_connection((target["address"], port), TIMEOUT_SECONDS):
+            return target, str(port), "ready"
+    except OSError as exc:
+        return target, str(port), "unreachable: " + str(exc).replace("\n", " ")
+
+workers = min(MAX_WORKERS, max(1, len(targets)))
+with ThreadPoolExecutor(max_workers=workers) as pool:
+    results = list(pool.map(check, targets))
+
+with open("preflight-results.csv", "w", newline="", encoding="utf-8") as output:
+    writer = csv.writer(output)
+    writer.writerow(("hostname", "address", "os", "port", "status"))
+    for target, port, status in results:
+        writer.writerow((target["hostname"], target["address"], target["os"], port, status))
+
+failed = [(target, port, status) for target, port, status in results if status != "ready"]
+print("Fleet preflight: %%d ready, %%d unreachable" %% (len(results) - len(failed), len(failed)))
+for target, port, status in failed[:25]:
+    print("  - %%s (%%s), port %%s: %%s" %% (target["hostname"], target["address"], port, status))
+if len(failed) > 25:
+    print("  ... and %%d more; see preflight-results.csv" %% (len(failed) - 25))
+if failed:
+    print("\nNothing was installed.")
+    if any(target["os"] == "windows" for target, _, _ in failed):
+        print("\nOn each unreachable Windows computer, open Command Prompt (CMD) as Administrator and paste this single command:\n")
+        print(%s)
+        print("\nThen rerun ./deploy.sh. No file needs to be copied to Windows.")
+    sys.exit(2)
+`, strconv.Quote(fleetWindowsBootstrapCommand))
 
 func countFleetOS(targets []fleetTarget, osName string) int {
 	count := 0
@@ -856,8 +1105,20 @@ operation_timeout_sec = 60
 read_timeout_sec = 90
 `
 
-func fleetDeployScript(targets []fleetTarget) string {
+func fleetDeployScript(req fleetBundleRequest, targets []fleetTarget) string {
 	hasWindows := countFleetOS(targets, "windows") > 0
+	windowsTargets := make([]string, 0, countFleetOS(targets, "windows"))
+	windowsAddresses := make([]string, 0, countFleetOS(targets, "windows"))
+	for _, target := range targets {
+		if target.OS == "windows" {
+			windowsTargets = append(windowsTargets, strconv.Quote(target.Hostname))
+			address := target.Address
+			if address == "" {
+				address = target.Hostname
+			}
+			windowsAddresses = append(windowsAddresses, strconv.Quote(address))
+		}
+	}
 	hasRemoteUnix := false
 	hasLocalUnix := false
 	for _, target := range targets {
@@ -876,6 +1137,12 @@ cd "$(dirname "$0")"
 if ! command -v python3 >/dev/null 2>&1; then
   echo "error: python3 is required on this Linux control node" >&2
   exit 1
+fi
+
+echo "Checking management connectivity for the complete fleet..."
+if ! python3 preflight.py; then
+  echo "Preflight failed safely before credentials were requested. See preflight-results.csv." >&2
+  exit 2
 fi
 
 install_python_venv() {
@@ -924,15 +1191,62 @@ fi
 
 export KITE_WINDOWS_USER=""
 export KITE_WINDOWS_PASSWORD=""
+windows_targets=(%s)
+windows_addresses=(%s)
 export KITE_SSH_USER=""
 export KITE_SSH_KEY=""
 export KITE_BECOME_PASSWORD=""
 
 if %t; then
-  read -r -p "Windows domain user (DOMAIN\\user): " KITE_WINDOWS_USER
-  read -r -s -p "Windows password: " KITE_WINDOWS_PASSWORD
-  echo
-  export KITE_WINDOWS_USER KITE_WINDOWS_PASSWORD
+	  artifact_dir="$PWD/.artifacts"
+	  artifact_name="kite-collector_%s_amd64.msi"
+	  artifact_url="https://github.com/VulnerTrack/kite-collector/releases/download/v%s/${artifact_name}"
+	  legacy_name="kite-collector_windows_386_legacy.exe"
+	  legacy_url="https://github.com/VulnerTrack/kite-collector/releases/download/v%s/${legacy_name}"
+	  mkdir -p "$artifact_dir"
+	  echo "Downloading and verifying the Windows installer on this Linux controller..."
+	  curl -fsSL --retry 3 "$artifact_url" -o "$artifact_dir/$artifact_name"
+	  curl -fsSL --retry 3 "$artifact_url.sha256" -o "$artifact_dir/$artifact_name.sha256"
+	  (cd "$artifact_dir" && sha256sum -c "$artifact_name.sha256")
+	  if [ -f "artifacts/$legacy_name" ]; then
+		  echo "Using the bundled Windows 7 32-bit compatibility agent..."
+		  cp "artifacts/$legacy_name" "$artifact_dir/$legacy_name"
+		  (cd "$artifact_dir" && sha256sum "$legacy_name" > "$legacy_name.sha256")
+	  else
+		  echo "Downloading the Windows 7 32-bit compatibility agent..."
+		  curl -fsSL --retry 3 "$legacy_url" -o "$artifact_dir/$legacy_name"
+		  curl -fsSL --retry 3 "$legacy_url.sha256" -o "$artifact_dir/$legacy_name.sha256"
+		  (cd "$artifact_dir" && sha256sum -c "$legacy_name.sha256")
+	  fi
+	  KITE_CONTROLLER_IP="$(ip route get "${windows_addresses[0]}" | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')"
+	  if [ -z "$KITE_CONTROLLER_IP" ]; then
+	    echo "error: could not determine the Linux controller IP for the Windows network" >&2
+	    exit 1
+	  fi
+	  python3 -m http.server 18080 --bind 0.0.0.0 --directory "$artifact_dir" >"$artifact_dir/server.log" 2>&1 &
+	  artifact_server_pid=$!
+	  trap 'kill "$artifact_server_pid" >/dev/null 2>&1 || true' EXIT
+	  export KITE_WINDOWS_ARTIFACT_BASE="http://${KITE_CONTROLLER_IP}:18080"
+	  sleep 1
+	  echo "Windows deployment requests the administrator for each target computer."
+	  for windows_target in "${windows_targets[@]}"; do
+	    KITE_WINDOWS_USER_DEFAULT="${windows_target}\\Administrador"
+	    KITE_WINDOWS_USER=""
+	    KITE_WINDOWS_PASSWORD=""
+	    read -r -p "Windows administrator [${KITE_WINDOWS_USER_DEFAULT}] (press Enter if this is the correct user): " KITE_WINDOWS_USER
+	    KITE_WINDOWS_USER="${KITE_WINDOWS_USER:-$KITE_WINDOWS_USER_DEFAULT}"
+	    KITE_WINDOWS_USER="${KITE_WINDOWS_USER//\//\\}"
+	    while [ -z "$KITE_WINDOWS_PASSWORD" ]; do
+	      read -r -s -p "Windows password for ${KITE_WINDOWS_USER}: " KITE_WINDOWS_PASSWORD
+	      echo
+	      if [ -z "$KITE_WINDOWS_PASSWORD" ]; then
+	        echo "Windows password is required; deployment cannot continue without it." >&2
+	      fi
+	    done
+	    export KITE_WINDOWS_USER KITE_WINDOWS_PASSWORD
+	    .venv/bin/ansible-playbook playbooks/deploy.yml --limit "$windows_target"
+	    unset KITE_WINDOWS_PASSWORD
+	  done
 fi
 if %t; then
   read -r -p "SSH user for Linux/macOS: " KITE_SSH_USER
@@ -948,9 +1262,11 @@ if %t; then
   export KITE_BECOME_PASSWORD
 fi
 
-args=(playbooks/deploy.yml)
-if %t; then args+=(--ask-become-pass); fi
-.venv/bin/ansible-playbook "${args[@]}"
+if %t; then
+  args=(playbooks/deploy.yml --limit linux:macos:unix_auto)
+  if %t; then args+=(--ask-become-pass); fi
+  .venv/bin/ansible-playbook "${args[@]}"
+fi
 
 if %t; then
   echo "Restarting the local Kite Collector dashboard with the collected data..."
@@ -981,7 +1297,9 @@ fi
 unset KITE_WINDOWS_PASSWORD
 unset KITE_BECOME_PASSWORD
 echo "Deployment finished. Verify fleet heartbeats, then delete this package."
-`, hasWindows, hasRemoteUnix, hasLocalUnix || hasRemoteUnix, hasRemoteUnix, hasLocalUnix)
+`, strings.Join(windowsTargets, " "), strings.Join(windowsAddresses, " "), hasWindows,
+		req.Version, req.Version, req.Version, hasRemoteUnix, hasLocalUnix || hasRemoteUnix,
+		hasLocalUnix || hasRemoteUnix, hasRemoteUnix, hasLocalUnix)
 }
 
 const fleetPlaybookYAML = `---
@@ -997,6 +1315,8 @@ const fleetPlaybookYAML = `---
     ansible_connection: winrm
     ansible_winrm_transport: ntlm
     ansible_winrm_message_encryption: always
+    ansible_winrm_operation_timeout_sec: 110
+    ansible_winrm_read_timeout_sec: 120
     ansible_port: 5985
     ansible_user: "{{ lookup('env', 'KITE_WINDOWS_USER') }}"
     ansible_password: "{{ lookup('env', 'KITE_WINDOWS_PASSWORD') }}"
@@ -1004,52 +1324,142 @@ const fleetPlaybookYAML = `---
     kite_msi_path: "C:\\ProgramData\\VulnerTrack\\packages\\{{ kite_msi_name }}"
     kite_executable: 'C:\Program Files\Kite Collector\kite-collector.exe'
     kite_data_dir: 'C:\ProgramData\kite-collector'
+    kite_windows_artifact_base: "{{ lookup('env', 'KITE_WINDOWS_ARTIFACT_BASE') }}"
   tasks:
+    - name: Detect Windows version and processor architecture
+      ansible.builtin.raw: |
+        $version = [Environment]::OSVersion.Version
+        $architecture = $env:PROCESSOR_ARCHITECTURE
+        if ($env:PROCESSOR_ARCHITEW6432) { $architecture = $env:PROCESSOR_ARCHITEW6432 }
+        Write-Output ("KITE_PLATFORM={0}.{1}|{2}" -f $version.Major, $version.Minor, $architecture)
+      register: kite_windows_platform
+      changed_when: false
+      retries: 6
+      delay: 10
+      until: kite_windows_platform.rc == 0
+    - name: Select Windows 7 legacy collector
+      ansible.builtin.set_fact:
+        kite_windows_legacy: "{{ ('KITE_PLATFORM=6.1|' in kite_windows_platform.stdout) or ('|x86' in (kite_windows_platform.stdout | lower)) }}"
+    - name: Verify the remote account has an elevated administrator token
+      ansible.builtin.raw: |
+        $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+        if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+          throw 'REMOTE_UAC_FILTERED: run the updated Kite CMD bootstrap locally as Administrator, then rerun deploy.sh'
+        }
+      changed_when: false
     - name: Create package directory
-      ansible.windows.win_file:
-        path: 'C:\ProgramData\VulnerTrack\packages'
-        state: directory
+      ansible.builtin.raw: >-
+        if (-not (Test-Path -LiteralPath 'C:\ProgramData\VulnerTrack\packages')) {
+          New-Item -ItemType Directory -Force -Path 'C:\ProgramData\VulnerTrack\packages' | Out-Null
+        }
+      changed_when: false
     - name: Download and verify MSI
-      ansible.windows.win_get_url:
-        url: "{{ kite_release_base }}/{{ kite_msi_name }}"
-        dest: "{{ kite_msi_path }}"
-        checksum_url: "{{ kite_release_base }}/{{ kite_msi_name }}.sha256"
-        checksum_algorithm: sha256
-        force: false
+      ansible.builtin.raw: |
+        $ErrorActionPreference = 'Stop'
+        $msi = '{{ kite_msi_path }}'
+        $url = '{{ kite_windows_artifact_base }}/{{ kite_msi_name }}'
+        $checksumUrl = '{{ kite_windows_artifact_base }}/{{ kite_msi_name }}.sha256'
+        $client = New-Object Net.WebClient
+        if (-not (Test-Path -LiteralPath $msi)) { $client.DownloadFile($url, $msi) }
+        $expected = ($client.DownloadString($checksumUrl) -split '\s+')[0].ToLowerInvariant()
+        $stream = [IO.File]::OpenRead($msi)
+        try {
+          $sha = [Security.Cryptography.SHA256]::Create()
+          $actual = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+        } finally { $stream.Dispose() }
+        if ($actual -ne $expected) { throw "MSI checksum mismatch" }
+      changed_when: false
+      when: not kite_windows_legacy | bool
+    - name: Download and verify Windows 7 legacy executable
+      ansible.builtin.raw: |
+        $ErrorActionPreference = 'Stop'
+        $legacyDir = 'C:\ProgramData\VulnerTrack\packages'
+        $stagedExe = Join-Path $legacyDir ('kite-legacy-' + [Guid]::NewGuid().ToString('N') + '.download')
+        $exe = Join-Path $legacyDir 'kite-collector-legacy.exe'
+        $url = '{{ kite_windows_artifact_base }}/kite-collector_windows_386_legacy.exe'
+        $checksumUrl = $url + '.sha256'
+        $client = New-Object Net.WebClient
+        $client.DownloadFile($url, $stagedExe)
+        $expected = ($client.DownloadString($checksumUrl) -split '\s+')[0].ToLowerInvariant()
+        $stream = [IO.File]::OpenRead($stagedExe)
+        try { $sha = [Security.Cryptography.SHA256]::Create(); $actual = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() } finally { $stream.Dispose() }
+        if ($actual -ne $expected) { throw 'Legacy executable checksum mismatch' }
+        if ((Get-Item -LiteralPath $stagedExe).Length -le 0) { throw 'Downloaded legacy executable is empty' }
+        sc.exe stop kite-collector-legacy 2>$null | Out-Null
+        Start-Sleep -Seconds 2
+        sc.exe delete kite-collector-legacy 2>$null | Out-Null
+        Remove-Item -LiteralPath $exe -Force -ErrorAction SilentlyContinue
+        Move-Item -LiteralPath $stagedExe -Destination $exe -Force
+      changed_when: false
+      when: kite_windows_legacy | bool
     - name: Install or update collector
-      ansible.windows.win_package:
-        path: "{{ kite_msi_path }}"
-        provider: msi
-        state: present
-    - name: Stop service during enrollment check
-      ansible.windows.win_service:
-        name: kite-collector
-        state: stopped
-    - name: Check enrollment certificate
-      ansible.windows.win_stat:
-        path: '{{ kite_data_dir }}\agent.pem'
-      register: kite_windows_cert
+      ansible.builtin.raw: |
+        $process = Start-Process -FilePath msiexec.exe -ArgumentList '/i','{{ kite_msi_path }}','/qn','/norestart' -Wait -PassThru
+        if (@(0, 1641, 3010) -notcontains $process.ExitCode) { throw "msiexec failed with exit code $($process.ExitCode)" }
+      when: not kite_windows_legacy | bool
+    - name: Install Windows 7 legacy service without starting it
+      ansible.builtin.raw: |
+        $exe = 'C:\ProgramData\VulnerTrack\packages\kite-collector-legacy.exe'
+        if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+          throw 'LEGACY_EXE_REMOVED: security software or application-control policy removed the verified executable after deployment; restore/allow the Kite binary and rerun deploy.sh'
+        }
+        & $exe version
+        if ($LASTEXITCODE -ne 0) { throw "Windows blocked the verified legacy executable with exit code $LASTEXITCODE" }
+        & $exe install --certs-dir '{{ kite_data_dir }}' --no-start
+        if ($LASTEXITCODE -ne 0) { throw "Legacy service installation failed with exit code $LASTEXITCODE" }
+      when: kite_windows_legacy | bool
+    - name: Stop modern service during enrollment check
+      ansible.builtin.raw: Stop-Service -Name kite-collector -ErrorAction SilentlyContinue
+      changed_when: false
+      when: not kite_windows_legacy | bool
     - name: Enroll Windows collector
-      ansible.windows.win_command:
-        argv:
-          - "{{ kite_executable }}"
-          - enroll
-          - --agent-code
-          - "{{ kite_agent_code }}"
-          - --enrollment-token
-          - "{{ kite_enrollment_token_b64 | b64decode }}"
-          - --certs-dir
-          - "{{ kite_data_dir }}"
-        creates: '{{ kite_data_dir }}\agent.pem'
-      environment:
-        KITE_PKI_ENDPOINT: "{{ kite_pki_endpoint }}"
-      when: not kite_windows_cert.stat.exists
+      ansible.builtin.raw: |
+        if (-not (Test-Path -LiteralPath '{{ kite_data_dir }}\agent.pem')) {
+          $env:KITE_PKI_ENDPOINT = '{{ kite_pki_endpoint }}'
+          $token = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{ kite_enrollment_token_b64 }}'))
+          $diagnostic = 'C:\ProgramData\VulnerTrack\packages\kite-enrollment-error.txt'
+          Remove-Item -LiteralPath $diagnostic -Force -ErrorAction SilentlyContinue
+          if ({{ kite_windows_legacy | bool | ternary('$true', '$false') }}) {
+            $exe = 'C:\ProgramData\VulnerTrack\packages\kite-collector-legacy.exe'
+          } else {
+            $exe = '{{ kite_executable }}'
+          }
+          $output = (& $exe enroll --agent-code '{{ kite_agent_code }}' --enrollment-token $token --certs-dir '{{ kite_data_dir }}' 2>&1 | Out-String)
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            $safeOutput = $output.Replace($token, '[REDACTED]')
+            Set-Content -LiteralPath $diagnostic -Value $safeOutput -Encoding UTF8
+            exit $exitCode
+          }
+        }
       no_log: true
-    - name: Start Windows collector
-      ansible.windows.win_service:
-        name: kite-collector
-        start_mode: auto
-        state: started
+      register: kite_enrollment
+      failed_when: false
+    - name: Read sanitized enrollment diagnostic
+      ansible.builtin.raw: |
+        $diagnostic = 'C:\ProgramData\VulnerTrack\packages\kite-enrollment-error.txt'
+        if (Test-Path -LiteralPath $diagnostic) {
+          Get-Content -LiteralPath $diagnostic
+        } else {
+          Write-Output 'Enrollment failed without diagnostic output'
+        }
+      register: kite_enrollment_diagnostic
+      changed_when: false
+      when: kite_enrollment.rc != 0
+    - name: Stop after enrollment failure
+      ansible.builtin.fail:
+        msg: "{{ kite_enrollment_diagnostic.stdout | trim }}"
+      when: kite_enrollment.rc != 0
+    - name: Start modern Windows collector
+      ansible.builtin.raw: |
+        Set-Service -Name kite-collector -StartupType Automatic
+        Start-Service -Name kite-collector
+      changed_when: false
+      when: not kite_windows_legacy | bool
+    - name: Start Windows 7 legacy collector
+      ansible.builtin.raw: sc.exe start kite-collector-legacy
+      changed_when: false
+      when: kite_windows_legacy | bool
 
 - name: Detect Linux or macOS automatically
   hosts: unix_auto

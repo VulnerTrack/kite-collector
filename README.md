@@ -72,6 +72,27 @@ single short-lived Ansible package for Windows, Linux, and macOS targets:
 5. Move the ZIP to a Linux control computer that can reach the targets, unzip
    it, and run `./deploy.sh`.
 
+#### Prepare Windows computers without copying files
+
+The same command can be run on any number of Windows 7/8/10/11 and Windows
+Server 2008 R2 or newer computers. On each one, open **Command Prompt (CMD) as
+Administrator** and paste:
+
+```cmd
+sc.exe config WinRM start= auto & sc.exe start WinRM & winrm quickconfig -quiet & netsh advfirewall firewall add rule name="Kite WinRM HTTP 5985" dir=in action=allow protocol=TCP localport=5985 profile=any remoteip=localsubnet & netstat -ano | findstr ":5985"
+```
+
+This command only enables the WinRM management channel; it does not install or
+enroll Kite and contains no token, credential, or computer-specific value. The
+firewall rule accepts connections only from the local subnet. A line containing
+`:5985` should appear when it succeeds. After running it on the
+selected computers, generate one ZIP and run `./deploy.sh` once from Linux. The
+deployment installs and enrolls every computer using its unique token from the
+ZIP. For each Windows target, `deploy.sh` automatically suggests
+`COMPUTER-NAME\Administrator`; press Enter to accept it or type another
+administrative account. This remains dynamic for packages containing tens or
+hundreds of computers.
+
 The script prompts for AD/WinRM and SSH credentials at runtime; infrastructure
 passwords are not written to the package. Windows targets require WinRM, while
 Linux and macOS targets require SSH and privilege escalation. The enrollment
@@ -559,3 +580,17 @@ See [`samples/streaming-to-otel/`](samples/streaming-to-otel/) for a self-contai
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Windows 7 legacy inventory
+
+Mass deployment automatically selects the isolated Windows/386 collector for
+Windows 7 and 32-bit computers. It stores its transactional inventory database
+at `C:\ProgramData\kite-collector\kite.db` and exposes a loopback-only local
+dashboard at `http://127.0.0.1:9090`. The service scans at startup and every six
+hours, covering core OS, hardware, software, updates, identity, services,
+processes, networking, storage, drivers, scheduled tasks, startup entries, and
+Windows 7 security state. Completed snapshots sync over mTLS OTLP: asset
+summaries reach `analytics_asset_current_state` and full category JSON reaches
+`analytics_windows_inventory_categories` in Supabase, with retry every five
+minutes after transient failures. See `legacy/windows7/README.md` for its deliberately
+isolated compatibility architecture and CLI commands.
