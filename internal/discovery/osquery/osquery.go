@@ -130,15 +130,26 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		tags["yara_match_count"] = len(matches)
 		if len(matches) > 0 {
 			tags["yara_matches"] = matches
+			// Rule names are operator-authored (never file contents), so
+			// naming them here is alert-safe and saves the on-call a pivot
+			// into the machine record.
 			slog.Warn("osquery: yara rules matched on host",
-				"code", string(LogCodeYaraMatchesFound), "count", len(matches))
+				"code", string(LogCodeYaraMatchesFound),
+				"count", len(matches),
+				"rules", matchedRuleNames(matches))
 		}
 	}
 
 	// FIM summary: recent file_events through the daemon's watch config. An
-	// empty count with no file_paths configured is normal.
-	if events, err := s.FileEvents(ctx, cfg, now.Add(-24*time.Hour).Unix()); err == nil {
+	// empty count with no file_paths configured is normal — but a FAILED
+	// query is not an empty count, so it must not be silent: without the
+	// warning, "0 events" and "events subsystem broken" are indistinguishable
+	// to an operator.
+	if events, err := fileEventsWith(ctx, client, now.Add(-24*time.Hour).Unix()); err == nil {
 		tags["file_events_24h"] = len(events)
+	} else {
+		slog.Warn("osquery: file_events summary failed",
+			"code", string(LogCodeDiscoverFileEventsFailed), "error", err)
 	}
 
 	tagsJSON, _ := json.Marshal(tags)
@@ -162,12 +173,20 @@ func (s *Source) yaraScan(ctx context.Context, client querier, cfg map[string]an
 
 	// Prove the sigfile exists in the DAEMON's mount namespace (which may not
 	// be ours). osquery's `file` table errors without a path constraint, so
-	// this is a constrained probe, and a zero-row answer means the daemon
-	// cannot see the rules file.
+	// this is a constrained probe. The two ways it can refuse are DIFFERENT
+	// failure modes with different remediations, so they get distinct codes:
+	// a probe error means the daemon/table is broken (fix the daemon); zero
+	// rows means the daemon genuinely cannot see the rules file (fix the
+	// sigfile path or its mount).
 	vis, err := client.Query(ctx, fmt.Sprintf("SELECT path FROM file WHERE path = '%s';", sqlEscape(sigfile)))
-	if err != nil || len(vis) == 0 {
+	if err != nil {
+		slog.Warn("osquery: yara sigfile visibility probe failed; scan skipped",
+			"code", string(LogCodeYaraSigfileProbeFailed), "sigfile", sigfile, "error", err)
+		return nil, false
+	}
+	if len(vis) == 0 {
 		slog.Warn("osquery: yara sigfile not visible to daemon; scan skipped",
-			"code", string(LogCodeYaraSigfileInvisible), "sigfile", sigfile, "error", err)
+			"code", string(LogCodeYaraSigfileInvisible), "sigfile", sigfile)
 		return nil, false
 	}
 
@@ -199,7 +218,12 @@ func (s *Source) FileEvents(ctx context.Context, cfg map[string]any, sinceUnix i
 	if socket == "" {
 		return nil, fmt.Errorf("osquery: no extensions socket found")
 	}
-	client := s.newClient(socket)
+	return fileEventsWith(ctx, s.newClient(socket), sinceUnix)
+}
+
+// fileEventsWith is FileEvents against an already-connected client, so
+// Discover reuses its session instead of re-resolving and re-dialing.
+func fileEventsWith(ctx context.Context, client querier, sinceUnix int64) ([]FileEvent, error) {
 	rows, err := client.Query(ctx, fmt.Sprintf(
 		"SELECT target_path, category, action, sha256, time FROM file_events WHERE time > %d;", sinceUnix))
 	if err != nil {
@@ -216,6 +240,23 @@ func (s *Source) FileEvents(ctx context.Context, cfg map[string]any, sinceUnix i
 		})
 	}
 	return events, nil
+}
+
+// matchedRuleNames flattens the distinct rule names across matches for the
+// alert log line, preserving first-seen order.
+func matchedRuleNames(matches []YaraMatch) []string {
+	seen := make(map[string]bool)
+	var names []string
+	for _, m := range matches {
+		for _, rule := range strings.Split(m.Matches, ",") {
+			rule = strings.TrimSpace(rule)
+			if rule != "" && !seen[rule] {
+				seen[rule] = true
+				names = append(names, rule)
+			}
+		}
+	}
+	return names
 }
 
 // buildMachine maps osquery identity rows onto the Machine model.

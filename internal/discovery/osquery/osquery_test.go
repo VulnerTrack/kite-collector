@@ -1,9 +1,11 @@
 package osquery
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -535,4 +537,111 @@ func TestFirst_EmptyAndPopulated(t *testing.T) {
 	assert.Equal(t, map[string]string{}, first(nil))
 	assert.Equal(t, map[string]string{}, first([]map[string]string{}))
 	assert.Equal(t, "v", first([]map[string]string{{"k": "v"}})["k"])
+}
+
+// ---------------------------------------------------------------------------
+// Log-practice pins: every degraded path must emit its code, exactly once,
+// with honest attributes (no error=<nil>, distinct codes per failure mode).
+// ---------------------------------------------------------------------------
+
+// captureLogs redirects the default slog logger into a buffer for the test's
+// duration so assertions can pin codes and attributes.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func TestLogs_SigfileInvisible_NoNilErrorAttr(t *testing.T) {
+	// The daemon ANSWERED the probe with zero rows — there is no error, so
+	// no error attribute may appear (error=<nil> misleads log pipelines that
+	// filter on the presence of an error field).
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.responses["FROM file"] = nil
+	s, _ := sourceWith(stub)
+	_, err := s.Discover(context.Background(), yaraCfg("/opt/x"))
+	require.NoError(t, err)
+	out := buf.String()
+	assert.Contains(t, out, string(LogCodeYaraSigfileInvisible))
+	assert.NotContains(t, out, string(LogCodeYaraSigfileProbeFailed))
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, string(LogCodeYaraSigfileInvisible)) {
+			assert.NotContains(t, line, "error=", "no error attr on the no-error path")
+		}
+	}
+}
+
+func TestLogs_SigfileProbeFailure_DistinctCodeWithError(t *testing.T) {
+	// The probe ERRORED — a different failure mode (daemon/table broken, not
+	// a bad sigfile path), so a different code, and this one carries the
+	// error.
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.errs["FROM file"] = errors.New("file table wedged")
+	s, _ := sourceWith(stub)
+	_, err := s.Discover(context.Background(), yaraCfg("/opt/x"))
+	require.NoError(t, err)
+	out := buf.String()
+	assert.Contains(t, out, string(LogCodeYaraSigfileProbeFailed))
+	assert.Contains(t, out, "file table wedged")
+	assert.NotContains(t, out, string(LogCodeYaraSigfileInvisible))
+}
+
+func TestLogs_FileEventsFailure_IsNotSilent(t *testing.T) {
+	// A failed FIM summary must be visible: without the warning, "0 events"
+	// and "events subsystem broken" are indistinguishable to an operator.
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.errs["file_events"] = errors.New("events disabled")
+	s, cfg := sourceWith(stub)
+	_, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), string(LogCodeDiscoverFileEventsFailed))
+	assert.Contains(t, buf.String(), "events disabled")
+}
+
+func TestLogs_YaraMatches_NameTheRules(t *testing.T) {
+	// The alert line must carry the rule names so on-call does not need to
+	// pivot into the machine record to know WHAT matched.
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.responses["FROM file"] = []map[string]string{{"path": "x"}}
+	stub.responses["FROM yara"] = []map[string]string{
+		{"path": "/opt/a", "matches": "kite_sim_canary,kite_sim_hex_canary", "count": "2"},
+	}
+	s, _ := sourceWith(stub)
+	_, err := s.Discover(context.Background(), yaraCfg("/opt/a"))
+	require.NoError(t, err)
+	out := buf.String()
+	assert.Contains(t, out, string(LogCodeYaraMatchesFound))
+	assert.Contains(t, out, "kite_sim_canary")
+	assert.Contains(t, out, "kite_sim_hex_canary")
+}
+
+func TestLogs_HappyPath_NoWarnings(t *testing.T) {
+	// A fully healthy scan must not cry wolf: no WARN lines at all.
+	buf := captureLogs(t)
+	s, cfg := sourceWith(healthyStub())
+	_, err := s.Discover(context.Background(), cfg)
+	require.NoError(t, err)
+	assert.NotContains(t, buf.String(), "level=WARN")
+}
+
+func TestMatchedRuleNames_DedupOrderAndWhitespace(t *testing.T) {
+	names := matchedRuleNames([]YaraMatch{
+		{Matches: "b, a"},
+		{Matches: "a,c"},
+		{Matches: ""},
+		{Matches: " , "},
+	})
+	assert.Equal(t, []string{"b", "a", "c"}, names)
+}
+
+func TestMatchedRuleNames_Empty(t *testing.T) {
+	assert.Empty(t, matchedRuleNames(nil))
+	assert.Empty(t, matchedRuleNames([]YaraMatch{{Matches: ""}}))
 }

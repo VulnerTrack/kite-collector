@@ -429,3 +429,41 @@ func TestAtoi_Tolerant(t *testing.T) {
 		assert.Equal(t, want, atoi(in), "atoi(%q)", in)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Error-state audit additions: protocol desync + method-honest rejections
+// ---------------------------------------------------------------------------
+
+func TestClient_MismatchedSequenceID_IsProtocolDesync(t *testing.T) {
+	// A reply carrying a different sequence id than the call must be
+	// rejected: decoding it as this call's answer would silently attribute
+	// another call's rows or errors to this query.
+	f := newFakeOsqueryd(t, func(method, _ string, seq int32) []byte {
+		return queryReply(seq+1, 0, "OK", []map[string]string{{"a": "1"}}, [][]string{{"a"}})
+	})
+	_, err := NewClient(f.socket).Query(context.Background(), "SELECT 1;")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "sequence id")
+	assert.False(t, IsQueryError(err), "desync is a protocol failure, not a daemon rejection")
+}
+
+func TestClient_PingRejection_MessageNamesPing(t *testing.T) {
+	// A failed ping is a daemon-health signal; its error must not read
+	// "rejected query".
+	f := newFakeOsqueryd(t, func(method, _ string, seq int32) []byte {
+		return pingReply(seq, 2, "shutting down")
+	})
+	err := NewClient(f.socket).Ping(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rejected ping")
+	assert.NotContains(t, err.Error(), "rejected query")
+}
+
+func TestClient_QueryRejection_MessageNamesQuery(t *testing.T) {
+	f := newFakeOsqueryd(t, func(method, _ string, seq int32) []byte {
+		return queryReply(seq, 1, "no such table", nil, nil)
+	})
+	_, err := NewClient(f.socket).Query(context.Background(), "SELECT 1;")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rejected query")
+}
