@@ -2,12 +2,28 @@ package netbios
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"net"
 	"strings"
 	"testing"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
+
+func TestBuildTagsEscapesNetBIOSControlCharacters(t *testing.T) {
+	r := &responder{
+		addr:     net.ParseIP("192.0.2.20"),
+		machine:  "WIN-KITE-TEST",
+		services: []string{"\x01\x02__MSBROWSE__\x02<01>"},
+	}
+	var tags map[string]any
+	if err := json.Unmarshal([]byte(buildTags(r)), &tags); err != nil {
+		t.Fatalf("buildTags returned invalid JSON: %v", err)
+	}
+	if tags["nbns_ip"] != "192.0.2.20" {
+		t.Fatalf("nbns_ip = %v, want 192.0.2.20", tags["nbns_ip"])
+	}
+}
 
 func TestEncodeDecodeNetBIOSNameRoundTrip(t *testing.T) {
 	var raw [16]byte
