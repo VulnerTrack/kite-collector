@@ -125,6 +125,17 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 	if v := first(sys)["hardware_model"]; v != "" {
 		tags["hardware_model"] = v
 	}
+	// cpu_type and physical_memory were already fetched by the system_info
+	// query but previously discarded — surface them; they are core inventory
+	// facts (processor and installed RAM). physical_memory is BIGINT bytes.
+	if v := first(sys)["cpu_type"]; v != "" {
+		tags["cpu_type"] = v
+	}
+	if v := first(sys)["physical_memory"]; v != "" {
+		if bytes := atoi(v); bytes > 0 {
+			tags["physical_memory_bytes"] = bytes
+		}
+	}
 
 	// Optional on-demand YARA sweep.
 	if res := s.yaraScan(ctx, client, cfg); res.scanned {
