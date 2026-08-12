@@ -4,6 +4,10 @@
 # Binaries for programs and plugins
 *.exe
 *.exe~
+# This reviewed PE32 compatibility payload is embedded into the dashboard so
+# every generated fleet ZIP can deploy Windows 7/32-bit without a second
+# download or a working-directory-dependent local file.
+!internal/dashboard/assets/kite-collector_windows_386_legacy.exe
 *.dll
 *.so
 *.dylib

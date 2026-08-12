@@ -72,6 +72,27 @@ Windows, Linux y macOS:
 5. Lleva el ZIP a una computadora de control Linux que tenga acceso de red a
    los equipos, descomprímelo y ejecuta `./deploy.sh`.
 
+#### Preparar computadoras Windows sin copiar archivos
+
+El mismo comando puede ejecutarse en cualquier cantidad de computadoras
+Windows 7/8/10/11 y Windows Server 2008 R2 o posterior. En cada una, abre
+**Símbolo del sistema (CMD) como administrador** y pega:
+
+```cmd
+sc.exe config WinRM start= auto & sc.exe start WinRM & winrm quickconfig -quiet & netsh advfirewall firewall add rule name="Kite WinRM HTTP 5985" dir=in action=allow protocol=TCP localport=5985 profile=any remoteip=localsubnet & netstat -ano | findstr ":5985"
+```
+
+Este comando sólo habilita el canal administrativo WinRM; no instala ni enrola
+Kite y no contiene tokens, credenciales ni valores específicos del equipo. La
+regla permite conexiones únicamente desde la subred local. Al finalizar debe
+aparecer una línea que contenga `:5985`. Después de ejecutarlo en las
+computadoras seleccionadas, el operador genera un solo ZIP y ejecuta
+`./deploy.sh` una vez desde Linux. El despliegue instala y enrola todas las
+computadoras usando el token único incluido para cada una. Para cada Windows,
+`deploy.sh` propone automáticamente `NOMBRE-PC\Administrador`; pulsa Enter para
+aceptarlo o escribe otra cuenta administrativa. Esto también funciona de forma
+dinámica cuando el paquete contiene decenas o cientos de equipos.
+
 El script solicita las credenciales de AD/WinRM y SSH al ejecutarse; las
 contraseñas de infraestructura no se guardan en el paquete. Windows requiere
 WinRM y Linux/macOS requieren SSH y elevación de privilegios. El token de
@@ -342,3 +363,25 @@ En modo streaming, los eventos OTLP se envian a un OpenTelemetry Collector para 
 ## Licencia
 
 MIT -- ver [LICENSE](LICENSE).
+# Compatibilidad con Windows 7 (legacy)
+
+El despliegue masivo detecta automáticamente Windows 7 y los equipos Windows
+de 32 bits. En esos casos instala `kite-collector-legacy`, compilado con Go
+1.17/386 softfloat para Windows 7 SP1; los Windows modernos de 64 bits siguen usando el MSI
+completo. El operador ejecuta el mismo `./deploy.sh`: no debe elegir el
+instalador ni actualizar PowerShell manualmente.
+
+La edición legacy permite enrolamiento por token, validación de certificados,
+heartbeat firmado, ejecución como servicio e inventario local persistente. La
+base transaccional se guarda en `C:\ProgramData\kite-collector\kite.db`; el
+dashboard local está disponible en `http://127.0.0.1:9090` y el servicio
+actualiza el inventario al iniciar y cada seis horas. Incluye sistema,
+hardware, software, actualizaciones, usuarios, servicios, procesos, red,
+puertos, discos, drivers, tareas, inicio y controles de seguridad disponibles
+en Windows 7. Cada snapshot también se sincroniza automáticamente por OTLP con
+mTLS: el resumen llega a `analytics_asset_current_state` y todas las categorías
+completas llegan a `analytics_windows_inventory_categories` en Supabase. Si la
+red no está disponible, el agente conserva el snapshot local y reintenta cada
+cinco minutos. Windows 7 ya no recibe soporte del fabricante, por lo que esta
+edición debe tratarse como un puente de migración y WinRM debe limitarse a la
+red de administración.
