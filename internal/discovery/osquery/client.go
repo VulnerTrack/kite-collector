@@ -33,17 +33,20 @@ func NewClient(socket string) *Client {
 	return &Client{socket: socket, timeout: callTimeout}
 }
 
-// queryError is a query the daemon parsed and REJECTED (status.code != 0):
-// bad SQL, unknown table, constraint-required table without a WHERE. Distinct
-// from transport errors so callers can tell "osquery said no" from "osquery
-// unreachable" — the circuit-breaker cares about the latter.
+// queryError is a call the daemon parsed and REJECTED (status.code != 0):
+// bad SQL, unknown table, constraint-required table without a WHERE, or an
+// unhealthy ping. Distinct from transport errors so callers can tell "osquery
+// said no" from "osquery unreachable" — the circuit-breaker cares about the
+// latter. method keeps the message honest: a failed ping is a daemon-health
+// signal, not a rejected query.
 type queryError struct {
-	code    int32
+	method  string
 	message string
+	code    int32
 }
 
 func (e *queryError) Error() string {
-	return fmt.Sprintf("osquery rejected query (code %d): %s", e.code, e.message)
+	return fmt.Sprintf("osquery rejected %s (code %d): %s", e.method, e.code, e.message)
 }
 
 // IsQueryError reports whether err is a daemon-side query rejection rather
@@ -112,7 +115,7 @@ func (c *Client) call(ctx context.Context, method, sql string) ([]map[string]str
 	}
 
 	r := newThriftReader(conn)
-	mtype, _, err := r.readMessageBegin()
+	mtype, gotSeq, err := r.readMessageBegin()
 	if err != nil {
 		return nil, status, fmt.Errorf("osquery: read %s reply: %w", method, err)
 	}
@@ -121,6 +124,13 @@ func (c *Client) call(ctx context.Context, method, sql string) ([]map[string]str
 	}
 	if mtype != mREPLY {
 		return nil, status, fmt.Errorf("osquery: unexpected message type %d", mtype)
+	}
+	// One fresh connection per call means the first reply must answer THIS
+	// call. A mismatched sequence id is protocol desync — decoding the rest
+	// as if it were our answer would silently attribute another call's rows
+	// (or errors) to this query.
+	if gotSeq != seq {
+		return nil, status, fmt.Errorf("osquery: reply sequence id %d does not match call %d", gotSeq, seq)
 	}
 
 	// The reply is a result struct whose field 0 is the return value.
@@ -153,7 +163,7 @@ func (c *Client) call(ctx context.Context, method, sql string) ([]map[string]str
 	}
 
 	if status.Code != 0 {
-		return nil, status, &queryError{code: status.Code, message: status.Message}
+		return nil, status, &queryError{method: method, code: status.Code, message: status.Message}
 	}
 	return rows, status, nil
 }

@@ -12,7 +12,9 @@ func allLogCodes() []LogCode {
 		LogCodeDiscoverSystemInfoFailed,
 		LogCodeDiscoverOSVersionFailed,
 		LogCodeDiscoverKernelInfoFailed,
+		LogCodeDiscoverFileEventsFailed,
 		LogCodeYaraSigfileInvisible,
+		LogCodeYaraSigfileProbeFailed,
 		LogCodeYaraScanFailed,
 		LogCodeYaraMatchesFound,
 	}

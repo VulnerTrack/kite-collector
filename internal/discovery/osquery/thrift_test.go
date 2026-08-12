@@ -420,14 +420,15 @@ func TestReadRows_WrongElemTypeErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "want map")
 }
 
-func TestReadRows_NonStringPairsSkippedDefensively(t *testing.T) {
-	// A row of map<i32,i32> is not ours; it must be skipped without error.
+func TestReadRows_NonStringPairsAreProtocolDrift(t *testing.T) {
+	// ExtensionPluginResponse is map<string,string> by schema. A row of
+	// map<i32,i32> means the protocol drifted — that must be a LOUD error,
+	// not an empty row a caller would misread as a real result.
 	e := (&enc{}).byte1(tMAP).i32(1)
 	e.byte1(tI32).byte1(tI32).i32(1).i32(5).i32(6)
-	rows, err := e.reader().readRows()
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Empty(t, rows[0])
+	_, err := e.reader().readRows()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "want (string,string)")
 }
 
 func TestReadRows_RowCountCapped(t *testing.T) {

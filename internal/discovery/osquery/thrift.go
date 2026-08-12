@@ -366,17 +366,12 @@ func (t *thriftReader) readRows() ([]map[string]string, error) {
 			return nil, fmt.Errorf("thrift: row size %d out of range", pairs)
 		}
 		if kt != tSTRING || vt != tSTRING {
-			// Not the map<string,string> we expect — skip defensively.
-			for j := int32(0); j < pairs; j++ {
-				if err := t.skip(kt, 0); err != nil {
-					return nil, err
-				}
-				if err := t.skip(vt, 0); err != nil {
-					return nil, err
-				}
-			}
-			rows = append(rows, map[string]string{})
-			continue
+			// ExtensionPluginResponse is map<string,string> by schema; any
+			// other element type is protocol drift. Failing loudly beats
+			// appending an empty row a caller would misread as a real result
+			// with no columns (the silent-wrong failure mode this package
+			// exists to avoid).
+			return nil, fmt.Errorf("thrift: row map types (%d,%d), want (string,string)", kt, vt)
 		}
 		row := make(map[string]string, pairs)
 		for j := int32(0); j < pairs; j++ {

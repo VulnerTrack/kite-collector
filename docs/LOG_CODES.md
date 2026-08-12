@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 458 codes across 57 packages.
+**Catalog size:** 466 codes across 58 packages.
 
 ---
 
@@ -928,6 +928,28 @@ Source: [`internal/discovery/network/logcodes.go`](../internal/discovery/network
 | `network.scanner.scan_event_persist_failed` | `LogCodeScannerScanEventPersistFail` | — |
 | `network.scanner.open_ports_persist_failed` | `LogCodeScannerOpenPortsPersistFail` | — |
 | `network.scanner.invalid_cidr_skipped` | `LogCodeScannerInvalidCIDRSkipped` | — |
+
+## `osquery` (internal/discovery/osquery)
+
+Source: [`internal/discovery/osquery/logcodes.go`](../internal/discovery/osquery/logcodes.go) · 8 codes
+
+**discover surface — host identity and FIM summary over the extensions socket**
+
+| Code | Constant | Description |
+|---|---|---|
+| `osquery.discover.system_info_failed` | `LogCodeDiscoverSystemInfoFailed` | system_info query failed; machine emitted with empty hostname/hardware identity |
+| `osquery.discover.os_version_failed` | `LogCodeDiscoverOSVersionFailed` | os_version query failed; machine emitted with empty OS family/version |
+| `osquery.discover.kernel_info_failed` | `LogCodeDiscoverKernelInfoFailed` | kernel_info query failed; machine emitted without kernel version |
+| `osquery.discover.file_events_failed` | `LogCodeDiscoverFileEventsFailed` | per-scan FIM summary failed — without this, "0 events" and "events subsystem broken" are indistinguishable |
+
+**yara surface — on-demand rule scans and their skip guards**
+
+| Code | Constant | Description |
+|---|---|---|
+| `osquery.yara.sigfile_invisible` | `LogCodeYaraSigfileInvisible` | daemon answered the visibility probe but cannot see the rules file (bad path/mount); scan SKIPPED, never reported clean |
+| `osquery.yara.sigfile_probe_failed` | `LogCodeYaraSigfileProbeFailed` | the visibility probe itself errored (daemon or file table broken); scan SKIPPED — different remediation than an invisible sigfile |
+| `osquery.yara.scan_failed` | `LogCodeYaraScanFailed` | one configured path's yara-table scan errored; remaining paths still scan |
+| `osquery.yara.matches_found` | `LogCodeYaraMatchesFound` | YARA rules matched on the host — the alert line names the rules |
 
 ## `paas` (internal/discovery/paas)
 
