@@ -1,9 +1,10 @@
 # Simulated osquery environment
 
-A docker-compose stack that stands up a **real osqueryd** exposing its Thrift
-extensions socket — a faithful, reproducible stand-in for an osquery-equipped
-host. Use it to develop and test a future osquery-backed kite collector without
-installing osquery locally (or fighting the `nettle3` conflict on Arch).
+A docker-compose stack that stands up a **real osqueryd** with events enabled —
+inotify FIM, event-driven YARA scanning, and canary rules baked in — exposing
+its Thrift extensions socket. A faithful, reproducible stand-in for an
+osquery-equipped host, used both to test the kite osquery discovery source
+(`internal/discovery/osquery`) and to catch upstream osquery drift daily.
 
 ## Run it
 
@@ -18,7 +19,16 @@ docker compose -f docker-compose.osquery.yml up --build          # Ctrl-C to sto
 docker compose -f docker-compose.osquery.yml down -v             # tear down
 ```
 
-`make sim-osquery` runs the one-shot probe.
+Make targets (each tears the stack down afterwards):
+
+| Target | What it runs |
+|--------|--------------|
+| `make sim-osquery` | the one-shot probe (liveness + YARA demo) |
+| `make osquery-checks` | the 47-check drift battery (`checks.sh`) |
+| `make osquery-edge` | the 20-check edge-case / error-state battery (`edge.sh`) |
+| `make test-osquery-kite` | the collector's osquery source (`go test -tags osquerysim`) against the live daemon |
+
+Override the daemon version on any of them: `OSQUERY_VERSION=latest make osquery-checks`.
 
 ## Daily drift check — "what could go wrong"
 
@@ -32,60 +42,103 @@ names *which* failure mode hit:
 | extensions socket present | osqueryd failed to start or moved the socket |
 | `--connect` over socket | the client attach behavior changed (it has before) |
 | `osquery_info` queryable | the daemon answers but returns garbage |
-| table exists (×16) | a table a collector would consume was removed/renamed |
-| columns (×6) | a column a collector reads was removed/renamed |
+| table exists (×22) | a table a collector consumes was removed/renamed |
+| columns (×11) | a column a collector reads was removed/renamed |
+| events subsystem (×3) | the inotify publisher or a subscriber went inactive |
+| YARA on-demand (+ negative) | rules stopped compiling or started matching everything |
+| hash vs sha256sum | the hash table disagrees with coreutils |
+| FIM delivery | file_events stopped seeing writes under `file_paths` |
+| YARA events | yara_events stopped scanning on change |
+| collision pin | the inotify watch-ownership collision (below) changed upstream |
 
-It runs against a **matrix** of two targets so drift surfaces early:
+The **edge battery** (`edge.sh`, also in the daily run) pins how osquery
+*fails*: loud errors (bad SQL, missing tables, constraint-required tables,
+dead socket) versus the **silent zero-row traps** — a missing or
+*uncompilable* YARA sigfile and a missing scan target all return rc=0 with
+zero rows, indistinguishable from a clean scan. Collector error handling is
+designed against these pinned behaviors, not assumptions.
 
-- **pinned** (`5.15.0`) — the version a kite osquery-backed collector would target.
+The **kite leg** runs the collector's own discovery source against the live
+daemon (see below), so on `latest` it catches an osquery release breaking the
+kite client before adoption.
+
+Everything runs against a **matrix** of two targets so drift surfaces early:
+
+- **pinned** (`5.15.0`) — the version the kite osquery source targets.
 - **latest** — whatever the osquery repo currently publishes.
 
 When `latest` fails but `pinned` passes, a new osquery release broke something —
 and you know before adopting it. `fail-fast: false` keeps both legs reporting;
-each run uploads its `checks-<label>.log` as an artifact.
+each run uploads its `checks/edge/kite-<label>.log` files as artifacts.
 
-Run the battery locally:
+## The inotify watch-ownership collision (do not watch the same paths twice)
 
-```bash
-make osquery-checks                       # pinned 5.15.0
-OSQUERY_VERSION=latest make osquery-checks # test drift against latest
-```
+osquery's inotify publisher hands each kernel watch descriptor to exactly
+**one** subscriber (`shouldFire`: `sc.get() != ec->isub_ctx.get()`), and
+`inotify_add_watch` dedups by path. When `file_events` and `yara_events` watch
+the same directory, whichever registers last (yara_events) **silently steals
+the watch** and file_events goes deaf on that subtree — zero errors anywhere.
+
+This sim therefore watches disjoint subtrees (`/var/kite/watch/fim` for FIM,
+`/var/kite/watch/yara` for event-driven YARA), and `checks.sh` pins the
+collision itself so an upstream fix shows up as a named check flip rather than
+silent behavior drift. A production `file_paths` config must keep FIM and
+YARA-event categories disjoint for the same reason.
 
 ## What it is
 
 | Service   | Role |
 |-----------|------|
-| `osquery` | `osqueryd --ephemeral` in the foreground, extensions socket at `/var/osquery/osquery.em` on the `osq-socket` volume. Healthy only when it answers a query over that socket. |
-| `probe`   | Attaches with `osqueryi --connect` and runs `osquery_info` / `processes` / `os_version`, asserting a non-empty version comes back. Green = daemon + socket work. |
+| `osquery` | `osqueryd --ephemeral` in the foreground, events ON, extensions socket at `/var/osquery/osquery.em` on the `osq-socket` volume, canary YARA rules at `/etc/osquery/yara/kite.yar`, FIM+YARA watches over the shared `osq-watch` volume. |
+| `probe`   | Attaches with `osqueryi --connect`, runs identity queries plus an on-demand YARA canary scan. Green = daemon + socket work. |
+| `checks`  | The 47-check drift battery. |
+| `edge`    | The 20-check edge-case / error-state battery. |
+| `kite-runner` | `golang` image running `go test -tags osquerysim ./tests/e2e/osquery/...` — the collector's real discovery source against the live daemon over the shared socket volume. |
 
 The probe uses `--connect` (attach to the running daemon) rather than a
 standalone `osqueryi` shell, so it exercises the **socket**, which is the
 integration surface — not just the osquery binary.
 
-## How kite would consume it
+## How kite consumes it
 
-osquery's client protocol is Thrift over a **unix domain socket** (there is no
-native TCP). A Go client (`github.com/osquery/osquery-go`) binds to that socket.
-To wire a kite runner into this stack, mount the same volume read-only and point
-the collector at the socket:
+`internal/discovery/osquery` is a discovery source registered in the binary.
+It speaks a minimal hand-rolled Thrift binary-protocol client (`query` +
+`ping` only — no vendor SDK, mirroring the docker source) to the extensions
+socket, reading host identity (`osquery_info`, `system_info`, `os_version`,
+`kernel_info`), optional on-demand YARA scans (`yara_sigfile` + `yara_paths`
+config), and FIM `file_events`.
 
-```yaml
-  kite-runner:
-    image: golang:1.26-bookworm
-    depends_on:
-      osquery:
-        condition: service_healthy
-    volumes:
-      - osq-socket:/var/osquery:ro
-    environment:
-      KITE_OSQUERY_SOCKET: "/var/osquery/osquery.em"
-    command: ["go", "test", "-tags", "osquerysim", "./..."]
-```
+Socket resolution: `sources.osquery.socket` config → `KITE_OSQUERY_SOCKET`
+env → platform defaults (`/var/osquery/osquery.em` on Linux/macOS, the pipes
+below on Windows). Hosts without osqueryd log one per-scan warning and
+contribute nothing.
 
-> **Status:** kite has no osquery client today — the container collector
-> (`internal/discovery/agent/containers`) talks to the Docker Engine API, not
-> osquery. This environment is groundwork for an osquery-backed collector; it is
-> not yet consumed by the binary.
+Design decisions verified by this sim:
+
+- **Silent-zero guard**: the source only reports a YARA scan when the sigfile
+  is *proven* visible to the daemon (`file` table probe), because osquery
+  answers a missing/uncompilable sigfile with rc=0 and zero rows.
+- **Loud errors** decode as `queryError` (distinct from transport failures,
+  which feed the circuit breaker).
+- **FIM is eventually consistent**: consumers poll `file_events` with a
+  budget; single-shot reads are wrong by design.
+
+### Windows: the deployment surface already exists
+
+The `kite-collector-osquery` Windows MSI (built by
+`scripts/build-msi.sh --with-osquery` from `cmd/kite-collector/wix.wxs`,
+`-D OSQUERY`) already ships osqueryd 5.15.0 as the `kite-osqueryd` service.
+On Windows the Thrift endpoint is a **named pipe**, not a unix socket, and
+the MSI fixes the contract the client honors:
+
+- pipe: `\\.\pipe\kite-osquery.em` (namespaced; standalone osquery uses
+  `\\.\pipe\osquery.em`) — both are default lookup paths in
+  `internal/discovery/osquery/socket_windows.go`, dialed via `go-winio`.
+- env: `KITE_OSQUERY_SOCKET` is set machine-wide to that pipe name at install
+  time, so the client-side lookup is identical on both platforms: read
+  `KITE_OSQUERY_SOCKET`, dial it untouched.
+
+Changing either value is a breaking change for already-deployed bundles.
 
 ## Notes
 
@@ -94,5 +147,8 @@ the collector at the socket:
   the `osquery` service — off by default to keep the sim isolated and unprivileged.
 - **Version pinning:** `Dockerfile.osquery` pins `OSQUERY_VERSION` for
   reproducibility. Bump the ARG to move it.
+- **Watch dirs must pre-exist:** the daemon resolves `file_paths` globs to
+  inotify watches at startup; `fim/` and `yara/` are created in the image so
+  the named volume inherits them before osqueryd boots.
 - **Platform:** the apt repo line is `arch=amd64`. On arm64 hosts, switch to
   osquery's arm64 channel.

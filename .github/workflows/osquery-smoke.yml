@@ -81,6 +81,28 @@ jobs:
           docker compose -f docker-compose.osquery.yml run --rm --build checks \
             | tee checks-${{ matrix.label }}.log
 
+      - name: Run edge-case / error-state battery
+        working-directory: tests/e2e/osquery
+        env:
+          OSQUERY_VERSION: ${{ matrix.osquery_version }}
+        run: |
+          # Pins how osquery FAILS (loud errors vs silent zero-row traps,
+          # async event delivery) — drift here breaks collector error
+          # handling even when every happy-path check stays green.
+          docker compose -f docker-compose.osquery.yml run --rm edge \
+            | tee edge-${{ matrix.label }}.log
+
+      - name: Run kite osquery source against the live daemon
+        working-directory: tests/e2e/osquery
+        env:
+          OSQUERY_VERSION: ${{ matrix.osquery_version }}
+        run: |
+          # The collector's own discovery source (hand-rolled Thrift client)
+          # over the real extensions socket. On the `latest` leg this catches
+          # an osquery release breaking the kite client before adoption.
+          docker compose -f docker-compose.osquery.yml run --rm kite-runner \
+            | tee kite-${{ matrix.label }}.log
+
       - name: Tear down
         if: always()
         working-directory: tests/e2e/osquery
@@ -91,5 +113,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: osquery-checks-${{ matrix.label }}
-          path: tests/e2e/osquery/checks-${{ matrix.label }}.log
+          path: |
+            tests/e2e/osquery/checks-${{ matrix.label }}.log
+            tests/e2e/osquery/edge-${{ matrix.label }}.log
+            tests/e2e/osquery/kite-${{ matrix.label }}.log
           if-no-files-found: warn

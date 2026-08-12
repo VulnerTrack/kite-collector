@@ -97,6 +97,36 @@ services:
     entrypoint: ["/usr/local/bin/edge.sh"]
     restart: "no"
 
+  # The kite integration leg: runs the collector's osquery discovery source
+  # (go test -tags osquerysim) against the live daemon over the shared socket
+  # volume — the exact consumption path the README sketched before the source
+  # existed. Run: make test-osquery-kite
+  kite-runner:
+    image: golang:1.26-bookworm
+    depends_on:
+      osquery:
+        condition: service_healthy
+    working_dir: /src
+    volumes:
+      - ../../..:/src
+      - osq-socket:/var/osquery
+      - osq-watch:/var/kite/watch
+      - go-mod-cache:/go/pkg/mod
+    environment:
+      KITE_OSQUERY_SOCKET: "/var/osquery/osquery.em"
+      OSQUERY_WATCH_DIR: "/var/kite/watch"
+      GOTOOLCHAIN: auto
+      GOFLAGS: "-buildvcs=false"
+    command:
+      - go
+      - test
+      - -tags=osquerysim
+      - -count=1
+      - -v
+      - -timeout=300s
+      - ./tests/e2e/osquery/...
+    restart: "no"
+
 volumes:
   # The shared extensions socket. Mount this same volume (read-only) into a
   # kite runner and point it at unix:///var/osquery/osquery.em to consume the
@@ -106,3 +136,6 @@ volumes:
   # osquery.conf); sibling containers plant files here to trigger file_events
   # and yara_events.
   osq-watch:
+  # Module cache for the kite-runner leg, so repeat local runs skip the
+  # go mod download.
+  go-mod-cache:

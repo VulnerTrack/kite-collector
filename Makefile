@@ -1,4 +1,4 @@
-.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -204,6 +204,14 @@ osquery-checks:
 # against verified behavior, not assumptions.
 osquery-edge:
 	docker compose -f tests/e2e/osquery/docker-compose.osquery.yml run --rm --build edge; \
+	  rc=$$?; \
+	  docker compose -f tests/e2e/osquery/docker-compose.osquery.yml down -v >/dev/null 2>&1 || true; \
+	  exit $$rc
+
+# Kite integration leg: the osquery discovery source (go test -tags osquerysim)
+# against the live simulated daemon over its real extensions socket.
+test-osquery-kite:
+	docker compose -f tests/e2e/osquery/docker-compose.osquery.yml run --rm --build kite-runner; \
 	  rc=$$?; \
 	  docker compose -f tests/e2e/osquery/docker-compose.osquery.yml down -v >/dev/null 2>&1 || true; \
 	  exit $$rc
