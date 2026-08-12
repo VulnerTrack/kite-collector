@@ -127,18 +127,24 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 	}
 
 	// Optional on-demand YARA sweep.
-	if matches, scanned := s.yaraScan(ctx, client, cfg); scanned {
+	if res := s.yaraScan(ctx, client, cfg); res.scanned {
 		tags["yara_scanned"] = true
-		tags["yara_match_count"] = len(matches)
-		if len(matches) > 0 {
-			tags["yara_matches"] = matches
+		tags["yara_match_count"] = len(res.matches)
+		// A non-zero unscannable count means some configured paths produced no
+		// scan (missing/unreadable/directory/empty glob). Surface it so a
+		// "0 matches" result is not mistaken for full coverage.
+		if res.unscannable > 0 {
+			tags["yara_paths_unscannable"] = res.unscannable
+		}
+		if len(res.matches) > 0 {
+			tags["yara_matches"] = res.matches
 			// Rule names are operator-authored (never file contents), so
 			// naming them here is alert-safe and saves the on-call a pivot
 			// into the machine record.
 			slog.Warn("osquery: yara rules matched on host",
 				"code", string(LogCodeYaraMatchesFound),
-				"count", len(matches),
-				"rules", matchedRuleNames(matches))
+				"count", len(res.matches),
+				"rules", matchedRuleNames(res.matches))
 		}
 	}
 
@@ -161,11 +167,20 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 	return []model.Machine{machine}, nil
 }
 
-// yaraScan runs the configured on-demand scans. Returns (matches, scanned):
-// scanned is false when YARA was not configured or the rule credential could
-// not be PROVEN usable by the daemon — the silent-zero contract means an
-// unproven credential yields rows indistinguishable from "clean", so we
-// refuse to report a clean result we cannot stand behind.
+// yaraScanResult is what a sweep reports back to Discover. scanned is false
+// when YARA was not configured or the credential could not be PROVEN usable —
+// the silent-zero contract means an unproven credential yields rows
+// indistinguishable from "clean", so we refuse to report a result we cannot
+// stand behind. unscannable counts configured paths the daemon opened nothing
+// for (missing/unreadable/directory/empty glob) — real coverage gaps that a
+// "0 matches" number would otherwise hide.
+type yaraScanResult struct {
+	matches     []YaraMatch
+	scanned     bool
+	unscannable int
+}
+
+// yaraScan runs the configured on-demand scans.
 //
 // Two credential forms, chosen by config (yara_rules wins if both are set,
 // since inline rules need no daemon-side file):
@@ -178,10 +193,10 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 //	               malformed rule is silently dropped (0 rows, same shape as
 //	               "no match"), so we prove it COMPILES via a probe scan
 //	               against the daemon's own binary before trusting a scan.
-func (s *Source) yaraScan(ctx context.Context, client querier, cfg map[string]any) ([]YaraMatch, bool) {
+func (s *Source) yaraScan(ctx context.Context, client querier, cfg map[string]any) yaraScanResult {
 	paths := toStrings(cfg["yara_paths"])
 	if len(paths) == 0 {
-		return nil, false
+		return yaraScanResult{}
 	}
 
 	sigfile := toString(cfg["yara_sigfile"])
@@ -193,7 +208,7 @@ func (s *Source) yaraScan(ctx context.Context, client querier, cfg map[string]an
 	case sigfile != "":
 		return s.yaraScanWith(ctx, client, paths, "sigfile", sigfile, s.proveSigfileVisible)
 	default:
-		return nil, false
+		return yaraScanResult{}
 	}
 }
 
@@ -212,14 +227,15 @@ func (s *Source) yaraScanWith(
 	paths []string,
 	constraint, value string,
 	prove credentialProof,
-) ([]YaraMatch, bool) {
+) yaraScanResult {
 	if !prove(ctx, client, value) {
-		return nil, false
+		return yaraScanResult{}
 	}
 
 	var (
-		matches []YaraMatch
-		scanned int // paths the daemon actually scanned without error
+		matches     []YaraMatch
+		scanned     int // paths the daemon actually opened and scanned
+		unscannable int // paths that produced no scan (missing/dir/unreadable/empty glob)
 	)
 	for _, p := range paths {
 		rows, err := client.Query(ctx, fmt.Sprintf(
@@ -228,6 +244,18 @@ func (s *Source) yaraScanWith(
 		if err != nil {
 			slog.Warn("osquery: yara scan failed",
 				"code", string(LogCodeYaraScanFailed), "path", p, "error", err)
+			continue
+		}
+		// osquery's doYARAScanPath pushes a row ONLY when it opened and
+		// scanned a file (ERROR_SUCCESS) — a scanned-clean file still yields
+		// one row with count 0. Zero rows therefore means the daemon scanned
+		// NOTHING for this path (missing, a directory, unreadable, or a glob
+		// that matched no readable file), which is NOT the same as "clean".
+		// Counting it as scanned would be a per-path false clean.
+		if len(rows) == 0 {
+			unscannable++
+			slog.Warn("osquery: yara scan target produced no scan; path skipped",
+				"code", string(LogCodeYaraPathUnscannable), "path", p)
 			continue
 		}
 		scanned++
@@ -239,17 +267,18 @@ func (s *Source) yaraScanWith(
 	}
 
 	// The credential proof only established that the RULES are usable — the
-	// sigfile visibility probe never exercises the `yara` table itself. If
-	// every path then errored (yara table absent, e.g. a FreeBSD daemon; or
-	// all paths unreadable), no scan actually ran, so reporting a clean
-	// 0-match result would be a false clean — the exact failure this
-	// integration exists to prevent. Refuse it.
+	// sigfile visibility probe never exercises the `yara` table itself, and a
+	// per-path scan can silently open nothing. If NO path was actually
+	// scanned (yara table absent, e.g. a FreeBSD daemon; every path errored;
+	// or every target was unscannable), reporting a clean 0-match result
+	// would be a false clean — the exact failure this integration exists to
+	// prevent. Refuse it.
 	if scanned == 0 {
-		slog.Warn("osquery: every yara scan path errored; scan not reported",
-			"code", string(LogCodeYaraAllPathsFailed), "paths", len(paths))
-		return nil, false
+		slog.Warn("osquery: no yara scan path was actually scanned; scan not reported",
+			"code", string(LogCodeYaraAllPathsFailed), "paths", len(paths), "unscannable", unscannable)
+		return yaraScanResult{}
 	}
-	return matches, true
+	return yaraScanResult{matches: matches, scanned: true, unscannable: unscannable}
 }
 
 // proveSigfileVisible confirms the daemon can see the sigfile. osquery's

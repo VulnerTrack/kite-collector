@@ -265,3 +265,47 @@ func TestLive_Discover_MalformedInlineRuleSkips(t *testing.T) {
 	_, scanned := tags["yara_scanned"]
 	assert.False(t, scanned, "malformed inline rule must be caught by the compile probe and skipped")
 }
+
+// TestLive_Discover_MissingPathNotReportedClean proves against the live
+// daemon that a configured scan path which does not exist is treated as a
+// coverage gap, not silently folded into a clean result. osquery emits no
+// row for an unopenable file (doYARAScanPath only pushes on ERROR_SUCCESS).
+func TestLive_Discover_MissingPathNotReportedClean(t *testing.T) {
+	missing := filepath.Join(watchDir(t), "yara",
+		fmt.Sprintf("does-not-exist-%d.txt", time.Now().UnixNano()))
+	src := osquerydisc.New()
+	machines, err := src.Discover(ctxWithTimeout(t), map[string]any{
+		"socket":       socketPath(t),
+		"yara_sigfile": sigfile,
+		"yara_paths":   []any{missing}, // the only path, and it is absent
+	})
+	require.NoError(t, err)
+
+	var tags map[string]any
+	require.NoError(t, json.Unmarshal([]byte(machines[0].Tags), &tags))
+	_, scanned := tags["yara_scanned"]
+	assert.False(t, scanned, "a missing scan target must not be reported as a clean scan")
+}
+
+func TestLive_Discover_MixedPresentAndMissingPaths(t *testing.T) {
+	present := filepath.Join(watchDir(t), "yara",
+		fmt.Sprintf("present-%d.txt", time.Now().UnixNano()))
+	require.NoError(t, os.MkdirAll(filepath.Dir(present), 0o755))
+	require.NoError(t, os.WriteFile(present, []byte("clean\n"), 0o644))
+	t.Cleanup(func() { _ = os.Remove(present) })
+	missing := filepath.Join(watchDir(t), "yara",
+		fmt.Sprintf("absent-%d.txt", time.Now().UnixNano()))
+
+	src := osquerydisc.New()
+	machines, err := src.Discover(ctxWithTimeout(t), map[string]any{
+		"socket":       socketPath(t),
+		"yara_sigfile": sigfile,
+		"yara_paths":   []any{present, missing},
+	})
+	require.NoError(t, err)
+
+	var tags map[string]any
+	require.NoError(t, json.Unmarshal([]byte(machines[0].Tags), &tags))
+	assert.Equal(t, true, tags["yara_scanned"], "the present path scanned")
+	assert.Equal(t, float64(1), tags["yara_paths_unscannable"], "the absent path is a reported coverage gap")
+}

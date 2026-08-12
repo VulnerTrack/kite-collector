@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 469 codes across 58 packages.
+**Catalog size:** 470 codes across 58 packages.
 
 ---
 
@@ -931,7 +931,7 @@ Source: [`internal/discovery/network/logcodes.go`](../internal/discovery/network
 
 ## `osquery` (internal/discovery/osquery)
 
-Source: [`internal/discovery/osquery/logcodes.go`](../internal/discovery/osquery/logcodes.go) · 11 codes
+Source: [`internal/discovery/osquery/logcodes.go`](../internal/discovery/osquery/logcodes.go) · 12 codes
 
 **discover surface — host identity and FIM summary over the extensions socket**
 
@@ -951,7 +951,8 @@ Source: [`internal/discovery/osquery/logcodes.go`](../internal/discovery/osquery
 | `osquery.yara.compile_probe_failed` | `LogCodeYaraCompileProbeFailed` | could not run the inline-rule compile probe (daemon binary unresolved or probe query errored); scan SKIPPED |
 | `osquery.yara.rules_uncompilable` | `LogCodeYaraRulesUncompilable` | inline yara_rules failed to compile (malformed rule text); scan SKIPPED, never reported clean |
 | `osquery.yara.scan_failed` | `LogCodeYaraScanFailed` | one configured path's yara-table scan errored; remaining paths still scan |
-| `osquery.yara.all_paths_failed` | `LogCodeYaraAllPathsFailed` | EVERY path errored (yara table absent/all unreadable); scan NOT reported, so a false clean is not emitted |
+| `osquery.yara.path_unscannable` | `LogCodeYaraPathUnscannable` | a path produced zero scan rows (missing/directory/unreadable/empty glob); NOT counted as scanned-clean |
+| `osquery.yara.all_paths_failed` | `LogCodeYaraAllPathsFailed` | no path was actually scanned (all errored/unscannable, or yara table absent); scan NOT reported, so a false clean is not emitted |
 | `osquery.yara.matches_found` | `LogCodeYaraMatchesFound` | YARA rules matched on the host — the alert line names the rules |
 
 ## `paas` (internal/discovery/paas)

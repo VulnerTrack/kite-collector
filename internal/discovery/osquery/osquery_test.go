@@ -915,3 +915,58 @@ func TestYara_SomePathsError_StillReportsScan(t *testing.T) {
 	assert.Equal(t, true, tags["yara_scanned"], "one good path means the scan really ran")
 	assert.Equal(t, float64(0), tags["yara_match_count"])
 }
+
+// ---------------------------------------------------------------------------
+// Per-path false-clean guard: osquery's doYARAScanPath pushes a row ONLY on
+// ERROR_SUCCESS, so a missing/unreadable/directory path (or an empty glob)
+// returns 0 rows rc=0 — NOT the same as a scanned-clean file (1 row, count 0).
+// Verified against the 5.15.0 sim (missing/dir/empty-glob -> 0 rows).
+// ---------------------------------------------------------------------------
+
+func TestYara_UnscannablePath_NotCountedAsClean(t *testing.T) {
+	// One real path (1 row, clean) + one missing path (0 rows). The missing
+	// path must be reported as unscannable coverage, not folded into "clean".
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.responses["FROM file"] = []map[string]string{{"path": "/etc/osquery/yara/kite.yar"}}
+	stub.responses["/real"] = []map[string]string{{"path": "/real", "matches": "", "count": "0"}}
+	stub.responses["/missing"] = nil // 0 rows: daemon opened nothing
+	s, _ := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), yaraCfg("/real", "/missing"))
+	require.NoError(t, err)
+	tags := tagsOf(t, machines[0])
+	assert.Equal(t, true, tags["yara_scanned"], "one real path scanned -> result stands")
+	assert.Equal(t, float64(0), tags["yara_match_count"])
+	assert.Equal(t, float64(1), tags["yara_paths_unscannable"], "the missing path is a coverage gap")
+	assert.Contains(t, buf.String(), string(LogCodeYaraPathUnscannable))
+}
+
+func TestYara_EveryPathUnscannable_NotReportedClean(t *testing.T) {
+	// All configured paths return 0 rows (all missing). Nothing was actually
+	// scanned, so the result must NOT be reported as a clean bill of health.
+	buf := captureLogs(t)
+	stub := healthyStub()
+	stub.responses["FROM file"] = []map[string]string{{"path": "/etc/osquery/yara/kite.yar"}}
+	stub.responses["/gone-a"] = nil
+	stub.responses["/gone-b"] = nil
+	s, _ := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), yaraCfg("/gone-a", "/gone-b"))
+	require.NoError(t, err)
+	_, scanned := tagsOf(t, machines[0])["yara_scanned"]
+	assert.False(t, scanned, "no path scanned -> no clean claim")
+	assert.Contains(t, buf.String(), string(LogCodeYaraAllPathsFailed))
+}
+
+func TestYara_NoUnscannableTag_WhenAllPathsScan(t *testing.T) {
+	// A fully-covered scan must not carry the coverage-gap tag at all.
+	stub := healthyStub()
+	stub.responses["FROM file"] = []map[string]string{{"path": "/etc/osquery/yara/kite.yar"}}
+	stub.responses["/real"] = []map[string]string{{"path": "/real", "matches": "", "count": "0"}}
+	s, _ := sourceWith(stub)
+	machines, err := s.Discover(context.Background(), yaraCfg("/real"))
+	require.NoError(t, err)
+	tags := tagsOf(t, machines[0])
+	assert.Equal(t, true, tags["yara_scanned"])
+	_, present := tags["yara_paths_unscannable"]
+	assert.False(t, present, "no coverage gaps -> no unscannable tag")
+}
