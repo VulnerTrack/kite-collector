@@ -54,6 +54,7 @@ import (
 	ldapdisc "github.com/vulnertrack/kite-collector/internal/discovery/ldap"
 	"github.com/vulnertrack/kite-collector/internal/discovery/mdm"
 	"github.com/vulnertrack/kite-collector/internal/discovery/network"
+	osquerydisc "github.com/vulnertrack/kite-collector/internal/discovery/osquery"
 	"github.com/vulnertrack/kite-collector/internal/discovery/paas"
 	"github.com/vulnertrack/kite-collector/internal/discovery/proxmox"
 	"github.com/vulnertrack/kite-collector/internal/discovery/snmp"
@@ -377,6 +378,7 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(cmdb.NewDevice42())
 	registry.Register(cmdb.NewLansweeper())
 	registry.Register(dockerdisc.New())
+	registry.Register(osquerydisc.New())
 	registry.Register(unifi.New())
 	registry.Register(proxmox.New())
 	registry.Register(snmp.New())
@@ -1125,6 +1127,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	registry.Register(cmdb.NewDevice42())
 	registry.Register(cmdb.NewLansweeper())
 	registry.Register(dockerdisc.New())
+	registry.Register(osquerydisc.New())
 	registry.Register(unifi.New())
 	registry.Register(proxmox.New())
 	registry.Register(snmp.New())
