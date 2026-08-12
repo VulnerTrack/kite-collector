@@ -1,4 +1,4 @@
-.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -74,22 +74,27 @@ clean-windows-resources:
 #   1. xmllint --noout            — XML well-formedness
 #   2. xmllint --schema wix.xsd   — WiX 3.x XSD conformance
 #   3. wixl --arch x64 -o /tmp/   — actual MSI build (subset wixl supports)
+#   4. wixl -D OSQUERY            — same build for the osquery-bundle variant
 #
-# Layer 3 is the only ground truth — wixl implements a subset of WiX 3.x,
+# Layers 3-4 are the only ground truth — wixl implements a subset of WiX 3.x,
 # so a wxs can validate clean against the upstream XSD and still fail at
 # build time. xmllint catches the schema-level errors editors miss; wixl
-# catches the wixl-specific gaps. Run both before pushing wxs edits.
+# catches the wixl-specific gaps. Run all before pushing wxs edits.
+#
+# Layer 4 stages zero-byte stand-ins for the osquery payload files — this
+# validates the wxs (element support, source paths, GUID/ref wiring), not
+# the payload; scripts/build-msi.sh --with-osquery stages the real one.
 #
 # The vendored schema lives at schemas/wix.xsd. To refresh:
 #   curl -fsSL https://raw.githubusercontent.com/wixtoolset/wix3/develop/src/tools/wix/Xsd/wix.xsd -o schemas/wix.xsd
 WIX_WXS    := cmd/kite-collector/wix.wxs
 WIX_XSD    := schemas/wix.xsd
 validate-wxs:
-	@echo "[1/3] xmllint well-formedness"
+	@echo "[1/4] xmllint well-formedness"
 	@xmllint --noout $(WIX_WXS) && echo "  PASS"
-	@echo "[2/3] xmllint XSD ($(WIX_XSD))"
+	@echo "[2/4] xmllint XSD ($(WIX_XSD))"
 	@xmllint --noout --schema $(WIX_XSD) $(WIX_WXS)
-	@echo "[3/3] wixl dry build"
+	@echo "[3/4] wixl dry build (plain)"
 	@if ! command -v wixl >/dev/null 2>&1; then \
 		echo "  SKIP — wixl not on PATH (install wixl + msitools to enable)"; \
 	else \
@@ -97,6 +102,22 @@ validate-wxs:
 		sed -e 's|{{ \.Version }}|0.0.0-dev|g' -e 's|{{ \.ShortCommit }}|dev|g' $(WIX_WXS) > $$tmp/wix.wxs; \
 		: > $$tmp/kite-collector.exe; \
 		wixl --arch x64 -o $$tmp/test.msi $$tmp/wix.wxs && echo "  PASS — wixl accepts the wxs"; \
+	fi
+	@echo "[4/4] wixl dry build (-D OSQUERY bundle)"
+	@if ! command -v wixl >/dev/null 2>&1; then \
+		echo "  SKIP — wixl not on PATH (install wixl + msitools to enable)"; \
+	else \
+		tmp=$$(mktemp -d); trap "rm -rf $$tmp" EXIT; \
+		sed -e 's|{{ \.Version }}|0.0.0-dev|g' -e 's|{{ \.ShortCommit }}|dev|g' $(WIX_WXS) > $$tmp/wix.wxs; \
+		: > $$tmp/kite-collector.exe; \
+		mkdir -p $$tmp/osquery/osqueryd $$tmp/osquery/certs $$tmp/osquery/packs; \
+		: > $$tmp/osquery/osqueryd/osqueryd.exe; \
+		: > $$tmp/osquery/certs/certs.pem; \
+		for p in windows-hardening windows-attacks vuln-management incident-response it-compliance osquery-monitoring; do \
+			: > $$tmp/osquery/packs/$$p.conf; \
+		done; \
+		cp configs/osquery/osquery.conf configs/osquery/osquery.flags $$tmp/osquery/; \
+		wixl --arch x64 -D OSQUERY -o $$tmp/test-osquery.msi $$tmp/wix.wxs && echo "  PASS — wixl accepts the OSQUERY variant"; \
 	fi
 
 # build-host is the fast inner-loop target — same flags as the goreleaser
@@ -174,6 +195,15 @@ sim-osquery:
 # which failure mode hit. Override OSQUERY_VERSION=latest to test drift.
 osquery-checks:
 	docker compose -f tests/e2e/osquery/docker-compose.osquery.yml run --rm --build checks; \
+	  rc=$$?; \
+	  docker compose -f tests/e2e/osquery/docker-compose.osquery.yml down -v >/dev/null 2>&1 || true; \
+	  exit $$rc
+
+# Edge-case / error-state battery: pins how osquery FAILS (loud errors, silent
+# zero-row traps, async event delivery) so collector error handling is designed
+# against verified behavior, not assumptions.
+osquery-edge:
+	docker compose -f tests/e2e/osquery/docker-compose.osquery.yml run --rm --build edge; \
 	  rc=$$?; \
 	  docker compose -f tests/e2e/osquery/docker-compose.osquery.yml down -v >/dev/null 2>&1 || true; \
 	  exit $$rc
