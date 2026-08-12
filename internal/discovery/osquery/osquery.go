@@ -217,7 +217,10 @@ func (s *Source) yaraScanWith(
 		return nil, false
 	}
 
-	var matches []YaraMatch
+	var (
+		matches []YaraMatch
+		scanned int // paths the daemon actually scanned without error
+	)
 	for _, p := range paths {
 		rows, err := client.Query(ctx, fmt.Sprintf(
 			"SELECT path, matches, count FROM yara WHERE path = '%s' AND %s = '%s';",
@@ -227,11 +230,24 @@ func (s *Source) yaraScanWith(
 				"code", string(LogCodeYaraScanFailed), "path", p, "error", err)
 			continue
 		}
+		scanned++
 		for _, r := range rows {
 			if n := atoi(r["count"]); n > 0 {
 				matches = append(matches, YaraMatch{Path: r["path"], Matches: r["matches"], Count: n})
 			}
 		}
+	}
+
+	// The credential proof only established that the RULES are usable — the
+	// sigfile visibility probe never exercises the `yara` table itself. If
+	// every path then errored (yara table absent, e.g. a FreeBSD daemon; or
+	// all paths unreadable), no scan actually ran, so reporting a clean
+	// 0-match result would be a false clean — the exact failure this
+	// integration exists to prevent. Refuse it.
+	if scanned == 0 {
+		slog.Warn("osquery: every yara scan path errored; scan not reported",
+			"code", string(LogCodeYaraAllPathsFailed), "paths", len(paths))
+		return nil, false
 	}
 	return matches, true
 }
