@@ -130,6 +130,14 @@ func TestLive_Discover_HostIdentity(t *testing.T) {
 	assert.Equal(t, "linux", m.OSFamily)
 	assert.NotEmpty(t, m.OSVersion)
 	assert.Equal(t, "osquery", m.DiscoverySource)
+	// The daemon reports os_version.arch = "x86_64"; the source must
+	// normalize it to the GOARCH vocabulary the agent probe uses (amd64 on
+	// the amd64 CI host) so a dual-discovered host does not churn the
+	// material fingerprint. Assert it is GOARCH-shaped, never a uname string.
+	assert.NotContains(t, []string{"x86_64", "aarch64", "i686"}, m.Architecture,
+		"Architecture must be normalized to GOARCH, got a uname string: %q", m.Architecture)
+	assert.Contains(t, []string{"amd64", "arm64", "386", "arm"}, m.Architecture,
+		"Architecture must be a GOARCH value, got %q", m.Architecture)
 
 	var tags map[string]any
 	require.NoError(t, json.Unmarshal([]byte(m.Tags), &tags))
