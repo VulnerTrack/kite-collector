@@ -18,6 +18,7 @@ func allLogCodes() []LogCode {
 		LogCodeYaraCompileProbeFailed,
 		LogCodeYaraRulesUncompilable,
 		LogCodeYaraScanFailed,
+		LogCodeYaraPathUnscannable,
 		LogCodeYaraAllPathsFailed,
 		LogCodeYaraMatchesFound,
 	}
