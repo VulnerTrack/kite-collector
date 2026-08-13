@@ -1214,17 +1214,22 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				"error", idErr,
 				"identity_dir", identityDir)
 		}
-		// Tenant is authoritative from the agent's own client certificate
-		// (Subject Organization, stamped by PKI at enrollment); KITE_TENANT_ID
-		// is only a fallback. Reading it from the cert stops assets landing
-		// with a NULL/"unknown" tenant when the env var is unset.
+		// Seed tenant.id from the agent's own client certificate (Subject
+		// Organization, stamped by PKI at enrollment), falling back to
+		// KITE_TENANT_ID. This is a HINT, not the authority: per RFC-0150 the
+		// collector re-derives the tenant from the SAME presented certificate
+		// (mTLS peer, or the Cloudflare-forwarded cert Subject) and overwrites
+		// tenant.id server-side. Seeding it here keeps the attribute populated
+		// for local visibility and for any path the collector does not rewrite;
+		// it can never let the agent assert a tenant the collector rejects.
 		tenantID := telresource.ResolveTenantID(
 			cfg.Streaming.OTLP.TLS.CertFile,
 			os.Getenv("KITE_TENANT_ID"),
 		)
 		if tenantID == "" {
-			slog.Warn("no tenant resolved from certificate or KITE_TENANT_ID; "+
-				"telemetry will be emitted untenanted",
+			slog.Warn("no tenant hint resolved from certificate or KITE_TENANT_ID; "+
+				"emitting with empty tenant.id (collector will stamp the "+
+				"authoritative tenant from the presented certificate — RFC-0150)",
 				"code", string(LogCodeTelemetryIdentityUnavailable),
 				"cert_file", cfg.Streaming.OTLP.TLS.CertFile)
 		}

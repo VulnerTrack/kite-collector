@@ -14,11 +14,16 @@ import (
 // (RFC-0063 §5.1) — or "" when the file is missing/unparseable or its
 // Organization is not a well-formed UUID.
 //
-// This is the authoritative source of the agent's tenant: it cannot diverge
-// from the certificate the agent actually presents. It exists because the OTLP
-// resource attribute tenant.id was previously read only from KITE_TENANT_ID,
-// which is easy to leave unset — landing every asset with a NULL/"unknown"
-// tenant even though the cert carried the real one.
+// Authority note (RFC-0150): the *certificate* is the authoritative tenant
+// source, but that authority is now enforced SERVER-SIDE at the collector,
+// which overwrites the OTLP tenant.id resource attribute from the same cert
+// Organization (read via the mTLS peer or a Cloudflare-forwarded header). The
+// value produced here is therefore a non-load-bearing HINT: it seeds tenant.id
+// so the attribute is populated for the agent's own local visibility and for
+// any path the collector does not overwrite, but it can never be trusted over
+// the collector's determination. Because both sides read the same cert, the
+// values agree; the agent cannot assert a tenant the collector would disagree
+// with.
 func TenantFromCertFile(certPath string) string {
 	if strings.TrimSpace(certPath) == "" {
 		return ""
@@ -56,8 +61,12 @@ func tenantFromCertPEM(pemBytes []byte) string {
 
 // ResolveTenantID returns the agent's tenant, preferring the value bound into
 // its client certificate over the KITE_TENANT_ID environment variable. The env
-// var remains a fallback for pre-enrollment / non-mTLS setups, but a valid
-// cert-derived tenant is authoritative and cannot be overridden by a stale env.
+// var remains a fallback for pre-enrollment / non-mTLS setups.
+//
+// Post-RFC-0150 this seeds a HINT only: the collector re-derives the tenant
+// from the presented certificate and overwrites tenant.id server-side, so a
+// stale KITE_TENANT_ID cannot cause a mis-tenanted asset — at worst it stamps a
+// hint the collector replaces (or clears, under stamp_empty).
 func ResolveTenantID(certPath, envTenant string) string {
 	if t := TenantFromCertFile(certPath); t != "" {
 		return t
