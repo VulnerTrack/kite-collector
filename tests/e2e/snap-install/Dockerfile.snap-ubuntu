@@ -1,0 +1,43 @@
+# The "machine": an Ubuntu box where kite-collector was installed via snap.
+#
+# The build stage compiles the real binary; the final stage lays it out exactly
+# as `snap install kite-collector` would — versioned read-only tree under
+# /snap/kite-collector/<rev>/, a `current` symlink, data dirs under /var/snap,
+# and a /snap/bin run shim that exports the SNAP* environment before exec'ing
+# the versioned binary. snapd itself and AppArmor confinement are NOT emulated
+# (snapd does not run inside docker); see README.md for what that means.
+#
+# systemd runs as PID 1 (container is privileged in compose) so
+# `kite-collector install` talks to the same service manager it would on a
+# real snap-capable Ubuntu host.
+FROM golang:1.26-bookworm AS build
+# The golang:1.26 image may lag go.mod's pinned toolchain; `auto` fetches it.
+ENV GOTOOLCHAIN=auto
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /kite-collector ./cmd/kite-collector
+
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends systemd ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Snap-installed layout.
+COPY --from=build /kite-collector /snap/kite-collector/x1/kite-collector
+RUN ln -s x1 /snap/kite-collector/current \
+    && mkdir -p /snap/bin /var/snap/kite-collector/x1 /var/snap/kite-collector/common
+COPY tests/e2e/snap-install/snap-wrapper.sh /snap/bin/kite-collector
+COPY tests/e2e/snap-install/scenario.sh /usr/local/bin/scenario.sh
+# a-w mirrors the read-only squashfs: any install code path that tries to
+# write into the snap tree should fail, and the scenario asserts it did not.
+RUN chmod 0755 /snap/bin/kite-collector /usr/local/bin/scenario.sh \
+    && chmod -R a-w /snap/kite-collector
+
+# snapd prepends /snap/bin to PATH on real hosts.
+ENV PATH=/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/lib/systemd/systemd"]
