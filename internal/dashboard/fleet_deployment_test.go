@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -259,9 +258,6 @@ func TestResolveFleetReleaseVersion_UsesServerConfiguration(t *testing.T) {
 }
 
 func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
-	legacyPath := t.TempDir() + "/kite-collector_windows_386_legacy.exe"
-	require.NoError(t, os.WriteFile(legacyPath, []byte("test-pe32-artifact"), 0o600))
-	t.Setenv("KITE_FLEET_LEGACY_ARTIFACT", legacyPath)
 	req := fleetBundleRequest{
 		Version:     "0.42.0",
 		PKIEndpoint: "https://pki.example.test",
@@ -297,13 +293,12 @@ func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
 
 	for _, name := range []string{
 		"README.md", "ansible.cfg", "deploy.sh", "deployment.json",
-		"artifacts/kite-collector_windows_386_legacy.exe",
 		"inventory/hosts.yml", "inventory/group_vars/all.yml",
 		"playbooks/deploy.yml", "targets.csv",
 	} {
 		assert.Contains(t, files, name)
 	}
-	assert.Equal(t, "test-pe32-artifact", files["artifacts/kite-collector_windows_386_legacy.exe"])
+	assert.NotContains(t, files, "artifacts/kite-collector_windows_386_legacy.exe")
 	assert.Contains(t, files["inventory/hosts.yml"], `"pc-001.example.test"`)
 	assert.Contains(t, files["inventory/hosts.yml"], `"srv-001.example.test"`)
 	assert.Contains(t, files["inventory/hosts.yml"], `"mac-001.example.test"`)
@@ -327,7 +322,7 @@ func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
 	assert.Contains(t, files["deploy.sh"], "apt-get install -y python3-venv")
 	assert.Contains(t, files["deploy.sh"], "python3 -m venv .venv")
 	assert.Contains(t, files["deploy.sh"], "Downloading the CI-built Windows 7 32-bit compatibility agent")
-	assert.Contains(t, files["deploy.sh"], "Using the bundled Windows 7 32-bit compatibility agent")
+	assert.NotContains(t, files["deploy.sh"], "Using the bundled Windows 7 32-bit compatibility agent")
 	assert.Contains(t, files["inventory/hosts.yml"],
 		base64.StdEncoding.EncodeToString([]byte(req.EnrollmentTokens["pc-001.example.test"])))
 	for _, token := range req.EnrollmentTokens {
@@ -341,30 +336,6 @@ func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
 		var document yaml.Node
 		require.NoErrorf(t, yaml.Unmarshal([]byte(files[name]), &document), "invalid generated YAML in %s", name)
 	}
-}
-
-func TestEmbeddedFleetWindowsLegacyArtifact_IsCompleteRecoveryBuild(t *testing.T) {
-	t.Setenv("KITE_FLEET_LEGACY_ARTIFACT", "")
-	require.Greater(t, len(embeddedFleetWindowsLegacyArtifact), 1<<20)
-	assert.Equal(t, []byte{'M', 'Z'}, embeddedFleetWindowsLegacyArtifact[:2])
-	assert.Contains(t, string(embeddedFleetWindowsLegacyArtifact),
-		"validate PKI response (response preserved for retry)")
-
-	var out bytes.Buffer
-	require.NoError(t, writeFleetBundle(&out, fleetBundleRequest{
-		Version:          "0.42.0",
-		PKIEndpoint:      "https://pki.example.test",
-		EnrollmentTokens: map[string]string{"pc.example.test": "single-use-secret-value"},
-	}, []fleetTarget{{Hostname: "pc.example.test", OS: "windows", Arch: "amd64"}}))
-	zr, err := zip.NewReader(bytes.NewReader(out.Bytes()), int64(out.Len()))
-	require.NoError(t, err)
-	for _, file := range zr.File {
-		if file.Name == "artifacts/kite-collector_windows_386_legacy.exe" {
-			assert.Greater(t, file.UncompressedSize64, uint64(1<<20))
-			return
-		}
-	}
-	t.Fatal("generated ZIP did not contain the embedded Windows 7 artifact")
 }
 
 func TestRoute_GET_Fleet_ReturnsFullShellAndActiveNavigation(t *testing.T) {
