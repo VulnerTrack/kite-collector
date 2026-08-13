@@ -155,7 +155,7 @@ func (s *SQLiteStore) VacuumInto(ctx context.Context, dstPath string) error {
 	// parameter; single-quote-escape it. dstPath is always an internal
 	// tmpfs working path, never user input.
 	esc := strings.ReplaceAll(dstPath, "'", "''")
-	if _, err := s.db.ExecContext(ctx, "VACUUM INTO '"+esc+"'"); err != nil { // #nosec G701 -- dstPath single-quote-escaped; always an internal tmpfs path, never user input
+	if _, err := s.db.ExecContext(ctx, "VACUUM INTO '"+esc+"'"); err != nil { // #nosec G202 G701 -- VACUUM INTO cannot take bound params; dstPath single-quote-escaped, always an internal tmpfs path, never user input
 		return fmt.Errorf("vacuum into %s: %w", dstPath, err)
 	}
 	return nil
