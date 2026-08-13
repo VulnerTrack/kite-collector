@@ -39,14 +39,31 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
+  # The snap needs a distinct app entry for snapd to supervise. It is the
+  # same program with `service run` supplied by snap metadata; keeping it as
+  # a second Linux-only binary lets the normal CLI remain interactive.
+  - id: kite-collector-snap-daemon
+    main: ./cmd/kite-collector
+    binary: kite-collector-daemon
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    goos: [linux]
+    goarch: [amd64, arm64]
 
 # Tarball for Homebrew (brews requires tar.gz, not raw binaries).
 archives:
   - id: homebrew
+    ids: [kite-collector]
     formats: [tar.gz]
     name_template: "kite-collector_{{ .Os }}_{{ .Arch }}"
   # Flat binary distribution — single file download, no tar.gz.
   - id: flat
+    ids: [kite-collector]
     formats: [binary]
     name_template: "kite-collector_{{ .Os }}_{{ .Arch }}_bin"
 
@@ -62,6 +79,7 @@ checksum:
 # packages declare (install one, apt removes the other).
 nfpms:
   - id: packages
+    ids: [kite-collector]
     package_name: kite-collector
     conflicts:
       - kite-collector-osquery
@@ -102,6 +120,7 @@ homebrew_casks:
 # Configuración para la Snap Store
 snapcrafts:
   - id: default
+    ids: [kite-collector, kite-collector-snap-daemon]
     name: kite-collector
     summary: Cybersecurity machine discovery and posture analysis agent.
     description: |
@@ -112,6 +131,29 @@ snapcrafts:
     confinement: strict
     base: core22
     license: MIT
+    apps:
+      kite-collector:
+        plugs:
+          - hardware-observe
+          - home
+          - mount-observe
+          - network
+          - network-bind
+          - network-observe
+          - system-observe
+      kite-collector-daemon:
+        args: service run
+        daemon: simple
+        install_mode: disable
+        restart_condition: on-failure
+        plugs:
+          - hardware-observe
+          - home
+          - mount-observe
+          - network
+          - network-bind
+          - network-observe
+          - system-observe
 
 # Scoop manifests
 scoops:

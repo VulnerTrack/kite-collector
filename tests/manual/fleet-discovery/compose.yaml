@@ -1,0 +1,42 @@
+name: kite-fleet-discovery-lab
+
+services:
+  ubuntu-target:
+    build:
+      context: .
+      dockerfile: Dockerfile.ubuntu
+    hostname: ubuntu-kite-test
+    container_name: kite-test-ubuntu
+    networks:
+      discovery-lab:
+        ipv4_address: 172.30.50.10
+        mac_address: "02:42:ac:1e:32:0a"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/22'"]
+      interval: 2s
+      timeout: 1s
+      retries: 15
+
+  windows-target:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows-sim
+    hostname: win-kite-test
+    container_name: kite-test-windows
+    networks:
+      discovery-lab:
+        ipv4_address: 172.30.50.20
+        mac_address: "02:42:ac:1e:32:14"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 5985), 1).close()"]
+      interval: 2s
+      timeout: 1s
+      retries: 15
+
+networks:
+  discovery-lab:
+    name: kite-fleet-discovery-lab
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.50.0/24

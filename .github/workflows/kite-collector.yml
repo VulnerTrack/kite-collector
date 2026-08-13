@@ -303,14 +303,10 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      # wixl is the WiX toolset's Linux-native MSI builder. On Ubuntu 24.04
-      # (noble) and later, wixl ships as a standalone package separate from
-      # msitools; install both so the build works on older releases too.
-      # Used by scripts/build-msi.sh in the post-goreleaser step below.
-      # Without wixl, the MSI build step fails with "wixl: command not found".
-      - name: Install dependencies (wixl, dpkg-dev, snapcraft)
+      - name: Install dependencies (dpkg-dev, WiX, snapcraft)
         run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends wixl msitools dpkg-dev
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends dpkg-dev msitools wixl
           sudo snap install snapcraft --classic
 
       # Embed the Windows app manifest (UAC requireAdministrator +
@@ -374,6 +370,10 @@ jobs:
       #   kite-collector-osquery_<v>_amd64.msi  — also installs osqueryd as
       #     the kite-osqueryd service; payload harvested from the official
       #     osquery MSI (version + SHA256 pinned in scripts/build-msi.sh).
+      #
+      # The collector-only MSI also gets a SHA256 checksum asset and a
+      # stable unversioned alias (kite-collector_amd64.msi) so scripted
+      # deployments can always fetch the latest release by a fixed name.
       - name: Build MSIs and attach to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -382,8 +382,16 @@ jobs:
           COMMIT="${GITHUB_SHA:0:7}"
           ./scripts/build-msi.sh "$VERSION" "$COMMIT"
           ./scripts/build-msi.sh "$VERSION" "$COMMIT" --with-osquery
+          versioned_msi="kite-collector_${VERSION}_amd64.msi"
+          cp "dist/${versioned_msi}" dist/kite-collector_amd64.msi
+          (
+            cd dist
+            sha256sum "${versioned_msi}" > "${versioned_msi}.sha256"
+          )
           gh release upload "$GITHUB_REF_NAME" \
-            "dist/kite-collector_${VERSION}_amd64.msi" \
+            "dist/${versioned_msi}" \
+            "dist/${versioned_msi}.sha256" \
+            dist/kite-collector_amd64.msi \
             "dist/kite-collector-osquery_${VERSION}_amd64.msi" \
             --clobber
 
@@ -414,10 +422,28 @@ jobs:
           # into the WinGet manifest as a second installer. The bundle stays
           # a GitHub-Releases-only artifact. (The prefix differs — the
           # bundle is "kite-collector-osquery_", so this cannot match it.)
+          # The unversioned kite-collector_amd64.msi alias cannot match
+          # either — it lacks the underscore-delimited version segment.
           installers-regex: 'kite-collector_[^/]*_amd64\.msi$'
           token: ${{ secrets.WINGET_TOKEN }}
+
+      - name: Build and upload Windows 7 32-bit compatibility agent
         env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          (
+            cd legacy/windows7
+            GOTOOLCHAIN=go1.17.13 CGO_ENABLED=0 GOOS=windows GOARCH=386 GO386=softfloat go build -trimpath \
+              -ldflags="-X main.version=${version}" \
+              -o ../../dist/kite-collector_windows_386_legacy.exe .
+          )
+          (cd dist && sha256sum kite-collector_windows_386_legacy.exe > kite-collector_windows_386_legacy.exe.sha256)
+          gh release upload "$GITHUB_REF_NAME" \
+            dist/kite-collector_windows_386_legacy.exe \
+            dist/kite-collector_windows_386_legacy.exe.sha256 \
+            --clobber
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0

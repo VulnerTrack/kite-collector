@@ -44,7 +44,17 @@ For any Linux distribution that supports Snap (including Ubuntu, Debian, Fedora,
 
 ```bash
 sudo snap install kite-collector
+sudo kite-collector install
+sudo kite-collector enroll
+sudo snap start --enable kite-collector.kite-collector-daemon
 ```
+
+For the Snap edition, `install` prepares persistent storage under
+`/var/snap/kite-collector/common/certs`; the parent `common` directory remains
+owned by snapd, while the collector can secure the `certs` subdirectory. snapd
+already manages the binary, service, and updates. Check its state with
+`snap services kite-collector` and follow logs with
+`sudo snap logs -f kite-collector.kite-collector-daemon`.
 
 ### Other Linux Distributions (Fedora, Red Hat, Arch Linux, etc.)
 
@@ -62,6 +72,62 @@ brew install --cask vulnertrack/tap/kite-collector
 kite-collector install
 ```
 
+### Mass deployment from the dashboard
+
+The local kite-collector dashboard includes **Mass deployment**. It generates a
+single short-lived Ansible package for Windows, Linux, and macOS targets:
+
+1. Open the dashboard and select **Mass deployment**.
+2. Press **Discover computers**. One click combines TCP scanning, SSH banners,
+   Bonjour/mDNS, NetBIOS, SSDP, and WS-Discovery. Kite shows the detected local
+   IP and queries only its local `/24` after explicit confirmation.
+3. Select the compatible computers already discovered in **Machines**. Kite
+   derives their operating system and architecture automatically. Additional
+   hosts or IP addresses can still be entered as `hostname,os,arch`.
+4. Press **Generate deployment package**. Kite automatically requests one
+   single-use, two-hour PKI credential per computer and downloads the ZIP. The
+   operator never copies or types enrollment credentials.
+5. Move the ZIP to a Linux control computer that can reach the targets, unzip
+   it, and run `./deploy.sh`.
+
+#### Prepare Windows computers without copying files
+
+The same command can be run on any number of Windows 7/8/10/11 and Windows
+Server 2008 R2 or newer computers. On each one, open **Command Prompt (CMD) as
+Administrator** and paste:
+
+```cmd
+sc.exe config WinRM start= auto & sc.exe start WinRM & winrm quickconfig -quiet & netsh advfirewall firewall add rule name="Kite WinRM HTTP 5985" dir=in action=allow protocol=TCP localport=5985 profile=any remoteip=localsubnet & netstat -ano | findstr ":5985"
+```
+
+This command only enables the WinRM management channel; it does not install or
+enroll Kite and contains no token, credential, or computer-specific value. The
+firewall rule accepts connections only from the local subnet. A line containing
+`:5985` should appear when it succeeds. After running it on the
+selected computers, generate one ZIP and run `./deploy.sh` once from Linux. The
+deployment installs and enrolls every computer using its unique token from the
+ZIP. For each Windows target, `deploy.sh` automatically suggests
+`COMPUTER-NAME\Administrator`; press Enter to accept it or type another
+administrative account. This remains dynamic for packages containing tens or
+hundreds of computers.
+
+The script prompts for AD/WinRM and SSH credentials at runtime; infrastructure
+passwords are not written to the package. Windows targets require WinRM, while
+Linux and macOS targets require SSH and privilege escalation. The enrollment
+credentials are confidential and are contained in the generated ZIP, so delete
+the ZIP after deployment or when they expire.
+The collector release, PKI endpoint, and unique per-computer agent codes are
+supplied automatically by the controller and are not operator inputs.
+
+Operating-system detection uses high-confidence evidence such as WinRM or an
+SSH banner that identifies the distribution. If the network or firewall offers
+no conclusive signal, Kite leaves the OS unselected rather than risk deploying
+to a router, printer, or another non-computer device.
+When a host advertises OpenSSH but cannot be distinguished as Linux or macOS,
+the package performs that check automatically after connecting, detects
+`amd64`/`arm64`, and saves the result in `detected-platforms.csv`. The operator
+does not type those commands.
+
 ### Windows
 
 For Windows, you can install `kite-collector` using any of these simple and fast methods:
@@ -77,6 +143,9 @@ Need [osquery](https://osquery.io) on the endpoint too? Grab
 a bundled osqueryd registered as the `kite-osqueryd` service, namespaced so
 it never conflicts with a standalone osquery install. Details in
 [docs/window_install.md](docs/window_install.md#bundled-osquery-msi-kite-collector-osquery).
+
+For a version-pinned, rolling deployment to hundreds of domain-joined Windows
+computers, use the included [Ansible fleet deployment](deploy/ansible/README.md).
 
 #### 2. Standalone GUI Wizard
 Download the Windows binary `kite-collector_windows_amd64.exe` and double-click it from File Explorer. The binary will automatically detect the double-click launch and open the built-in graphical installation wizard.
@@ -535,3 +604,17 @@ See [`samples/streaming-to-otel/`](samples/streaming-to-otel/) for a self-contai
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Windows 7 legacy inventory
+
+Mass deployment automatically selects the isolated Windows/386 collector for
+Windows 7 and 32-bit computers. It stores its transactional inventory database
+at `C:\ProgramData\kite-collector\kite.db` and exposes a loopback-only local
+dashboard at `http://127.0.0.1:9090`. The service scans at startup and every six
+hours, covering core OS, hardware, software, updates, identity, services,
+processes, networking, storage, drivers, scheduled tasks, startup entries, and
+Windows 7 security state. Completed snapshots sync over mTLS OTLP: asset
+summaries reach `analytics_asset_current_state` and full category JSON reaches
+`analytics_windows_inventory_categories` in Supabase, with retry every five
+minutes after transient failures. See `legacy/windows7/README.md` for its deliberately
+isolated compatibility architecture and CLI commands.

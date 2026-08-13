@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Build the kite-collector Windows MSI from cmd/kite-collector/wix.wxs.
 #
-# Used by:
-#   - .github/workflows/kite-collector.yml (release job, after goreleaser)
-#   - Local developers wanting to test the MSI without cutting a tag
+# Intended for local developers wanting to build or test the MSI without
+# attaching it to a GitHub release.
 #
 # Inputs:
 #   $1  version       e.g. "1.2.3"   (defaults to "0.0.0-dev")

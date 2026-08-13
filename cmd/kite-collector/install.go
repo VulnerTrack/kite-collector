@@ -35,13 +35,14 @@ const (
 // program is the service.Interface implementation the OS service manager
 // drives. Start spawns runAgent in a goroutine, Stop cancels its context.
 type program struct {
-	cancel   context.CancelFunc
-	done     chan struct{}
-	certsDir string
-	cfgFile  string
-	dbPath   string
-	endpoint string
-	verbose  bool
+	cancel        context.CancelFunc
+	done          chan struct{}
+	certsDir      string
+	cfgFile       string
+	dbPath        string
+	endpoint      string
+	dashboardAddr string
+	verbose       bool
 }
 
 func (p *program) Start(_ service.Service) error {
@@ -53,7 +54,7 @@ func (p *program) Start(_ service.Service) error {
 		// runAgent's error is intentionally swallowed here: the service
 		// manager only cares about the process exit code, and unrecoverable
 		// errors will already have been logged by runAgent itself.
-		_ = runAgent(ctx, p.cfgFile, p.dbPath, "", p.certsDir, p.endpoint, "", p.verbose, true)
+		_ = runAgent(ctx, p.cfgFile, p.dbPath, "", p.certsDir, p.endpoint, p.dashboardAddr, p.verbose, true, false)
 	}()
 	return nil
 }
@@ -74,13 +75,14 @@ func (p *program) Stop(_ service.Service) error {
 // ---------------------------------------------------------------------------
 
 type svcOpts struct {
-	executable  string
-	certsDir    string
-	cfgFile     string
-	dbPath      string
-	endpoint    string
-	userService bool
-	verbose     bool
+	executable    string
+	certsDir      string
+	cfgFile       string
+	dbPath        string
+	endpoint      string
+	dashboardAddr string
+	userService   bool
+	verbose       bool
 }
 
 // toInstallerOptions adapts the cmd-layer svcOpts to the installer package's
@@ -88,13 +90,14 @@ type svcOpts struct {
 // BuildSvcConfig produces the same Executable string we used in v1.
 func (o svcOpts) toInstallerOptions() installer.Options {
 	return installer.Options{
-		UserMode:  o.userService,
-		BinaryDir: filepath.Dir(o.executable),
-		CertsDir:  o.certsDir,
-		CfgFile:   o.cfgFile,
-		DbPath:    o.dbPath,
-		Endpoint:  o.endpoint,
-		Verbose:   o.verbose,
+		UserMode:      o.userService,
+		BinaryDir:     filepath.Dir(o.executable),
+		CertsDir:      o.certsDir,
+		CfgFile:       o.cfgFile,
+		DbPath:        o.dbPath,
+		Endpoint:      o.endpoint,
+		DashboardAddr: o.dashboardAddr,
+		Verbose:       o.verbose,
 	}
 }
 
@@ -108,11 +111,12 @@ func buildSvcConfig(o svcOpts) *service.Config {
 // flags off its own command line.
 func newProgramService(o svcOpts) (service.Service, *program, error) {
 	prg := &program{
-		certsDir: o.certsDir,
-		cfgFile:  o.cfgFile,
-		dbPath:   o.dbPath,
-		endpoint: o.endpoint,
-		verbose:  o.verbose,
+		certsDir:      o.certsDir,
+		cfgFile:       o.cfgFile,
+		dbPath:        o.dbPath,
+		endpoint:      o.endpoint,
+		dashboardAddr: o.dashboardAddr,
+		verbose:       o.verbose,
 	}
 	svc, err := service.New(prg, buildSvcConfig(o))
 	if err != nil {
@@ -352,12 +356,13 @@ func newServiceStatusCmd() *cobra.Command {
 // the user-facing surface clean, but remains discoverable via direct lookup.
 func newServiceRunCmd() *cobra.Command {
 	var (
-		certsDir string
-		cfgFile  string
-		dbPath   string
-		endpoint string
-		verbose  bool
-		userMode bool
+		certsDir      string
+		cfgFile       string
+		dbPath        string
+		endpoint      string
+		dashboardAddr string
+		verbose       bool
+		userMode      bool
 	)
 	cmd := &cobra.Command{
 		Use:    "run",
@@ -376,12 +381,13 @@ func newServiceRunCmd() *cobra.Command {
 				return fmt.Errorf("ensure certs dir %s: %w", certsDir, err)
 			}
 			svc, _, err := newProgramService(svcOpts{
-				userService: userMode,
-				certsDir:    certsDir,
-				cfgFile:     cfgFile,
-				dbPath:      dbPath,
-				endpoint:    endpoint,
-				verbose:     verbose,
+				userService:   userMode,
+				certsDir:      certsDir,
+				cfgFile:       cfgFile,
+				dbPath:        dbPath,
+				endpoint:      endpoint,
+				dashboardAddr: dashboardAddr,
+				verbose:       verbose,
 			})
 			if err != nil {
 				return fmt.Errorf("create service: %w", err)
@@ -393,6 +399,8 @@ func newServiceRunCmd() *cobra.Command {
 	cmd.Flags().StringVar(&cfgFile, "config", "", "path to configuration file")
 	cmd.Flags().StringVar(&dbPath, "db", "", "path to SQLite database")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "OTLP endpoint override")
+	cmd.Flags().StringVar(&dashboardAddr, "dashboard-addr", installer.DefaultDashboardAddr,
+		"local dashboard listen address")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "debug logging")
 	cmd.Flags().BoolVar(&userMode, "user", false, "service was installed in user mode")
 	return cmd
@@ -418,6 +426,10 @@ type installArgs struct {
 }
 
 func runInstall(cmd *cobra.Command, a installArgs) error {
+	if installer.RunningInSnap() {
+		return runSnapInstall(cmd, a)
+	}
+
 	out := cmd.OutOrStdout()
 
 	src, err := os.Executable()
@@ -516,29 +528,7 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	// still leaves the service registered (the operator can re-run
 	// `install --agent-code` later) — the defer'd post-install report
 	// will explain the state either way.
-	enrolled := false
-	if a.agentCode != "" {
-		credential := a.token
-		if credential == "" {
-			// Default path: interactive sign-in. The short-lived JWT rides
-			// the same enrollment token field as the legacy HMAC tokens.
-			jwt, signErr := oauthSignIn(cmd, a.oauth)
-			if signErr != nil {
-				_, _ = fmt.Fprintf(out, "  ✗  sign-in failed: %v\n", signErr)
-			}
-			credential = jwt
-		}
-		if credential != "" {
-			if err := runEnroll(a.agentCode, credential, a.certsDir); err != nil {
-				_, _ = fmt.Fprintf(out, "  ✗  enrollment failed: %v\n", err)
-				// Don't propagate — service is registered; the operator can
-				// re-run `install --agent-code` without losing anything.
-			} else {
-				_, _ = fmt.Fprintf(out, "  ✓  enrolled agent %q\n", a.agentCode)
-				enrolled = true
-			}
-		}
-	}
+	enrolled := enrollDuringInstall(cmd, a)
 
 	// Auto-start when the service has something to do — i.e. enrollment
 	// just succeeded OR certs were already present from a prior install.
@@ -564,6 +554,111 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  service %q started\n", cfg.Name)
 	return nil
+}
+
+// runSnapInstall performs only the mutable setup that belongs inside a snap.
+// snapd already installed the immutable binary under /snap and owns service
+// registration, so copying into /usr/local/bin or writing a systemd unit is
+// both unnecessary and forbidden by strict confinement.
+func runSnapInstall(cmd *cobra.Command, a installArgs) error {
+	out := cmd.OutOrStdout()
+	certsDir := installer.DefaultCertsDir(false)
+	a.certsDir = certsDir
+
+	if a.dryRun {
+		_, _ = fmt.Fprintln(out, "-- dry-run: no files will be written --")
+		_, _ = fmt.Fprintln(out, "  binary and service are managed by snapd")
+		_, _ = fmt.Fprintf(out, "  mkdir  %s\n", certsDir)
+		if a.agentCode != "" {
+			_, _ = fmt.Fprintf(out, "  enroll agent_code=%s → %s\n", a.agentCode, certsDir)
+		}
+		_, _ = fmt.Fprintf(out, "  enable service %s after enrollment\n", installer.SnapServiceName)
+		return nil
+	}
+
+	if err := os.MkdirAll(certsDir, 0o750); err != nil {
+		return fmt.Errorf("create snap certs dir %s: %w", certsDir, err)
+	}
+	_, _ = fmt.Fprintln(out, "  ✓  binary installed and updates managed by snapd")
+	_, _ = fmt.Fprintf(out, "  ✓  %s\n", certsDir)
+	_, _ = fmt.Fprintf(out, "  ✓  service %q registered by snapd\n", installer.SnapServiceName)
+
+	enrolled := enrollDuringInstall(cmd, a)
+	if !enrolled {
+		enrolled = enrollmentPresent(certsDir)
+	}
+	if enrolled && !a.noStart {
+		control := exec.CommandContext(cmd.Context(), "snapctl", "start", "--enable", installer.SnapServiceName) // #nosec G204 -- executable and arguments are fixed constants
+		if controlOut, err := control.CombinedOutput(); err != nil {
+			_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v (%s)\n", err, trimOutput(controlOut))
+		} else {
+			_, _ = fmt.Fprintf(out, "  ✓  service %q enabled and started\n", installer.SnapServiceName)
+		}
+	}
+
+	printSnapPostInstall(out, certsDir, enrolled)
+	return nil
+}
+
+func enrollDuringInstall(cmd *cobra.Command, a installArgs) bool {
+	if a.agentCode == "" {
+		return false
+	}
+	out := cmd.OutOrStdout()
+	credential := a.token
+	if credential == "" {
+		jwt, err := oauthSignIn(cmd, a.oauth)
+		if err != nil {
+			_, _ = fmt.Fprintf(out, "  ✗  sign-in failed: %v\n", err)
+		}
+		credential = jwt
+	}
+	if credential == "" {
+		return false
+	}
+	if err := runEnroll(a.agentCode, credential, a.certsDir); err != nil {
+		_, _ = fmt.Fprintf(out, "  ✗  enrollment failed: %v\n", err)
+		return false
+	}
+	_, _ = fmt.Fprintf(out, "  ✓  enrolled agent %q\n", a.agentCode)
+	return true
+}
+
+func enrollmentPresent(certsDir string) bool {
+	for _, name := range installer.EnrollmentFiles {
+		if _, err := os.Stat(filepath.Join(certsDir, name)); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func printSnapPostInstall(out io.Writer, certsDir string, enrolled bool) {
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Current state:")
+	_, _ = fmt.Fprintln(out, "  ✓  binary       /snap/bin/kite-collector")
+	_, _ = fmt.Fprintf(out, "  ✓  certs dir    %s\n", certsDir)
+	if enrolled {
+		_, _ = fmt.Fprintln(out, "  ✓  enrollment   ca.pem + agent.pem + agent-key.pem present")
+	} else {
+		_, _ = fmt.Fprintln(out, "  ✗  enrollment   certs missing")
+	}
+	_, _ = fmt.Fprintf(out, "  -  service      managed by snapd (%s)\n", installer.SnapServiceName)
+
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Next steps:")
+	step := 1
+	if !enrolled {
+		_, _ = fmt.Fprintf(out, "  %d. Enroll this collector (one-time):\n       sudo kite-collector enroll --certs-dir %s\n\n", step, certsDir)
+		step++
+	}
+	_, _ = fmt.Fprintf(out, "  %d. Enable and start the snap service:\n       sudo snap start --enable %s\n\n", step, installer.SnapServiceName)
+	step++
+	_, _ = fmt.Fprintf(out, "  %d. Verify OTLP connectivity:\n       sudo kite-collector check --certs-dir %s\n\n", step, certsDir)
+	step++
+	_, _ = fmt.Fprintf(out, "  %d. View logs:\n       sudo snap logs -f %s\n\n", step, installer.SnapServiceName)
+	step++
+	_, _ = fmt.Fprintf(out, "  %d. Open the dashboard:\n       sudo kite-collector dashboard --certs-dir %s\n\n", step, certsDir)
 }
 
 // ---------------------------------------------------------------------------

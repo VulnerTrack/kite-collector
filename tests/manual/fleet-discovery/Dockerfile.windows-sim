@@ -1,0 +1,15 @@
+FROM python:3.13-alpine
+
+RUN apk add --no-cache samba-server \
+    && mkdir -p /srv/public /run/samba \
+    && chmod 0777 /srv/public
+
+WORKDIR /app
+COPY windows_winrm.py /app/windows_winrm.py
+COPY windows-smb.conf /etc/samba/smb.conf
+COPY windows-entrypoint.sh /app/windows-entrypoint.sh
+RUN chmod 0755 /app/windows-entrypoint.sh
+
+EXPOSE 137/udp 138/udp 139 445 5985
+
+CMD ["/app/windows-entrypoint.sh"]
