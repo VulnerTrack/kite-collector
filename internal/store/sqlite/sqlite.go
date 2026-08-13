@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -25,34 +26,139 @@ type SQLiteStore struct {
 // Compile-time interface check.
 var _ store.Store = (*SQLiteStore)(nil)
 
+// connectionPragmas are applied to EVERY connection modernc.org/sqlite opens
+// in the pool. They fall into two groups (SQLite treats them differently, but
+// modernc runs all of them per-connection on connect, so listing them here is
+// both correct and idempotent):
+//
+//	Persistent / file-level — safe to re-assert on every open:
+//	  journal_mode(WAL)          readers never block the single writer. WAL is
+//	                             sticky in the file header; re-running is a
+//	                             no-op. REQUIRES all accessors on one host —
+//	                             never place a WAL DB on NFS/SMB/network FS.
+//	  wal_autocheckpoint(2000)   checkpoint every ~2000 WAL pages (~8 MiB at
+//	                             4 KiB pages) instead of the 1000 default.
+//	  journal_size_limit(64 MiB) cap the reclaimed WAL/journal file size.
+//	  synchronous(1)             NORMAL — durable under WAL, ~2x faster writes.
+//	  temp_store(2)              MEMORY — temp b-trees/tables in RAM.
+//
+//	Per-connection — NOT persisted, MUST be set on each connection:
+//	  busy_timeout(5000)         contention becomes a bounded 5s wait, not an
+//	                             immediate SQLITE_BUSY. The core BUSY-storm fix.
+//	  foreign_keys(1)            FK enforcement is runtime state, off by
+//	                             default, and cannot change inside a tx — so it
+//	                             must ride connect, before any statement.
+//	  cache_size(-32768)         32 MiB page cache (negative = KiB). Budget
+//	                             against pool size: N connections ⇒ up to
+//	                             N×32 MiB. With SetMaxOpenConns(1) below that
+//	                             is 32 MiB total. (SQLite's stock default is
+//	                             ~2 MiB.)
+//	  mmap_size(268435456)       256 MiB memory-mapped I/O. Address-space, not
+//	                             RSS; a per-DATABASE mapping cap, so many tenant
+//	                             files multiply the address-space potential.
+//	                             Bump to 512 MiB/1 GiB for read-heavy DBs.
+//	  cache_spill(1)             let a large write tx spill dirty pages to disk
+//	                             mid-transaction rather than ballooning memory.
+//
+// Syntax is modernc's `_pragma=name(value)` form — NOT mattn/go-sqlite3's
+// `_journal_mode=WAL`, which modernc silently ignores. That silent ignore
+// once meant the store ran with journal_mode=delete, busy_timeout=0 and
+// foreign_keys=0, producing SQLITE_BUSY storms during multi-source scans.
+// TestPragmasEffective pins every value below against the live connection.
+var connectionPragmas = []string{
+	"journal_mode(WAL)",
+	"wal_autocheckpoint(2000)",
+	"journal_size_limit(67108864)", // 64 MiB
+	"synchronous(1)",               // NORMAL
+	"temp_store(2)",                // MEMORY
+	"busy_timeout(5000)",           // 5 s
+	"foreign_keys(1)",
+	"cache_size(-32768)",   // 32 MiB per connection
+	"mmap_size(268435456)", // 256 MiB per mapped database
+	"cache_spill(1)",
+}
+
 // New opens (or creates) a SQLite database at dbPath and returns an
-// initialised SQLiteStore. The connection enables WAL journal mode, a 5-second
-// busy timeout, foreign key enforcement, and performance pragmas.
+// initialised SQLiteStore with the pragmas in connectionPragmas applied to
+// every connection, plus a one-time PRAGMA optimize warm-up.
+//
+// _txlock=immediate makes write transactions take the write lock at BEGIN
+// instead of failing mid-transaction when a deferred read lock cannot be
+// upgraded.
 func New(dbPath string) (*SQLiteStore, error) {
-	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=on"
+	dsn := dbPath + "?_txlock=immediate"
+	for _, p := range connectionPragmas {
+		dsn += "&_pragma=" + p
+	}
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite open %s: %w", dbPath, err)
 	}
-	if err := db.PingContext(context.Background()); err != nil {
+
+	// Single-writer discipline: SQLite allows exactly one writer at a time,
+	// so queue in Go instead of colliding in C. One connection also makes
+	// the per-connection pragmas apply to every statement by construction,
+	// and keeps the cache-size memory budget at a flat 32 MiB. Reads
+	// serialize behind writes; both are millisecond-scale on this store,
+	// and the dashboard's HTMX polls tolerate that comfortably.
+	db.SetMaxOpenConns(1)
+
+	ctx := context.Background()
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("sqlite ping %s: %w", dbPath, err)
 	}
 
-	// Performance pragmas (session-level, not persisted in schema).
-	for _, p := range []string{
-		"PRAGMA synchronous = NORMAL",  // safe with WAL, ~2x faster writes
-		"PRAGMA cache_size = -64000",   // 64MB page cache (default 2MB)
-		"PRAGMA temp_store = MEMORY",   // temp tables in RAM
-		"PRAGMA mmap_size = 268435456", // 256MB memory-mapped I/O
-	} {
-		if _, pErr := db.ExecContext(context.Background(), p); pErr != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("sqlite pragma %q: %w", p, pErr)
-		}
+	s := &SQLiteStore{db: db, path: dbPath}
+
+	// One-time initialization: prime the query planner. On a fresh DB this is
+	// a cheap no-op; on an existing one it applies SQLite's bounded analysis
+	// so early queries get good plans. Best-effort — a failure here must not
+	// block opening the store.
+	if err := s.Optimize(ctx); err != nil {
+		slog.Warn("sqlite: initial PRAGMA optimize failed (non-fatal)", "error", err)
 	}
 
-	return &SQLiteStore{db: db, path: dbPath}, nil
+	return s, nil
+}
+
+// Optimize runs PRAGMA optimize — SQLite's recommended maintenance over a
+// direct ANALYZE in current versions, because it applies a bounded strategy
+// suitable for large databases. Call after significant schema/index changes
+// (Migrate does) or periodically during low traffic.
+func (s *SQLiteStore) Optimize(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, "PRAGMA optimize;"); err != nil {
+		return fmt.Errorf("pragma optimize: %w", err)
+	}
+	return nil
+}
+
+// Checkpoint runs a PASSIVE WAL checkpoint — folds committed WAL frames back
+// into the main database without blocking readers or writers. wal_autocheckpoint
+// already does this automatically; expose it for explicit low-traffic flushes
+// (e.g. before backup or shutdown).
+func (s *SQLiteStore) Checkpoint(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(PASSIVE);"); err != nil {
+		return fmt.Errorf("pragma wal_checkpoint: %w", err)
+	}
+	return nil
+}
+
+// VacuumInto writes a transactionally-consistent copy of the database to
+// dstPath using SQLite's VACUUM INTO. It reads a consistent snapshot under a
+// read lock, so it is safe on a live database with concurrent writers and
+// captures committed WAL frames not yet checkpointed into the main file — the
+// SQLite-recommended way to snapshot an open database. dstPath must NOT
+// already exist (VACUUM INTO refuses to overwrite).
+func (s *SQLiteStore) VacuumInto(ctx context.Context, dstPath string) error {
+	// The VACUUM INTO target is a string literal that cannot be bound as a
+	// parameter; single-quote-escape it. dstPath is always an internal
+	// tmpfs working path, never user input.
+	esc := strings.ReplaceAll(dstPath, "'", "''")
+	if _, err := s.db.ExecContext(ctx, "VACUUM INTO '"+esc+"'"); err != nil { // #nosec G701 -- dstPath single-quote-escaped; always an internal tmpfs path, never user input
+		return fmt.Errorf("vacuum into %s: %w", dstPath, err)
+	}
+	return nil
 }
 
 // RawDB returns the underlying *sql.DB connection for raw queries.
@@ -273,6 +379,17 @@ func (s *SQLiteStore) PersistSourceHealth(h safety.SourceHealth) error {
 		lastFailure = h.LastFailureAt.UTC().Format(time.RFC3339Nano)
 	}
 
+	// Written best-effort after every source success/failure while the scan
+	// is still writing elsewhere — retry lock contention like the other hot
+	// telemetry path (RecordHeartbeat) instead of losing breaker state.
+	return withTransientRetry(3, func() error {
+		return s.persistSourceHealthOnce(ctx, h, lastSuccess, lastFailure)
+	})
+}
+
+// persistSourceHealthOnce performs the single upsert attempt for
+// PersistSourceHealth; split out so the retry wrapper stays readable.
+func (s *SQLiteStore) persistSourceHealthOnce(ctx context.Context, h safety.SourceHealth, lastSuccess, lastFailure any) error {
 	_, err := s.db.ExecContext(
 		ctx, `
 		INSERT INTO source_health (

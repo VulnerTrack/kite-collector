@@ -77,6 +77,13 @@ func (s *SQLiteStore) Migrate(ctx context.Context) error {
 	if err := s.applyMigrations(ctx); err != nil {
 		return kiteerrors.FromCatalog(kiteerrors.CodeMigrationFailed, err)
 	}
+	// PRAGMA optimize after schema/index changes, per SQLite's guidance (it
+	// applies a bounded analysis over ANALYZE). Best-effort — good query
+	// plans are an optimization, not a correctness requirement, so a failure
+	// here must not fail the migration.
+	if err := s.Optimize(ctx); err != nil {
+		slog.Warn("sqlite: post-migration PRAGMA optimize failed (non-fatal)", "error", err)
+	}
 	return nil
 }
 
