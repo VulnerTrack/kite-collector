@@ -1,0 +1,30 @@
+# osv-scanner policy for the legacy Windows 7 module ONLY.
+# osv-scanner discovers config per scanned directory, so nothing here
+# affects the main module — its stdlib and deps remain fully scanned by
+# the repo-root osv-scanner.toml plus govulncheck (call-graph aware).
+#
+# This module is deliberately frozen on Go 1.17: the last toolchain able
+# to target Windows 7 (Go 1.21 dropped Win7/2008). Its stdlib advisories
+# are therefore unfixable by construction and regrow with every Go
+# release (91 IDs as of 2026-08-13). The artifact is an isolated,
+# single-purpose inventory client shipped only to Windows 7 hosts inside
+# customer LANs; it is not linked into the collector or dashboard.
+# Review when Windows 7 support is dropped.
+
+[[PackageOverrides]]
+name = "stdlib"
+ecosystem = "Go"
+ignore = true
+reason = "Frozen Go 1.17 (last Win7-capable toolchain); stdlib advisories unfixable by construction. See header."
+
+# x/sys and x/text cannot be bumped further here: every later release
+# requires go >= 1.18. Same acceptance and review trigger.
+[[IgnoredVulns]]
+id = "GO-2026-5024"
+ignoreUntil = 2026-11-13
+reason = "golang.org/x/sys frozen at last go1.17-compatible release; uncalled per osv-scanner call analysis. Review by sunset or when Win7 support drops."
+
+[[IgnoredVulns]]
+id = "GO-2026-5970"
+ignoreUntil = 2026-11-13
+reason = "golang.org/x/text 0.3.8 is the last go1.17-compatible release (main module ships current x/text); uncalled per call analysis. Review by sunset or when Win7 support drops."
