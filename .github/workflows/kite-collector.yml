@@ -98,6 +98,17 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Reject generated collector binaries in Git
+        run: |
+          tracked_binaries="$(git ls-files -- \
+            internal/dashboard/assets/kite-collector_windows_386_legacy.exe \
+            kite-collector.new \
+            kite-collector.release)"
+          if [ -n "$tracked_binaries" ]; then
+            echo "::error::Generated collector binaries must come from CI artifacts/releases, not Git."
+            echo "$tracked_binaries"
+            exit 1
+          fi
       - name: Run tests
         run: go test -count=1 -coverprofile=coverage.out ./...
       - name: Coverage summary
@@ -108,6 +119,25 @@ jobs:
           name: coverage
           path: coverage.out
           retention-days: 30
+
+  legacy-windows7:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.17.13"
+      - name: Test isolated Windows 7 module
+        working-directory: legacy/windows7
+        run: go test -count=1 ./...
+      - name: Cross-compile Windows 7 agent outside the checkout
+        working-directory: legacy/windows7
+        run: |
+          CGO_ENABLED=0 GOOS=windows GOARCH=386 GO386=softfloat \
+            go build -trimpath -ldflags="-X main.version=ci-${GITHUB_SHA::8}" \
+            -o "$RUNNER_TEMP/kite-collector_windows_386_legacy.exe" .
+          test -s "$RUNNER_TEMP/kite-collector_windows_386_legacy.exe"
 
   tidy:
     runs-on: ubuntu-24.04
@@ -234,6 +264,7 @@ jobs:
       - lint
       - security
       - test
+      - legacy-windows7
       - qa-e2e
       - qa-smoke-containers
       - qa-kite-containers
@@ -284,7 +315,7 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    needs: [vet, lint, security, test]
+    needs: [vet, lint, security, test, legacy-windows7]
     if: startsWith(github.ref, 'refs/tags/v')
     # Bind to the "Deployment" environment so the job can access environment-
     # scoped secrets (notably HOMEBREW_TAP_GITHUB_TOKEN). Repository-scoped
