@@ -260,14 +260,14 @@ func renderFleetDeploymentFragment(
 	if networkInfo, detectErr := discovery.detect(); detectErr == nil {
 		localNetwork = &networkInfo
 	}
-	if err := fleetDeploymentTmpl.Execute(w, fleetPageView{
+	if executeErr := fleetDeploymentTmpl.Execute(w, fleetPageView{
 		Machines:        candidates,
 		CompatibleCount: compatibleCount,
 		SkippedCount:    len(candidates) - compatibleCount,
 		LocalNetwork:    localNetwork,
 		Discovery:       discoveryStatus,
-	}); err != nil {
-		return fmt.Errorf("render fleet deployment template: %w", err)
+	}); executeErr != nil {
+		return fmt.Errorf("render fleet deployment template: %w", executeErr)
 	}
 	_, err = io.WriteString(w, fleetSelectionScript)
 	if err != nil {
@@ -619,6 +619,13 @@ func isDeployableMachineType(machineType model.MachineType) bool {
 		model.MachineTypeCloudInstance,
 		model.MachineTypeVirtualMachine:
 		return true
+	case model.MachineTypeNetworkDevice,
+		model.MachineTypeContainer,
+		model.MachineTypeIOTDevice,
+		model.MachineTypeAppliance,
+		model.MachineTypeSoftwareProject,
+		model.MachineTypeRepository:
+		return false
 	default:
 		return false
 	}
@@ -656,7 +663,7 @@ func parseFleetTargets(raw string) ([]fleetTarget, error) {
 	targets := make([]fleetTarget, 0)
 	for line := 1; ; line++ {
 		record, err := reader.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -823,7 +830,7 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		// ZIP's portable timestamp range starts in 1980. Keeping a fixed value
 		// makes generated bundles reproducible without showing a misleading
 		// 1969 date in time zones west of UTC.
-		header.SetModTime(time.Date(1980, time.January, 1, 12, 0, 0, 0, time.UTC))
+		header.Modified = time.Date(1980, time.January, 1, 12, 0, 0, 0, time.UTC)
 		if name == "deploy.sh" || name == "preflight.py" {
 			header.SetMode(0o700)
 		} else {

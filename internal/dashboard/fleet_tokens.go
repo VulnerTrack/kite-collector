@@ -47,7 +47,7 @@ func (s *fleetPackageService) issueTokens(
 	}
 	operatorToken, err := s.operatorToken(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errFleetSignInRequired, err)
+		return nil, fmt.Errorf("%w: %w", errFleetSignInRequired, err)
 	}
 	issuer := s.issuer
 	if issuer == nil {
