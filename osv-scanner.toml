@@ -34,20 +34,17 @@ and govulncheck reports zero reachable paths. No upstream fix released as
 of v28.5.2. Revisit by 2026-07-22.
 """
 
-[[PackageOverrides]]
-name = "stdlib"
-version = "1.17"
-ecosystem = "Go"
-ignore = true
+
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2026-11-13
 reason = """
-legacy/windows7 is deliberately frozen on Go 1.17 — the last toolchain that
-can target Windows 7 (Go 1.21 dropped Win7/2008 support) — so its stdlib
-advisories are unfixable by construction and regrow with every Go release
-(91 IDs as of 2026-08-13). Scope: this override is version-pinned to 1.17,
-so the main module's modern stdlib remains fully scanned. Reachability: the
-legacy artifact is an isolated, single-purpose inventory client shipped only
-to Windows 7 hosts inside customer LANs; it is not linked into the main
-collector or dashboard. Accepted risk documented in legacy/windows7/README.md.
-Review when Windows 7 support is dropped or if a supported toolchain regains
-Win7 targeting.
+golang.org/x/crypto/openpgp is deprecated-by-design upstream — the advisory
+is a permanent "do not use" marker with no fix ever planned. kite-collector
+never imports any openpgp package (`grep -rn openpgp --include='*.go'`
+returns zero matches); x/crypto is present transitively for ssh/argon2-class
+packages, and osv-scanner's own call analysis classifies this finding as
+uncalled. govulncheck (call-graph aware, first `make security` gate) reports
+no reachable path. Revisit at sunset in case a dependency starts importing
+openpgp or upstream splits the module.
 """
