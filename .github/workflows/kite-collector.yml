@@ -92,7 +92,10 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # The SQLite and dashboard packages apply the complete embedded migration
+    # catalog in isolated temp databases. GitHub's shared runners can take
+    # longer than 15 minutes even though the same suite completes locally.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
