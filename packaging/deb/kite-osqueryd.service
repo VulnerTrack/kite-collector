@@ -1,0 +1,33 @@
+# systemd unit for the osquery daemon bundled by the kite-collector-osquery
+# deb. Namespaced (unit name, install prefix, state dirs, socket) so it never
+# collides with a standalone osquery package, which owns osqueryd.service,
+# /opt/osquery and /var/osquery.
+#
+# Path flags live HERE, not in /etc/kite-collector/osquery/osquery.flags —
+# same split as the Windows MSI (paths on the service command line, behavior
+# in the flags file). Override with `systemctl edit kite-osqueryd`.
+[Unit]
+Description=Bundled osquery daemon for the Kite Collector agent
+Documentation=https://github.com/VulnerTrack/kite-collector
+After=network.target
+
+[Service]
+Type=simple
+RuntimeDirectory=kite-osquery
+ExecStart=/opt/kite-collector/osquery/bin/osqueryd \
+  --flagfile /etc/kite-collector/osquery/osquery.flags \
+  --config_path /etc/kite-collector/osquery/osquery.conf \
+  --database_path /var/lib/kite-collector/osquery/osquery.db \
+  --logger_path /var/log/kite-collector/osquery \
+  --extensions_socket /run/kite-osquery/kite-osquery.em
+Restart=on-failure
+RestartSec=5
+# Mirrors the official osqueryd.service resource guards: the daemon's own
+# watchdog handles worker memory; the CPU quota caps scan bursts.
+CPUQuota=20%
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

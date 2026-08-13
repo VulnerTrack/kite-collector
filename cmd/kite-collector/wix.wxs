@@ -32,10 +32,24 @@
   build time. The `.Version` token comes from the git tag.
 -->
 
+<!--
+  osquery bundling: `wixl -D OSQUERY` builds the kite-collector-osquery
+  variant — same product family (same UpgradeCode, so plain and bundle
+  installs replace each other instead of fighting over the kite-collector
+  service), plus an osqueryd payload harvested from the official osquery
+  MSI by scripts/build-msi.sh. Without -D OSQUERY this file compiles to
+  the classic collector-only MSI, byte-for-byte the same layout as before.
+-->
+<?ifdef var.OSQUERY ?>
+<?define ProductName = "Kite Collector + osquery" ?>
+<?else?>
+<?define ProductName = "Kite Collector" ?>
+<?endif?>
+
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product
       Id="*"
-      Name="Kite Collector"
+      Name="$(var.ProductName)"
       Language="1033"
       Version="{{ .Version }}"
       Manufacturer="VulnerTrack"
@@ -59,7 +73,16 @@
       wixl (msitools) does not implement the Schedule attribute, so it is
       omitted here for portability between full WiX and wixl-based CI.
     -->
+    <!--
+      AllowSameVersionUpgrades lets the plain and osquery-bundle MSIs
+      (which share this UpgradeCode) replace each other at the SAME
+      version — without it a same-version cross-grade installs
+      side-by-side and the second ServiceInstall for "kite-collector"
+      fails mid-install. Side effect on a same-variant reinstall: the
+      existing install is removed and relaid, which is harmless.
+    -->
     <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
         DowngradeErrorMessage="A newer version of Kite Collector is already installed."/>
 
     <!--
@@ -75,6 +98,22 @@
       <ComponentRef Id="CertsDirComponent"/>
       <ComponentRef Id="StartMenuShortcut"/>
     </Feature>
+
+<?ifdef var.OSQUERY ?>
+    <!--
+      Bundled osquery. A separate Feature so `msiexec ADDLOCAL=ProductFeature`
+      can still lay down a collector-only install from the bundle MSI.
+    -->
+    <Feature Id="OsqueryFeature" Title="osquery (bundled)" Level="1">
+      <ComponentRef Id="OsquerydExecutable"/>
+      <ComponentRef Id="OsqueryConfig"/>
+      <ComponentRef Id="OsqueryFlags"/>
+      <ComponentRef Id="OsqueryCerts"/>
+      <ComponentRef Id="OsqueryPacks"/>
+      <ComponentRef Id="OsqueryDataDirComponent"/>
+      <ComponentRef Id="OsqueryLogDirComponent"/>
+    </Feature>
+<?endif?>
 
     <!-- Per-machine install layout: Program Files\Kite Collector\ -->
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -131,6 +170,123 @@
                 Wait="no"/>
           </Component>
 
+<?ifdef var.OSQUERY ?>
+          <!--
+            Bundled osquery payload, namespaced under the Kite Collector
+            install so it can never collide with a standalone osquery
+            install (which owns Program Files\osquery and the "osqueryd"
+            service name). Binary layout mirrors the official MSI
+            (osqueryd\osqueryd.exe nesting) so upstream docs still map.
+
+            The daemon doubles as an interactive shell for debugging:
+              "...\osquery\osqueryd\osqueryd.exe" -S
+            so the 24 MB osqueryi.exe is deliberately not shipped.
+          -->
+          <Directory Id="OSQUERYDIR" Name="osquery">
+
+            <Component Id="OsqueryConfig" Guid="45e75bb9-366c-439e-a1e8-06a461fd0869" Win64="yes">
+              <File
+                  Id="OsqueryConf"
+                  Name="osquery.conf"
+                  Source="osquery/osquery.conf"
+                  KeyPath="yes"/>
+            </Component>
+
+            <Component Id="OsqueryFlags" Guid="3980459a-c6b3-4387-9cca-8faf684b3b8d" Win64="yes">
+              <File
+                  Id="OsqueryFlagsFile"
+                  Name="osquery.flags"
+                  Source="osquery/osquery.flags"
+                  KeyPath="yes"/>
+            </Component>
+
+            <Directory Id="OSQUERYDDIR" Name="osqueryd">
+              <Component Id="OsquerydExecutable" Guid="3a5ebf69-3d8d-4edf-bd28-ed6b2dd9b8a1" Win64="yes">
+                <File
+                    Id="OsquerydExe"
+                    Name="osqueryd.exe"
+                    Source="osquery/osqueryd/osqueryd.exe"
+                    KeyPath="yes"/>
+
+                <!--
+                  Machine-wide env var so an osquery-aware collector build can
+                  find the bundled daemon's Thrift pipe without configuration
+                  (the contract sketched in tests/e2e/osquery/README.md). The
+                  pipe name is namespaced for the same reason the service is:
+                  standalone osquery defaults to \\.\pipe\osquery.em.
+                -->
+                <Environment
+                    Id="KiteOsquerySocketEnv"
+                    Name="KITE_OSQUERY_SOCKET"
+                    Value="\\.\pipe\kite-osquery.em"
+                    System="yes"
+                    Action="set"
+                    Part="all"/>
+
+                <!--
+                  Path flags (flagfile, config_path, database_path,
+                  logger_path, extensions_socket) ride the SCM command line
+                  rather than osquery.flags so INSTALLFOLDER/CERTSDIR
+                  relocation keeps working: directory properties resolve at
+                  install time and, coming after the flagfile flag, they win
+                  any conflicting flagfile line. Directory-valued arguments
+                  must not end in a trailing backslash before a closing
+                  quote (backslash-quote escapes it), hence
+                  "[OSQUERYDATADIR]logs" built from the parent property.
+                -->
+                <ServiceInstall
+                    Id="KiteOsquerydService"
+                    Name="kite-osqueryd"
+                    DisplayName="Kite Collector osquery daemon"
+                    Description="Bundled osquery daemon for the Kite Collector agent"
+                    Type="ownProcess"
+                    Start="auto"
+                    ErrorControl="normal"
+                    Account="LocalSystem"
+                    Arguments="--flagfile=&quot;[OSQUERYDIR]osquery.flags&quot; --config_path=&quot;[OSQUERYDIR]osquery.conf&quot; --database_path=&quot;[OSQUERYDATADIR]osquery.db&quot; --logger_path=&quot;[OSQUERYDATADIR]logs&quot; --extensions_socket=\\.\pipe\kite-osquery.em"
+                    Vital="yes"/>
+
+                <ServiceControl
+                    Id="StartKiteOsquerydService"
+                    Name="kite-osqueryd"
+                    Start="install"
+                    Stop="both"
+                    Remove="uninstall"
+                    Wait="no"/>
+              </Component>
+            </Directory>
+
+            <Directory Id="OSQUERYCERTSDIR" Name="certs">
+              <Component Id="OsqueryCerts" Guid="835a49d9-a35b-4263-a33d-d62092fc13b4" Win64="yes">
+                <File
+                    Id="OsqueryCertsPem"
+                    Name="certs.pem"
+                    Source="osquery/certs/certs.pem"
+                    KeyPath="yes"/>
+              </Component>
+            </Directory>
+
+            <!--
+              Community packs from the official osquery MSI, Windows-relevant
+              subset (the darwin/linux-only packs are dropped at staging time
+              by scripts/build-msi.sh). All referenced-but-disabled in
+              osquery.conf; one component because they only ever ship as a
+              set from the same upstream artifact.
+            -->
+            <Directory Id="OSQUERYPACKSDIR" Name="packs">
+              <Component Id="OsqueryPacks" Guid="1347bacb-3fd5-4166-a6fc-48efc10d0c9c" Win64="yes">
+                <File Id="PackWindowsHardening" Name="windows-hardening.conf" Source="osquery/packs/windows-hardening.conf" KeyPath="yes"/>
+                <File Id="PackWindowsAttacks" Name="windows-attacks.conf" Source="osquery/packs/windows-attacks.conf"/>
+                <File Id="PackVulnManagement" Name="vuln-management.conf" Source="osquery/packs/vuln-management.conf"/>
+                <File Id="PackIncidentResponse" Name="incident-response.conf" Source="osquery/packs/incident-response.conf"/>
+                <File Id="PackItCompliance" Name="it-compliance.conf" Source="osquery/packs/it-compliance.conf"/>
+                <File Id="PackOsqueryMonitoring" Name="osquery-monitoring.conf" Source="osquery/packs/osquery-monitoring.conf"/>
+              </Component>
+            </Directory>
+
+          </Directory>
+<?endif?>
+
           <Component Id="StartMenuShortcut" Guid="4cbfa176-f57e-4682-afcd-a459abdfc28b" Win64="yes">
             <Shortcut
                 Id="DashboardShortcut"
@@ -179,6 +335,44 @@
                 Value="[CERTSDIR]"
                 KeyPath="yes"/>
           </Component>
+
+<?ifdef var.OSQUERY ?>
+          <!--
+            Mutable osquery state (RocksDB database, result/status logs)
+            lives under ProgramData with the collector's own data, not
+            under Program Files. Same ACL story as CERTSDIR: inherited
+            ProgramData ACEs give the LocalSystem service full control
+            while non-admin users cannot modify files created here, which
+            also satisfies osqueryd's safe-permissions checks.
+
+            Like the certs dir, runtime files created inside are NOT
+            tracked by the MSI and survive uninstall by design.
+          -->
+          <Directory Id="OSQUERYDATADIR" Name="osquery">
+            <Component Id="OsqueryDataDirComponent" Guid="11767768-fb72-48e5-b9b7-60c241dc62bb" Win64="yes">
+              <CreateFolder/>
+              <RegistryValue
+                  Root="HKLM"
+                  Key="Software\VulnerTrack\KiteCollector"
+                  Name="OsqueryDataDir"
+                  Type="string"
+                  Value="[OSQUERYDATADIR]"
+                  KeyPath="yes"/>
+            </Component>
+            <Directory Id="OSQUERYLOGDIR" Name="logs">
+              <Component Id="OsqueryLogDirComponent" Guid="f5ecbed7-2608-4f9d-8f83-a3ffd35a6c97" Win64="yes">
+                <CreateFolder/>
+                <RegistryValue
+                    Root="HKLM"
+                    Key="Software\VulnerTrack\KiteCollector"
+                    Name="OsqueryLogDir"
+                    Type="string"
+                    Value="[OSQUERYLOGDIR]"
+                    KeyPath="yes"/>
+              </Component>
+            </Directory>
+          </Directory>
+<?endif?>
         </Directory>
       </Directory>
     </Directory>

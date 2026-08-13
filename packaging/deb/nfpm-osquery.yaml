@@ -1,0 +1,115 @@
+# nfpm config for the kite-collector-osquery Debian package — the Linux
+# analogue of the Windows bundle MSI (cmd/kite-collector/wix.wxs with
+# -D OSQUERY): collector + a namespaced osqueryd, one artifact.
+#
+# Built by scripts/build-deb-osquery.sh, which sed-renders the goreleaser
+# -style tokens below (same templating mechanism build-msi.sh uses on
+# wix.wxs — nfpm does not expand variables in content paths itself):
+#   {{ .Version }}  package version (e.g. 1.2.3)
+#   {{ .Arch }}     amd64
+#   {{ .Staging }}  dir holding kite-collector + the harvested osquery payload
+# Relative src paths (configs/, packaging/) resolve against the repo root,
+# where the script invokes nfpm.
+#
+# The plain kite-collector deb stays goreleaser-owned (.goreleaser.yaml
+# nfpms block); conflicts/replaces/provides below give the two packages the
+# same swap semantics the MSIs get from their shared UpgradeCode.
+name: kite-collector-osquery
+arch: {{ .Arch }}
+platform: linux
+version: {{ .Version }}
+section: admin
+priority: optional
+maintainer: VulnerTrack <hello@vulnertrack.dev>
+vendor: VulnerTrack
+homepage: https://github.com/VulnerTrack/kite-collector
+license: MIT
+description: |
+  Kite Collector bundled with osquery.
+  Cybersecurity machine discovery, configuration audit, and posture
+  analysis agent, plus a bundled osquery daemon (kite-osqueryd) the
+  collector's osquery discovery source reads over the Thrift extensions
+  socket at /run/kite-osquery/kite-osquery.em.
+
+conflicts:
+  - kite-collector
+replaces:
+  - kite-collector
+provides:
+  - kite-collector
+
+# Mirrors the official osquery deb's dependency line — osqueryd links glibc
+# and zlib dynamically; the collector itself is CGO_ENABLED=0 static.
+depends:
+  - libc6 (>= 2.12)
+  - zlib1g
+
+contents:
+  # ── collector (same layout as the plain goreleaser deb) ──────────────
+  - src: {{ .Staging }}/kite-collector
+    dst: /usr/local/bin/kite-collector
+    file_info:
+      mode: 0755
+  - src: configs/kite-collector.example.yaml
+    dst: /etc/kite-collector/kite-collector.example.yaml
+    type: config
+
+  # ── osquery payload, harvested from the official osquery deb ─────────
+  # Namespaced under /opt/kite-collector so it can never collide with a
+  # standalone osquery package (/opt/osquery, /var/osquery, osqueryd.service).
+  - src: {{ .Staging }}/osquery/osqueryd
+    dst: /opt/kite-collector/osquery/bin/osqueryd
+    file_info:
+      mode: 0755
+  # osqueryi is the same binary in shell mode — ship it as a symlink for
+  # debugging and for the container e2e battery (client over the socket).
+  - src: /opt/kite-collector/osquery/bin/osqueryd
+    dst: /opt/kite-collector/osquery/bin/osqueryi
+    type: symlink
+  - src: {{ .Staging }}/osquery/certs/certs.pem
+    dst: /opt/kite-collector/osquery/certs/certs.pem
+    file_info:
+      mode: 0644
+  - src: {{ .Staging }}/osquery/packs/*.conf
+    dst: /opt/kite-collector/osquery/packs/
+    file_info:
+      mode: 0644
+  # Augeas lenses back the `augeas` table; the relocated path is wired via
+  # --augeas_lenses in osquery.flags.
+  - src: {{ .Staging }}/osquery/lenses/*.aug
+    dst: /opt/kite-collector/osquery/lenses/
+    file_info:
+      mode: 0644
+
+  # ── configuration (conffiles — dpkg preserves local edits) ───────────
+  - src: packaging/deb/osquery.conf
+    dst: /etc/kite-collector/osquery/osquery.conf
+    type: config|noreplace
+  - src: packaging/deb/osquery.flags
+    dst: /etc/kite-collector/osquery/osquery.flags
+    type: config|noreplace
+
+  # ── systemd ──────────────────────────────────────────────────────────
+  - src: packaging/deb/kite-osqueryd.service
+    dst: /usr/lib/systemd/system/kite-osqueryd.service
+    file_info:
+      mode: 0644
+  - src: packaging/deb/10-kite-osquery-socket.conf
+    dst: /usr/lib/systemd/system/kite-collector.service.d/10-kite-osquery-socket.conf
+    file_info:
+      mode: 0644
+
+  # ── mutable state (survives remove, deleted on purge — see postrm) ───
+  - dst: /var/lib/kite-collector/osquery
+    type: dir
+    file_info:
+      mode: 0750
+  - dst: /var/log/kite-collector/osquery
+    type: dir
+    file_info:
+      mode: 0750
+
+scripts:
+  postinstall: packaging/deb/postinstall.sh
+  preremove: packaging/deb/preremove.sh
+  postremove: packaging/deb/postremove.sh

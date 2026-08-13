@@ -364,19 +364,43 @@ jobs:
           # Token para publicar automáticamente en la Snap Store:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
 
-      # Build the Windows MSI from the .exe goreleaser just produced and
-      # attach it to the GitHub Release as an additional asset. Runs after
+      # Build the Windows MSIs from the .exe goreleaser just produced and
+      # attach them to the GitHub Release as additional assets. Runs after
       # goreleaser publishes so the release already exists for `gh release
       # upload` to target. Pure OSS path — no goreleaser Pro license needed.
-      - name: Build MSI and attach to release
+      #
+      # Two variants from the same wxs:
+      #   kite-collector_<v>_amd64.msi          — collector only (unchanged)
+      #   kite-collector-osquery_<v>_amd64.msi  — also installs osqueryd as
+      #     the kite-osqueryd service; payload harvested from the official
+      #     osquery MSI (version + SHA256 pinned in scripts/build-msi.sh).
+      - name: Build MSIs and attach to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           COMMIT="${GITHUB_SHA:0:7}"
           ./scripts/build-msi.sh "$VERSION" "$COMMIT"
+          ./scripts/build-msi.sh "$VERSION" "$COMMIT" --with-osquery
           gh release upload "$GITHUB_REF_NAME" \
             "dist/kite-collector_${VERSION}_amd64.msi" \
+            "dist/kite-collector-osquery_${VERSION}_amd64.msi" \
+            --clobber
+
+      # Linux counterpart of the osquery-bundle MSI: collector + namespaced
+      # kite-osqueryd in one deb (scripts/build-deb-osquery.sh, payload
+      # harvested from the official osquery deb, pinned + SHA256-verified).
+      # MUST run before the APT-repo step below — that step sweeps
+      # dist/*.deb, so the bundle lands in the dynamic APT repository
+      # automatically alongside the plain goreleaser deb.
+      - name: Build osquery-bundle deb and attach to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ./scripts/build-deb-osquery.sh "$VERSION"
+          gh release upload "$GITHUB_REF_NAME" \
+            "dist/kite-collector-osquery_${VERSION}_amd64.deb" \
             --clobber
 
       - name: Publish to WinGet
@@ -385,6 +409,12 @@ jobs:
         with:
           identifier: VulnerTrack.KiteCollector
           max-retries: 3
+          # Pin the manifest to the collector-only MSI. Without this the
+          # action's default regex would also sweep the -osquery bundle MSI
+          # into the WinGet manifest as a second installer. The bundle stays
+          # a GitHub-Releases-only artifact. (The prefix differs — the
+          # bundle is "kite-collector-osquery_", so this cannot match it.)
+          installers-regex: 'kite-collector_[^/]*_amd64\.msi$'
           token: ${{ secrets.WINGET_TOKEN }}
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
