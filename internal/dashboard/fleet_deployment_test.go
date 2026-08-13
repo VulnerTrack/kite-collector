@@ -137,9 +137,9 @@ func TestFleetMachinesFromLatestDiscovery_ExcludesHistoricalMachines(t *testing.
 	assert.Equal(t, "CURRENT-PC", current[1].Hostname)
 }
 
-func TestFleetMachinesFromLatestDiscovery_IsEmptyBeforeFirstScan(t *testing.T) {
+func TestFleetMachinesFromLatestDiscovery_ReusesInventoryBeforeFirstScan(t *testing.T) {
 	machines := []model.Machine{{Hostname: "ROBERTO-PC", DiscoverySource: "wsdiscovery"}}
-	assert.Empty(t, fleetMachinesFromLatestDiscovery(machines, nil))
+	assert.Equal(t, machines, fleetMachinesFromLatestDiscovery(machines, nil))
 }
 
 func TestMergeFleetTargetInputs_CombinesSelectionsAndManualTargets(t *testing.T) {
