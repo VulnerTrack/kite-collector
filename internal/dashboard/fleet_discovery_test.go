@@ -219,7 +219,9 @@ func TestDiscoverFleetControllerMachine_UsesRuntimeFacts(t *testing.T) {
 
 func TestHandleFleetDiscovery_RejectsCrossSitePost(t *testing.T) {
 	controller := &fleetDiscoveryController{}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:9090/api/v1/fleet/discover", nil)
+	req := httptest.NewRequestWithContext(
+		context.Background(), http.MethodPost,
+		"http://127.0.0.1:9090/api/v1/fleet/discover", nil)
 	req.Header.Set("Origin", "https://malicious.example")
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
 	rec := httptest.NewRecorder()
