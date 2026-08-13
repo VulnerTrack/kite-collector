@@ -106,7 +106,7 @@ func writeFileAtomic(dst string, data []byte, perm os.FileMode) error {
 
 	// fsync the directory so the rename (a metadata op) is durable across
 	// power loss. Best-effort: some filesystems reject O_RDONLY dir fsync.
-	if d, derr := os.Open(dir); derr == nil { // #nosec G703 -- dir is filepath.Dir(dst)
+	if d, derr := os.Open(dir); derr == nil { // #nosec G304 G703 -- dir is filepath.Dir(dst), an internal store path, never user input
 		_ = d.Sync()
 		_ = d.Close()
 	}
