@@ -33,3 +33,21 @@ is transitive-only via testcontainers-go, never imported by kite-collector,
 and govulncheck reports zero reachable paths. No upstream fix released as
 of v28.5.2. Revisit by 2026-07-22.
 """
+
+[[PackageOverrides]]
+name = "stdlib"
+version = "1.17"
+ecosystem = "Go"
+ignore = true
+reason = """
+legacy/windows7 is deliberately frozen on Go 1.17 — the last toolchain that
+can target Windows 7 (Go 1.21 dropped Win7/2008 support) — so its stdlib
+advisories are unfixable by construction and regrow with every Go release
+(91 IDs as of 2026-08-13). Scope: this override is version-pinned to 1.17,
+so the main module's modern stdlib remains fully scanned. Reachability: the
+legacy artifact is an isolated, single-purpose inventory client shipped only
+to Windows 7 hosts inside customer LANs; it is not linked into the main
+collector or dashboard. Accepted risk documented in legacy/windows7/README.md.
+Review when Windows 7 support is dropped or if a supported toolchain regains
+Win7 targeting.
+"""
