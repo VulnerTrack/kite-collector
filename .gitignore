@@ -36,6 +36,10 @@ go.work.sum
 
 # Build output
 bin/
+# goreleaser + scripts/build-msi.sh output (dist/cache/ holds the pinned
+# osquery MSI download for the --with-osquery bundle build)
+dist/
+*.msi
 
 # Runtime data
 data/

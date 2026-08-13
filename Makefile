@@ -1,4 +1,4 @@
-.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host test test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -154,6 +154,14 @@ test-smoke-containers:
 # + the compose plugin.
 test-kite-containers:
 	./tests/e2e/kite-containers/run.sh
+
+# Debian-package install/run battery for the kite-collector-osquery bundle:
+# builds the deb (scripts/build-deb-osquery.sh) if dist/ has none, installs
+# it inside a stock debian:12 container (no systemd as PID 1), runs the
+# bundled kite-osqueryd, queries it over the extensions socket, and proves
+# the plain<->bundle cross-grade + remove/purge semantics. Requires docker.
+test-deb-osquery:
+	./tests/e2e/deb-osquery/run.sh
 
 # Ubuntu multi-version package-discovery matrix (RFC-0149). Runs the compiled
 # binary's software.Dpkg collector inside real, unmodified ubuntu:20.04/22.04/

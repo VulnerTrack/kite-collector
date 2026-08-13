@@ -54,9 +54,17 @@ checksum:
   name_template: "checksums.txt"
 
 # Linux packages via nfpm.
+#
+# The kite-collector-osquery bundle deb is NOT built here — goreleaser OSS
+# can't stage the harvested osquery payload. scripts/build-deb-osquery.sh
+# builds it in the release workflow, from packaging/deb/nfpm-osquery.yaml.
+# The conflicts line below is the plain side of the swap semantics both
+# packages declare (install one, apt removes the other).
 nfpms:
   - id: packages
     package_name: kite-collector
+    conflicts:
+      - kite-collector-osquery
     vendor: VulnerTrack
     homepage: https://github.com/VulnerTrack/kite-collector
     maintainer: VulnerTrack <hello@vulnertrack.dev>

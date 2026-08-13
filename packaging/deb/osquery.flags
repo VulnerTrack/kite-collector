@@ -1,0 +1,41 @@
+# Behavioral flags for the kite-osqueryd service installed by the
+# kite-collector-osquery deb.
+#
+# Installed to: /etc/kite-collector/osquery/osquery.flags  (conffile)
+#
+# PATH FLAGS DO NOT BELONG HERE. --config_path, --database_path,
+# --logger_path and --extensions_socket live on the systemd unit's ExecStart
+# (after --flagfile, so the command line wins). Inspect or override with:
+#   systemctl cat kite-osqueryd
+#   systemctl edit kite-osqueryd
+#
+# gflags reads this file line by line; lines starting with '#' are comments.
+
+# Timestamps in UTC so logs correlate with the collector's OTLP stream.
+--utc=true
+
+# Keep INFO-level daemon chatter out of the status logs; warnings and errors
+# still land in /var/log/kite-collector/osquery.
+--logger_min_status=1
+
+# Splay scheduled queries (also set in osquery.conf; flag form covers the
+# window before the config is parsed).
+--schedule_splay_percent=10
+
+# File-integrity monitoring: the file_events subscriber is DISABLED by
+# osquery's own default (--enable_file_events=false), so it is switched on
+# here — otherwise configuring file_paths in osquery.conf silently produces
+# zero events and the collector's file_events_24h reads 0. With no
+# file_paths configured (the shipped default) no watches are armed, so this
+# costs nothing at rest. To hard-disable the whole events subsystem:
+# --disable_events=true
+--enable_file_events=true
+
+# Augeas lenses for the `augeas` table. This is a payload-layout path (fixed
+# by the package, unlike the state paths on the unit's ExecStart) — without
+# it osqueryd looks in the standalone install's /opt/osquery/share location.
+--augeas_lenses=/opt/kite-collector/osquery/lenses
+
+# TLS remote-config roots ship at:
+#   /opt/kite-collector/osquery/certs/certs.pem
+# Point --tls_server_certs there if you enable a TLS config/logger plugin.

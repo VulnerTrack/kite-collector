@@ -29,6 +29,15 @@ You can install `kite-collector` on Debian-based distributions (such as Ubuntu, 
    kite-collector install
    ```
 
+Need [osquery](https://osquery.io) on the host too? Install `kite-collector-osquery`
+instead — the same agent plus a bundled osqueryd running as the
+`kite-osqueryd` systemd service (extensions socket at
+`/run/kite-osquery/kite-osquery.em`, which the collector's osquery discovery
+source picks up automatically). It is namespaced under `/opt/kite-collector`
+so it never conflicts with a standalone osquery package, and installing
+either of `kite-collector`/`kite-collector-osquery` cleanly replaces the
+other.
+
 ### Snap (Universal Linux)
 
 For any Linux distribution that supports Snap (including Ubuntu, Debian, Fedora, Arch Linux, etc.), you can install the agent directly from the Snap Store:
@@ -44,6 +53,15 @@ For distributions that do not use the `apt` package manager (such as Fedora, Red
 - **Fedora / Red Hat / CentOS**: Download the `.rpm` package directly from the [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) page and install it using your package manager (e.g., `sudo dnf install ./kite-collector-*.rpm`).
 - **Arch Linux / Others**: Download the precompiled binary inside the `.tar.gz` archive from the releases page, extract it, and place it in your `PATH`. Alternatively, you can build from source.
 
+### macOS (Homebrew)
+
+Install `kite-collector` on macOS from our Homebrew tap. The cask clears the Gatekeeper quarantine attribute automatically, so the binary runs without the "unidentified developer" prompt:
+
+```bash
+brew install --cask vulnertrack/tap/kite-collector
+kite-collector install
+```
+
 ### Windows
 
 For Windows, you can install `kite-collector` using any of these simple and fast methods:
@@ -53,6 +71,12 @@ Download the latest `kite-collector_<version>_amd64.msi` package from the [GitHu
 ```powershell
 msiexec /i kite-collector_amd64.msi /quiet
 ```
+
+Need [osquery](https://osquery.io) on the endpoint too? Grab
+`kite-collector-osquery_<version>_amd64.msi` instead — the same install plus
+a bundled osqueryd registered as the `kite-osqueryd` service, namespaced so
+it never conflicts with a standalone osquery install. Details in
+[docs/window_install.md](docs/window_install.md#bundled-osquery-msi-kite-collector-osquery).
 
 #### 2. Standalone GUI Wizard
 Download the Windows binary `kite-collector_windows_amd64.exe` and double-click it from File Explorer. The binary will automatically detect the double-click launch and open the built-in graphical installation wizard.

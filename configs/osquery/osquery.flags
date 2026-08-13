@@ -1,0 +1,36 @@
+# Behavioral flags for the kite-osqueryd service installed by the
+# kite-collector-osquery Windows MSI.
+#
+# Installed to: C:\Program Files\Kite Collector\osquery\osquery.flags
+#
+# PATH FLAGS DO NOT BELONG HERE. --config_path, --database_path,
+# --logger_path and --extensions_socket are passed on the service command
+# line by the MSI (after --flagfile, so the command line wins) — that keeps
+# relocated installs working. Inspect them with:
+#   sc.exe qc kite-osqueryd
+#
+# gflags reads this file line by line; lines starting with '#' are comments.
+
+# Timestamps in UTC so logs correlate with the collector's OTLP stream.
+--utc=true
+
+# Keep INFO-level daemon chatter out of the status logs; warnings and errors
+# still land in C:\ProgramData\kite-collector\osquery\logs.
+--logger_min_status=1
+
+# Splay scheduled queries (also set in osquery.conf; flag form covers the
+# window before the config is parsed).
+--schedule_splay_percent=10
+
+# File-integrity monitoring: the file_events subscriber is DISABLED by
+# osquery's own default (--enable_file_events=false), so it is switched on
+# here — otherwise configuring file_paths in osquery.conf silently produces
+# zero events and the collector's file_events_24h reads 0. With no
+# file_paths configured (the shipped default) no watches are armed, so this
+# costs nothing at rest. To hard-disable the whole events subsystem:
+# --disable_events=true
+--enable_file_events=true
+
+# TLS remote-config roots ship at:
+#   C:\Program Files\Kite Collector\osquery\certs\certs.pem
+# Point --tls_server_certs there if you enable a TLS config/logger plugin.

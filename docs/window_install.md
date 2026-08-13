@@ -219,6 +219,56 @@ Remove-Item -Recurse -Force "$env:ProgramData\kite-collector"
 | Service display name | Kite Collector | Kite Collector |
 | Logs | Windows Event Log → Application → kite-collector | Same |
 
+## Bundled osquery MSI (`kite-collector-osquery`)
+
+Each release also ships `kite-collector-osquery_<version>_amd64.msi` — the
+same collector install plus [osquery](https://osquery.io) as a second,
+self-contained Windows service. Use it when you want host telemetry via
+osquery's tables on endpoints that don't already run osquery.
+
+```powershell
+msiexec /i kite-collector-osquery_<version>_amd64.msi /quiet
+```
+
+What it adds on top of the plain MSI:
+
+| Item | Value |
+| --- | --- |
+| Daemon | `%ProgramFiles%\Kite Collector\osquery\osqueryd\osqueryd.exe` (osquery 5.15.0) |
+| Service name (SCM) | `kite-osqueryd` (auto-start, LocalSystem) |
+| Config / flags | `%ProgramFiles%\Kite Collector\osquery\osquery.conf`, `osquery.flags` |
+| Database + logs | `%ProgramData%\kite-collector\osquery\` (`osquery.db`, `logs\`) |
+| Extensions pipe | `\\.\pipe\kite-osquery.em` (also exported machine-wide as `KITE_OSQUERY_SOCKET`) |
+| Community packs | `...\osquery\packs\` — shipped disabled; enable in `osquery.conf` |
+
+Everything is namespaced (service name, install path, pipe name) so the
+bundle **never conflicts with a standalone osquery installation**, which owns
+`Program Files\osquery` and the `osqueryd` service name.
+
+Notes:
+
+- The plain and bundle MSIs share one upgrade identity: installing one
+  replaces the other (at the same or newer version), so switching variants is
+  a single `msiexec /i`, no manual uninstall.
+- The collector does not consume osquery data yet — the client contract is
+  staged in `tests/e2e/osquery/README.md`. The bundle exists so fleets can
+  roll the daemon out now and light the integration up via a collector
+  upgrade later, with `KITE_OSQUERY_SOCKET` already pointing at the pipe.
+- Debug shell against the bundled daemon (Administrator):
+
+  ```powershell
+  & "$env:ProgramFiles\Kite Collector\osquery\osqueryd\osqueryd.exe" -S
+  ```
+
+- Scheduled-query results land in
+  `%ProgramData%\kite-collector\osquery\logs\`; the default schedule is a
+  minimal heartbeat (system_info, os_version, programs), so volume is tiny
+  until you enable packs.
+- On uninstall, runtime state under `%ProgramData%\kite-collector\osquery\`
+  is left in place, mirroring the certificate-store behavior above.
+- A collector-only install from the bundle MSI is possible with
+  `msiexec /i ... ADDLOCAL=ProductFeature`.
+
 ## Troubleshooting
 
 ### `install` fails with `Access is denied`

@@ -27,6 +27,15 @@ Puedes instalar `kite-collector` en distribuciones basadas en Debian (como Ubunt
    kite-collector install
    ```
 
+¿Necesitas también [osquery](https://osquery.io) en el host? Instala
+`kite-collector-osquery` — el mismo agente más un osqueryd incluido que corre
+como el servicio systemd `kite-osqueryd` (socket de extensiones en
+`/run/kite-osquery/kite-osquery.em`, que la fuente de descubrimiento osquery
+del collector detecta automáticamente). Está aislado bajo
+`/opt/kite-collector` para no chocar con una instalación independiente de
+osquery, e instalar cualquiera de `kite-collector`/`kite-collector-osquery`
+reemplaza limpiamente al otro.
+
 ### Snap (Linux Universal)
 
 Para cualquier distribución de Linux compatible con Snap (incluyendo Ubuntu, Debian, Fedora, Arch Linux, etc.), puedes instalar el agente directamente desde la Snap Store:
@@ -42,6 +51,15 @@ Para aquellas distribuciones que NO utilizan el gestor de paquetes `apt` (como F
 - **Fedora / Red Hat / CentOS**: Puedes descargar el paquete `.rpm` directamente desde la pestaña de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) e instalarlo usando tu gestor de paquetes (por ejemplo, `sudo dnf install ./kite-collector-*.rpm`).
 - **Arch Linux / Otras distribuciones**: Descarga el binario precompilado dentro del archivo `.tar.gz` desde la página de Releases, extráelo y colócalo en tu `PATH`. Alternativamente, puedes compilarlo desde el código fuente.
 
+### macOS (Homebrew)
+
+Instala `kite-collector` en macOS desde nuestro tap de Homebrew. El cask elimina automáticamente el atributo de cuarentena de Gatekeeper, por lo que el binario se ejecuta sin el aviso de "desarrollador no identificado":
+
+```bash
+brew install --cask vulnertrack/tap/kite-collector
+kite-collector install
+```
+
 ### Windows
 
 Para Windows, puedes instalar `kite-collector` usando cualquiera de estos métodos rápidos y sencillos:
@@ -51,6 +69,13 @@ Descarga el último instalador `kite-collector_<version>_amd64.msi` desde la pá
 ```powershell
 msiexec /i kite-collector_amd64.msi /quiet
 ```
+
+¿Necesitas también [osquery](https://osquery.io) en el endpoint? Usa
+`kite-collector-osquery_<version>_amd64.msi` — la misma instalación más un
+osqueryd incluido, registrado como el servicio `kite-osqueryd` con nombres
+propios para no chocar con una instalación independiente de osquery. Detalles
+en [docs/window_install.md](docs/window_install.md#bundled-osquery-msi-kite-collector-osquery)
+(en inglés).
 
 #### 2. Asistente Gráfico Integrado
 Descarga el binario para Windows `kite-collector_windows_amd64.exe` y haz doble clic sobre él en el Explorador de Archivos. El binario detectará el doble clic y abrirá automáticamente el asistente gráfico de instalación para registrar el servicio.
@@ -84,7 +109,7 @@ curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download
 chmod +x kite-collector
 
 # macOS
-brew install vulnertrack/tap/kite-collector
+curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download/kite-collector_darwin_arm64.tar.gz | tar xz
 
 # Windows (PowerShell)
 irm https://get.kite-collector.dev/install.ps1 | iex
