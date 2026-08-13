@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 475 codes across 58 packages.
+**Catalog size:** 484 codes across 58 packages.
 
 ---
 
@@ -1182,7 +1182,7 @@ Source: [`internal/emitter/logcodes.go`](../internal/emitter/logcodes.go) · 1 c
 
 ## `endpoint` (internal/endpoint)
 
-Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 5 codes
+Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 14 codes
 
 **manager surface — connection lifecycle and configuration**
 
@@ -1203,6 +1203,25 @@ Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 5
 | Code | Constant | Description |
 |---|---|---|
 | `endpoint.tofu.fingerprint_mismatch` | `LogCodeTOFUMismatch` | — |
+
+**queue surface — durable offline buffer capacity management**
+
+| Code | Constant | Description |
+|---|---|---|
+| `endpoint.queue.capacity_check_failed` | `LogCodeQueueCapacityCheckFailed` | — |
+| `endpoint.queue.evict_failed` | `LogCodeQueueEvictFailed` | — |
+| `endpoint.queue.evicted` | `LogCodeQueueEvicted` | — |
+
+**durable emitter surface — spool-on-failure and background drain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `endpoint.durable.spooled` | `LogCodeDurableSpooled` | — |
+| `endpoint.durable.spool_failed` | `LogCodeDurableSpoolFailed` | — |
+| `endpoint.durable.drained` | `LogCodeDurableDrained` | — |
+| `endpoint.durable.drain_failed` | `LogCodeDurableDrainFailed` | — |
+| `endpoint.durable.dropped_poison` | `LogCodeDurableDroppedPoison` | — |
+| `endpoint.durable.dropped_corrupt` | `LogCodeDurableDroppedCorrupt` | — |
 
 ## `engine` (internal/engine)
 

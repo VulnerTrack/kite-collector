@@ -479,24 +479,6 @@ jobs:
             dist/kite-collector_windows_386_legacy.exe.sha256 \
             --clobber
 
-      - name: Build and upload Windows 7 32-bit compatibility agent
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p dist
-          (
-            cd legacy/windows7
-            GOTOOLCHAIN=go1.17.13 CGO_ENABLED=0 GOOS=windows GOARCH=386 GO386=softfloat go build -trimpath \
-              -ldflags="-X main.version=${version}" \
-              -o ../../dist/kite-collector_windows_386_legacy.exe .
-          )
-          (cd dist && sha256sum kite-collector_windows_386_legacy.exe > kite-collector_windows_386_legacy.exe.sha256)
-          gh release upload "$GITHUB_REF_NAME" \
-            dist/kite-collector_windows_386_legacy.exe \
-            dist/kite-collector_windows_386_legacy.exe.sha256 \
-            --clobber
-
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
