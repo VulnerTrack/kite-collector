@@ -798,17 +798,6 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		"preflight.py":                           fleetPreflightPython,
 		"targets.csv":                            fleetTargetsCSV(targets),
 	}
-	// Releases publish the compatibility executable from CI. Developers and
-	// tests can explicitly bundle a locally rebuilt artifact; otherwise the
-	// generated deploy script downloads and verifies the release artifact.
-	var legacyArtifact []byte
-	if legacyArtifactPath := strings.TrimSpace(os.Getenv("KITE_FLEET_LEGACY_ARTIFACT")); legacyArtifactPath != "" {
-		var legacyArtifactErr error
-		legacyArtifact, legacyArtifactErr = os.ReadFile(legacyArtifactPath) //#nosec G304 -- explicit operator override
-		if legacyArtifactErr != nil {
-			return fmt.Errorf("read Windows 7 artifact override: %w", legacyArtifactErr)
-		}
-	}
 	manifest, err := json.MarshalIndent(map[string]any{
 		"created_at":    time.Now().UTC().Format(time.RFC3339),
 		"pki_endpoint":  req.PKIEndpoint,
@@ -846,18 +835,6 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		}
 		if _, writeErr := io.WriteString(entry, files[name]); writeErr != nil {
 			return fmt.Errorf("write bundle entry %s: %w", name, writeErr)
-		}
-	}
-	if len(legacyArtifact) > 0 {
-		header := &zip.FileHeader{Name: "artifacts/kite-collector_windows_386_legacy.exe", Method: zip.Deflate}
-		header.SetModTime(time.Date(1980, time.January, 1, 12, 0, 0, 0, time.UTC))
-		header.SetMode(0o600)
-		entry, createErr := zw.CreateHeader(header)
-		if createErr != nil {
-			return fmt.Errorf("create bundled Windows 7 artifact: %w", createErr)
-		}
-		if _, writeErr := entry.Write(legacyArtifact); writeErr != nil {
-			return fmt.Errorf("write bundled Windows 7 artifact: %w", writeErr)
 		}
 	}
 	if err := zw.Close(); err != nil {
@@ -1203,15 +1180,13 @@ if %t; then
 	  curl -fsSL --retry 3 "$artifact_url" -o "$artifact_dir/$artifact_name"
 	  curl -fsSL --retry 3 "$artifact_url.sha256" -o "$artifact_dir/$artifact_name.sha256"
 	  (cd "$artifact_dir" && sha256sum -c "$artifact_name.sha256")
-	  if [ -f "artifacts/$legacy_name" ]; then
-		  echo "Using the bundled Windows 7 32-bit compatibility agent..."
-		  cp "artifacts/$legacy_name" "$artifact_dir/$legacy_name"
-		  (cd "$artifact_dir" && sha256sum "$legacy_name" > "$legacy_name.sha256")
-	  else
-		  echo "Downloading the Windows 7 32-bit compatibility agent..."
-		  curl -fsSL --retry 3 "$legacy_url" -o "$artifact_dir/$legacy_name"
-		  curl -fsSL --retry 3 "$legacy_url.sha256" -o "$artifact_dir/$legacy_name.sha256"
+	  echo "Downloading the CI-built Windows 7 32-bit compatibility agent..."
+	  if curl -fsSL --retry 3 "$legacy_url" -o "$artifact_dir/$legacy_name" &&
+	     curl -fsSL --retry 3 "$legacy_url.sha256" -o "$artifact_dir/$legacy_name.sha256"; then
 		  (cd "$artifact_dir" && sha256sum -c "$legacy_name.sha256")
+	  else
+		  rm -f "$artifact_dir/$legacy_name" "$artifact_dir/$legacy_name.sha256"
+		  echo "warning: release v%s has no legacy agent; modern Windows enrollment can continue, but Windows 7/32-bit requires a release containing $legacy_name" >&2
 	  fi
 	  KITE_CONTROLLER_IP="$(ip route get "${windows_addresses[0]}" | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')"
 	  if [ -z "$KITE_CONTROLLER_IP" ]; then
@@ -1293,7 +1268,7 @@ unset KITE_WINDOWS_PASSWORD
 unset KITE_BECOME_PASSWORD
 echo "Deployment finished. Verify fleet heartbeats, then delete this package."
 `, strings.Join(windowsTargets, " "), strings.Join(windowsAddresses, " "), hasWindows,
-		req.Version, req.Version, req.Version, hasRemoteUnix, hasLocalUnix || hasRemoteUnix,
+		req.Version, req.Version, req.Version, req.Version, hasRemoteUnix, hasLocalUnix || hasRemoteUnix,
 		hasLocalUnix || hasRemoteUnix, hasRemoteUnix, hasLocalUnix)
 }
 
@@ -1374,8 +1349,13 @@ const fleetPlaybookYAML = `---
         $url = '{{ kite_windows_artifact_base }}/kite-collector_windows_386_legacy.exe'
         $checksumUrl = $url + '.sha256'
         $client = New-Object Net.WebClient
-        $client.DownloadFile($url, $stagedExe)
-        $expected = ($client.DownloadString($checksumUrl) -split '\s+')[0].ToLowerInvariant()
+        try {
+          $client.DownloadFile($url, $stagedExe)
+          $expected = ($client.DownloadString($checksumUrl) -split '\s+')[0].ToLowerInvariant()
+        } catch {
+          Remove-Item -LiteralPath $stagedExe -Force -ErrorAction SilentlyContinue
+          throw 'LEGACY_RELEASE_ARTIFACT_UNAVAILABLE: publish the CI-built Windows 7 agent for this Kite release and rerun deploy.sh'
+        }
         $stream = [IO.File]::OpenRead($stagedExe)
         try { $sha = [Security.Cryptography.SHA256]::Create(); $actual = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() } finally { $stream.Dispose() }
         if ($actual -ne $expected) { throw 'Legacy executable checksum mismatch' }
