@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 473 codes across 58 packages.
+**Catalog size:** 475 codes across 58 packages.
 
 ---
 
@@ -256,7 +256,7 @@ Source: [`internal/copilot/fsm/logcodes.go`](../internal/copilot/fsm/logcodes.go
 
 ## `dashboard` (internal/dashboard)
 
-Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 30 codes
+Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 32 codes
 
 **observability surface — /observability page + /api/v1/observability/***
 
@@ -294,6 +294,13 @@ Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) ·
 | Code | Constant | Description |
 |---|---|---|
 | `dashboard.support_bundle.manifest_failed` | `LogCodeSupportBundleManifest` | — |
+
+**fleet deployment surface — POST /api/v1/fleet/package**
+
+| Code | Constant | Description |
+|---|---|---|
+| `dashboard.fleet.package_build_failed` | `LogCodeFleetPackageBuild` | — |
+| `dashboard.fleet.discovery_failed` | `LogCodeFleetDiscovery` | — |
 
 **install surface — POST /api/v1/agent/install + /uninstall**
 
