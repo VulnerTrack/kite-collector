@@ -19,24 +19,29 @@ const heartbeatColumns = `id, scan_run_id, source, status, items_emitted, ` +
 // unique index makes duplicate inserts surface as a SQLite constraint
 // violation; the caller treats that as a registry bug, not an alert.
 func (s *SQLiteStore) RecordHeartbeat(ctx context.Context, hb model.ProbeHeartbeat) error {
-	_, err := s.db.ExecContext(
-		ctx,
-		`INSERT INTO probe_heartbeats (`+heartbeatColumns+`) `+
-			`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		hb.ID.String(),
-		hb.ScanRunID.String(),
-		hb.Source,
-		string(hb.Status),
-		hb.ItemsEmitted,
-		hb.DurationMS,
-		hb.BinaryHash,
-		hb.Signature,
-		hb.CreatedAt.Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("insert probe heartbeat %s/%s: %w", hb.ScanRunID, hb.Source, err)
-	}
-	return nil
+	// Heartbeats are written concurrently by every discovery source mid-scan
+	// — the hottest write path in the store — so lock contention is retried
+	// like UpsertMachines does, instead of dropping the liveness record.
+	return withTransientRetry(3, func() error {
+		_, err := s.db.ExecContext(
+			ctx,
+			`INSERT INTO probe_heartbeats (`+heartbeatColumns+`) `+
+				`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			hb.ID.String(),
+			hb.ScanRunID.String(),
+			hb.Source,
+			string(hb.Status),
+			hb.ItemsEmitted,
+			hb.DurationMS,
+			hb.BinaryHash,
+			hb.Signature,
+			hb.CreatedAt.Format(time.RFC3339Nano),
+		)
+		if err != nil {
+			return fmt.Errorf("insert probe heartbeat %s/%s: %w", hb.ScanRunID, hb.Source, err)
+		}
+		return nil
+	})
 }
 
 // ListHeartbeats returns heartbeats matching the filter, ordered by
