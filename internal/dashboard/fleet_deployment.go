@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	_ "embed"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
@@ -40,9 +39,6 @@ var (
 	fleetHostPattern    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,252}$`)
 	fleetVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 )
-
-//go:embed assets/kite-collector_windows_386_legacy.exe
-var embeddedFleetWindowsLegacyArtifact []byte
 
 type fleetTarget struct {
 	Hostname string
@@ -283,7 +279,15 @@ func renderFleetDeploymentFragment(
 func fleetMachinesFromLatestDiscovery(machines []model.Machine, currentKeys []string) []model.Machine {
 	current := make(map[string]struct{}, len(currentKeys))
 	for _, key := range currentKeys {
-		current[strings.ToLower(strings.TrimSpace(key))] = struct{}{}
+		if trimmed := strings.ToLower(strings.TrimSpace(key)); trimmed != "" {
+			current[trimmed] = struct{}{}
+		}
+	}
+	// No discovery session yet: the page promises the local Machines
+	// inventory ("Kite automatically reuses compatible computers"), so an
+	// empty key set must mean "no narrowing", not "hide everything".
+	if len(current) == 0 {
+		return machines
 	}
 	result := make([]model.Machine, 0, len(machines))
 	for _, machine := range machines {
@@ -809,18 +813,6 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		"preflight.py":                           fleetPreflightPython,
 		"targets.csv":                            fleetTargetsCSV(targets),
 	}
-	// The compatibility executable is embedded in the dashboard binary so a
-	// package downloaded from a systemd service is complete regardless of its
-	// working directory or internet access. Developers can explicitly override
-	// it to exercise a locally rebuilt legacy artifact.
-	legacyArtifact := embeddedFleetWindowsLegacyArtifact
-	if legacyArtifactPath := strings.TrimSpace(os.Getenv("KITE_FLEET_LEGACY_ARTIFACT")); legacyArtifactPath != "" {
-		var legacyArtifactErr error
-		legacyArtifact, legacyArtifactErr = os.ReadFile(legacyArtifactPath) //#nosec G304 G703 -- explicit operator override
-		if legacyArtifactErr != nil {
-			return fmt.Errorf("read Windows 7 artifact override: %w", legacyArtifactErr)
-		}
-	}
 	manifest, err := json.MarshalIndent(map[string]any{
 		"created_at":    time.Now().UTC().Format(time.RFC3339),
 		"pki_endpoint":  req.PKIEndpoint,
@@ -858,18 +850,6 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		}
 		if _, writeErr := io.WriteString(entry, files[name]); writeErr != nil {
 			return fmt.Errorf("write bundle entry %s: %w", name, writeErr)
-		}
-	}
-	if len(legacyArtifact) > 0 {
-		header := &zip.FileHeader{Name: "artifacts/kite-collector_windows_386_legacy.exe", Method: zip.Deflate}
-		header.Modified = time.Date(1980, time.January, 1, 12, 0, 0, 0, time.UTC)
-		header.SetMode(0o600)
-		entry, createErr := zw.CreateHeader(header)
-		if createErr != nil {
-			return fmt.Errorf("create bundled Windows 7 artifact: %w", createErr)
-		}
-		if _, writeErr := entry.Write(legacyArtifact); writeErr != nil {
-			return fmt.Errorf("write bundled Windows 7 artifact: %w", writeErr)
 		}
 	}
 	if err := zw.Close(); err != nil {
@@ -1215,19 +1195,13 @@ if %t; then
 	  curl -fsSL --retry 3 "$artifact_url" -o "$artifact_dir/$artifact_name"
 	  curl -fsSL --retry 3 "$artifact_url.sha256" -o "$artifact_dir/$artifact_name.sha256"
 	  (cd "$artifact_dir" && sha256sum -c "$artifact_name.sha256")
-	  if [ -f "artifacts/$legacy_name" ]; then
-		  echo "Using the bundled Windows 7 32-bit compatibility agent..."
-		  cp "artifacts/$legacy_name" "$artifact_dir/$legacy_name"
-		  (cd "$artifact_dir" && sha256sum "$legacy_name" > "$legacy_name.sha256")
+	  echo "Downloading the CI-built Windows 7 32-bit compatibility agent..."
+	  if curl -fsSL --retry 3 "$legacy_url" -o "$artifact_dir/$legacy_name" &&
+	     curl -fsSL --retry 3 "$legacy_url.sha256" -o "$artifact_dir/$legacy_name.sha256"; then
+		  (cd "$artifact_dir" && sha256sum -c "$legacy_name.sha256")
 	  else
-		  echo "Downloading the CI-built Windows 7 32-bit compatibility agent..."
-		  if curl -fsSL --retry 3 "$legacy_url" -o "$artifact_dir/$legacy_name" &&
-		     curl -fsSL --retry 3 "$legacy_url.sha256" -o "$artifact_dir/$legacy_name.sha256"; then
-			  (cd "$artifact_dir" && sha256sum -c "$legacy_name.sha256")
-		  else
-			  rm -f "$artifact_dir/$legacy_name" "$artifact_dir/$legacy_name.sha256"
-			  echo "warning: release v%s has no legacy agent; modern Windows enrollment can continue, but Windows 7/32-bit requires a release containing $legacy_name" >&2
-		  fi
+		  rm -f "$artifact_dir/$legacy_name" "$artifact_dir/$legacy_name.sha256"
+		  echo "warning: release v%s has no legacy agent; modern Windows enrollment can continue, but Windows 7/32-bit requires a release containing $legacy_name" >&2
 	  fi
 	  KITE_CONTROLLER_IP="$(ip route get "${windows_addresses[0]}" | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')"
 	  if [ -z "$KITE_CONTROLLER_IP" ]; then
