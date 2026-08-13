@@ -321,7 +321,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Access Granted - Kite Collector</title>
+<title>Welcome to Kite Collector</title>
 <link rel="stylesheet" href="/static/style.css?v=1.0.1">
 <style>
   body.kite-success-page {
@@ -419,11 +419,11 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 <main class="kite-success-card" aria-labelledby="kite-success-title">
   <img class="kite-success-logo" src="/static/img/vulnertrack_banner_dark.png" alt="Vulnertrack">
   <h1 class="kite-success-heading" id="kite-success-title">
-    <span>Success!</span>
+    <span>Welcome to Kite!</span>
     <span class="kite-success-check" aria-hidden="true">✓</span>
   </h1>
-  <p class="kite-success-copy">You've granted Kite Collector access to your Vulnertrack account.</p>
-  <p class="kite-success-copy">To continue, return to the dashboard and finish reviewing your collector status.</p>
+  <p class="kite-success-copy">Enrollment complete. Kite Collector is connected to your Vulnertrack account.</p>
+  <p class="kite-success-copy">Kite is ready. Continue to the local dashboard to review your collector.</p>
   <div class="kite-success-actions">
     <a class="kite-success-btn" href="{{.DashboardURL}}">Go to Dashboard</a>
   </div>

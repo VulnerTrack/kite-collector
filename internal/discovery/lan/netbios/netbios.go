@@ -14,6 +14,7 @@ package netbios
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -550,7 +551,9 @@ func buildTags(r *responder) string {
 	services := append([]string(nil), r.services...)
 	sort.Strings(services)
 	var sb strings.Builder
-	sb.WriteString(`{"nbns_machine":"`)
+	sb.WriteString(`{"nbns_ip":"`)
+	sb.WriteString(jsonEscape(r.addr.String()))
+	sb.WriteString(`","nbns_machine":"`)
 	sb.WriteString(jsonEscape(r.machine))
 	sb.WriteString(`","nbns_workgroup":"`)
 	sb.WriteString(jsonEscape(r.workgroup))
@@ -570,21 +573,11 @@ func buildTags(r *responder) string {
 }
 
 func jsonEscape(s string) string {
-	if !strings.ContainsAny(s, `"\`) {
-		return s
+	quoted, err := json.Marshal(s)
+	if err != nil || len(quoted) < 2 {
+		return ""
 	}
-	var b strings.Builder
-	b.Grow(len(s) + 4)
-	for _, r := range s {
-		switch r {
-		case '"', '\\':
-			b.WriteByte('\\')
-			b.WriteRune(r)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return string(quoted[1 : len(quoted)-1])
 }
 
 func toStringSlice(v any) []string {

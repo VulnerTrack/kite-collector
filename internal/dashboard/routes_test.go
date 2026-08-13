@@ -274,7 +274,7 @@ func TestOAuthWaitDoesNotCompleteForUnknownState(t *testing.T) {
 	assert.False(t, kiteOAuthWaitComplete(waitID))
 }
 
-func TestRoute_GET_KiteSuccess_ReturnsAccessGrantedPage(t *testing.T) {
+func TestRoute_GET_KiteSuccess_ReturnsWelcomePage(t *testing.T) {
 	handler := newTestHandler(t)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/kite-success", nil)
 	rec := httptest.NewRecorder()
@@ -283,8 +283,9 @@ func TestRoute_GET_KiteSuccess_ReturnsAccessGrantedPage(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.Contains(t, body, `<body class="kite-success-page">`)
-	assert.Contains(t, body, "Success!")
-	assert.Contains(t, body, "You've granted Kite Collector access")
+	assert.Contains(t, body, "Welcome to Kite!")
+	assert.Contains(t, body, "Enrollment complete.")
+	assert.Contains(t, body, "Kite is ready.")
 	assert.Contains(t, body, "Go to Dashboard")
 	assert.Contains(t, body, `href="/machines"`)
 }

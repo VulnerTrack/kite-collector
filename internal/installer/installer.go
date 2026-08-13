@@ -35,13 +35,14 @@ var EnrollmentFiles = []string{"ca.pem", "agent.pem", "agent-key.pem"}
 // Field ordering pins strings (16B) before bools (1B) so the struct packs
 // without padding — fieldalignment-clean for the linter.
 type Options struct {
-	BinaryDir string `json:"binary_dir"`
-	CertsDir  string `json:"certs_dir"`
-	CfgFile   string `json:"cfg_file,omitempty"`
-	DbPath    string `json:"db_path,omitempty"`
-	Endpoint  string `json:"endpoint,omitempty"`
-	UserMode  bool   `json:"user_mode"`
-	Verbose   bool   `json:"verbose,omitempty"`
+	BinaryDir     string `json:"binary_dir"`
+	CertsDir      string `json:"certs_dir"`
+	CfgFile       string `json:"cfg_file,omitempty"`
+	DbPath        string `json:"db_path,omitempty"`
+	Endpoint      string `json:"endpoint,omitempty"`
+	DashboardAddr string `json:"dashboard_addr,omitempty"`
+	UserMode      bool   `json:"user_mode"`
+	Verbose       bool   `json:"verbose,omitempty"`
 }
 
 // BinaryPath returns the absolute path to the installed binary given the
@@ -112,6 +113,11 @@ const (
 	SvcName        = "kite-collector"
 	SvcDisplayName = "Kite Collector"
 	SvcDescription = "Continuous machine discovery and OTLP streaming agent"
+
+	// DefaultDashboardAddr keeps the installed dashboard local to the host.
+	// The service owns the live encrypted store, so serving the UI from that
+	// same process avoids a second process decrypting a stale database copy.
+	DefaultDashboardAddr = "127.0.0.1:9090"
 )
 
 // DetectDefaults returns smart, OS-aware Options + the Detected facts that
@@ -124,9 +130,11 @@ func DetectDefaults() Defaults {
 	hostname, _ := os.Hostname()
 	return Defaults{
 		Options: Options{
-			UserMode:  userMode,
-			BinaryDir: DefaultBinaryDir(userMode),
-			CertsDir:  DefaultCertsDir(userMode),
+			UserMode:      userMode,
+			BinaryDir:     DefaultBinaryDir(userMode),
+			CertsDir:      DefaultCertsDir(userMode),
+			DbPath:        filepath.Join(DefaultCertsDir(userMode), "kite.db"),
+			DashboardAddr: DefaultDashboardAddr,
 		},
 		Detected: Detected{
 			OS:         runtime.GOOS,
@@ -227,12 +235,21 @@ func buildSvcConfig(opts Options) *service.Config {
 	if opts.CfgFile != "" {
 		args = append(args, "--config", opts.CfgFile)
 	}
-	if opts.DbPath != "" {
-		args = append(args, "--db", opts.DbPath)
+	dbPath := opts.DbPath
+	if dbPath == "" && opts.CertsDir != "" {
+		dbPath = filepath.Join(opts.CertsDir, "kite.db")
+	}
+	if dbPath != "" {
+		args = append(args, "--db", dbPath)
 	}
 	if opts.Endpoint != "" {
 		args = append(args, "--endpoint", opts.Endpoint)
 	}
+	dashboardAddr := opts.DashboardAddr
+	if dashboardAddr == "" {
+		dashboardAddr = DefaultDashboardAddr
+	}
+	args = append(args, "--dashboard-addr", dashboardAddr)
 	if opts.Verbose {
 		args = append(args, "--verbose")
 	}
@@ -273,6 +290,9 @@ func BinaryName() string {
 //   - Unix system:    /usr/local/bin
 //   - Unix user:      ~/.local/bin
 func DefaultBinaryDir(userMode bool) string {
+	if RunningInSnap() {
+		return filepath.Clean(os.Getenv("SNAP"))
+	}
 	if runtime.GOOS == "windows" {
 		if userMode {
 			if v := os.Getenv("LOCALAPPDATA"); v != "" {
@@ -294,11 +314,18 @@ func DefaultBinaryDir(userMode bool) string {
 
 // DefaultCertsDir returns the conventional certificate store directory.
 //
+//   - Snap:             $SNAP_COMMON/certs
 //   - Windows system: %ProgramData%\kite-collector
 //   - Windows user:   %LOCALAPPDATA%\kite-collector\data
 //   - Unix system:    /var/lib/kite-collector
 //   - Unix user:      $XDG_DATA_HOME/kite-collector  (or ~/.local/share/kite-collector)
 func DefaultCertsDir(userMode bool) string {
+	if RunningInSnap() {
+		// snapd owns SNAP_COMMON itself and strict confinement denies chmod on
+		// that root directory. Keep credentials in an app-owned child so the
+		// enrollment flow can enforce its required 0700 permissions.
+		return filepath.Join(SnapCommonDir(), "certs")
+	}
 	if runtime.GOOS == "windows" {
 		if userMode {
 			if v := os.Getenv("LOCALAPPDATA"); v != "" {

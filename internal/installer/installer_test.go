@@ -20,6 +20,36 @@ func TestDetectDefaults_PopulatesSmartFields(t *testing.T) {
 	assert.Equal(t, runtime.GOARCH, d.Detected.Arch, "Detected.Arch must match runtime.GOARCH")
 	assert.NotEmpty(t, d.Options.BinaryDir, "BinaryDir must always be populated")
 	assert.NotEmpty(t, d.Options.CertsDir, "CertsDir must always be populated")
+	assert.Equal(t, filepath.Join(d.Options.CertsDir, "kite.db"), d.Options.DbPath,
+		"service defaults must keep SQLite beside the enrollment credentials")
+	assert.Equal(t, DefaultDashboardAddr, d.Options.DashboardAddr,
+		"the managed service must expose its live store through the local dashboard")
+}
+
+func TestSnapDefaultsUseRevisionIndependentWritableStorage(t *testing.T) {
+	t.Setenv("SNAP", "/snap/kite-collector/42")
+	t.Setenv("SNAP_COMMON", "/var/snap/kite-collector/common")
+
+	assert.True(t, RunningInSnap())
+	assert.Equal(t, "/snap/kite-collector/42", DefaultBinaryDir(false))
+	assert.Equal(t, "/var/snap/kite-collector/common/certs", DefaultCertsDir(false))
+	assert.Equal(t, "/var/snap/kite-collector/common/certs", DefaultCertsDir(true))
+}
+
+func TestLinuxSystemDefaultCertsDirRemainsCompatibleWithAPT(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("APT system path is Linux-specific")
+	}
+	t.Setenv("SNAP", "")
+	t.Setenv("SNAP_COMMON", "")
+
+	assert.Equal(t, "/var/lib/kite-collector", DefaultCertsDir(false))
+}
+
+func TestRunningInSnapRequiresCompleteEnvironment(t *testing.T) {
+	t.Setenv("SNAP", "/snap/kite-collector/42")
+	t.Setenv("SNAP_COMMON", "")
+	assert.False(t, RunningInSnap())
 }
 
 // TestProbe_EmptyTempDir asserts that a clean temp directory reports the
@@ -169,6 +199,22 @@ func TestBuildSvcConfig_PropagatesOptions(t *testing.T) {
 	assert.Contains(t, cfg.Arguments, "/var/kc")
 	assert.Contains(t, cfg.Arguments, "--config")
 	assert.Contains(t, cfg.Arguments, "--endpoint")
+	assert.Contains(t, cfg.Arguments, "--dashboard-addr")
+	assert.Contains(t, cfg.Arguments, DefaultDashboardAddr)
 	assert.Contains(t, cfg.Arguments, "--verbose")
 	assert.Equal(t, true, cfg.Option["UserService"])
+}
+
+func TestBuildSvcConfig_DefaultsDBBesideCerts(t *testing.T) {
+	opts := Options{
+		BinaryDir: "/opt/kc",
+		CertsDir:  "/var/lib/kite-collector",
+	}
+
+	cfg := BuildSvcConfig(opts)
+
+	assert.Contains(t, cfg.Arguments, "--db")
+	assert.Contains(t, cfg.Arguments, "/var/lib/kite-collector/kite.db")
+	assert.Contains(t, cfg.Arguments, "--dashboard-addr")
+	assert.Contains(t, cfg.Arguments, DefaultDashboardAddr)
 }

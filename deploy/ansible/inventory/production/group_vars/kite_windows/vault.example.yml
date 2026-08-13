@@ -1,0 +1,5 @@
+---
+# Copy this file to vault.yml and encrypt it before inserting real values:
+#   ansible-vault encrypt inventory/production/group_vars/kite_windows/vault.yml
+vault_ansible_password: "REPLACE_ME"
+vault_kite_enrollment_token: "pki_enroll_v1_REPLACE_ME"

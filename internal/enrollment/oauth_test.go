@@ -32,6 +32,19 @@ func TestNewPKCE_VerifiersAreUnique(t *testing.T) {
 	assert.NotEqual(t, a.Verifier, b.Verifier)
 }
 
+func TestNewState_IsOpaqueAndUnique(t *testing.T) {
+	a, err := NewState()
+	require.NoError(t, err)
+	b, err := NewState()
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, a)
+	assert.NotEqual(t, a, b)
+	decoded, err := base64.RawURLEncoding.DecodeString(a)
+	require.NoError(t, err)
+	assert.Len(t, decoded, 16)
+}
+
 func TestAuthorizeURL_CarriesPKCEAndClientParams(t *testing.T) {
 	cfg := OAuthConfig{
 		Issuer:      "https://proj.supabase.co/auth/v1/",

@@ -1,0 +1,5 @@
+---
+collections:
+  - name: ansible.windows
+    # win_package.verify_signature was added in ansible.windows 3.4.0.
+    version: ">=3.4.0,<4.0.0"
