@@ -1,0 +1,40 @@
+# Two-container snap-installation e2e stack:
+#
+#   ubuntu       — the machine under test: Ubuntu 24.04 with systemd as PID 1
+#                  and kite-collector laid out exactly as `snap install` leaves
+#                  it. scenario.sh runs `kite-collector install` there and
+#                  writes evidence into the shared /results volume.
+#   test-runner  — reads /results and asserts; its exit code is the verdict.
+#
+#   ./run.sh wraps the full sequence (boot → scenario → assert → teardown).
+#
+# The compose project name is fixed so repeated runs reuse the same volume
+# namespace and teardown is deterministic.
+name: kite-snap-install-e2e
+
+services:
+  ubuntu:
+    build:
+      # Repo root is three levels up: the build compiles the real binary.
+      context: ../../..
+      dockerfile: tests/e2e/snap-install/Dockerfile.snap-ubuntu
+    # systemd as PID 1 needs a writable cgroup fs and its runtime tmpfs
+    # mounts; privileged is the portable way to get both under docker.
+    privileged: true
+    tmpfs:
+      - /run
+      - /run/lock
+    volumes:
+      - results:/results
+    restart: "no"
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test-runner
+    volumes:
+      - results:/results:ro
+    restart: "no"
+
+volumes:
+  results:

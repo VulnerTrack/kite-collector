@@ -1,0 +1,7 @@
+# The test runner: asserts on the evidence files the ubuntu machine wrote to
+# the shared /results volume. Kept separate from the machine under test so the
+# verdicts cannot depend on (or disturb) the machine's state.
+FROM debian:bookworm-slim
+COPY checks.sh /usr/local/bin/checks.sh
+RUN chmod 0755 /usr/local/bin/checks.sh
+ENTRYPOINT ["/usr/local/bin/checks.sh"]
