@@ -36,6 +36,8 @@ const (
 	LogCodeEncryptedDecrypting           LogCode = "sqlitestore.encrypted.decrypting"
 	LogCodeEncryptedMigratingUnencrypted LogCode = "sqlitestore.encrypted.migrating_unencrypted"
 	LogCodeEncryptedEncryptingAtRest     LogCode = "sqlitestore.encrypted.encrypting_at_rest"
+	LogCodeEncryptedSnapshot             LogCode = "sqlitestore.encrypted.snapshot"
+	LogCodeEncryptedSnapshotFailed       LogCode = "sqlitestore.encrypted.snapshot_failed"
 	LogCodeEncryptedRemoveWorkingFile    LogCode = "sqlitestore.encrypted.remove_working_file_failed"
 	LogCodeEncryptedRemoveWorkdir        LogCode = "sqlitestore.encrypted.remove_workdir_failed"
 

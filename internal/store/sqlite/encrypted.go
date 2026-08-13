@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -120,7 +121,7 @@ func workingPath(encPath string, logger *slog.Logger) (path string, onRAMDisk bo
 	// Try RAM-backed directory first.
 	if ramDir := ramDirAvailable(); ramDir != "" {
 		nsDir := filepath.Join(ramDir, "kite-collector", ns)
-		if err := os.MkdirAll(nsDir, 0o700); err == nil {
+		if err := os.MkdirAll(nsDir, 0o700); err == nil { // #nosec G703 -- nsDir is a hash-namespaced subdir under a validated ramdisk root
 			p := filepath.Join(nsDir, base)
 			logger.Info("using RAM-backed directory for decrypted working copy",
 				"code", string(LogCodeEncryptedUsingRAMDir),
@@ -133,7 +134,7 @@ func workingPath(encPath string, logger *slog.Logger) (path string, onRAMDisk bo
 	// Fall back to OS temp directory — not RAM but at least not next to
 	// the encrypted file.
 	nsTmpDir := filepath.Join(os.TempDir(), "kite-collector", ns)
-	if err := os.MkdirAll(nsTmpDir, 0o700); err == nil {
+	if err := os.MkdirAll(nsTmpDir, 0o700); err == nil { // #nosec G703 -- nsTmpDir is a hash-namespaced subdir under a validated temp root
 		p := filepath.Join(nsTmpDir, base)
 		logger.Warn("no RAM-backed directory available; using OS temp directory for decrypted working copy (plaintext may persist on disk during operation)",
 			"code", string(LogCodeEncryptedNoRAMDir),
@@ -175,7 +176,7 @@ func NewEncrypted(encPath string, key []byte, keyBackend string, logger *slog.Lo
 	}
 
 	dir := filepath.Dir(encPath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- dir is filepath.Dir of the configured db path
 		return nil, fmt.Errorf("encrypted store: create dir: %w", err)
 	}
 
@@ -250,6 +251,58 @@ func (es *EncryptedStore) Close() error {
 	return nil
 }
 
+// Snapshot re-encrypts a transactionally-consistent copy of the live working
+// database to the at-rest path WITHOUT closing the store. It exists to bound
+// data loss in long-running (agent/service) mode: the working copy lives on
+// tmpfs (RAM) and is otherwise encrypted back to durable storage only on
+// Close, so an OOM kill, SIGKILL, container stop, or power loss would lose
+// every write since process start. Calling Snapshot after each scan cycle
+// shrinks that window to "since the last snapshot".
+//
+// It uses VACUUM INTO to capture a consistent copy even while scans are
+// writing (including WAL frames not yet checkpointed), writes that copy to a
+// plaintext temp file on the SAME tmpfs directory as the working copy — so
+// plaintext never touches durable disk — then encrypts it atomically onto the
+// at-rest path (writeFileAtomic: temp + fsync + rename, so a crash mid-encrypt
+// leaves the previous good at-rest file intact).
+func (es *EncryptedStore) Snapshot(ctx context.Context) error {
+	inner, ok := es.Store.(*SQLiteStore)
+	if !ok {
+		return fmt.Errorf("encrypted store: snapshot requires an inner *SQLiteStore")
+	}
+
+	// VACUUM INTO refuses to overwrite, so clear any leftover from a prior
+	// crashed snapshot before writing.
+	snapPath := es.workPath + ".snap"
+	es.removeSnapshotFiles(snapPath)
+
+	if err := inner.VacuumInto(ctx, snapPath); err != nil {
+		return fmt.Errorf("encrypted store: snapshot vacuum: %w", err)
+	}
+	defer es.removeSnapshotFiles(snapPath)
+
+	if err := EncryptFile(snapPath, es.encPath, es.key); err != nil {
+		return fmt.Errorf("encrypted store: snapshot encrypt: %w", err)
+	}
+
+	es.logger.Debug("durability snapshot written to at-rest storage",
+		"code", string(LogCodeEncryptedSnapshot),
+		"enc_path", es.encPath)
+	return nil
+}
+
+// removeSnapshotFiles deletes the plaintext snapshot working file and any
+// journal siblings VACUUM INTO may have produced. Best-effort.
+func (es *EncryptedStore) removeSnapshotFiles(snapPath string) {
+	for _, p := range []string{snapPath, snapPath + "-wal", snapPath + "-shm", snapPath + "-journal"} {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) { // #nosec G703 -- p is a derived internal snapshot path
+			es.logger.Warn("failed to remove snapshot working file",
+				"code", string(LogCodeEncryptedRemoveWorkingFile),
+				"path", p, "error", err)
+		}
+	}
+}
+
 // UseRAMDisk reports whether the working copy is on a RAM-backed filesystem.
 func (es *EncryptedStore) UseRAMDisk() bool {
 	return es.useRAMDisk
@@ -305,12 +358,12 @@ func isNamespacedWorkDir(dir string) bool {
 }
 
 func fileExists(path string) bool {
-	_, err := os.Stat(path)
+	_, err := os.Stat(path) // #nosec G703 -- path is an internal working/snapshot path
 	return err == nil
 }
 
 func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src) // #nosec G304
+	data, err := os.ReadFile(src) // #nosec G304,G703 -- src validated by caller (securePath/internal)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}

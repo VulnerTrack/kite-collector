@@ -1068,7 +1068,10 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	}
 
 	// Select store backend: PostgreSQL if DSN is configured, otherwise SQLite.
+	// snapshot is set only for the encrypted SQLite backend (see below);
+	// Postgres is durable on its own, so it stays nil.
 	var st store.Store
+	var snapshot func(context.Context) error
 	if cfg.Postgres.DSN != "" {
 		slog.Info("store backend selected: postgres",
 			"code", string(LogCodeStorePostgresSelected))
@@ -1099,6 +1102,11 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			return fmt.Errorf("migrate sqlite store: %w", sqlErr)
 		}
 		st = encStore.Store
+		// The encrypted working copy lives on tmpfs and is otherwise written
+		// back to durable storage only on clean Close. Snapshot after each
+		// scan cycle so a crash/OOM/power-loss loses at most one cycle's data
+		// rather than everything since the agent started.
+		snapshot = encStore.Snapshot
 	}
 
 	registry := discovery.NewRegistry()
@@ -1437,6 +1445,17 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 					"stale", result.StaleMachines,
 					"events_emitted", result.EventsEmitted,
 				)
+				// Persist a durable, atomic snapshot of the just-written scan
+				// so a subsequent crash/OOM/power-loss can't discard it. Best
+				// effort: a snapshot failure must not stop the agent (the next
+				// cycle retries, and clean shutdown still encrypts on Close).
+				if snapshot != nil {
+					if snapErr := snapshot(ctx); snapErr != nil {
+						slog.Warn("durability snapshot after scan failed",
+							"code", string(LogCodeScanPeriodicComplete),
+							"error", snapErr)
+					}
+				}
 			}
 		}
 	}
