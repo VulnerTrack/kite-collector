@@ -1250,10 +1250,21 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		if otlpErr != nil {
 			return fmt.Errorf("create OTLP emitter: %w", otlpErr)
 		}
-		em = otlpEmitter
-		defer func() { _ = otlpEmitter.Shutdown(context.Background()) }()
+		// Wrap the OTLP emitter with a durable disk-backed overflow buffer so
+		// telemetry that cannot be delivered (endpoint down, retries exhausted)
+		// is spooled to queue.db and replayed on reconnect instead of dropped.
+		// The spool lives beside the main DB (same data dir).
+		durableEmitter, durErr := endpoint.NewDurableEmitter(ctx, otlpEmitter, filepath.Dir(dbPath), slog.Default())
+		if durErr != nil {
+			return fmt.Errorf("create durable emitter: %w", durErr)
+		}
+		durableEmitter.Start(ctx)
+		em = durableEmitter
+		// durableEmitter.Shutdown chains to the inner OTLP emitter's Shutdown,
+		// so a single deferred Shutdown covers both.
+		defer func() { _ = durableEmitter.Shutdown(context.Background()) }()
 		slog.Info(
-			"OTLP emitter configured; events will be streamed upstream",
+			"OTLP emitter configured with durable spool; events will be streamed upstream",
 			"code", string(LogCodeTelemetryOTLPConfigured),
 			"endpoint", cfg.Streaming.OTLP.Endpoint,
 			"protocol", cfg.Streaming.OTLP.Protocol,

@@ -22,4 +22,17 @@ const (
 
 	// tofu surface — server certificate fingerprint mismatch
 	LogCodeTOFUMismatch LogCode = "endpoint.tofu.fingerprint_mismatch"
+
+	// queue surface — durable offline buffer capacity management
+	LogCodeQueueCapacityCheckFailed LogCode = "endpoint.queue.capacity_check_failed"
+	LogCodeQueueEvictFailed         LogCode = "endpoint.queue.evict_failed"
+	LogCodeQueueEvicted             LogCode = "endpoint.queue.evicted"
+
+	// durable emitter surface — spool-on-failure and background drain
+	LogCodeDurableSpooled        LogCode = "endpoint.durable.spooled"
+	LogCodeDurableSpoolFailed    LogCode = "endpoint.durable.spool_failed"
+	LogCodeDurableDrained        LogCode = "endpoint.durable.drained"
+	LogCodeDurableDrainFailed    LogCode = "endpoint.durable.drain_failed"
+	LogCodeDurableDroppedPoison  LogCode = "endpoint.durable.dropped_poison"
+	LogCodeDurableDroppedCorrupt LogCode = "endpoint.durable.dropped_corrupt"
 )
