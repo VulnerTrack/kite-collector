@@ -283,7 +283,9 @@ func fleetMachineIP(machine model.Machine) string {
 	if json.Unmarshal([]byte(machine.Tags), &tags) != nil {
 		return ""
 	}
-	for _, key := range []string{"nbns_ip", "local_ip"} {
+	// Discovery providers use a few established tag names for the primary
+	// address. Keep this tolerant so known IPs are not hidden in the UI.
+	for _, key := range []string{"nbns_ip", "local_ip", "ip_address", "ip"} {
 		if value, ok := tags[key].(string); ok {
 			if ip := net.ParseIP(strings.TrimSpace(value)); ip != nil {
 				return ip.String()

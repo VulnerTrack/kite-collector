@@ -1165,6 +1165,12 @@ select {
 }
 .fleet-machine-main { display: flex; flex-direction: column; min-width: 0; }
 .fleet-machine-main strong { overflow: hidden; text-overflow: ellipsis; }
+.fleet-machine-address,
+.machine-address { color: var(--palette-text-secondary); font-size: 0.78rem; }
+.fleet-machine-address strong,
+.machine-address strong { color: var(--palette-text-primary); }
+.fleet-machine-address code,
+.machine-address code { white-space: nowrap; }
 .fleet-detection-hint { color: #9a6700; font-size: 0.74rem; }
 .fleet-machine-disabled { cursor: not-allowed; opacity: 0.62; background: var(--palette-grey-100); }
 .fleet-machine-disabled:hover { background: var(--palette-grey-100); }

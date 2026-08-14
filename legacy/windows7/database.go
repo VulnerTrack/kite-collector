@@ -19,6 +19,7 @@ var (
 	bucketCategories = []byte("categories")
 	keySnapshot      = []byte("snapshot")
 	keyLastSynced    = []byte("last_otlp_sync")
+	keyMachineSent   = []byte("machine_discovery_sent")
 )
 
 func inventoryDBPath(dir string) string { return filepath.Join(dir, "kite.db") }
@@ -106,6 +107,22 @@ func inventoryNeedsSync(dir string, collectedAt time.Time) (bool, error) {
 	return synced != collectedAt.UTC().Format(time.RFC3339Nano), err
 }
 
+func machineDiscoveryNeedsSync(dir string) (bool, error) {
+	db, err := bolt.Open(inventoryDBPath(dir), 0600, &bolt.Options{ReadOnly: true, Timeout: 2 * time.Second})
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+	var sent bool
+	err = db.View(func(tx *bolt.Tx) error {
+		if bucket := tx.Bucket(bucketMeta); bucket != nil {
+			sent = string(bucket.Get(keyMachineSent)) == "true"
+		}
+		return nil
+	})
+	return !sent, err
+}
+
 func markInventorySynced(dir string, collectedAt time.Time) error {
 	db, err := bolt.Open(inventoryDBPath(dir), 0600, &bolt.Options{Timeout: 5 * time.Second})
 	if err != nil {
@@ -117,7 +134,10 @@ func markInventorySynced(dir string, collectedAt time.Time) error {
 		if err != nil {
 			return err
 		}
-		return meta.Put(keyLastSynced, []byte(collectedAt.UTC().Format(time.RFC3339Nano)))
+		if err := meta.Put(keyLastSynced, []byte(collectedAt.UTC().Format(time.RFC3339Nano))); err != nil {
+			return err
+		}
+		return meta.Put(keyMachineSent, []byte("true"))
 	})
 }
 

@@ -118,10 +118,45 @@ func TestFleetCandidatesFromMachines_SelectsOnlyDeployableComputers(t *testing.T
 	assert.True(t, byHostname["192.0.2.26"].NeedsOSSelection)
 	assert.False(t, byHostname["ROBERTO-PC"].Compatible)
 	assert.True(t, byHostname["ROBERTO-PC"].NeedsOSSelection)
+	assert.Equal(t, "ROBERTO-PC", byHostname["ROBERTO-PC"].AddressLabel)
+	assert.Equal(t, "192.0.2.27", byHostname["ROBERTO-PC"].Address)
 	assert.Equal(t, "ROBERTO-PC,windows,amd64,192.0.2.27", byHostname["ROBERTO-PC"].TargetWindows)
 	assert.Contains(t, byHostname["ROBERTO-PC"].Reason, "Windows probable")
 	assert.True(t, byHostname["OFFICE-PC"].NeedsOSSelection)
 	assert.Equal(t, "OFFICE-PC,windows,amd64", byHostname["OFFICE-PC"].TargetWindows)
+}
+
+func TestFleetCandidateFromMachine_LabelsLocalAndRemoteAddresses(t *testing.T) {
+	local := fleetCandidateFromMachine(model.Machine{
+		Hostname: "controller", DiscoverySource: "local_controller",
+		MachineType: model.MachineTypeWorkstation, OSFamily: "linux", Architecture: "amd64",
+		Tags: `{"local_ip":"192.0.2.10"}`,
+	})
+	assert.True(t, local.Local)
+	assert.Equal(t, "Local IP", local.AddressLabel)
+	assert.Equal(t, "192.0.2.10", local.Address)
+
+	remote := fleetCandidateFromMachine(model.Machine{
+		Hostname: "ROBERTO-PC", DiscoverySource: "netbios",
+		MachineType: model.MachineTypeWorkstation, OSFamily: "windows",
+		Tags: `{"nbns_ip":"192.0.2.27"}`,
+	})
+	assert.False(t, remote.Local)
+	assert.Equal(t, "ROBERTO-PC", remote.AddressLabel)
+	assert.Equal(t, "192.0.2.27", remote.Address)
+}
+
+func TestMachineDisplayRows_IdentifiesLocalAndRemoteAddresses(t *testing.T) {
+	rows := machineDisplayRows([]model.Machine{
+		{Hostname: "controller", DiscoverySource: "agent"},
+		{Hostname: "ROBERTO-PC", DiscoverySource: "netbios", Tags: `{"nbns_ip":"192.0.2.27"}`},
+	}, "controller", "192.0.2.10")
+
+	require.Len(t, rows, 2)
+	assert.Equal(t, "Local IP", rows[0].IPLabel)
+	assert.Equal(t, "192.0.2.10", rows[0].IPAddress)
+	assert.Equal(t, "ROBERTO-PC", rows[1].IPLabel)
+	assert.Equal(t, "192.0.2.27", rows[1].IPAddress)
 }
 
 func TestFleetMachinesFromLatestDiscovery_ExcludesHistoricalMachines(t *testing.T) {
@@ -310,6 +345,9 @@ func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
 	assert.Contains(t, files["playbooks/deploy.yml"], "Detect Windows version and processor architecture")
 	assert.Contains(t, files["playbooks/deploy.yml"], "kite_windows_legacy")
 	assert.Contains(t, files["playbooks/deploy.yml"], "kite-collector_windows_386_legacy.exe")
+	assert.Contains(t, files["playbooks/deploy.yml"], "Retire incompatible modern collector on Windows 7")
+	assert.Contains(t, files["playbooks/deploy.yml"], "taskkill.exe /F /IM kite-collector.exe")
+	assert.Contains(t, files["playbooks/deploy.yml"], "sc.exe delete kite-collector")
 	assert.Contains(t, files["playbooks/deploy.yml"], "ansible_winrm_read_timeout_sec: 120")
 	assert.Contains(t, files["playbooks/deploy.yml"], "Read sanitized enrollment diagnostic")
 	assert.Contains(t, files["playbooks/deploy.yml"], "[REDACTED]")
@@ -321,8 +359,8 @@ func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
 	assert.Contains(t, files["deploy.sh"], "install_python_venv()")
 	assert.Contains(t, files["deploy.sh"], "apt-get install -y python3-venv")
 	assert.Contains(t, files["deploy.sh"], "python3 -m venv .venv")
-	assert.Contains(t, files["deploy.sh"], "Downloading the CI-built Windows 7 32-bit compatibility agent")
-	assert.NotContains(t, files["deploy.sh"], "Using the bundled Windows 7 32-bit compatibility agent")
+	assert.Contains(t, files["deploy.sh"], "Using the verified pre-staged Windows 7 compatibility agent")
+	assert.Contains(t, files["deploy.sh"], "Downloaded the CI-built Windows 7 32-bit compatibility agent")
 	assert.Contains(t, files["inventory/hosts.yml"],
 		base64.StdEncoding.EncodeToString([]byte(req.EnrollmentTokens["pc-001.example.test"])))
 	for _, token := range req.EnrollmentTokens {
@@ -371,6 +409,7 @@ func TestRoute_GET_Fleet_ListsCompatibleDiscoveredMachines(t *testing.T) {
 		MachineType:     model.MachineTypeWorkstation,
 		OSFamily:        "Windows 11 Pro",
 		DiscoverySource: "ldap",
+		Tags:            `{"ip_address":"192.0.2.27"}`,
 		IsAuthorized:    model.AuthorizationUnknown,
 		IsManaged:       model.ManagedUnknown,
 		FirstSeenAt:     time.Now().UTC(),
@@ -385,9 +424,10 @@ func TestRoute_GET_Fleet_ListsCompatibleDiscoveredMachines(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.Contains(t, body, "Computers discovered by Kite")
-	assert.Contains(t, body, `value="pc-discovered.example.test,windows,amd64"`)
+	assert.Contains(t, body, `value="pc-discovered.example.test,windows,amd64,192.0.2.27"`)
 	assert.Contains(t, body, "1 compatible")
 	assert.Contains(t, body, "ldap")
+	assert.Contains(t, body, `<strong>pc-discovered.example.test:</strong> <code>192.0.2.27</code>`)
 }
 
 func TestRoute_POST_FleetPackage_ReturnsZip(t *testing.T) {
