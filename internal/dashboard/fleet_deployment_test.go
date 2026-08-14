@@ -346,8 +346,21 @@ func TestWriteFleetBundle_ContainsRunnableUniversalPackage(t *testing.T) {
 	assert.Contains(t, files["playbooks/deploy.yml"], "kite_windows_legacy")
 	assert.Contains(t, files["playbooks/deploy.yml"], "kite-collector_windows_386_legacy.exe")
 	assert.Contains(t, files["playbooks/deploy.yml"], "Retire incompatible modern collector on Windows 7")
-	assert.Contains(t, files["playbooks/deploy.yml"], "taskkill.exe /F /IM kite-collector.exe")
+	assert.Contains(t, files["playbooks/deploy.yml"], "Get-Service -Name kite-collector -ErrorAction SilentlyContinue")
+	assert.Contains(t, files["playbooks/deploy.yml"], "if ($null -ne $modernService)")
+	assert.Contains(t, files["playbooks/deploy.yml"], "Get-Process -Name kite-collector -ErrorAction SilentlyContinue")
 	assert.Contains(t, files["playbooks/deploy.yml"], "sc.exe delete kite-collector")
+	assert.Contains(t, files["playbooks/deploy.yml"], "if ($LASTEXITCODE -ne 0)")
+	assert.Contains(t, files["playbooks/deploy.yml"], "exit 0")
+	retireStart := strings.Index(files["playbooks/deploy.yml"], "Retire incompatible modern collector on Windows 7")
+	retireEnd := strings.Index(files["playbooks/deploy.yml"], "Create package directory")
+	require.Greater(t, retireStart, -1)
+	require.Greater(t, retireEnd, retireStart)
+	assert.NotContains(t, files["playbooks/deploy.yml"][retireStart:retireEnd], "failed_when: false")
+	assert.Less(t,
+		strings.Index(files["playbooks/deploy.yml"], "Verify the remote account has an elevated administrator token"),
+		strings.Index(files["playbooks/deploy.yml"], "Retire incompatible modern collector on Windows 7"),
+	)
 	assert.Contains(t, files["playbooks/deploy.yml"], "ansible_winrm_read_timeout_sec: 120")
 	assert.Contains(t, files["playbooks/deploy.yml"], "Read sanitized enrollment diagnostic")
 	assert.Contains(t, files["playbooks/deploy.yml"], "[REDACTED]")
