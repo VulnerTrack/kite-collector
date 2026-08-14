@@ -134,10 +134,53 @@ func collectInventory(ctx context.Context) inventorySnapshot {
 		}
 		snapshot.Categories[category] = rows
 	}
+	// Give the compatibility dashboard the same first-class machine row as the
+	// modern collector. The raw source categories remain available alongside
+	// this normalized projection, so no Windows 7 detail is discarded.
+	snapshot.Categories["machines"] = []map[string]string{legacyMachineRow(&snapshot)}
 	if len(snapshot.Errors) == 0 {
 		snapshot.Errors = nil
 	}
 	return snapshot
+}
+
+func legacyMachineRow(snapshot *inventorySnapshot) map[string]string {
+	osVersion := inventoryOSVersion(snapshot)
+	architecture := "x86"
+	if row := firstRow(snapshot, "operating_system"); row != nil {
+		if value := firstValue(row, "OSArchitecture"); value != "" {
+			architecture = value
+		}
+	}
+	addresses := legacyInventoryIPAddresses(snapshot)
+	return map[string]string{
+		"hostname":         snapshot.Hostname,
+		"machine_type":     "workstation",
+		"os_family":        "windows",
+		"os_version":       osVersion,
+		"architecture":     architecture,
+		"ip_addresses":     strings.Join(addresses, ", "),
+		"is_authorized":    "unknown",
+		"is_managed":       "managed",
+		"discovery_source": "agent",
+	}
+}
+
+func parseWMIList(value string) []string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimPrefix(value, "{")
+	value = strings.TrimSuffix(value, "}")
+	if value == "" {
+		return nil
+	}
+	var values []string
+	for _, item := range strings.Split(value, ",") {
+		item = strings.Trim(strings.TrimSpace(item), `"`)
+		if item != "" {
+			values = append(values, item)
+		}
+	}
+	return values
 }
 
 func runText(ctx context.Context, exe string, args ...string) string {

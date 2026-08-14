@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -111,14 +113,51 @@ func renderMachinesFragment(w io.Writer, ctx context.Context, st store.Store, rc
 		return fmt.Errorf("list machines: %w", err)
 	}
 
+	localHostname, _ := os.Hostname()
+	localIP := ""
+	if network, networkErr := detectFleetLocalNetwork(); networkErr == nil {
+		localIP = network.LocalIP
+	}
+	rows := machineDisplayRows(machines, localHostname, localIP)
+
 	tmpl := template.Must(template.New("machines").Funcs(templateFuncs).Parse(machinesTemplate))
 	if err := tmpl.Execute(w, map[string]any{
-		"Machines": machines,
+		"Machines": rows,
 		"Context":  rc,
 	}); err != nil {
 		return fmt.Errorf("render machines template: %w", err)
 	}
 	return nil
+}
+
+type machineDisplayRow struct {
+	model.Machine
+	IPAddress string
+	IPLabel   string
+}
+
+// machineDisplayRows adds address information for the UI without changing the
+// persisted machine model. Remote computers keep their hostname as the label;
+// the computer serving this dashboard is identified explicitly as local.
+func machineDisplayRows(machines []model.Machine, localHostname, localIP string) []machineDisplayRow {
+	rows := make([]machineDisplayRow, 0, len(machines))
+	for _, machine := range machines {
+		hostname := strings.TrimSpace(machine.Hostname)
+		isLocal := strings.EqualFold(strings.TrimSpace(machine.DiscoverySource), "local_controller") ||
+			(localHostname != "" && strings.EqualFold(hostname, strings.TrimSpace(localHostname)))
+		ip := fleetMachineIP(machine)
+		if parsedLocalIP := net.ParseIP(strings.TrimSpace(localIP)); isLocal && parsedLocalIP != nil {
+			ip = parsedLocalIP.String()
+		}
+		label := hostname
+		if isLocal {
+			label = "Local IP"
+		} else if net.ParseIP(hostname) != nil {
+			label = "IP"
+		}
+		rows = append(rows, machineDisplayRow{Machine: machine, IPAddress: ip, IPLabel: label})
+	}
+	return rows
 }
 
 // renderSoftwareFragment renders the software table as an HTML fragment.
@@ -214,6 +253,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}})</h2>
   <thead>
     <tr>
       <th>Hostname</th>
+      <th>IP address</th>
       <th>Type</th>
       <th>OS</th>
       <th>Authorized</th>
@@ -226,6 +266,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}})</h2>
   {{range .Machines}}
     <tr>
       <td>{{.Hostname}}</td>
+      <td>{{if .IPAddress}}<span class="machine-address"><strong>{{.IPLabel}}:</strong> <code>{{.IPAddress}}</code></span>{{else}}—{{end}}</td>
       <td>{{.MachineType}}</td>
       <td>{{.OSFamily}}{{if .OSVersion}} {{.OSVersion}}{{end}}</td>
       <td><span class="badge {{authClass .IsAuthorized}}">{{.IsAuthorized}}</span></td>

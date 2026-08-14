@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -73,14 +74,21 @@ func syncLatestInventory(ctx context.Context, dir string) error {
 		return err
 	}
 	needed, err := inventoryNeedsSync(dir, snapshot.CollectedAt)
-	if err != nil || !needed {
+	if err != nil {
 		return err
+	}
+	discoveryNeeded, err := machineDiscoveryNeedsSync(dir)
+	if err != nil {
+		return err
+	}
+	if !needed && !discoveryNeeded {
+		return nil
 	}
 	client, err := newLegacyOTLPClient(dir, snapshot)
 	if err != nil {
 		return err
 	}
-	records, err := buildInventoryOTLPRecords(snapshot, client.resource)
+	records, err := buildInventoryOTLPRecords(snapshot, client.resource, discoveryNeeded)
 	if err != nil {
 		return err
 	}
@@ -196,7 +204,7 @@ func inventoryOSVersion(snapshot *inventorySnapshot) string {
 	return "6.1"
 }
 
-func buildInventoryOTLPRecords(snapshot *inventorySnapshot, resource []legacyOTLPKeyValue) ([]legacyOTLPLogRecord, error) {
+func buildInventoryOTLPRecords(snapshot *inventorySnapshot, resource []legacyOTLPKeyValue, discovery bool) ([]legacyOTLPLogRecord, error) {
 	assetID := otlpResourceValue(resource, "agent.id")
 	scanID := randomUUID()
 	traceID := strings.ReplaceAll(scanID, "-", "")
@@ -238,12 +246,19 @@ func buildInventoryOTLPRecords(snapshot *inventorySnapshot, resource []legacyOTL
 		"os_family": "windows", "os_version": inventoryOSVersion(snapshot),
 		"discovery_source": "agent", "is_authorized": "unknown", "is_managed": "managed",
 		"first_seen_at": now.Format(time.RFC3339Nano), "last_seen_at": now.Format(time.RFC3339Nano),
-		"software": software, "tags": []string{"windows-legacy", "windows-7", "x86"},
+		"software": software, "interfaces": legacyInventoryInterfaces(snapshot),
+		"config_findings": legacyInventoryFindings(snapshot),
+		"tags":            []string{"windows-legacy", "windows-7", "x86"},
 	}
 	attributes := cloneStrings(common)
 	attributes["event_type"] = "MachineUpdated"
 	attributes["event_name"] = "kite.machine.updated"
 	attributes["event.name"] = "machine.changed"
+	if discovery {
+		attributes["event_type"] = "MachineDiscovered"
+		attributes["event_name"] = "kite.machine.discovered"
+		attributes["event.name"] = "machine.discovered"
+	}
 	records := []legacyOTLPLogRecord{newInventoryOTLPRecord(summaryBody, attributes, now, traceID)}
 
 	categoryNames := inventoryCategoryNames(snapshot)
@@ -270,6 +285,70 @@ func buildInventoryOTLPRecords(snapshot *inventorySnapshot, resource []legacyOTL
 		records = append(records, newInventoryOTLPRecord(body, categoryAttrs, now, traceID))
 	}
 	return records, nil
+}
+
+func legacyInventoryIPAddresses(snapshot *inventorySnapshot) []string {
+	seen := make(map[string]bool)
+	var addresses []string
+	for _, adapter := range snapshot.Categories["network_adapters"] {
+		for _, raw := range parseWMIList(firstValue(adapter, "IPAddress")) {
+			ip := net.ParseIP(strings.TrimSpace(raw))
+			if ip == nil || ip.IsLoopback() || ip.IsUnspecified() {
+				continue
+			}
+			value := ip.String()
+			if !seen[value] {
+				seen[value] = true
+				addresses = append(addresses, value)
+			}
+		}
+	}
+	sort.Strings(addresses)
+	return addresses
+}
+
+func legacyInventoryInterfaces(snapshot *inventorySnapshot) []map[string]interface{} {
+	var interfaces []map[string]interface{}
+	for _, adapter := range snapshot.Categories["network_adapters"] {
+		addresses := parseWMIList(firstValue(adapter, "IPAddress"))
+		subnets := parseWMIList(firstValue(adapter, "IPSubnet"))
+		for index, raw := range addresses {
+			ip := net.ParseIP(strings.TrimSpace(raw))
+			if ip == nil || ip.IsLoopback() || ip.IsUnspecified() {
+				continue
+			}
+			subnet := ""
+			if index < len(subnets) {
+				subnet = subnets[index]
+			}
+			interfaces = append(interfaces, map[string]interface{}{
+				"interface_name": firstValue(adapter, "Description"),
+				"ip_address":     ip.String(),
+				"mac_address":    firstValue(adapter, "MACAddress"),
+				"subnet":         subnet,
+				"is_primary":     len(interfaces) == 0,
+				"is_public":      !ip.IsPrivate(),
+			})
+		}
+	}
+	return interfaces
+}
+
+func legacyInventoryFindings(snapshot *inventorySnapshot) []map[string]string {
+	findings := buildSecurityFindings(snapshot)
+	result := make([]map[string]string, 0, len(findings))
+	for index, finding := range findings {
+		result = append(result, map[string]string{
+			"auditor":     "windows7-compatibility",
+			"check_id":    fmt.Sprintf("WIN7-%03d-%s", index+1, strings.ToUpper(finding.Category)),
+			"title":       finding.Title,
+			"severity":    finding.Severity,
+			"evidence":    finding.Detail,
+			"expected":    "Secure Windows configuration",
+			"remediation": "Review the linked Windows inventory evidence and remediate the reported condition.",
+		})
+	}
+	return result
 }
 
 func newInventoryOTLPRecord(body interface{}, attrs map[string]string, timestamp time.Time, traceID string) legacyOTLPLogRecord {
