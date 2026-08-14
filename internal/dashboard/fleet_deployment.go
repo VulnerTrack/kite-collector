@@ -1342,14 +1342,6 @@ const fleetPlaybookYAML = `---
     - name: Select Windows 7 legacy collector
       ansible.builtin.set_fact:
         kite_windows_legacy: "{{ ('KITE_PLATFORM=6.1|' in kite_windows_platform.stdout) or ('|x86' in (kite_windows_platform.stdout | lower)) }}"
-    - name: Retire incompatible modern collector on Windows 7
-      ansible.builtin.raw: |
-        sc.exe stop kite-collector 2>$null | Out-Null
-        taskkill.exe /F /IM kite-collector.exe 2>$null | Out-Null
-        sc.exe delete kite-collector 2>$null | Out-Null
-        Remove-Item -LiteralPath 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Kite Collector Dashboard.lnk' -Force -ErrorAction SilentlyContinue
-      changed_when: false
-      when: kite_windows_legacy | bool
     - name: Verify the remote account has an elevated administrator token
       ansible.builtin.raw: |
         $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -1357,6 +1349,19 @@ const fleetPlaybookYAML = `---
           throw 'REMOTE_UAC_FILTERED: run the updated Kite CMD bootstrap locally as Administrator, then rerun deploy.sh'
         }
       changed_when: false
+    - name: Retire incompatible modern collector on Windows 7
+      ansible.builtin.raw: |
+        $modernService = Get-Service -Name kite-collector -ErrorAction SilentlyContinue
+        if ($null -ne $modernService) {
+          Stop-Service -Name kite-collector -Force -ErrorAction Stop
+          sc.exe delete kite-collector 2>$null | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Failed to delete the incompatible kite-collector service (exit $LASTEXITCODE)" }
+        }
+        Get-Process -Name kite-collector -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction Stop
+        Remove-Item -LiteralPath 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Kite Collector Dashboard.lnk' -Force -ErrorAction SilentlyContinue
+        exit 0
+      changed_when: false
+      when: kite_windows_legacy | bool
     - name: Create package directory
       ansible.builtin.raw: >-
         if (-not (Test-Path -LiteralPath 'C:\ProgramData\VulnerTrack\packages')) {
