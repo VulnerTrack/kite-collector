@@ -146,29 +146,28 @@ func handlePKICertificateDetail(w http.ResponseWriter, r *http.Request, deps onb
 }
 
 var pkiCertificateDetailTmpl = template.Must(template.New("pki-certificate-detail").Parse(`
+{{define "detailCopy"}}{{if .}}<button type="button" class="pki-copy-button" data-copy="{{.}}" onclick="copyPKIValue(this)" title="Copy value" aria-label="Copy value to clipboard"><svg class="pki-copy-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z"></path><path d="M5 16H4V5h11v1"></path></svg><svg class="pki-copy-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button>{{end}}{{end}}
 <div class="pki-certificate-detail">
-  <div class="observability-table-wrap">
-    <table class="kv observability-kv">
-      <tr><td>ID</td><td><code>{{.ID}}</code></td></tr>
-      <tr><td>Serial number</td><td><code>{{.SerialNumber}}</code></td></tr>
-      <tr><td>Subject CN</td><td><code>{{.SubjectCN}}</code></td></tr>
-      <tr><td>Subject organization</td><td><code>{{.SubjectOrg}}</code></td></tr>
-      <tr><td>Tenant ID</td><td><code>{{.TenantID}}</code></td></tr>
-      <tr><td>Issuer CN</td><td><code>{{.IssuerCN}}</code></td></tr>
-      <tr><td>SHA-256 fingerprint</td><td><code>{{.FingerprintSHA256}}</code></td></tr>
-      <tr><td>Key algorithm</td><td>{{.KeyAlgorithm}}</td></tr>
-      <tr><td>Purpose</td><td>{{.Purpose}}</td></tr>
-      <tr><td>Status</td><td><span class="badge {{.StatusClass}}">{{.Status}}</span></td></tr>
-      <tr><td>Not before</td><td><code>{{.NotBefore}}</code></td></tr>
-      <tr><td>Not after</td><td><code>{{.NotAfter}}</code></td></tr>
-      <tr><td>Issued at</td><td><code>{{.IssuedAt}}</code></td></tr>
-      <tr><td>Revoked at</td><td>{{if .RevokedAt}}<code>{{.RevokedAt}}</code>{{else}}&mdash;{{end}}</td></tr>
-      <tr><td>Revocation reason</td><td>{{if .RevocationReason}}{{.RevocationReason}}{{else}}&mdash;{{end}}</td></tr>
-      <tr><td>Parent CA ID</td><td>{{if .ParentCAID}}<code>{{.ParentCAID}}</code>{{else}}&mdash;{{end}}</td></tr>
-      <tr><td>Agent code</td><td>{{if .AgentCode}}<code>{{.AgentCode}}</code>{{else}}&mdash;{{end}}</td></tr>
-      <tr><td>Sync version</td><td>{{if .SyncVersion}}<code>{{.SyncVersion}}</code>{{else}}<span class="muted small">not returned by this PKI version</span>{{end}}</td></tr>
-    </table>
-  </div>
+  <dl class="pki-key-values pki-key-values--detail">
+    <div class="pki-key-value"><dt>ID</dt><dd><code>{{.ID}}</code>{{template "detailCopy" .ID}}</dd></div>
+    <div class="pki-key-value"><dt>Serial number</dt><dd><code>{{.SerialNumber}}</code>{{template "detailCopy" .SerialNumber}}</dd></div>
+    <div class="pki-key-value"><dt>Subject CN</dt><dd><code>{{.SubjectCN}}</code>{{template "detailCopy" .SubjectCN}}</dd></div>
+    <div class="pki-key-value"><dt>Subject organization</dt><dd><code>{{.SubjectOrg}}</code>{{template "detailCopy" .SubjectOrg}}</dd></div>
+    <div class="pki-key-value"><dt>Tenant ID</dt><dd><code>{{.TenantID}}</code>{{template "detailCopy" .TenantID}}</dd></div>
+    <div class="pki-key-value"><dt>Issuer CN</dt><dd><code>{{.IssuerCN}}</code>{{template "detailCopy" .IssuerCN}}</dd></div>
+    <div class="pki-key-value pki-key-value--wide"><dt>SHA-256 fingerprint</dt><dd><code>{{.FingerprintSHA256}}</code>{{template "detailCopy" .FingerprintSHA256}}</dd></div>
+    <div class="pki-key-value"><dt>Key algorithm</dt><dd><span>{{.KeyAlgorithm}}</span>{{template "detailCopy" .KeyAlgorithm}}</dd></div>
+    <div class="pki-key-value"><dt>Purpose</dt><dd><span>{{.Purpose}}</span>{{template "detailCopy" .Purpose}}</dd></div>
+    <div class="pki-key-value"><dt>Status</dt><dd><span class="badge {{.StatusClass}}">{{.Status}}</span>{{template "detailCopy" .Status}}</dd></div>
+    <div class="pki-key-value"><dt>Not before</dt><dd><code>{{.NotBefore}}</code>{{template "detailCopy" .NotBefore}}</dd></div>
+    <div class="pki-key-value"><dt>Not after</dt><dd><code>{{.NotAfter}}</code>{{template "detailCopy" .NotAfter}}</dd></div>
+    <div class="pki-key-value"><dt>Issued at</dt><dd><code>{{.IssuedAt}}</code>{{template "detailCopy" .IssuedAt}}</dd></div>
+    <div class="pki-key-value"><dt>Revoked at</dt><dd>{{if .RevokedAt}}<code>{{.RevokedAt}}</code>{{template "detailCopy" .RevokedAt}}{{else}}&mdash;{{end}}</dd></div>
+    <div class="pki-key-value"><dt>Revocation reason</dt><dd>{{if .RevocationReason}}<span>{{.RevocationReason}}</span>{{template "detailCopy" .RevocationReason}}{{else}}&mdash;{{end}}</dd></div>
+    <div class="pki-key-value"><dt>Parent CA ID</dt><dd>{{if .ParentCAID}}<code>{{.ParentCAID}}</code>{{template "detailCopy" .ParentCAID}}{{else}}&mdash;{{end}}</dd></div>
+    <div class="pki-key-value"><dt>Agent code</dt><dd>{{if .AgentCode}}<code>{{.AgentCode}}</code>{{template "detailCopy" .AgentCode}}{{else}}&mdash;{{end}}</dd></div>
+    <div class="pki-key-value"><dt>Sync version</dt><dd>{{if .SyncVersion}}<code>{{.SyncVersion}}</code>{{template "detailCopy" .SyncVersion}}{{else}}<span class="muted small">not returned by this PKI version</span>{{end}}</dd></div>
+  </dl>
   <details>
     <summary>Certificate PEM</summary>
     <pre class="failure-diagnostic">{{.CertPEM}}</pre>
@@ -181,6 +180,7 @@ var pkiCertificateDetailTmpl = template.Must(template.New("pki-certificate-detai
 </div>`))
 
 var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-inventory").Parse(`
+{{define "inventoryCopy"}}{{if .}}<button type="button" class="pki-copy-button" data-copy="{{.}}" onclick="copyPKIValue(this)" title="Copy value" aria-label="Copy value to clipboard"><svg class="pki-copy-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z"></path><path d="M5 16H4V5h11v1"></path></svg><svg class="pki-copy-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button>{{end}}{{end}}
 {{if .CertificatesError}}
   <div class="pki-certificate-notice" data-kind="{{if .CertificatesSignInRequired}}auth{{else}}pki{{end}}">
     <strong>{{if .CertificatesSignInRequired}}Sign in required{{else}}PKI unavailable{{end}}:</strong>
@@ -189,31 +189,53 @@ var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-in
   </div>
 {{else if .HasCertificates}}
   <p class="muted small">Showing this computer's most recently issued active certificate. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
-  <div class="observability-table-wrap">
-  <table class="observability-table pki-certificates-table">
-    <thead>
-      <tr><th>Agent / subject</th><th>Status</th><th>Serial</th><th>Tenant</th><th>Issued</th><th>Expires</th><th>Fingerprint SHA-256</th><th>Details</th></tr>
-    </thead>
-    <tbody>
-    {{range .Certificates}}
-      <tr>
-        <td>{{if .AgentCode}}<code>{{.AgentCode}}</code>{{else}}<code>{{.SubjectCN}}</code>{{end}}<br><span class="muted small">{{.Purpose}} &middot; {{.KeyAlgorithm}}</span></td>
-        <td><span class="badge {{.StatusClass}}">{{.Status}}</span></td>
-        <td><code>{{.SerialNumber}}</code></td>
-        <td><code>{{.TenantID}}</code></td>
-        <td><code>{{.IssuedAt}}</code></td>
-        <td><code>{{.NotAfter}}</code></td>
-        <td><code>{{.FingerprintSHA256}}</code></td>
-        <td><button class="btn btn-ghost" type="button"
-                    hx-get="/fragments/observability/certificates/{{.ID}}"
-                    hx-target="#certificate-detail-{{.ID}}"
-                    hx-swap="innerHTML">Full details</button></td>
-      </tr>
-      <tr><td colspan="8" id="certificate-detail-{{.ID}}"></td></tr>
-    {{end}}
-    </tbody>
-  </table>
+  {{range .Certificates}}
+  <dl class="pki-key-values">
+    <div class="pki-key-value"><dt>Agent code</dt><dd><code>{{.AgentCode}}</code>{{template "inventoryCopy" .AgentCode}}</dd></div>
+    <div class="pki-key-value"><dt>Subject CN</dt><dd><code>{{.SubjectCN}}</code>{{template "inventoryCopy" .SubjectCN}}</dd></div>
+    <div class="pki-key-value"><dt>Status</dt><dd><span class="badge {{.StatusClass}}">{{.Status}}</span>{{template "inventoryCopy" .Status}}</dd></div>
+    <div class="pki-key-value"><dt>Serial number</dt><dd><code>{{.SerialNumber}}</code>{{template "inventoryCopy" .SerialNumber}}</dd></div>
+    <div class="pki-key-value"><dt>Tenant ID</dt><dd><code>{{.TenantID}}</code>{{template "inventoryCopy" .TenantID}}</dd></div>
+    <div class="pki-key-value"><dt>Issued at</dt><dd><code>{{.IssuedAt}}</code>{{template "inventoryCopy" .IssuedAt}}</dd></div>
+    <div class="pki-key-value"><dt>Expires at</dt><dd><code>{{.NotAfter}}</code>{{template "inventoryCopy" .NotAfter}}</dd></div>
+    <div class="pki-key-value"><dt>Purpose</dt><dd><span>{{.Purpose}}</span>{{template "inventoryCopy" .Purpose}}</dd></div>
+    <div class="pki-key-value"><dt>Key algorithm</dt><dd><span>{{.KeyAlgorithm}}</span>{{template "inventoryCopy" .KeyAlgorithm}}</dd></div>
+    <div class="pki-key-value pki-key-value--wide"><dt>SHA-256 fingerprint</dt><dd><code>{{.FingerprintSHA256}}</code>{{template "inventoryCopy" .FingerprintSHA256}}</dd></div>
+  </dl>
+  <div class="pki-certificate-actions">
+    <button class="btn btn-ghost" type="button"
+            hx-get="/fragments/observability/certificates/{{.ID}}"
+            hx-target="#certificate-detail-{{.ID}}"
+            hx-swap="innerHTML">Full details</button>
   </div>
+  <div id="certificate-detail-{{.ID}}"></div>
+  {{end}}
 {{else}}
   <p class="muted">No PKI certificates have been issued for this organization yet. Certificates from individual and mass enrollments will appear here.</p>
-{{end}}`))
+{{end}}
+<script>
+window.copyPKIValue = function(button) {
+  var value = button.getAttribute('data-copy') || '';
+  if (!value) return;
+  var copied = function() {
+    button.classList.add('is-copied');
+    button.setAttribute('aria-label', 'Copied');
+    window.setTimeout(function() {
+      button.classList.remove('is-copied');
+      button.setAttribute('aria-label', 'Copy value to clipboard');
+    }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(value).then(copied);
+    return;
+  }
+  var input = document.createElement('textarea');
+  input.value = value;
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.appendChild(input);
+  input.select();
+  if (document.execCommand('copy')) copied();
+  input.remove();
+};
+</script>`))
