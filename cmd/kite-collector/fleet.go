@@ -105,7 +105,10 @@ func runFleetDiscover(cmd *cobra.Command, dashboardURL string, timeout time.Dura
 	if jsonOutput {
 		encoder := json.NewEncoder(cmd.OutOrStdout())
 		encoder.SetIndent("", "  ")
-		return encoder.Encode(result)
+		if err := encoder.Encode(result); err != nil {
+			return fmt.Errorf("encode fleet discovery result: %w", err)
+		}
+		return nil
 	}
 
 	out := cmd.OutOrStdout()
@@ -263,8 +266,8 @@ func runFleetDeploy(cmd *cobra.Command, dashboardURL string, timeout time.Durati
 	}
 
 	if packageOnly {
-		if err := os.WriteFile(output, bundle, 0o600); err != nil {
-			return fmt.Errorf("write deployment package %s: %w", output, err)
+		if writeErr := os.WriteFile(output, bundle, 0o600); writeErr != nil {
+			return fmt.Errorf("write deployment package %s: %w", output, writeErr)
 		}
 		_, _ = fmt.Fprintf(out, "Deployment package written to %s (contains a short-lived secret).\n", output)
 		return nil
@@ -373,27 +376,6 @@ func fleetEnrollmentComputers(computers []fleetDiscoverComputer) []fleetDiscover
 	return available
 }
 
-func waitForFleetDiscovery(ctx context.Context, dashboardURL string, timeout time.Duration) (fleetDiscoverResponse, error) {
-	deadline := time.Now().Add(timeout)
-	for {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			return fleetDiscoverResponse{}, fmt.Errorf("timed out waiting for the active network discovery")
-		}
-		result, err := requestFleetDiscovery(ctx, dashboardURL, remaining)
-		if !errors.Is(err, errFleetDiscoveryInProgress) {
-			return result, err
-		}
-		timer := time.NewTimer(2 * time.Second)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return fleetDiscoverResponse{}, ctx.Err()
-		case <-timer.C:
-		}
-	}
-}
-
 func selectFleetComputer(computers []fleetDiscoverComputer, requested string) (fleetDiscoverComputer, error) {
 	requested = strings.TrimSpace(requested)
 	var matches []fleetDiscoverComputer
@@ -482,11 +464,20 @@ func requestFleetPackage(ctx context.Context, dashboardURL string, targets []str
 	return bundle, nil
 }
 
+// maxFleetBundleEntrySize caps the decompressed size of one deployment package
+// entry so a malformed bundle cannot exhaust local disk during extraction.
+const maxFleetBundleEntrySize = 256 << 20
+
 func extractFleetBundle(bundle []byte, destination string) error {
 	zr, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
 	if err != nil {
-		return err
+		return fmt.Errorf("open deployment package: %w", err)
 	}
+	root, err := os.OpenRoot(destination)
+	if err != nil {
+		return fmt.Errorf("open deployment directory %s: %w", destination, err)
+	}
+	defer func() { _ = root.Close() }()
 	for _, entry := range zr.File {
 		name := filepath.Clean(entry.Name)
 		if name == "." || filepath.IsAbs(name) || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
@@ -495,41 +486,50 @@ func extractFleetBundle(bundle []byte, destination string) error {
 		if entry.FileInfo().Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("symlink ZIP entry %q is not allowed", entry.Name)
 		}
-		path := filepath.Join(destination, name)
 		if entry.FileInfo().IsDir() {
-			if err := os.MkdirAll(path, 0o700); err != nil {
-				return err
+			if err := root.MkdirAll(name, 0o700); err != nil {
+				return fmt.Errorf("create directory for ZIP entry %q: %w", entry.Name, err)
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return err
+		if dir := filepath.Dir(name); dir != "." {
+			if err := root.MkdirAll(dir, 0o700); err != nil {
+				return fmt.Errorf("create parent directory for ZIP entry %q: %w", entry.Name, err)
+			}
 		}
 		mode := os.FileMode(0o600)
 		if entry.Mode()&0o100 != 0 {
 			mode = 0o700
 		}
-		source, err := entry.Open()
-		if err != nil {
+		if err := extractFleetBundleFile(root, entry, name, mode); err != nil {
 			return err
 		}
-		destinationFile, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
-		if err != nil {
-			_ = source.Close()
-			return err
-		}
-		_, copyErr := io.Copy(destinationFile, source)
-		closeErr := destinationFile.Close()
-		sourceErr := source.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		if closeErr != nil {
-			return closeErr
-		}
-		if sourceErr != nil {
-			return sourceErr
-		}
+	}
+	return nil
+}
+
+func extractFleetBundleFile(root *os.Root, entry *zip.File, name string, mode os.FileMode) error {
+	source, err := entry.Open()
+	if err != nil {
+		return fmt.Errorf("open ZIP entry %q: %w", entry.Name, err)
+	}
+	defer func() { _ = source.Close() }()
+	destinationFile, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	if err != nil {
+		return fmt.Errorf("create file for ZIP entry %q: %w", entry.Name, err)
+	}
+	_, copyErr := io.CopyN(destinationFile, source, maxFleetBundleEntrySize+1)
+	closeErr := destinationFile.Close()
+	switch {
+	case errors.Is(copyErr, io.EOF):
+		// The whole entry fit under the extraction cap.
+	case copyErr != nil:
+		return fmt.Errorf("write ZIP entry %q: %w", entry.Name, copyErr)
+	default:
+		return fmt.Errorf("ZIP entry %q exceeds the %d byte extraction limit", entry.Name, maxFleetBundleEntrySize)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close extracted ZIP entry %q: %w", entry.Name, closeErr)
 	}
 	return nil
 }

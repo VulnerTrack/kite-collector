@@ -23,7 +23,7 @@ func collectPKICertificates(
 	if err != nil {
 		return nil, 0, "Sign in to VulnerTrack to load tenant certificates", true
 	}
-	certificates, total, err := deps.PKIReader.List(ctx, deps.PKIEndpoint, token)
+	certificates, _, err := deps.PKIReader.List(ctx, deps.PKIEndpoint, token)
 	if err != nil {
 		if errors.Is(err, errPKICertificateSignInRequired) {
 			return nil, 0, "Your VulnerTrack session expired; sign in again to load certificates", true
@@ -31,7 +31,7 @@ func collectPKICertificates(
 		return nil, 0, err.Error(), false
 	}
 	certificates = latestActiveComputerCertificate(certificates, kiteAgentCode())
-	total = len(certificates)
+	total := len(certificates)
 	for i := range certificates {
 		certificates[i].StatusClass = pkiCertificateStatusClass(certificates[i].Status)
 	}
