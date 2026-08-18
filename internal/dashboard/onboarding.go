@@ -1307,54 +1307,6 @@ func runReachProbe(ctx context.Context, client *http.Client, endpoint string) (p
 	}, dateHdr
 }
 
-// runAuthProbe calls GET /v1/auth/echo using the ProbeClient's mTLS identity.
-// apiKey is retained only for backward compatibility with legacy enrollments.
-func runAuthProbe(ctx context.Context, client *http.Client, endpoint, apiKey string) probeResult {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/v1/auth/echo", nil)
-	if err != nil {
-		return probeResult{Result: "fail", Diagnostic: "build auth request: " + err.Error()}
-	}
-	req.Header.Set("X-API-Key", apiKey)
-	if apiKey == "" {
-		req.Header.Del("X-API-Key")
-	}
-	req.Header.Set("Accept", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return probeResult{Result: "fail", Diagnostic: "auth: " + err.Error()}
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return probeResult{Result: "fail", Diagnostic: fmt.Sprintf("HTTP %d — token rejected", resp.StatusCode)}
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		// The mTLS handshake and client-cert check already succeeded (a cert
-		// failure surfaces as a transport error above, not an HTTP status).
-		// A 404 means the endpoint simply has no /v1/auth/echo route.
-		return probeResult{Result: "fail", Diagnostic: "HTTP 404 from /v1/auth/echo — route absent (mTLS handshake succeeded)"}
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return probeResult{Result: "fail", Diagnostic: fmt.Sprintf("HTTP %d from /v1/auth/echo", resp.StatusCode)}
-	}
-	if apiKey == "" {
-		return probeResult{Result: "pass", Diagnostic: "mTLS authenticated"}
-	}
-	expected := sqlite.APIKeyFingerprint(apiKey)
-	var parsed struct {
-		Fingerprint string `json:"api_key_fingerprint"`
-	}
-	if jsonErr := json.Unmarshal(body, &parsed); jsonErr == nil && parsed.Fingerprint != "" {
-		if strings.EqualFold(parsed.Fingerprint, expected) {
-			return probeResult{Result: "pass", Diagnostic: "fingerprint echoed"}
-		}
-		return probeResult{Result: "fail", Diagnostic: "fingerprint mismatch"}
-	}
-	// Some platforms don't echo — accept a clean 2xx as pass.
-	return probeResult{Result: "pass", Diagnostic: fmt.Sprintf("HTTP %d", resp.StatusCode)}
-}
-
 // runClockProbe parses the Date header captured from the reach response and
 // flags any skew greater than 60 seconds.
 func runClockProbe(dateHdr string) probeResult {

@@ -132,7 +132,7 @@ func TestPKICertificateDetailFragmentRendersAllPublicMaterial(t *testing.T) {
 		},
 		CertPEM: "PUBLIC-CERT-PEM", CSRPEM: "PUBLIC-CSR-PEM", SyncVersion: 9,
 	}}
-	req := httptest.NewRequest(http.MethodGet, "/fragments/observability/certificates/"+certificateID, nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/fragments/observability/certificates/"+certificateID, nil)
 	req.SetPathValue("id", certificateID)
 	recorder := httptest.NewRecorder()
 	handlePKICertificateDetail(recorder, req, onboardingDeps{
