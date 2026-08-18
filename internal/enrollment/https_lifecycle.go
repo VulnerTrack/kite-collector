@@ -14,14 +14,18 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"time"
+
+	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 const (
@@ -375,6 +379,21 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
+// lifecycleFailureAttrs builds the structured log attributes for a heartbeat
+// or cert-check failure: the site's log code first, then the kiteerrors
+// envelope. A missing credential PEM means this collector simply has not
+// enrolled yet — that case is decorated with a copy-pasteable remediation
+// hint instead of surfacing a bare file-not-found.
+func lifecycleFailureAttrs(err error, code LogCode, certsDir string) []slog.Attr {
+	if errors.Is(err, fs.ErrNotExist) {
+		err = kiteerrors.Wrap(err, "enrollment.https.not_enrolled",
+			"agent credentials missing from certs dir").
+			WithHint("this collector is not enrolled yet — run `kite-collector enroll --certs-dir " +
+				certsDir + "` (or `kite-collector install --agent-code <code>`) to provision agent.pem")
+	}
+	return append([]slog.Attr{slog.String("code", string(code))}, kiteerrors.Attrs(err)...)
+}
+
 // RunHTTPSLifecycle sends heartbeats and renews at two-thirds of certificate life.
 func (c *Client) RunHTTPSLifecycle(ctx context.Context, certsDir string) {
 	logger := c.logger
@@ -390,13 +409,15 @@ func (c *Client) RunHTTPSLifecycle(ctx context.Context, certsDir string) {
 		requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		if err := c.HeartbeatHTTPS(requestCtx, certsDir); err != nil {
-			logger.Warn("PKI HTTPS heartbeat failed", "error", err)
+			logger.LogAttrs(ctx, slog.LevelWarn, "PKI HTTPS heartbeat failed",
+				lifecycleFailureAttrs(err, LogCodeEnrollmentHeartbeatFailed, certsDir)...)
 		}
 	}
 	checkRenewal := func() {
 		material, err := loadAgentMaterial(certsDir)
 		if err != nil {
-			logger.Warn("PKI certificate check failed", "error", err)
+			logger.LogAttrs(ctx, slog.LevelWarn, "PKI certificate check failed",
+				lifecycleFailureAttrs(err, LogCodeEnrollmentHTTPSCertCheckFailed, certsDir)...)
 			return
 		}
 		if !ShouldRenew(material.certificate.NotBefore, material.certificate.NotAfter) {
@@ -405,10 +426,12 @@ func (c *Client) RunHTTPSLifecycle(ctx context.Context, certsDir string) {
 		requestCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		if err := c.RenewHTTPS(requestCtx, certsDir); err != nil {
-			logger.Error("PKI HTTPS certificate renewal failed", "error", err)
+			logger.LogAttrs(ctx, slog.LevelError, "PKI HTTPS certificate renewal failed",
+				lifecycleFailureAttrs(err, LogCodeEnrollmentRenewalFailed, certsDir)...)
 			return
 		}
-		logger.Info("PKI HTTPS certificate renewal completed")
+		logger.Info("PKI HTTPS certificate renewal completed",
+			"code", string(LogCodeEnrollmentRenewalCompleted))
 	}
 
 	sendHeartbeat()

@@ -14,6 +14,12 @@ const (
 	// renewal surface — periodic cert-renewal manager
 	LogCodeEnrollmentCertCheckFailed LogCode = "enrollment.renewal.cert_check_failed"
 
+	// https surface — PKI HTTPS heartbeat + renewal lifecycle
+	LogCodeEnrollmentHeartbeatFailed      LogCode = "enrollment.https.heartbeat_failed"
+	LogCodeEnrollmentHTTPSCertCheckFailed LogCode = "enrollment.https.cert_check_failed"
+	LogCodeEnrollmentRenewalFailed        LogCode = "enrollment.https.renewal_failed"
+	LogCodeEnrollmentRenewalCompleted     LogCode = "enrollment.https.renewal_completed"
+
 	// client surface — PKI enrollment client
 	LogCodeEnrollmentStarting LogCode = "enrollment.client.starting"
 

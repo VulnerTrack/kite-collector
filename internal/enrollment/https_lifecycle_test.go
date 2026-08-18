@@ -1,6 +1,7 @@
 package enrollment
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -12,6 +13,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"os"
@@ -286,4 +288,36 @@ func base64Hex(value []byte) string {
 		out[i*2+1] = digits[b&0x0f]
 	}
 	return string(out)
+}
+
+func TestRunHTTPSLifecycle_NotEnrolledEmitsHintedWarning(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := NewClient(logger)
+	client.http = &callbackDoer{do: func(*http.Request) (*http.Response, error) {
+		t.Fatal("missing credential files must prevent outbound lifecycle requests")
+		return nil, nil
+	}}
+
+	done := make(chan struct{})
+	go func() {
+		client.RunHTTPSLifecycle(ctx, t.TempDir())
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("HTTPS lifecycle did not honor context cancellation")
+	}
+
+	out := buf.String()
+	// Both initial checks fire against an empty certs dir; each must carry
+	// its site log code plus the not-enrolled envelope with a remediation
+	// hint (never a bare file-not-found).
+	assert.Contains(t, out, `"code":"enrollment.https.heartbeat_failed"`)
+	assert.Contains(t, out, `"code":"enrollment.https.cert_check_failed"`)
+	assert.Contains(t, out, `"error_code":"enrollment.https.not_enrolled"`)
+	assert.Contains(t, out, "kite-collector enroll --certs-dir")
 }
