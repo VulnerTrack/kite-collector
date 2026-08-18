@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"golang.org/x/sync/errgroup"
+
+	"github.com/vulnertrack/kite-collector/internal/sanitize"
 )
 
 // Registry manages software collectors and runs available ones in parallel.
@@ -121,6 +123,18 @@ func (r *Registry) Collect(ctx context.Context) *Result {
 					Err:       err,
 				})
 				return nil // don't abort other collectors
+			}
+
+			// Package-manager output is untrusted text: repair encoding,
+			// drop ANSI decorations and invisible runes, and trim every
+			// surfaced field before results reach dedup/persistence.
+			// CPE23 needs no pass — BuildCPE23 already restricts its
+			// components to [a-z0-9_.-].
+			for i := range res.Items {
+				item := &res.Items[i]
+				item.SoftwareName = sanitize.Clean(item.SoftwareName)
+				item.Vendor = sanitize.Clean(item.Vendor)
+				item.Version = sanitize.Clean(item.Version)
 			}
 
 			merged.Merge(res)
