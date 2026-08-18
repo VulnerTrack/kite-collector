@@ -200,7 +200,7 @@ var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-in
     <div class="pki-key-value"><dt>Expires at</dt><dd><code>{{.NotAfter}}</code>{{template "inventoryCopy" .NotAfter}}</dd></div>
     <div class="pki-key-value"><dt>Purpose</dt><dd><span>{{.Purpose}}</span>{{template "inventoryCopy" .Purpose}}</dd></div>
     <div class="pki-key-value"><dt>Key algorithm</dt><dd><span>{{.KeyAlgorithm}}</span>{{template "inventoryCopy" .KeyAlgorithm}}</dd></div>
-    <div class="pki-key-value pki-key-value--wide"><dt>SHA-256 fingerprint</dt><dd><code>{{.FingerprintSHA256}}</code>{{template "inventoryCopy" .FingerprintSHA256}}</dd></div>
+    <div class="pki-key-value"><dt>SHA-256 fingerprint</dt><dd><code>{{.FingerprintSHA256}}</code>{{template "inventoryCopy" .FingerprintSHA256}}</dd></div>
   </dl>
   <div class="pki-certificate-actions">
     <button class="btn btn-ghost" type="button"
