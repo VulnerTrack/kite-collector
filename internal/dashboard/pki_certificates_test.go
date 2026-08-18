@@ -107,6 +107,10 @@ func TestObservabilityCertificateSectionRendersSingleLatestActiveAgent(t *testin
 	require.NoError(t, pkiCertificateInventoryTmpl.Execute(&body, view))
 	assert.Contains(t, body.String(), "kite-fleet-pc-01")
 	assert.Contains(t, body.String(), "this computer's most recently issued active certificate")
+	assert.Contains(t, body.String(), `<dl class="pki-key-values">`)
+	assert.Contains(t, body.String(), `class="pki-copy-button"`)
+	assert.Contains(t, body.String(), `navigator.clipboard.writeText`)
+	assert.NotContains(t, body.String(), `class="observability-table pki-certificates-table"`)
 }
 
 func TestObservabilityLoadsCertificateInventoryIndependently(t *testing.T) {
@@ -141,6 +145,9 @@ func TestPKICertificateDetailFragmentRendersAllPublicMaterial(t *testing.T) {
 	for _, expected := range []string{"abc123", "kite-pc-01", "tenant-1", "deadbeef", "PUBLIC-CERT-PEM", "PUBLIC-CSR-PEM", ">9<"} {
 		assert.True(t, strings.Contains(body, expected), body)
 	}
+	assert.Contains(t, body, `<dl class="pki-key-values pki-key-values--detail">`)
+	assert.Contains(t, body, `class="pki-copy-button"`)
+	assert.NotContains(t, body, `<table`)
 }
 
 type fakePKICertificateReader struct {
