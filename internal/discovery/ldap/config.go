@@ -5,10 +5,16 @@ import (
 	"strings"
 )
 
+// DefaultBindPasswordEnvVar is the environment variable the LDAP source
+// reads the bind password from when the YAML omits bind_password_env.
+// Exported so the engine can include it in the process_env_secrets
+// declared-name detection set (RFC-0153 R9) without duplicating the value.
+const DefaultBindPasswordEnvVar = "KITE_LDAP_BIND_PASSWORD" //#nosec G101 -- env var name, not credential value
+
 // Default config values (RFC-0121 §5.4 / §10.2).
 const (
 	defaultTLSMode             = "ldaps"
-	defaultBindPasswordEnvVar  = "KITE_LDAP_BIND_PASSWORD" //#nosec G101 -- env var name, not credential value
+	defaultBindPasswordEnvVar  = DefaultBindPasswordEnvVar
 	defaultPageSize            = 1000
 	defaultTimeoutSeconds      = 300
 	defaultStaleThresholdDays  = 90

@@ -21,6 +21,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeContainerEnvMaxCapReached,
 		LogCodeProcessEnvReadProcFailed,
 		LogCodeProcessEnvMaxCapReached,
+		LogCodeProcessEnvEnvironTruncated,
 		LogCodeSecretsMissingPathTag,
 		LogCodeSecretsWalkError,
 	}
@@ -52,6 +53,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 		LogCodeContainerEnvMaxCapReached,
 		LogCodeProcessEnvReadProcFailed,
 		LogCodeProcessEnvMaxCapReached,
+		LogCodeProcessEnvEnvironTruncated,
 		LogCodeSecretsMissingPathTag,
 		LogCodeSecretsWalkError,
 	}

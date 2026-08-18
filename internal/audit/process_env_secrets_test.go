@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -187,6 +188,76 @@ func TestDeclaredEnvFinding_DeterministicPIDFreeID(t *testing.T) {
 	c := declaredEnvFinding(machine, 100, "cron", "KITE_JAMF_PASSWORD", "v1", now)
 	if a.ID == c.ID {
 		t.Error("IDs must differ across process names")
+	}
+}
+
+// Edge: an environ larger than the 256 KiB read cap gets its incomplete
+// tail entry dropped — complete entries are still detected, but a declared
+// name whose entry straddles the cap must not yield a finding with a
+// truncated-value hash.
+func TestProcessEnvSecrets_TruncatedEnvironDropsPartialTail(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("auditor is linux-only")
+	}
+	procRoot := t.TempDir()
+
+	// Layout: one complete declared entry up front, filler to just below the
+	// cap, then a second declared entry that straddles the cap boundary.
+	var env bytes.Buffer
+	env.WriteString("KITE_NETBOX_TOKEN=complete-value\x00")
+	filler := maxEnvBlockSize - 100 - env.Len()
+	env.WriteString("FILLER=" + strings.Repeat("a", filler-8) + "\x00")
+	env.WriteString("KITE_JAMF_PASSWORD=" + strings.Repeat("x", 300) + "\x00")
+	if env.Len() <= maxEnvBlockSize {
+		t.Fatalf("fixture must exceed the cap: %d <= %d", env.Len(), maxEnvBlockSize)
+	}
+
+	pid := fakePID()
+	dir := filepath.Join(procRoot, strconv.Itoa(pid))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "comm"), []byte("bloated\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "environ"), env.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := NewProcessEnvSecrets(ProcessEnvSecretsConfig{
+		ProcRoot:               procRoot,
+		DeclaredSecretEnvNames: []string{"KITE_NETBOX_TOKEN", "KITE_JAMF_PASSWORD"},
+	})
+	findings, err := p.Audit(context.Background(), serverMachine())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings = %d, want 1 (complete entry only): %+v", len(findings), findings)
+	}
+	if !strings.Contains(findings[0].Evidence, "ENV[KITE_NETBOX_TOKEN]") {
+		t.Errorf("finding is not for the complete entry: %q", findings[0].Evidence)
+	}
+}
+
+func TestDropPartialEnvTail(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"partial tail removed", "A=1\x00B=partia", "A=1\x00"},
+		{"complete block unchanged", "A=1\x00B=2\x00", "A=1\x00B=2\x00"},
+		{"no NUL at all is one partial entry", "A=partia", ""},
+		{"empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(dropPartialEnvTail([]byte(tc.in)))
+			if got != tc.want {
+				t.Errorf("dropPartialEnvTail(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 

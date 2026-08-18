@@ -19,6 +19,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
 	cloudsrc "github.com/vulnertrack/kite-collector/internal/discovery/cloud"
 	entrasrc "github.com/vulnertrack/kite-collector/internal/discovery/entra"
+	ldapdisc "github.com/vulnertrack/kite-collector/internal/discovery/ldap"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/identity"
@@ -135,16 +136,21 @@ var sourceEnvVars = map[string]map[string]string{ //#nosec G101 -- values are en
 }
 
 // legacySecretEnvNames returns the deduplicated set of well-known env var
-// names from sourceEnvVars that supply secret-bearing fields (password,
-// token, api_key, client_secret). RFC-0153 R9: these feed the
-// process_env_secrets declared-name detection so a globally-exported
-// KITE_*_PASSWORD-style variable is flagged when other processes carry it.
-// Non-secret entries (api_url, tenant_id, ...) are excluded.
+// names that supply secret-bearing fields outside explicit YAML declaration:
+// the password/token/api_key/client_secret entries of sourceEnvVars, plus
+// the LDAP source's default bind-password variable (which applies even when
+// the YAML omits bind_password_env, so Config.DeclaredSecretEnvNames cannot
+// see it). RFC-0153 R9: these feed the process_env_secrets declared-name
+// detection so a globally-exported KITE_*_PASSWORD-style variable is flagged
+// when other processes carry it. Non-secret entries (api_url, tenant_id,
+// ...) are excluded.
 func legacySecretEnvNames() []string {
 	secretKeys := map[string]bool{
 		"password": true, "token": true, "api_key": true, "client_secret": true,
 	}
-	seen := make(map[string]struct{})
+	seen := map[string]struct{}{
+		ldapdisc.DefaultBindPasswordEnvVar: {},
+	}
 	for _, fields := range sourceEnvVars {
 		for key, envVar := range fields {
 			if secretKeys[key] {
@@ -239,13 +245,27 @@ func buildSourceConfigMap(name string, src config.SourceConfig) map[string]any {
 	// SourceConfig (YAML) takes precedence: an env var only fills a field
 	// the YAML left empty (R4), and never one whose *_env companion is
 	// declared (RFC-0153 R3) — even when the declared variable is unset,
-	// explicit intent wins over the implicit well-known name.
+	// explicit intent wins over the implicit well-known name. That exact
+	// corner (declared-but-unresolved shadowing a legacy var that would
+	// have worked) is the one misconfiguration precedence alone can't
+	// explain, so it gets a structured warning.
 	for key, envVar := range sourceEnvVars[name] {
 		if existing, ok := m[key].(string); ok && existing != "" {
 			continue
 		}
 		if companion := secretEnvCompanions[key]; companion != "" {
 			if declared, ok := m[companion].(string); ok && declared != "" {
+				if v, _ := os.LookupEnv(declared); v == "" {
+					if _, legacySet := os.LookupEnv(envVar); legacySet {
+						slog.Warn("declared credential env indirection suppresses legacy env var",
+							"code", string(LogCodeSourceDeclaredEnvSuppressesLegacy),
+							"source", name,
+							"field", key,
+							"declared_env_var", declared,
+							"suppressed_env_var", envVar,
+							"hint", "the declared variable is unset/empty; unset "+key+"_env to fall back to the legacy variable, or inject the declared one")
+					}
+				}
 				continue
 			}
 		}

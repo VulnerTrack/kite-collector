@@ -70,6 +70,12 @@ const (
 	// retry helper (retry.go)
 	LogCodeRetryAttemptFailed LogCode = "engine.retry.attempt_failed"
 
+	// Source config assembly (RFC-0153): a declared *_env companion
+	// suppresses the legacy well-known env var even when the declared
+	// variable itself is unresolved — explicit intent wins, but the
+	// operator likely expected the legacy var to apply.
+	LogCodeSourceDeclaredEnvSuppressesLegacy LogCode = "engine.source_config.declared_env_suppresses_legacy"
+
 	// observability reconcile (inline call in scan-run loop)
 	LogCodeObservabilityReconcileFailed LogCode = "engine.observability.reconcile_failed"
 )
