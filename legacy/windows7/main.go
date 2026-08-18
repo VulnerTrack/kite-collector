@@ -35,8 +35,9 @@ import (
 )
 
 const (
-	serviceName = "kite-collector-legacy"
-	defaultPKI  = "https://pki.vulnertrack.io"
+	serviceName       = "kite-collector-legacy"
+	modernServiceName = "kite-collector"
+	defaultPKI        = "https://pki.vulnertrack.io"
 )
 
 type enrollResponse struct {
@@ -306,6 +307,13 @@ func installCommand(args []string) error {
 		return err
 	}
 	exe, _ = filepath.Abs(exe)
+	// A previous full collector cannot run correctly on Windows 7 and its
+	// dashboard occupies the same loopback port as this compatibility service.
+	// Retire only that service/process registration; preserve ProgramData so an
+	// existing enrollment identity and inventory remain available.
+	_ = exec.Command("sc.exe", "stop", modernServiceName).Run()
+	_ = exec.Command("taskkill.exe", "/F", "/IM", "kite-collector.exe").Run()
+	_ = exec.Command("sc.exe", "delete", modernServiceName).Run()
 	_ = exec.Command("sc.exe", "stop", serviceName).Run()
 	_ = exec.Command("sc.exe", "delete", serviceName).Run()
 	binPath := fmt.Sprintf("\"%s\" service run --certs-dir \"%s\"", exe, *dir)
@@ -332,6 +340,9 @@ func installDashboardShortcuts() {
 	paths := []string{
 		filepath.Join(programData, `Microsoft\Windows\Start Menu\Programs\Kite Collector Dashboard.url`),
 	}
+	// Remove the MSI shortcut that starts the unsupported full dashboard. It
+	// otherwise remains visible beside the compatibility dashboard URL.
+	_ = os.Remove(filepath.Join(programData, `Microsoft\Windows\Start Menu\Programs\Kite Collector Dashboard.lnk`))
 	if publicDir := os.Getenv("PUBLIC"); publicDir != "" {
 		paths = append(paths, filepath.Join(publicDir, `Desktop\Kite Collector Dashboard.url`))
 	}

@@ -129,11 +129,10 @@ build-host: build-windows7
 # Windows 7 uses the pinned Go 1.17 toolchain and a 32-bit binary. This intentionally builds
 # the isolated legacy module instead of weakening the modern collector.
 build-windows7:
-	@mkdir -p bin internal/dashboard/assets
+	@mkdir -p bin
 	cd legacy/windows7 && GOTOOLCHAIN=go1.17.13 CGO_ENABLED=0 GOOS=windows GOARCH=386 GO386=softfloat \
 		go build -trimpath -ldflags="-X main.version=$${VERSION:-dev}" \
-		-o ../../internal/dashboard/assets/kite-collector_windows_386_legacy.exe .
-	cp internal/dashboard/assets/kite-collector_windows_386_legacy.exe bin/kite-collector_windows_386_legacy.exe
+		-o ../../bin/kite-collector_windows_386_legacy.exe .
 
 run:
 	CGO_ENABLED=0 go run ./cmd/kite-collector

@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 489 codes across 58 packages.
+**Catalog size:** 493 codes across 59 packages.
 
 ---
 
@@ -180,7 +180,7 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 
 ## `audit` (internal/audit)
 
-Source: [`internal/audit/logcodes.go`](../internal/audit/logcodes.go) · 11 codes
+Source: [`internal/audit/logcodes.go`](../internal/audit/logcodes.go) · 12 codes
 
 **auditor surface — top-level fan-out orchestrator**
 
@@ -220,6 +220,12 @@ Source: [`internal/audit/logcodes.go`](../internal/audit/logcodes.go) · 11 code
 |---|---|---|
 | `audit.process_env.read_proc_failed` | `LogCodeProcessEnvReadProcFailed` | — |
 | `audit.process_env.max_pids_cap_reached` | `LogCodeProcessEnvMaxCapReached` | — |
+
+**LogCodeProcessEnvEnvironTruncated: a /proc/<pid>/environ read hit the 256 KiB cap, so the bytes after the last NUL are an incomplete entry. The partial tail is dropped rather than scanned — a truncated value would produce an unstable evidence hash and a truncated name could shadow a longer variable (RFC-0153 hardening).**
+
+| Code | Constant | Description |
+|---|---|---|
+| `audit.process_env.environ_truncated` | `LogCodeProcessEnvEnvironTruncated` | — |
 
 **secrets surface — repository content scanning**
 
@@ -738,6 +744,22 @@ Source: [`internal/discovery/code/logcodes.go`](../internal/discovery/code/logco
 | `code.scanner.path_resolve_failed` | `LogCodeScannerPathResolveFailed` | — |
 | `code.scanner.walk_failed` | `LogCodeScannerWalkFailed` | — |
 
+## `connectorkit` (internal/discovery/connectorkit)
+
+Source: [`internal/discovery/connectorkit/logcodes.go`](../internal/discovery/connectorkit/logcodes.go) · 2 codes
+
+**LogCodeEnvUnresolved is emitted when a declared *_env indirection (RFC-0153) names an environment variable that is unset or empty at credential-load time. The connector proceeds with its normal missing-credential skip; this warning is the operator's signal that a deployment forgot to inject the secret.**
+
+| Code | Constant | Description |
+|---|---|---|
+| `connectorkit.credentials.env_unresolved` | `LogCodeEnvUnresolved` | — |
+
+**LogCodeEnvWhitespace is emitted when a credential resolved through *_env indirection carries leading or trailing whitespace — almost always a trailing newline from file-based injection (echo/cat into EnvironmentFile). The value is used verbatim, so downstream auth failures with this warning present point at the injection pipeline.**
+
+| Code | Constant | Description |
+|---|---|---|
+| `connectorkit.credentials.env_whitespace` | `LogCodeEnvWhitespace` | — |
+
 ## `docker` (internal/discovery/docker)
 
 Source: [`internal/discovery/docker/logcodes.go`](../internal/discovery/docker/logcodes.go) · 3 codes
@@ -1226,7 +1248,7 @@ Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 1
 
 ## `engine` (internal/engine)
 
-Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 35 codes
+Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 36 codes
 
 **discovery surface — phase 1 of the scan pipeline**
 
@@ -1301,6 +1323,12 @@ Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 35 co
 | Code | Constant | Description |
 |---|---|---|
 | `engine.retry.attempt_failed` | `LogCodeRetryAttemptFailed` | — |
+
+**Source config assembly (RFC-0153): a declared *_env companion suppresses the legacy well-known env var even when the declared variable itself is unresolved — explicit intent wins, but the operator likely expected the legacy var to apply.**
+
+| Code | Constant | Description |
+|---|---|---|
+| `engine.source_config.declared_env_suppresses_legacy` | `LogCodeSourceDeclaredEnvSuppressesLegacy` | — |
 
 **observability reconcile (inline call in scan-run loop)**
 
