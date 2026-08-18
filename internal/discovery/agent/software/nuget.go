@@ -23,9 +23,16 @@ func (n *NuGet) Available() bool {
 }
 
 func (n *NuGet) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "dotnet", "list", "package", "--format=json")
+	// dotnet list package exits 1 with empty stdout when there is no
+	// project or solution file in cwd — the normal state for the agent
+	// service, whose working directory is /. Same benign-exit policy as
+	// composer.
+	out, _, exitCode, err := runWithLimitsTolerateExit(ctx, "dotnet", "list", "package", "--format=json")
 	if err != nil {
 		return nil, fmt.Errorf("dotnet list package: %w", err)
+	}
+	if exitCode != 0 && len(out) == 0 {
+		return &Result{}, nil
 	}
 	return ParseNuGetJSON(string(out)), nil
 }

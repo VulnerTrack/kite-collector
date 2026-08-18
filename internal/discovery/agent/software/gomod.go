@@ -24,9 +24,16 @@ func (g *GoMod) Available() bool {
 }
 
 func (g *GoMod) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "go", "list", "-m", "-json", "all")
+	// go list -m exits 1 with empty stdout when cwd is not inside a Go
+	// module ("go.mod file not found") — the normal state for the agent
+	// service, whose working directory is /. That is a "no Go project
+	// here" condition, not a failure — same benign-exit policy as composer.
+	out, _, exitCode, err := runWithLimitsTolerateExit(ctx, "go", "list", "-m", "-json", "all")
 	if err != nil {
 		return nil, fmt.Errorf("go list -m: %w", err)
+	}
+	if exitCode != 0 && len(out) == 0 {
+		return &Result{}, nil
 	}
 	return ParseGoModJSON(string(out)), nil
 }
