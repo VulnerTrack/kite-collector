@@ -110,6 +110,7 @@ func TestObservabilityCertificateSectionRendersSingleLatestActiveAgent(t *testin
 	assert.Contains(t, body.String(), `<dl class="pki-key-values">`)
 	assert.Contains(t, body.String(), `class="pki-copy-button"`)
 	assert.Contains(t, body.String(), `navigator.clipboard.writeText`)
+	assert.NotContains(t, body.String(), `pki-key-value pki-key-value--wide"><dt>SHA-256 fingerprint`)
 	assert.NotContains(t, body.String(), `class="observability-table pki-certificates-table"`)
 }
 
