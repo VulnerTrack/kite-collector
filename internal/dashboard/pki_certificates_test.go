@@ -72,11 +72,12 @@ func TestPKIHTTPCertificateReaderLoadsCompleteDetail(t *testing.T) {
 
 func TestCollectPKICertificatesIncludesMassEnrollmentRows(t *testing.T) {
 	t.Parallel()
+	localAgentCode := kiteAgentCode()
 	reader := &fakePKICertificateReader{list: []pkiCertificateSummary{
-		{ID: "old", AgentCode: "kite-pc-01", Status: "active", IssuedAt: "2026-08-17T10:00:00Z"},
-		{ID: "new", AgentCode: "kite-pc-01", Status: "active", IssuedAt: "2026-08-18T10:00:00Z"},
+		{ID: "old-local", AgentCode: localAgentCode, Status: "active", IssuedAt: "2026-08-17T10:00:00Z"},
+		{ID: "new-local", AgentCode: localAgentCode, Status: "active", IssuedAt: "2026-08-18T10:00:00Z"},
 		{ID: "newer-other-pc", AgentCode: "kite-pc-03", Status: "active", IssuedAt: "2026-08-18T12:00:00Z"},
-		{ID: "revoked", AgentCode: "kite-pc-02", Status: "revoked", IssuedAt: "2026-08-18T11:00:00Z"},
+		{ID: "revoked-local", AgentCode: localAgentCode, Status: "revoked", IssuedAt: "2026-08-18T11:00:00Z"},
 		{ID: "ca", SubjectCN: "Vulnertrack Root CA", Status: "active", IssuedAt: "2026-08-18T13:00:00Z"},
 	}}
 	certificates, total, message, signIn := collectPKICertificates(context.Background(), onboardingDeps{
@@ -88,7 +89,7 @@ func TestCollectPKICertificatesIncludesMassEnrollmentRows(t *testing.T) {
 	assert.Equal(t, 1, total)
 	assert.Empty(t, message)
 	assert.False(t, signIn)
-	assert.Equal(t, "newer-other-pc", certificates[0].ID)
+	assert.Equal(t, "new-local", certificates[0].ID)
 	assert.Equal(t, "badge-green", certificates[0].StatusClass)
 }
 
@@ -105,7 +106,7 @@ func TestObservabilityCertificateSectionRendersSingleLatestActiveAgent(t *testin
 	var body bytes.Buffer
 	require.NoError(t, pkiCertificateInventoryTmpl.Execute(&body, view))
 	assert.Contains(t, body.String(), "kite-fleet-pc-01")
-	assert.Contains(t, body.String(), "single most recently issued active computer certificate")
+	assert.Contains(t, body.String(), "this computer's most recently issued active certificate")
 }
 
 func TestObservabilityLoadsCertificateInventoryIndependently(t *testing.T) {
