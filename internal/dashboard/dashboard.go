@@ -203,6 +203,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("POST /api/v1/fleet/discover", func(w http.ResponseWriter, r *http.Request) {
 		handleFleetDiscovery(w, r, st, logger, fleetDiscovery)
 	})
+	mux.HandleFunc("GET /api/v1/fleet/discover", func(w http.ResponseWriter, r *http.Request) {
+		handleFleetDiscoveryResults(w, r, st, fleetDiscovery)
+	})
 	mux.HandleFunc("POST /api/v1/fleet/package", func(w http.ResponseWriter, r *http.Request) {
 		handleFleetPackage(w, r, logger, opts, fleetPackages)
 	})
@@ -401,6 +404,25 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				"code", string(LogCodeOnboardingDisabledNoWrapKey),
 				"error", keyErr)
 		} else {
+			operatorToken := fleetPackages.operatorToken
+			if operatorToken == nil {
+				operatorToken = func(ctx context.Context) (string, error) {
+					identity, identityErr := sqliteStore.GetEnrolledIdentity(ctx)
+					if identityErr != nil {
+						return "", fmt.Errorf("sign in to VulnerTrack before loading PKI data")
+					}
+					plaintext, unwrapErr := sqlite.AEADUnwrap(wrapKey, identity.ApiKeyWrapped)
+					if unwrapErr != nil {
+						return "", fmt.Errorf("VulnerTrack session is unavailable; sign in again")
+					}
+					token := strings.TrimSpace(string(plaintext))
+					if token == "" {
+						return "", fmt.Errorf("VulnerTrack session is unavailable; sign in again")
+					}
+					return token, nil
+				}
+				fleetPackages.operatorToken = operatorToken
+			}
 			var tlsCfg config.TLSConfig
 			if opts.BaseConfig != nil {
 				tlsCfg = opts.BaseConfig.Streaming.OTLP.TLS
@@ -415,30 +437,16 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				PlatformEndpoint: opts.PlatformEndpoint,
 				CertsDir:         opts.CertsDir,
 				ProbeDuration:    onboardingProbeDurationHistogram(),
+				PKIReader:        newPKIHTTPCertificateReader(),
+				PKIOperatorToken: operatorToken,
 				Installer:        opts.Installer,
 				ScanEnabled:      opts.Coordinator != nil && opts.BaseConfig != nil,
 				TLSConfig:        tlsCfg,
 				OAuth:            opts.OAuth,
+				PKIEndpoint:      resolveFleetPKIEndpoint(),
 			})
 			kiteOAuthEnrollment.Store = sqliteStore
 			kiteOAuthEnrollment.WrapKey = wrapKey
-			if fleetPackages.operatorToken == nil {
-				fleetPackages.operatorToken = func(ctx context.Context) (string, error) {
-					identity, identityErr := sqliteStore.GetEnrolledIdentity(ctx)
-					if identityErr != nil {
-						return "", fmt.Errorf("sign in to VulnerTrack before generating a deployment package")
-					}
-					plaintext, unwrapErr := sqlite.AEADUnwrap(wrapKey, identity.ApiKeyWrapped)
-					if unwrapErr != nil {
-						return "", fmt.Errorf("VulnerTrack session is unavailable; sign in again")
-					}
-					token := strings.TrimSpace(string(plaintext))
-					if token == "" {
-						return "", fmt.Errorf("VulnerTrack session is unavailable; sign in again")
-					}
-					return token, nil
-				}
-			}
 		}
 	} else {
 		logger.Warn("dashboard: onboarding disabled — store is not sqlite-backed",
