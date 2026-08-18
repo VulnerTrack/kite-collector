@@ -27,6 +27,17 @@ const (
 	processEnvSecretsExpected   = "No credentials in process environment variables"
 	processEnvSecretsCISControl = "CIS 3.11, CIS 14.8" //#nosec G101 -- CIS control reference, not a credential
 
+	// declaredEnvCheckID identifies the name-based detection (RFC-0153 R5):
+	// an env var the agent's own configuration declares as secret-bearing
+	// (a *_env indirection field or a legacy well-known credential var)
+	// observed with a non-empty value in a process other than the agent.
+	declaredEnvCheckID     = "env-exposure-001"
+	declaredEnvCheckName   = "Declared secret env var exposed"
+	declaredEnvRemediation = "Scope the variable to the kite-collector service unit " +
+		"(systemd Environment=/EnvironmentFile= or LoadCredential=) instead of " +
+		"exporting it globally, and rotate the credential if the exposing process " +
+		"is untrusted."
+
 	// defaultMaxPIDsScanned caps the number of PIDs scanned per Audit
 	// invocation to bound execution time on busy hosts.
 	defaultMaxPIDsScanned = 10_000
@@ -45,11 +56,12 @@ const (
 //
 // The agent's own PID and kernel threads are always skipped (R6).
 type ProcessEnvSecrets struct {
-	procRoot     string
-	processes    []string // optional case-insensitive filter; empty = all
-	denyPrefixes []string
-	maxPIDs      int
-	selfPID      int
+	procRoot      string
+	processes     []string // optional case-insensitive filter; empty = all
+	denyPrefixes  []string
+	declaredNames map[string]bool // case-sensitive; env names are on Linux
+	maxPIDs       int
+	selfPID       int
 }
 
 // ProcessEnvSecretsConfig configures a ProcessEnvSecrets auditor.
@@ -64,6 +76,13 @@ type ProcessEnvSecretsConfig struct {
 	// MaxPIDs caps the number of PIDs scanned per Audit. <=0 uses the
 	// default of 10,000.
 	MaxPIDs int
+	// DeclaredSecretEnvNames lists env var names the agent configuration
+	// declares as secret-bearing (RFC-0153): *_env indirection fields plus
+	// the legacy well-known credential vars. Any non-self process exposing
+	// one of these names with a non-empty value raises env-exposure-001,
+	// independent of value patterns and ahead of deny-prefix suppression —
+	// an explicit declaration beats prefix noise filtering (R6).
+	DeclaredSecretEnvNames []string
 }
 
 // NewProcessEnvSecrets constructs a ProcessEnvSecrets auditor with the
@@ -85,12 +104,19 @@ func NewProcessEnvSecrets(cfg ProcessEnvSecretsConfig) *ProcessEnvSecrets {
 	if max <= 0 {
 		max = defaultMaxPIDsScanned
 	}
+	declared := make(map[string]bool, len(cfg.DeclaredSecretEnvNames))
+	for _, name := range cfg.DeclaredSecretEnvNames {
+		if name != "" {
+			declared[name] = true
+		}
+	}
 	return &ProcessEnvSecrets{
-		procRoot:     procRoot,
-		processes:    cfg.Processes,
-		denyPrefixes: deny,
-		maxPIDs:      max,
-		selfPID:      os.Getpid(),
+		procRoot:      procRoot,
+		processes:     cfg.Processes,
+		denyPrefixes:  deny,
+		declaredNames: declared,
+		maxPIDs:       max,
+		selfPID:       os.Getpid(),
 	}
 }
 
@@ -176,7 +202,7 @@ func (p *ProcessEnvSecrets) Audit(ctx context.Context, machine model.Machine) ([
 		}
 
 		findings = append(findings,
-			scanProcessEnv(machine, pid, comm, envBytes, p.denyPrefixes, now)...)
+			scanProcessEnv(machine, pid, comm, envBytes, p.denyPrefixes, p.declaredNames, now)...)
 	}
 
 	if len(findings) > 0 {
@@ -191,15 +217,18 @@ func (p *ProcessEnvSecrets) Audit(ctx context.Context, machine model.Machine) ([
 	return findings, nil
 }
 
-// scanProcessEnv applies the secretPatterns to every NUL-separated
-// KEY=VALUE entry in envBytes and returns one ConfigFinding per
-// (pattern, env_var_name) pair, deduplicated within this PID.
+// scanProcessEnv applies the declared-name check (RFC-0153) and the
+// secretPatterns to every NUL-separated KEY=VALUE entry in envBytes and
+// returns one ConfigFinding per (check, env_var_name) pair, deduplicated
+// within this PID. The declared-name check runs BEFORE deny-prefix
+// filtering: an explicit declaration beats prefix noise suppression (R6).
 func scanProcessEnv(
 	machine model.Machine,
 	pid int,
 	processName string,
 	envBytes []byte,
 	denyPrefixes []string,
+	declaredNames map[string]bool,
 	now time.Time,
 ) []model.ConfigFinding {
 	if len(envBytes) == 0 {
@@ -218,6 +247,16 @@ func scanProcessEnv(
 		if !ok || value == "" {
 			continue
 		}
+
+		if declaredNames[name] {
+			dedupeKey := declaredEnvCheckID + ":" + name + ":" + strconv.Itoa(pid)
+			if !seen[dedupeKey] {
+				seen[dedupeKey] = true
+				findings = append(findings,
+					declaredEnvFinding(machine, pid, processName, name, value, now))
+			}
+		}
+
 		if matchesAnyPrefix(name, denyPrefixes) {
 			continue
 		}
@@ -262,6 +301,42 @@ func scanProcessEnv(
 	}
 
 	return findings
+}
+
+// declaredEnvFinding builds the env-exposure-001 ConfigFinding for a
+// declared secret env var name observed in a non-self process. The evidence
+// format is pinned by RFC-0153 §5.3 (the vie-side lift parses it); it never
+// contains the value — only a SHA-256 prefix for cross-process correlation
+// (R7). The finding ID excludes the ephemeral PID so a process restart
+// preserves first_seen_at, mirroring the pattern-based findings.
+func declaredEnvFinding(
+	machine model.Machine,
+	pid int,
+	processName string,
+	name string,
+	value string,
+	now time.Time,
+) model.ConfigFinding {
+	valueHash := fmt.Sprintf("%x", sha256.Sum256([]byte(value)))[:16]
+	seed := fmt.Sprintf("process_env_secrets:%s:%s:%s:%s",
+		machine.ID, declaredEnvCheckID, processName, name)
+	evidence := fmt.Sprintf(
+		"ENV[%s]=<redacted> declared secret exposed in process:%s (PID %d) hash:%s",
+		name, processName, pid, valueHash)
+
+	return model.ConfigFinding{
+		ID:          uuid.NewSHA1(uuid.NameSpaceURL, []byte(seed)),
+		MachineID:   machine.ID,
+		Auditor:     processEnvSecretsAuditorName,
+		CheckID:     declaredEnvCheckID,
+		Title:       fmt.Sprintf("%s: %s", declaredEnvCheckName, name),
+		Severity:    model.SeverityHigh,
+		Evidence:    evidence,
+		Expected:    processEnvSecretsExpected,
+		Remediation: declaredEnvRemediation,
+		CISControl:  processEnvSecretsCISControl,
+		Timestamp:   now,
+	}
 }
 
 // buildFilterSet returns a lowercase set of process names from filter, or

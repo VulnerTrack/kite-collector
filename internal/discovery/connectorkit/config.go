@@ -8,6 +8,7 @@
 package connectorkit
 
 import (
+	"os"
 	"strings"
 
 	"github.com/vulnertrack/kite-collector/internal/safenet"
@@ -55,6 +56,14 @@ type Credentials struct {
 // populated from SourceConfig (R4) with a fallback to the legacy sourceEnvVars
 // map in engine.go for backward compatibility. Secret-bearing values are cloned
 // onto the heap so a later Zero cannot fault on read-only literal memory.
+//
+// Secret fields additionally support declared env indirection (RFC-0153): when
+// the direct value is empty and cfg carries a "<key>_env" companion naming an
+// environment variable, the secret is resolved from that variable here — at
+// credential-load time — so the existing defer creds.Zero() at every call site
+// bounds the plaintext lifetime to one Discover call (R2). Precedence: direct
+// value > *_env indirection (the engine already suppressed the legacy env
+// overlay for declared keys, R3).
 func LoadCredentials(cfg map[string]any) Credentials {
 	return Credentials{
 		APIURL:          cfgString(cfg, "api_url"),
@@ -98,9 +107,21 @@ func cfgString(cfg map[string]any, key string) string {
 // owns independent heap memory. safenet.ZeroString mutates its argument's
 // backing array in place and fatally crashes on read-only literal memory, so a
 // clone here is the required companion to Zero.
+//
+// When the direct value is empty, the "<key>_env" companion is consulted
+// (RFC-0153): if it names an environment variable with a non-empty value, that
+// value is returned — cloned, because os.Getenv strings share the process
+// environment's backing memory, which Zero must never scribble on. An empty or
+// unset variable resolves to "", preserving each connector's existing
+// missing-credential graceful skip.
 func cfgSecret(cfg map[string]any, key string) string {
 	if v, ok := cfg[key].(string); ok && v != "" {
 		return strings.Clone(v)
+	}
+	if envName, ok := cfg[key+"_env"].(string); ok && envName != "" {
+		if v := os.Getenv(envName); v != "" {
+			return strings.Clone(v)
+		}
 	}
 	return ""
 }
