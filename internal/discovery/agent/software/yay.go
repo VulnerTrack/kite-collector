@@ -6,18 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/sanitize"
 )
-
-// ansiEscapes matches ANSI CSI sequences (colors, cursor movement). yay
-// keeps its message decorations colored even when stdout is a pipe, so
-// they must be stripped before line parsing.
-var ansiEscapes = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
 // Yay collects AUR/foreign packages using yay on Arch Linux.
 // It complements the Pacman collector which enumerates official packages.
@@ -53,7 +48,9 @@ func ParseYayOutput(raw string) *Result {
 
 	for scanner.Scan() {
 		lineNum++
-		line := ansiEscapes.ReplaceAllString(scanner.Text(), "")
+		// yay keeps its message decorations colored even when stdout is
+		// a pipe, so ANSI must be stripped before line parsing.
+		line := sanitize.StripANSI(scanner.Text())
 		if line == "" {
 			continue
 		}

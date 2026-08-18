@@ -194,3 +194,26 @@ func TestNewRegistry_ContainsAllCollectors(t *testing.T) {
 			"collector %q missing from NewRegistry()", name)
 	}
 }
+
+func TestRegistryCollect_SanitizesUntrustedFields(t *testing.T) {
+	r := &Registry{}
+	r.Register(&availableCollector{
+		name: "dirty",
+		items: []model.InstalledSoftware{
+			{
+				ID:             uuid.Must(uuid.NewV7()),
+				SoftwareName:   "  \x1b[1mCaf\xe9\x00  ",
+				Vendor:         "Ac\u200bme",
+				Version:        "\ufeff1.2.3\t",
+				PackageManager: "dirty",
+			},
+		},
+	})
+
+	res := r.Collect(context.Background())
+	require.Len(t, res.Items, 1)
+	// Latin-1 repaired, ANSI + NUL + zero-width + BOM dropped, trimmed.
+	assert.Equal(t, "Café", res.Items[0].SoftwareName)
+	assert.Equal(t, "Acme", res.Items[0].Vendor)
+	assert.Equal(t, "1.2.3", res.Items[0].Version)
+}
