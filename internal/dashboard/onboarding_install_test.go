@@ -1471,53 +1471,19 @@ func TestOnboardingPage_IncludesScrollToStepListener(t *testing.T) {
 // Probe-level typed recovery actions
 // ---------------------------------------------------------------------------
 
-func TestConnectionCheck_AuthFailureCarriesReEnrollAction(t *testing.T) {
+func TestConnectionCheck_ExcludesUnsupportedAuthProbe(t *testing.T) {
 	h := newInstallHarness(t, nil)
-
-	// Pre-enroll so the auth probe actually executes (otherwise it SKIPs
-	// with "no identity enrolled" and no action is attached).
-	form := url.Values{"api_key": {"sk-probe-action-0123456789ABCDEF"}}
-	_ = h.do(t, "POST", "/api/v1/identity/enroll",
-		strings.NewReader(form.Encode()),
-		map[string]string{"Content-Type": "application/x-www-form-urlencoded"})
-
 	rec := h.do(t, "GET", "/api/v1/connection/check", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp connectionCheckResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 
-	var authProbe *probeResult
-	var reachProbe *probeResult
-	for i := range resp.Probes {
-		switch resp.Probes[i].Name {
-		case probeAuth:
-			authProbe = &resp.Probes[i]
-		case probeReach:
-			reachProbe = &resp.Probes[i]
-		case probeDNS, probeTLS, probeClock, probeOTLP:
-			// other probes don't carry actions; ignored for this test
-		}
+	for _, probe := range resp.Probes {
+		assert.NotEqual(t, probeAuth, probe.Name,
+			"connection check must not call the unsupported /v1/auth/echo route")
 	}
-	require.NotNil(t, authProbe, "auth probe must be present in the 6-probe set")
-	require.Equal(t, "fail", authProbe.Result,
-		"auth probe must fail against the unreachable example.test endpoint")
-	require.NotNil(t, authProbe.Action,
-		"failed auth probe must carry a typed recovery action")
-	assert.Equal(t, "#enroll-card", authProbe.Action.URL,
-		"auth recovery must jump to the enroll card anchor")
-	assert.Equal(t, "Re-enroll", authProbe.Action.Label)
-
-	// Reach probe also fails (example.test is unreachable) and must carry the
-	// "Open endpoint" external link.
-	require.NotNil(t, reachProbe)
-	if reachProbe.Result == "fail" {
-		require.NotNil(t, reachProbe.Action, "reach failure must carry the open-endpoint action")
-		assert.Equal(t, "_blank", reachProbe.Action.Target,
-			"open-endpoint action must use target=_blank for an external open")
-		assert.Contains(t, reachProbe.Action.URL, "/healthz",
-			"open-endpoint URL must point at the /healthz path on the configured endpoint")
-	}
+	require.Len(t, resp.Probes, 5)
 }
 
 func TestActionFor_OnlyAuthAndReachAttachActions(t *testing.T) {
@@ -1595,11 +1561,11 @@ func TestConnectionCheck_PreservesCanonicalProbeOrder(t *testing.T) {
 
 	var resp connectionCheckResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp.Probes, 6, "must always emit 6 probes regardless of goroutine completion order")
+	require.Len(t, resp.Probes, 5, "must always emit 5 probes regardless of goroutine completion order")
 
 	// Canonical order matters — operator runbooks reference probe[2] = reach,
-	// probe[4] = clock, etc. Parallel execution must not scramble it.
-	expected := []probeName{probeDNS, probeTLS, probeReach, probeAuth, probeClock, probeOTLP}
+	// probe[3] = clock, etc. Parallel execution must not scramble it.
+	expected := []probeName{probeDNS, probeTLS, probeReach, probeClock, probeOTLP}
 	for i, want := range expected {
 		assert.Equal(t, want, resp.Probes[i].Name,
 			"probe[%d] order must be %s; got %s", i, want, resp.Probes[i].Name)
