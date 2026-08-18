@@ -203,6 +203,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("POST /api/v1/fleet/discover", func(w http.ResponseWriter, r *http.Request) {
 		handleFleetDiscovery(w, r, st, logger, fleetDiscovery)
 	})
+	mux.HandleFunc("GET /api/v1/fleet/discover", func(w http.ResponseWriter, r *http.Request) {
+		handleFleetDiscoveryResults(w, r, st, fleetDiscovery)
+	})
 	mux.HandleFunc("POST /api/v1/fleet/package", func(w http.ResponseWriter, r *http.Request) {
 		handleFleetPackage(w, r, logger, opts, fleetPackages)
 	})

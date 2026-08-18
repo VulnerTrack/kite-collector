@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -828,7 +830,7 @@ func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions
 		return fmt.Errorf("local enrollment wrap key is unavailable")
 	}
 
-	if strings.TrimSpace(enrollment.CertsDir) != "" {
+	if strings.TrimSpace(enrollment.CertsDir) != "" && !reuseFleetPKICredentials(r, enrollment.CertsDir) {
 		pkiClient := enrollment.PKIClient
 		if pkiClient == nil {
 			pkiClient = enrollmentpkg.NewClient(enrollment.Logger)
@@ -849,6 +851,10 @@ func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions
 		if err := enrollmentpkg.StoreCertificates(enrollment.CertsDir, result); err != nil {
 			return fmt.Errorf("store PKI certificates: %w", err)
 		}
+	} else if strings.TrimSpace(enrollment.CertsDir) != "" && enrollment.Logger != nil {
+		enrollment.Logger.Info("fleet operator login reusing existing PKI credentials",
+			"certs_dir", enrollment.CertsDir,
+			"request_path", r.URL.Path)
 	}
 
 	fingerprint := sqlite.APIKeyFingerprint(accessToken)
@@ -890,6 +896,20 @@ func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions
 			"remote_addr", r.RemoteAddr)
 	}
 	return nil
+}
+
+func reuseFleetPKICredentials(r *http.Request, certsDir string) bool {
+	dashboardCookie, err := r.Cookie(kiteOAuthDashboardCookie)
+	if err != nil || strings.TrimSpace(dashboardCookie.Value) != "/fleet" {
+		return false
+	}
+	for _, name := range []string{"ca.pem", "agent.pem", "agent-key.pem"} {
+		info, statErr := os.Stat(filepath.Join(certsDir, name))
+		if statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func kiteAgentCode() string {

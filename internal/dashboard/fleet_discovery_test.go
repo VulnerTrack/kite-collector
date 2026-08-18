@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -228,4 +229,65 @@ func TestHandleFleetDiscovery_RejectsCrossSitePost(t *testing.T) {
 
 	handleFleetDiscovery(rec, req, nil, slog.Default(), controller)
 	assert.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestHandleFleetDiscovery_JSONReturnsLatestCandidates(t *testing.T) {
+	st := testStore(t)
+	now := time.Now().UTC()
+	controller := &fleetDiscoveryController{
+		detect: func() (fleetLocalNetwork, error) {
+			return fleetLocalNetwork{LocalIP: "192.0.2.10", CIDR: "192.0.2.0/29", InterfaceName: "test0"}, nil
+		},
+		discover: func(context.Context, map[string]any) ([]model.Machine, error) {
+			return []model.Machine{{
+				Hostname: "ROBERTO-PC", MachineType: model.MachineTypeWorkstation,
+				OSFamily: "windows", Architecture: "amd64", DiscoverySource: "network_scan",
+				IsAuthorized: model.AuthorizationUnknown, IsManaged: model.ManagedUnknown,
+				Tags: `{"local_ip":"192.0.2.27"}`, FirstSeenAt: now, LastSeenAt: now,
+			}}, nil
+		},
+	}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost,
+		"http://127.0.0.1:9090/api/v1/fleet/discover", nil)
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+
+	handleFleetDiscovery(rec, req, st, slog.Default(), controller)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var response fleetDiscoveryAPIResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	assert.Equal(t, "192.0.2.0/29", response.Network)
+	assert.Equal(t, 1, response.Found)
+	require.Len(t, response.Computers, 1)
+	assert.Equal(t, "ROBERTO-PC", response.Computers[0].Hostname)
+	assert.Equal(t, "192.0.2.27", response.Computers[0].Address)
+	assert.True(t, response.Computers[0].Compatible)
+
+	// Reading the results must reuse this completed scan without invoking the
+	// discovery providers again.
+	controller.discover = func(context.Context, map[string]any) ([]model.Machine, error) {
+		t.Fatal("GET results unexpectedly started another network scan")
+		return nil, nil
+	}
+	getReq := httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"http://127.0.0.1:9090/api/v1/fleet/discover", nil)
+	getRec := httptest.NewRecorder()
+	handleFleetDiscoveryResults(getRec, getReq, st, controller)
+	require.Equal(t, http.StatusOK, getRec.Code)
+	var saved fleetDiscoveryAPIResponse
+	require.NoError(t, json.NewDecoder(getRec.Body).Decode(&saved))
+	require.Len(t, saved.Computers, 1)
+	assert.Equal(t, "ROBERTO-PC", saved.Computers[0].Hostname)
+}
+
+func TestHandleFleetDiscoveryResultsRequiresCompletedScan(t *testing.T) {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"http://127.0.0.1:9090/api/v1/fleet/discover", nil)
+	rec := httptest.NewRecorder()
+	handleFleetDiscoveryResults(rec, req, testStore(t), &fleetDiscoveryController{})
+	require.Equal(t, http.StatusConflict, rec.Code)
+	var response fleetDiscoveryAPIResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
+	assert.Contains(t, response.Error, "fleet discover")
 }
