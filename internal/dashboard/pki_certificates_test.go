@@ -101,11 +101,18 @@ func TestObservabilityCertificateSectionRendersEveryMassEnrollmentAgent(t *testi
 		Freshness:        newFreshness(true),
 	}
 	var body bytes.Buffer
-	require.NoError(t, observabilityTmpl.Execute(&body, view))
-	assert.Contains(t, body.String(), "Kite certificates")
+	require.NoError(t, pkiCertificateInventoryTmpl.Execute(&body, view))
 	assert.Contains(t, body.String(), "kite-fleet-pc-01")
 	assert.Contains(t, body.String(), "kite-fleet-pc-02")
 	assert.Contains(t, body.String(), "Showing all 2 certificates")
+}
+
+func TestObservabilityLoadsCertificateInventoryIndependently(t *testing.T) {
+	t.Parallel()
+	var body bytes.Buffer
+	require.NoError(t, observabilityTmpl.Execute(&body, observabilityView{Freshness: newFreshness(false)}))
+	assert.Contains(t, body.String(), `hx-get="/fragments/observability/certificates"`)
+	assert.Contains(t, body.String(), `hx-trigger="load, every 60s"`)
 }
 
 func TestPKICertificateDetailFragmentRendersAllPublicMaterial(t *testing.T) {

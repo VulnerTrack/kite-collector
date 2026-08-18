@@ -48,6 +48,21 @@ func pkiCertificateStatusClass(status string) string {
 	}
 }
 
+func handlePKICertificateInventory(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
+	view := observabilityView{}
+	view.Certificates, view.CertificateTotal, view.CertificatesError,
+		view.CertificatesSignInRequired = collectPKICertificates(r.Context(), deps)
+	view.HasCertificates = len(view.Certificates) > 0
+
+	var body bytes.Buffer
+	if err := pkiCertificateInventoryTmpl.Execute(&body, view); err != nil {
+		http.Error(w, "could not render certificate inventory", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(body.Bytes())
+}
+
 func handlePKICertificateDetail(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 	certificateID := strings.TrimSpace(r.PathValue("id"))
 	if _, err := uuid.Parse(certificateID); err != nil {
@@ -120,3 +135,41 @@ var pkiCertificateDetailTmpl = template.Must(template.New("pki-certificate-detai
   </details>
   <p class="muted small">PKI never returns or stores the certificate private key.</p>
 </div>`))
+
+var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-inventory").Parse(`
+{{if .CertificatesError}}
+  <div class="pki-certificate-notice" data-kind="{{if .CertificatesSignInRequired}}auth{{else}}pki{{end}}">
+    <strong>{{if .CertificatesSignInRequired}}Sign in required{{else}}PKI unavailable{{end}}:</strong>
+    <span>{{.CertificatesError}}</span>
+    {{if .CertificatesSignInRequired}}<a class="btn btn-ghost" href="/kite-login?dashboard=%2Fobservability">Sign in &rarr;</a>{{end}}
+  </div>
+{{else if .HasCertificates}}
+  <p class="muted small">Showing all {{.CertificateTotal}} certificates returned for the signed-in organization. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
+  <div class="observability-table-wrap">
+  <table class="observability-table pki-certificates-table">
+    <thead>
+      <tr><th>Agent / subject</th><th>Status</th><th>Serial</th><th>Tenant</th><th>Issued</th><th>Expires</th><th>Fingerprint SHA-256</th><th>Details</th></tr>
+    </thead>
+    <tbody>
+    {{range .Certificates}}
+      <tr>
+        <td>{{if .AgentCode}}<code>{{.AgentCode}}</code>{{else}}<code>{{.SubjectCN}}</code>{{end}}<br><span class="muted small">{{.Purpose}} &middot; {{.KeyAlgorithm}}</span></td>
+        <td><span class="badge {{.StatusClass}}">{{.Status}}</span></td>
+        <td><code>{{.SerialNumber}}</code></td>
+        <td><code>{{.TenantID}}</code></td>
+        <td><code>{{.IssuedAt}}</code></td>
+        <td><code>{{.NotAfter}}</code></td>
+        <td><code>{{.FingerprintSHA256}}</code></td>
+        <td><button class="btn btn-ghost" type="button"
+                    hx-get="/fragments/observability/certificates/{{.ID}}"
+                    hx-target="#certificate-detail-{{.ID}}"
+                    hx-swap="innerHTML">Full details</button></td>
+      </tr>
+      <tr><td colspan="8" id="certificate-detail-{{.ID}}"></td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+{{else}}
+  <p class="muted">No PKI certificates have been issued for this organization yet. Certificates from individual and mass enrollments will appear here.</p>
+{{end}}`))
