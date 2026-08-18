@@ -41,6 +41,7 @@ const (
 	// api surface — REST API server lifecycle
 	LogCodeAPIStarting     LogCode = "agent.api.starting"
 	LogCodeAPIServerFailed LogCode = "agent.api.server_failed"
+	LogCodeAPIDisabled     LogCode = "agent.api.disabled"
 
 	// dashboard surface — embedded dashboard server lifecycle
 	LogCodeDashboardStarting       LogCode = "agent.dashboard.starting"

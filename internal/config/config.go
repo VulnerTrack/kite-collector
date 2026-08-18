@@ -16,6 +16,7 @@ import (
 
 // Config is the top-level configuration structure.
 type Config struct {
+	API            APIConfig            `mapstructure:"api"`
 	Discovery      DiscoveryConfig      `mapstructure:"discovery"`
 	Identity       IdentityConfig       `mapstructure:"identity"`
 	LogLevel       string               `mapstructure:"log_level"`
@@ -407,6 +408,14 @@ type PostgresConfig struct {
 	DSN string `mapstructure:"dsn"`
 }
 
+// APIConfig configures the agent's REST API server (scan coordinator
+// endpoints + /metrics). Addr is the listen address; an empty string
+// disables the server entirely, mirroring the dashboard's empty-addr
+// semantics. Overridable via KITE_API_ADDR.
+type APIConfig struct {
+	Addr string `mapstructure:"addr"`
+}
+
 // Load reads configuration from a YAML file at path, applies defaults, and
 // binds environment variables with the "KITE" prefix.  Environment variables
 // use underscores as separators (e.g. KITE_LOG_LEVEL).
@@ -423,6 +432,7 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("discovery.sources.agent.collect_interfaces", true)
 	v.SetDefault("metrics.enabled", false)
 	v.SetDefault("metrics.listen", ":9090")
+	v.SetDefault("api.addr", ":8080")
 	v.SetDefault("audit.enabled", true)
 	v.SetDefault("audit.profile", "standard")
 	v.SetDefault("audit.ssh.enabled", true)

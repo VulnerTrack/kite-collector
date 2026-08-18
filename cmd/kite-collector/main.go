@@ -1336,23 +1336,32 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	apiMux := apiHandler.Mux()
 	apiMux.Handle("/metrics", met.Handler())
 
-	apiAddr := ":8080"
-	apiSrv := &http.Server{
-		Addr:              apiAddr,
-		Handler:           apiMux,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	go func() {
-		slog.Info("REST API server starting",
-			"code", string(LogCodeAPIStarting),
-			"addr", apiAddr)
-		if srvErr := apiSrv.ListenAndServe(); srvErr != nil && srvErr != http.ErrServerClosed {
-			slog.Error("REST API server exited with error",
-				"code", string(LogCodeAPIServerFailed),
-				"error", srvErr,
-				"addr", apiAddr)
+	// Empty api.addr disables the REST API, mirroring the dashboard's
+	// empty-addr semantics below. Override via config or KITE_API_ADDR
+	// (e.g. when another service already owns :8080).
+	apiAddr := cfg.API.Addr
+	var apiSrv *http.Server
+	if apiAddr != "" {
+		apiSrv = &http.Server{
+			Addr:              apiAddr,
+			Handler:           apiMux,
+			ReadHeaderTimeout: 10 * time.Second,
 		}
-	}()
+		go func() {
+			slog.Info("REST API server starting",
+				"code", string(LogCodeAPIStarting),
+				"addr", apiAddr)
+			if srvErr := apiSrv.ListenAndServe(); srvErr != nil && srvErr != http.ErrServerClosed {
+				slog.Error("REST API server exited with error",
+					"code", string(LogCodeAPIServerFailed),
+					"error", srvErr,
+					"addr", apiAddr)
+			}
+		}()
+	} else {
+		slog.Info("REST API server disabled (api.addr is empty)",
+			"code", string(LogCodeAPIDisabled))
+	}
 
 	// Dashboard with a live scan coordinator: "Run Scan" actually runs.
 	// Empty dashboardAddr disables the dashboard (useful for headless deploys).
@@ -1439,7 +1448,9 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				"reason", ctx.Err().Error())
 			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer shutdownCancel()
-			_ = apiSrv.Shutdown(shutdownCtx)
+			if apiSrv != nil {
+				_ = apiSrv.Shutdown(shutdownCtx)
+			}
 			if dashSrv != nil {
 				_ = dashSrv.Shutdown(shutdownCtx)
 			}

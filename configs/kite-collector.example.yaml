@@ -205,3 +205,8 @@ stale_threshold: 168h       # 7 days
 metrics:
   enabled: true
   listen: :9090             # Prometheus scrape endpoint
+
+# REST API (scan coordinator endpoints + /metrics in streaming mode).
+# Overridable via KITE_API_ADDR; an empty addr disables the server.
+api:
+  addr: :8080
