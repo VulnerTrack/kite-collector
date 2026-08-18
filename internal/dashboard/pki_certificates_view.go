@@ -6,7 +6,6 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -31,7 +30,7 @@ func collectPKICertificates(
 		}
 		return nil, 0, err.Error(), false
 	}
-	certificates = latestActiveComputerCertificates(certificates)
+	certificates = latestActiveComputerCertificate(certificates)
 	total = len(certificates)
 	for i := range certificates {
 		certificates[i].StatusClass = pkiCertificateStatusClass(certificates[i].Status)
@@ -39,12 +38,12 @@ func collectPKICertificates(
 	return certificates, total, "", false
 }
 
-// latestActiveComputerCertificates keeps the one certificate operators need
-// for each enrolled computer: the newest active row identified by agent_code.
-// CA/service rows without an agent_code and historical revoked/superseded rows
-// are intentionally excluded from the Observability inventory.
-func latestActiveComputerCertificates(certificates []pkiCertificateSummary) []pkiCertificateSummary {
-	latest := make(map[string]pkiCertificateSummary)
+// latestActiveComputerCertificate keeps exactly one row: the newest active
+// certificate associated with an enrolled computer. CA/service rows without
+// an agent_code and historical revoked/superseded rows are excluded.
+func latestActiveComputerCertificate(certificates []pkiCertificateSummary) []pkiCertificateSummary {
+	var latest pkiCertificateSummary
+	found := false
 	for _, certificate := range certificates {
 		if !strings.EqualFold(strings.TrimSpace(certificate.Status), "active") {
 			continue
@@ -53,21 +52,15 @@ func latestActiveComputerCertificates(certificates []pkiCertificateSummary) []pk
 		if agentCode == "" {
 			continue
 		}
-		key := strings.ToLower(agentCode)
-		current, exists := latest[key]
-		if !exists || certificateIssuedAfter(certificate, current) {
-			latest[key] = certificate
+		if !found || certificateIssuedAfter(certificate, latest) {
+			latest = certificate
+			found = true
 		}
 	}
-
-	filtered := make([]pkiCertificateSummary, 0, len(latest))
-	for _, certificate := range latest {
-		filtered = append(filtered, certificate)
+	if !found {
+		return nil
 	}
-	sort.Slice(filtered, func(i, j int) bool {
-		return certificateIssuedAfter(filtered[i], filtered[j])
-	})
-	return filtered
+	return []pkiCertificateSummary{latest}
 }
 
 func certificateIssuedAfter(candidate, current pkiCertificateSummary) bool {
@@ -190,7 +183,7 @@ var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-in
     {{if .CertificatesSignInRequired}}<a class="btn btn-ghost" href="/kite-login?dashboard=%2Fobservability">Sign in &rarr;</a>{{end}}
   </div>
 {{else if .HasCertificates}}
-  <p class="muted small">Showing the latest active certificate for each of {{.CertificateTotal}} enrolled computers. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
+  <p class="muted small">Showing the single most recently issued active computer certificate. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
   <div class="observability-table-wrap">
   <table class="observability-table pki-certificates-table">
     <thead>

@@ -75,8 +75,9 @@ func TestCollectPKICertificatesIncludesMassEnrollmentRows(t *testing.T) {
 	reader := &fakePKICertificateReader{list: []pkiCertificateSummary{
 		{ID: "old", AgentCode: "kite-pc-01", Status: "active", IssuedAt: "2026-08-17T10:00:00Z"},
 		{ID: "new", AgentCode: "kite-pc-01", Status: "active", IssuedAt: "2026-08-18T10:00:00Z"},
+		{ID: "newer-other-pc", AgentCode: "kite-pc-03", Status: "active", IssuedAt: "2026-08-18T12:00:00Z"},
 		{ID: "revoked", AgentCode: "kite-pc-02", Status: "revoked", IssuedAt: "2026-08-18T11:00:00Z"},
-		{ID: "ca", SubjectCN: "Vulnertrack Root CA", Status: "active", IssuedAt: "2026-08-18T12:00:00Z"},
+		{ID: "ca", SubjectCN: "Vulnertrack Root CA", Status: "active", IssuedAt: "2026-08-18T13:00:00Z"},
 	}}
 	certificates, total, message, signIn := collectPKICertificates(context.Background(), onboardingDeps{
 		PKIReader:        reader,
@@ -87,26 +88,24 @@ func TestCollectPKICertificatesIncludesMassEnrollmentRows(t *testing.T) {
 	assert.Equal(t, 1, total)
 	assert.Empty(t, message)
 	assert.False(t, signIn)
-	assert.Equal(t, "new", certificates[0].ID)
+	assert.Equal(t, "newer-other-pc", certificates[0].ID)
 	assert.Equal(t, "badge-green", certificates[0].StatusClass)
 }
 
-func TestObservabilityCertificateSectionRendersEveryMassEnrollmentAgent(t *testing.T) {
+func TestObservabilityCertificateSectionRendersSingleLatestActiveAgent(t *testing.T) {
 	t.Parallel()
 	view := observabilityView{
 		Certificates: []pkiCertificateSummary{
 			{ID: "1", AgentCode: "kite-fleet-pc-01", Status: "active", StatusClass: "badge-green"},
-			{ID: "2", AgentCode: "kite-fleet-pc-02", Status: "active", StatusClass: "badge-green"},
 		},
-		CertificateTotal: 2,
+		CertificateTotal: 1,
 		HasCertificates:  true,
 		Freshness:        newFreshness(true),
 	}
 	var body bytes.Buffer
 	require.NoError(t, pkiCertificateInventoryTmpl.Execute(&body, view))
 	assert.Contains(t, body.String(), "kite-fleet-pc-01")
-	assert.Contains(t, body.String(), "kite-fleet-pc-02")
-	assert.Contains(t, body.String(), "latest active certificate for each of 2 enrolled computers")
+	assert.Contains(t, body.String(), "single most recently issued active computer certificate")
 }
 
 func TestObservabilityLoadsCertificateInventoryIndependently(t *testing.T) {
