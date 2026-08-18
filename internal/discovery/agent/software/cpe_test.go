@@ -36,8 +36,38 @@ func TestBuildCPE23_NormalizesSpacesAndCase(t *testing.T) {
 }
 
 func TestBuildCPE23_StripsSpecialCharacters(t *testing.T) {
+	// "!" and "@" are removed; "+" and "~" are escaped per the CPE 2.3
+	// formatted-string binding, not deleted.
 	got := BuildCPE23("vendor!", "pkg@name", "1.0+dfsg~1")
-	assert.Equal(t, "cpe:2.3:a:vendor:pkgname:1.0dfsg1:*:*:*:*:*:*:*", got)
+	assert.Equal(t, `cpe:2.3:a:vendor:pkgname:1.0\+dfsg\~1:*:*:*:*:*:*:*`, got)
+}
+
+func TestBuildCPE23_EscapesPlusInProduct(t *testing.T) {
+	// NVD stores notepad++ as notepad\+\+; deleting the pluses would
+	// collapse g++ into g and libsigc++ into libsigc.
+	got := BuildCPE23("don ho", "Notepad++", "8.6")
+	assert.Equal(t, `cpe:2.3:a:don_ho:notepad\+\+:8.6:*:*:*:*:*:*:*`, got)
+}
+
+func TestBuildCPE23_SplitsEpochFromVersion(t *testing.T) {
+	// pacman/dpkg epoch: deleting the colon would report docker 29.7.1
+	// as version 129.7.1. NVD versions never carry epochs.
+	got := BuildCPE23("", "docker", "1:29.7.1-1")
+	assert.Equal(t, "cpe:2.3:a:*:docker:29.7.1-1:*:*:*:*:*:*:*", got)
+}
+
+func TestBuildCPE23_TransliteratesToASCII(t *testing.T) {
+	// The formatted-string grammar is ASCII-only: café must fold to cafe,
+	// not pass through and never match the NVD dictionary.
+	got := BuildCPE23("", "café", "1.0")
+	assert.Equal(t, "cpe:2.3:a:*:cafe:1.0:*:*:*:*:*:*:*", got)
+}
+
+func TestBuildCPE23_EscapedVersionWithVCSSuffix(t *testing.T) {
+	// Arch gcc-style versions keep their structure instead of fusing
+	// into an unrecognizable blob.
+	got := BuildCPE23("", "gcc", "16.1.1+r595+g171d15ac6959-1")
+	assert.Equal(t, `cpe:2.3:a:*:gcc:16.1.1\+r595\+g171d15ac6959-1:*:*:*:*:*:*:*`, got)
 }
 
 // ---------------------------------------------------------------------------

@@ -2,8 +2,10 @@ package software
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
-	"unicode"
+
+	"github.com/vulnertrack/kite-collector/internal/sanitize"
 )
 
 // BuildCPE23 constructs a best-effort CPE 2.3 formatted string for an
@@ -30,7 +32,7 @@ func BuildCPE23WithTargetSW(vendor, product, version, targetSW string) string {
 // target_hw fields.
 func BuildCPE23Full(vendor, product, version, targetSW, targetHW string) string {
 	p := normalizeComponent(product)
-	v := normalizeComponent(version)
+	v := normalizeVersion(version)
 
 	if p == "" && v == "" {
 		return ""
@@ -60,15 +62,44 @@ func BuildCPE23Full(vendor, product, version, targetSW, targetHW string) string 
 	return fmt.Sprintf("cpe:2.3:a:%s:%s:%s:*:*:*:*:%s:%s:*", ven, p, v, tsw, thw)
 }
 
-// normalizeComponent lowercases and sanitises a single CPE component value.
-// Spaces become underscores; characters outside [a-z0-9_\-.] are removed.
+// normalizeComponent lowercases and sanitises a single CPE component value
+// for the CPE 2.3 formatted-string binding. Accented letters fold to their
+// ASCII base (café → cafe) so components stay inside the spec's ASCII
+// grammar and matchable against the NVD dictionary; spaces become
+// underscores (NVD's http_server convention); the unreserved characters
+// [a-z0-9_.-] pass through bare; identity-bearing punctuation the spec
+// requires quoting — "+" and "~" — is escaped (notepad++ → notepad\+\+,
+// matching how NVD stores it) rather than deleted; everything else,
+// including any remaining non-ASCII, is removed.
 func normalizeComponent(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.ToLower(sanitize.Transliterate(strings.TrimSpace(s)))
 	s = strings.ReplaceAll(s, " ", "_")
-	return strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == '.' {
-			return r
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9',
+			r == '_', r == '-', r == '.':
+			b.WriteRune(r)
+		case r == '+' || r == '~':
+			b.WriteByte('\\')
+			b.WriteRune(r)
 		}
-		return -1
-	}, s)
+	}
+	return b.String()
+}
+
+// epochPrefix matches the Debian/Arch epoch in a package version ("1:" in
+// "1:29.7.1-1").
+var epochPrefix = regexp.MustCompile(`^[0-9]+:`)
+
+// normalizeVersion prepares a package-manager version string for the CPE
+// version component: the epoch prefix is split off before normalization —
+// NVD versions never carry epochs, and deleting the colon instead would
+// fuse the epoch digit into the version (1:29.7.1 → 129.7.1). The distro
+// release suffix (the -1 in 29.7.1-1) is deliberately kept: stripping it
+// is ecosystem-specific knowledge that belongs to the collectors, a
+// matching-fidelity question rather than an alphabet bug.
+func normalizeVersion(s string) string {
+	return normalizeComponent(epochPrefix.ReplaceAllString(strings.TrimSpace(s), ""))
 }
