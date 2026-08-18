@@ -28,9 +28,15 @@ func (p *Pnpm) Available() bool {
 
 // Collect runs pnpm list -g --json and returns parsed results.
 func (p *Pnpm) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "pnpm", "list", "-g", "--json")
+	// pnpm list -g exits 1 with empty stdout when the global installation
+	// was never set up for the invoking user ("pnpm setup" not run) — the
+	// usual state for root. Same benign-exit policy as composer.
+	out, _, exitCode, err := runWithLimitsTolerateExit(ctx, "pnpm", "list", "-g", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("pnpm list -g: %w", err)
+	}
+	if exitCode != 0 && len(out) == 0 {
+		return &Result{}, nil
 	}
 	return ParsePnpmJSON(string(out)), nil
 }
