@@ -12,6 +12,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/sanitize"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
@@ -83,6 +84,10 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, machines []model.Machine
 	order := make([]string, 0, len(machines))
 	groups := make(map[string][]model.Machine, len(machines))
 	for i := range machines {
+		// Sanitize BEFORE ComputeNaturalKey so dedup keys derive from the
+		// cleaned hostname — every source funnels through here, making this
+		// the single boundary where machine text is guaranteed valid UTF-8.
+		sanitizeMachine(&machines[i])
 		machines[i].ComputeNaturalKey()
 		key := machines[i].NaturalKey
 		if _, ok := groups[key]; !ok {
@@ -300,4 +305,22 @@ func parseTagObject(s string) map[string]json.RawMessage {
 		return nil
 	}
 	return m
+}
+
+// sanitizeMachine runs the standard sanitize pipeline (encoding repair,
+// ANSI/invisible-rune removal, trim) over every machine text field that
+// originates outside kite — discovery probes, remote-tool output, MDM/CMDB
+// connector APIs — so persisted records, JSON APIs, and proto3 OTLP string
+// fields (which reject invalid UTF-8 at marshal) all see clean text.
+// Kite-authored fields (DiscoverySource, TenantID, NaturalKey) are skipped.
+func sanitizeMachine(m *model.Machine) {
+	for _, f := range []*string{
+		&m.Hostname, &m.OSFamily, &m.OSVersion, &m.KernelVersion,
+		&m.Architecture, &m.Environment, &m.Owner, &m.Criticality,
+		&m.Tags, &m.MDMEnrollmentID, &m.CMDBSysID, &m.Site, &m.Tenant,
+		&m.MachineTag, &m.OperationalStatus, &m.OwnershipType,
+		&m.EnrolledUserUPN, &m.ComplianceState,
+	} {
+		*f = sanitize.Clean(*f)
+	}
 }

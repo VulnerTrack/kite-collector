@@ -624,3 +624,34 @@ func TestDedup_Idempotent(t *testing.T) {
 			"existing ID must be preserved on re-deduplication")
 	}
 }
+
+func TestDedup_SanitizesMachineTextBeforeKeying(t *testing.T) {
+	ms := newMockStore()
+	dd := New(ms, nil)
+	ctx := context.Background()
+
+	// Latin-1 hostname bytes, ANSI-decorated OS version, zero-width space
+	// in the owner: all repaired/stripped at the dedup boundary, and the
+	// natural key must be computed from the CLEANED hostname.
+	machines := []model.Machine{{
+		Hostname:        "  Caf\xe9-PC ",
+		OSVersion:       "\x1b[32mUbuntu 24.04\x1b[0m",
+		Owner:           "ro\u200bberto",
+		MachineType:     model.MachineTypeServer,
+		DiscoverySource: "test",
+	}}
+
+	res, err := dd.Deduplicate(ctx, machines)
+	require.NoError(t, err)
+	require.Len(t, res.Machines, 1)
+
+	got := res.Machines[0]
+	assert.Equal(t, "Café-PC", got.Hostname)
+	assert.Equal(t, "Ubuntu 24.04", got.OSVersion)
+	assert.Equal(t, "roberto", got.Owner)
+
+	clean := model.Machine{Hostname: "Café-PC", MachineType: model.MachineTypeServer}
+	clean.ComputeNaturalKey()
+	assert.Equal(t, clean.NaturalKey, got.NaturalKey,
+		"natural key must derive from the sanitized hostname")
+}
