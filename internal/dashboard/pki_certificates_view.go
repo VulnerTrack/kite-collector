@@ -30,7 +30,7 @@ func collectPKICertificates(
 		}
 		return nil, 0, err.Error(), false
 	}
-	certificates = latestActiveComputerCertificate(certificates)
+	certificates = latestActiveComputerCertificate(certificates, kiteAgentCode())
 	total = len(certificates)
 	for i := range certificates {
 		certificates[i].StatusClass = pkiCertificateStatusClass(certificates[i].Status)
@@ -39,9 +39,14 @@ func collectPKICertificates(
 }
 
 // latestActiveComputerCertificate keeps exactly one row: the newest active
-// certificate associated with an enrolled computer. CA/service rows without
-// an agent_code and historical revoked/superseded rows are excluded.
-func latestActiveComputerCertificate(certificates []pkiCertificateSummary) []pkiCertificateSummary {
+// certificate whose agent_code belongs to this local computer. Every Kite
+// installation therefore shows its own identity instead of another computer
+// from the same tenant. CA/service and historical rows are excluded.
+func latestActiveComputerCertificate(certificates []pkiCertificateSummary, localAgentCode string) []pkiCertificateSummary {
+	localAgentCode = strings.TrimSpace(localAgentCode)
+	if localAgentCode == "" {
+		return nil
+	}
 	var latest pkiCertificateSummary
 	found := false
 	for _, certificate := range certificates {
@@ -49,7 +54,7 @@ func latestActiveComputerCertificate(certificates []pkiCertificateSummary) []pki
 			continue
 		}
 		agentCode := strings.TrimSpace(certificate.AgentCode)
-		if agentCode == "" {
+		if !strings.EqualFold(agentCode, localAgentCode) {
 			continue
 		}
 		if !found || certificateIssuedAfter(certificate, latest) {
@@ -183,7 +188,7 @@ var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-in
     {{if .CertificatesSignInRequired}}<a class="btn btn-ghost" href="/kite-login?dashboard=%2Fobservability">Sign in &rarr;</a>{{end}}
   </div>
 {{else if .HasCertificates}}
-  <p class="muted small">Showing the single most recently issued active computer certificate. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
+  <p class="muted small">Showing this computer's most recently issued active certificate. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
   <div class="observability-table-wrap">
   <table class="observability-table pki-certificates-table">
     <thead>
