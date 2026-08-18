@@ -6,7 +6,9 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -29,10 +31,54 @@ func collectPKICertificates(
 		}
 		return nil, 0, err.Error(), false
 	}
+	certificates = latestActiveComputerCertificates(certificates)
+	total = len(certificates)
 	for i := range certificates {
 		certificates[i].StatusClass = pkiCertificateStatusClass(certificates[i].Status)
 	}
 	return certificates, total, "", false
+}
+
+// latestActiveComputerCertificates keeps the one certificate operators need
+// for each enrolled computer: the newest active row identified by agent_code.
+// CA/service rows without an agent_code and historical revoked/superseded rows
+// are intentionally excluded from the Observability inventory.
+func latestActiveComputerCertificates(certificates []pkiCertificateSummary) []pkiCertificateSummary {
+	latest := make(map[string]pkiCertificateSummary)
+	for _, certificate := range certificates {
+		if !strings.EqualFold(strings.TrimSpace(certificate.Status), "active") {
+			continue
+		}
+		agentCode := strings.TrimSpace(certificate.AgentCode)
+		if agentCode == "" {
+			continue
+		}
+		key := strings.ToLower(agentCode)
+		current, exists := latest[key]
+		if !exists || certificateIssuedAfter(certificate, current) {
+			latest[key] = certificate
+		}
+	}
+
+	filtered := make([]pkiCertificateSummary, 0, len(latest))
+	for _, certificate := range latest {
+		filtered = append(filtered, certificate)
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		return certificateIssuedAfter(filtered[i], filtered[j])
+	})
+	return filtered
+}
+
+func certificateIssuedAfter(candidate, current pkiCertificateSummary) bool {
+	candidateTime, candidateErr := time.Parse(time.RFC3339Nano, candidate.IssuedAt)
+	currentTime, currentErr := time.Parse(time.RFC3339Nano, current.IssuedAt)
+	if candidateErr == nil && currentErr == nil {
+		return candidateTime.After(currentTime)
+	}
+	// ClickHouse DateTime64 strings remain lexicographically sortable when an
+	// older API version omits an RFC3339 timezone suffix.
+	return candidate.IssuedAt > current.IssuedAt
 }
 
 func pkiCertificateStatusClass(status string) string {
@@ -144,7 +190,7 @@ var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-in
     {{if .CertificatesSignInRequired}}<a class="btn btn-ghost" href="/kite-login?dashboard=%2Fobservability">Sign in &rarr;</a>{{end}}
   </div>
 {{else if .HasCertificates}}
-  <p class="muted small">Showing all {{.CertificateTotal}} certificates returned for the signed-in organization. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
+  <p class="muted small">Showing the latest active certificate for each of {{.CertificateTotal}} enrolled computers. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
   <div class="observability-table-wrap">
   <table class="observability-table pki-certificates-table">
     <thead>

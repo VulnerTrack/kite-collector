@@ -792,6 +792,8 @@ func TestObservability_PageSelfPollsEvery15Seconds(t *testing.T) {
 		"observability page must auto-refresh every 15s — operators leave it open to watch state change")
 	assert.Contains(t, body, `hx-swap="outerHTML"`,
 		"swap must be outerHTML so the polling div replaces itself (hx-trigger survives across swaps)")
+	assert.NotContains(t, body, `hx-preserve`,
+		"polling root must not be preserved because that prevents its outerHTML replacement")
 	assert.Contains(t, body, "Auto-refreshes every 15 seconds",
 		"footer copy must tell operators the page is live so they don't manually reload")
 }
