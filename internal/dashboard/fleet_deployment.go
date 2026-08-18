@@ -66,6 +66,7 @@ type fleetPageView struct {
 type fleetMachineCandidate struct {
 	Hostname         string
 	Address          string
+	AddressLabel     string
 	OS               string
 	Arch             string
 	MachineType      string
@@ -75,6 +76,7 @@ type fleetMachineCandidate struct {
 	Reason           string
 	Detection        string
 	Compatible       bool
+	Local            bool
 	ArchInferred     bool
 	NeedsOSSelection bool
 	TargetWindows    string
@@ -152,6 +154,7 @@ const fleetDeploymentTemplate = `<div class="fleet-hero">
             {{end}}
             <span class="fleet-machine-main">
               <strong>{{.Hostname}}</strong>
+              {{if .Address}}<span class="fleet-machine-address"><strong>{{.AddressLabel}}:</strong> <code>{{.Address}}</code></span>{{end}}
               <span class="muted small">{{.MachineType}} · {{.DiscoverySource}} · {{.LastSeen}}</span>
               {{if .Detection}}<span class="muted small">{{.Detection}}</span>{{end}}
               {{if and .NeedsOSSelection .Reason}}<span class="fleet-detection-hint">{{.Reason}}</span>{{end}}
@@ -452,12 +455,22 @@ func fleetCandidatesFromMachines(machines []model.Machine) []fleetMachineCandida
 
 func fleetCandidateFromMachine(machine model.Machine) fleetMachineCandidate {
 	hostname := strings.TrimSpace(machine.Hostname)
+	address := fleetMachineIP(machine)
+	local := strings.EqualFold(strings.TrimSpace(machine.DiscoverySource), "local_controller")
+	addressLabel := hostname
+	if local {
+		addressLabel = "Local IP"
+	} else if net.ParseIP(hostname) != nil {
+		addressLabel = "IP"
+	}
 	candidate := fleetMachineCandidate{
 		Hostname:        hostname,
-		Address:         fleetMachineIP(machine),
+		Address:         address,
+		AddressLabel:    addressLabel,
 		MachineType:     string(machine.MachineType),
 		DiscoverySource: strings.TrimSpace(machine.DiscoverySource),
 		LastSeen:        "never",
+		Local:           local,
 	}
 	if !machine.LastSeenAt.IsZero() {
 		candidate.LastSeen = machine.LastSeenAt.UTC().Format("2006-01-02 15:04 UTC")
@@ -1195,9 +1208,13 @@ if %t; then
 	  curl -fsSL --retry 3 "$artifact_url" -o "$artifact_dir/$artifact_name"
 	  curl -fsSL --retry 3 "$artifact_url.sha256" -o "$artifact_dir/$artifact_name.sha256"
 	  (cd "$artifact_dir" && sha256sum -c "$artifact_name.sha256")
-	  echo "Downloading the CI-built Windows 7 32-bit compatibility agent..."
-	  if curl -fsSL --retry 3 "$legacy_url" -o "$artifact_dir/$legacy_name" &&
+	  if [ -s "$artifact_dir/$legacy_name" ] &&
+	     [ -s "$artifact_dir/$legacy_name.sha256" ] &&
+	     (cd "$artifact_dir" && sha256sum -c "$legacy_name.sha256"); then
+		  echo "Using the verified pre-staged Windows 7 compatibility agent."
+	  elif curl -fsSL --retry 3 "$legacy_url" -o "$artifact_dir/$legacy_name" &&
 	     curl -fsSL --retry 3 "$legacy_url.sha256" -o "$artifact_dir/$legacy_name.sha256"; then
+		  echo "Downloaded the CI-built Windows 7 32-bit compatibility agent."
 		  (cd "$artifact_dir" && sha256sum -c "$legacy_name.sha256")
 	  else
 		  rm -f "$artifact_dir/$legacy_name" "$artifact_dir/$legacy_name.sha256"
@@ -1332,6 +1349,19 @@ const fleetPlaybookYAML = `---
           throw 'REMOTE_UAC_FILTERED: run the updated Kite CMD bootstrap locally as Administrator, then rerun deploy.sh'
         }
       changed_when: false
+    - name: Retire incompatible modern collector on Windows 7
+      ansible.builtin.raw: |
+        $modernService = Get-Service -Name kite-collector -ErrorAction SilentlyContinue
+        if ($null -ne $modernService) {
+          Stop-Service -Name kite-collector -Force -ErrorAction Stop
+          sc.exe delete kite-collector 2>$null | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Failed to delete the incompatible kite-collector service (exit $LASTEXITCODE)" }
+        }
+        Get-Process -Name kite-collector -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction Stop
+        Remove-Item -LiteralPath 'C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Kite Collector Dashboard.lnk' -Force -ErrorAction SilentlyContinue
+        exit 0
+      changed_when: false
+      when: kite_windows_legacy | bool
     - name: Create package directory
       ansible.builtin.raw: >-
         if (-not (Test-Path -LiteralPath 'C:\ProgramData\VulnerTrack\packages')) {

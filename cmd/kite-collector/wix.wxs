@@ -215,13 +215,17 @@
                   pipe name is namespaced for the same reason the service is:
                   standalone osquery defaults to \\.\pipe\osquery.em.
                 -->
-                <Environment
+                <!-- wixl on Ubuntu 24.04 does not implement WiX's
+                     Environment element. Writing the machine environment
+                     registry value is the Windows Installer equivalent and
+                     remains compatible with both wixl and native WiX. -->
+                <RegistryValue
                     Id="KiteOsquerySocketEnv"
+                    Root="HKLM"
+                    Key="SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
                     Name="KITE_OSQUERY_SOCKET"
-                    Value="\\.\pipe\kite-osquery.em"
-                    System="yes"
-                    Action="set"
-                    Part="all"/>
+                    Type="string"
+                    Value="\\.\pipe\kite-osquery.em"/>
 
                 <!--
                   Path flags (flagfile, config_path, database_path,

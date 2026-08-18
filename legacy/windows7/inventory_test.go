@@ -131,6 +131,7 @@ func TestBuildInventoryOTLPRecordsIncludesSummaryAndEveryCategory(t *testing.T) 
 		Hostname:    "ROBERTO-PC",
 		Categories: map[string][]map[string]string{
 			"operating_system":          {{"Version": "6.1.7601", "Caption": "Windows 7"}},
+			"network_adapters":          {{"Description": "Intel Ethernet", "IPAddress": `{"192.168.1.75"}`, "IPSubnet": `{"255.255.255.0"}`, "MACAddress": "00:11:22:33:44:55"}},
 			"services":                  {{"Name": "kite-collector-legacy", "State": "Running"}},
 			"installed_software_native": {{"name": "Example", "publisher": "Vendor", "version": "1.2"}},
 		},
@@ -139,15 +140,23 @@ func TestBuildInventoryOTLPRecordsIncludesSummaryAndEveryCategory(t *testing.T) 
 	resource := mapOTLPAttributes(map[string]string{
 		"agent.id": "11111111-1111-5111-8111-111111111111",
 	})
-	records, err := buildInventoryOTLPRecords(snapshot, resource)
+	records, err := buildInventoryOTLPRecords(snapshot, resource, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 5 { // one summary + three categories + one error category
+	if len(records) != 6 { // one summary + four categories + one error category
 		t.Fatalf("record count=%d", len(records))
 	}
-	if records[0].EventName != "kite.machine.updated" {
+	if records[0].EventName != "kite.machine.discovered" {
 		t.Fatalf("summary event=%q", records[0].EventName)
+	}
+	var summary map[string]interface{}
+	if err := json.Unmarshal([]byte(*records[0].Body.StringValue), &summary); err != nil {
+		t.Fatal(err)
+	}
+	interfaces, ok := summary["interfaces"].([]interface{})
+	if !ok || len(interfaces) != 1 {
+		t.Fatalf("unexpected interfaces: %#v", summary["interfaces"])
 	}
 	attrs := make(map[string]string)
 	for _, attr := range records[1].Attributes {
@@ -164,6 +173,53 @@ func TestBuildInventoryOTLPRecordsIncludesSummaryAndEveryCategory(t *testing.T) 
 	}
 	if body["asset_id"] == "" || body["category"] == "" {
 		t.Fatalf("incomplete category body: %#v", body)
+	}
+	updated, err := buildInventoryOTLPRecords(snapshot, resource, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated[0].EventName != "kite.machine.updated" {
+		t.Fatalf("updated summary event=%q", updated[0].EventName)
+	}
+}
+
+func TestLegacyMachineProjectionIncludesAddresses(t *testing.T) {
+	snapshot := &inventorySnapshot{
+		Hostname: "ROBERTO-PC",
+		Categories: map[string][]map[string]string{
+			"operating_system": {{"Version": "6.1.7601", "OSArchitecture": "64-bit"}},
+			"network_adapters": {{
+				"Description": "Intel Ethernet", "IPAddress": `{"192.168.1.75","fe80::1234"}`,
+				"IPSubnet": `{"255.255.255.0","64"}`, "MACAddress": "00:11:22:33:44:55",
+			}},
+		},
+	}
+	row := legacyMachineRow(snapshot)
+	if row["hostname"] != "ROBERTO-PC" || row["ip_addresses"] != "192.168.1.75, fe80::1234" {
+		t.Fatalf("unexpected machine row: %#v", row)
+	}
+	interfaces := legacyInventoryInterfaces(snapshot)
+	if len(interfaces) != 2 || interfaces[0]["ip_address"] != "192.168.1.75" {
+		t.Fatalf("unexpected interfaces: %#v", interfaces)
+	}
+}
+
+func TestMachineDiscoveryWatermark(t *testing.T) {
+	dir := t.TempDir()
+	collectedAt := time.Date(2026, 8, 12, 5, 30, 0, 0, time.UTC)
+	if err := saveInventory(dir, inventorySnapshot{CollectedAt: collectedAt, Categories: map[string][]map[string]string{}}); err != nil {
+		t.Fatal(err)
+	}
+	needed, err := machineDiscoveryNeedsSync(dir)
+	if err != nil || !needed {
+		t.Fatalf("initial discovery needed=%v err=%v", needed, err)
+	}
+	if err := markInventorySynced(dir, collectedAt); err != nil {
+		t.Fatal(err)
+	}
+	needed, err = machineDiscoveryNeedsSync(dir)
+	if err != nil || needed {
+		t.Fatalf("discovery needed after sync=%v err=%v", needed, err)
 	}
 }
 

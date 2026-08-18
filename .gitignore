@@ -67,7 +67,6 @@ internal/discovery/agent/vpn/source_tailscale_e2e_test.go
 # JSON is uploaded as a build artifact, never committed.
 tests/e2e/ubuntu-matrix/.matrix-reports/
 ubuntu-package-matrix-*.log
-# This reviewed PE32 compatibility payload is embedded into the dashboard so
-# every generated fleet ZIP can deploy Windows 7/32-bit without a second
-# download or a working-directory-dependent local file.
-!internal/dashboard/assets/kite-collector_windows_386_legacy.exe
+# Collector binaries are produced by CI and attached to releases. They must
+# never be embedded in or committed to the source tree.
+internal/dashboard/assets/kite-collector_windows_386_legacy.exe

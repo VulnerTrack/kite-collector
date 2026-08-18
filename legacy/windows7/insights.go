@@ -151,7 +151,7 @@ var categorySections = []struct {
 	Name       string
 	Categories []string
 }{
-	{"Overview", []string{"system", "operating_system", "computer_system"}},
+	{"Overview", []string{"machines", "system", "operating_system", "computer_system"}},
 	{"Hardware", []string{"processors", "memory", "bios", "baseboard", "video_controllers", "sound_devices", "batteries", "pnp_devices", "physical_disks", "volumes"}},
 	{"Software", []string{"installed_software_native", "installed_software_wow64", "hotfixes"}},
 	{"Network", []string{"network_adapters", "network_configuration", "listening_ports", "routes", "arp"}},
