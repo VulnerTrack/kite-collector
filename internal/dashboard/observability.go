@@ -105,23 +105,28 @@ func resetProcessHistoryForTest() {
 // access to — no new scrapers, no external observability stack required.
 // "Local-instance observability" by design.
 type observabilityView struct {
-	Stream         *streamHealth          `json:"stream,omitempty"`
-	GeneratedAt    string                 `json:"generated_at"`
-	Endpoint       string                 `json:"endpoint,omitempty"`
-	HealthSummary  string                 `json:"health_summary"`
-	HealthDetail   string                 `json:"health_detail,omitempty"` // iter-33: names of fail/warn subsystems beside the rollup badge
-	HealthClass    string                 `json:"-"`                       // CSS class, UI-only
-	ScanStats      scanStats              `json:"scan_stats"`
-	Health         []healthCheck          `json:"health"`
-	ProbeMetrics   []probeMetric          `json:"probe_metrics"`
-	RecentActivity []activityEvent        `json:"recent_activity,omitempty"`
-	RecentFailures []recentFailure        `json:"recent_failures,omitempty"`
-	Runtime        runtimeStats           `json:"runtime"`
-	Freshness      observabilityFreshness `json:"-"` // UI-only: chip state + pause/resume controls
-	HasProbeData   bool                   `json:"has_probe_data"`
-	HasScanData    bool                   `json:"has_scan_data"`
-	HasActivity    bool                   `json:"-"`
-	HasFailures    bool                   `json:"-"`
+	Stream                     *streamHealth           `json:"stream,omitempty"`
+	GeneratedAt                string                  `json:"generated_at"`
+	Endpoint                   string                  `json:"endpoint,omitempty"`
+	HealthSummary              string                  `json:"health_summary"`
+	HealthDetail               string                  `json:"health_detail,omitempty"` // iter-33: names of fail/warn subsystems beside the rollup badge
+	HealthClass                string                  `json:"-"`                       // CSS class, UI-only
+	ScanStats                  scanStats               `json:"scan_stats"`
+	Health                     []healthCheck           `json:"health"`
+	ProbeMetrics               []probeMetric           `json:"probe_metrics"`
+	RecentActivity             []activityEvent         `json:"recent_activity,omitempty"`
+	RecentFailures             []recentFailure         `json:"recent_failures,omitempty"`
+	Certificates               []pkiCertificateSummary `json:"pki_certificates,omitempty"`
+	Runtime                    runtimeStats            `json:"runtime"`
+	Freshness                  observabilityFreshness  `json:"-"` // UI-only: chip state + pause/resume controls
+	HasProbeData               bool                    `json:"has_probe_data"`
+	HasScanData                bool                    `json:"has_scan_data"`
+	HasActivity                bool                    `json:"-"`
+	HasFailures                bool                    `json:"-"`
+	CertificateTotal           int                     `json:"pki_certificate_total"`
+	CertificatesError          string                  `json:"pki_certificates_error,omitempty"`
+	CertificatesSignInRequired bool                    `json:"-"`
+	HasCertificates            bool                    `json:"-"`
 }
 
 // recentFailure is one row in the iteration-33 "Recent failures" focused
@@ -1314,6 +1319,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <nav class="page-jumpnav" aria-label="Observability page sections">
   <span class="page-jumpnav-label muted small">Jump to:</span>
   <a href="#section-health">Health</a>
+  <a href="#section-certificates">Certificates</a>
   <a href="#section-failures">Failures</a>
   <a href="#section-activity">Activity</a>
   <a href="#section-probes">Probes</a>
@@ -1342,6 +1348,47 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     </tbody>
   </table>
   </div>
+</section>
+
+<section class="card observability-card observability-card--wide" id="section-certificates">
+  <h2>Kite certificates</h2>
+  <p class="muted">Tenant-scoped PKI inventory. A mass enrollment issues one certificate per computer; every certificate produced by that fleet enrollment appears here as soon as the remote computer completes enrollment.</p>
+  {{if .CertificatesError}}
+    <div class="pki-certificate-notice" data-kind="{{if .CertificatesSignInRequired}}auth{{else}}pki{{end}}">
+      <strong>{{if .CertificatesSignInRequired}}Sign in required{{else}}PKI unavailable{{end}}:</strong>
+      <span>{{.CertificatesError}}</span>
+      {{if .CertificatesSignInRequired}}<a class="btn btn-ghost" href="/kite-login?dashboard=%2Fobservability">Sign in &rarr;</a>{{end}}
+    </div>
+  {{else if .HasCertificates}}
+    <p class="muted small">Showing all {{.CertificateTotal}} certificates returned for the signed-in organization. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
+    <div class="observability-table-wrap">
+    <table class="observability-table pki-certificates-table">
+      <thead>
+        <tr><th>Agent / subject</th><th>Status</th><th>Serial</th><th>Tenant</th><th>Issued</th><th>Expires</th><th>Fingerprint SHA-256</th><th>Details</th></tr>
+      </thead>
+      <tbody>
+      {{range .Certificates}}
+        <tr>
+          <td>{{if .AgentCode}}<code>{{.AgentCode}}</code>{{else}}<code>{{.SubjectCN}}</code>{{end}}<br><span class="muted small">{{.Purpose}} &middot; {{.KeyAlgorithm}}</span></td>
+          <td><span class="badge {{.StatusClass}}">{{.Status}}</span></td>
+          <td><code>{{.SerialNumber}}</code></td>
+          <td><code>{{.TenantID}}</code></td>
+          <td><code>{{.IssuedAt}}</code></td>
+          <td><code>{{.NotAfter}}</code></td>
+          <td><code>{{.FingerprintSHA256}}</code></td>
+          <td><button class="btn btn-ghost" type="button"
+                      hx-get="/fragments/observability/certificates/{{.ID}}"
+                      hx-target="#certificate-detail-{{.ID}}"
+                      hx-swap="innerHTML">Full details</button></td>
+        </tr>
+        <tr><td colspan="8" id="certificate-detail-{{.ID}}"></td></tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+  {{else}}
+    <p class="muted">No PKI certificates have been issued for this organization yet. Certificates from individual and mass enrollments will appear here.</p>
+  {{end}}
 </section>
 
 <section class="card observability-card observability-card--wide observability-card--probes" id="section-probes">
@@ -1556,6 +1603,9 @@ func registerObservabilityRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	mux.HandleFunc("GET /api/v1/observability/snapshot.md", func(w http.ResponseWriter, r *http.Request) {
 		handleObservabilitySnapshotMarkdown(w, r, deps)
 	})
+	mux.HandleFunc("GET /fragments/observability/certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
+		handlePKICertificateDetail(w, r, deps)
+	})
 }
 
 // handleObservabilitySnapshot serves the observability data as a downloadable
@@ -1768,6 +1818,10 @@ func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabil
 	// state is positive copy ("agent operating normally").
 	view.RecentFailures = extractRecentFailures(probeRows, 5)
 	view.HasFailures = len(view.RecentFailures) > 0
+
+	view.Certificates, view.CertificateTotal, view.CertificatesError,
+		view.CertificatesSignInRequired = collectPKICertificates(ctx, deps)
+	view.HasCertificates = len(view.Certificates) > 0
 
 	if deps.StreamCtrl != nil {
 		s := deps.StreamCtrl.Status()
