@@ -73,20 +73,22 @@ func TestPKIHTTPCertificateReaderLoadsCompleteDetail(t *testing.T) {
 func TestCollectPKICertificatesIncludesMassEnrollmentRows(t *testing.T) {
 	t.Parallel()
 	reader := &fakePKICertificateReader{list: []pkiCertificateSummary{
-		{ID: "1", AgentCode: "kite-pc-01", Status: "active"},
-		{ID: "2", AgentCode: "kite-pc-02", Status: "revoked"},
+		{ID: "old", AgentCode: "kite-pc-01", Status: "active", IssuedAt: "2026-08-17T10:00:00Z"},
+		{ID: "new", AgentCode: "kite-pc-01", Status: "active", IssuedAt: "2026-08-18T10:00:00Z"},
+		{ID: "revoked", AgentCode: "kite-pc-02", Status: "revoked", IssuedAt: "2026-08-18T11:00:00Z"},
+		{ID: "ca", SubjectCN: "Vulnertrack Root CA", Status: "active", IssuedAt: "2026-08-18T12:00:00Z"},
 	}}
 	certificates, total, message, signIn := collectPKICertificates(context.Background(), onboardingDeps{
 		PKIReader:        reader,
 		PKIOperatorToken: func(context.Context) (string, error) { return "operator-jwt", nil },
 		PKIEndpoint:      "https://pki.example.test",
 	})
-	assert.Len(t, certificates, 2)
-	assert.Equal(t, 2, total)
+	assert.Len(t, certificates, 1)
+	assert.Equal(t, 1, total)
 	assert.Empty(t, message)
 	assert.False(t, signIn)
+	assert.Equal(t, "new", certificates[0].ID)
 	assert.Equal(t, "badge-green", certificates[0].StatusClass)
-	assert.Equal(t, "badge-red", certificates[1].StatusClass)
 }
 
 func TestObservabilityCertificateSectionRendersEveryMassEnrollmentAgent(t *testing.T) {
@@ -104,7 +106,7 @@ func TestObservabilityCertificateSectionRendersEveryMassEnrollmentAgent(t *testi
 	require.NoError(t, pkiCertificateInventoryTmpl.Execute(&body, view))
 	assert.Contains(t, body.String(), "kite-fleet-pc-01")
 	assert.Contains(t, body.String(), "kite-fleet-pc-02")
-	assert.Contains(t, body.String(), "Showing all 2 certificates")
+	assert.Contains(t, body.String(), "latest active certificate for each of 2 enrolled computers")
 }
 
 func TestObservabilityLoadsCertificateInventoryIndependently(t *testing.T) {
