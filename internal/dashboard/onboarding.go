@@ -43,9 +43,12 @@ type onboardingDeps struct {
 	Logger           *slog.Logger
 	ProbeClient      *http.Client
 	ProbeDuration    *prometheus.HistogramVec
+	PKIReader        pkiCertificateReader
+	PKIOperatorToken func(context.Context) (string, error)
 	AppVersion       string
 	Commit           string
 	PlatformEndpoint string
+	PKIEndpoint      string
 	CertsDir         string
 	WrapKey          []byte
 	OAuth            OAuthOptions
