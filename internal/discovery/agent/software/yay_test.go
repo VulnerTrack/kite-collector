@@ -43,3 +43,25 @@ func TestParseYayOutput_MixedValidAndInvalid(t *testing.T) {
 	require.Len(t, result.Items, 2)
 	require.Len(t, result.Errs, 1)
 }
+
+func TestParseYayOutput_RootWarningWithANSISkipped(t *testing.T) {
+	// Exact bytes yay emits when run as root (agent service context): a
+	// color-decorated "->" message line ahead of the package list.
+	raw := "\x1b[1m\x1b[33m -> \x1b[0m\x1b[0mAvoid running yay as root/sudo.\n" +
+		"google-chrome 126.0.6478.126-1\n"
+	result := ParseYayOutput(raw)
+
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "google-chrome", result.Items[0].SoftwareName)
+	assert.False(t, result.HasErrors(), "yay chatter must not surface as parse errors")
+}
+
+func TestParseYayOutput_ANSIColoredPackageLineStripped(t *testing.T) {
+	// Defensive: a package line wrapped in color codes still parses clean.
+	raw := "\x1b[1mzoom\x1b[0m 6.0.10.5765-1\n"
+	result := ParseYayOutput(raw)
+
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "zoom", result.Items[0].SoftwareName)
+	assert.Equal(t, "6.0.10.5765-1", result.Items[0].Version)
+}
