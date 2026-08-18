@@ -210,16 +210,15 @@ func TestHandleConnectionCheck_SkipsAuthWithoutIdentity(t *testing.T) {
 
 	var resp connectionCheckResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Len(t, resp.Probes, 6, "all six probes always reported")
+	assert.Len(t, resp.Probes, 5, "all five probes always reported")
 
-	// With no identity enrolled but a config endpoint set, probes 3–6
-	// (reach/auth/clock/otlp) must SKIP with the "no identity enrolled"
+	// With no identity enrolled but a config endpoint set, probes 3–5
+	// (reach/clock/otlp) must SKIP with the "no identity enrolled"
 	// diagnostic. Probes 1–2 (DNS/TLS) will execute against the test
 	// endpoint; we don't assert a specific outcome for them, only that
 	// the auth-dependent probes do not leak partial state.
 	skipProbes := map[probeName]bool{
 		probeReach: true,
-		probeAuth:  true,
 		probeClock: true,
 		probeOTLP:  true,
 	}
@@ -230,7 +229,7 @@ func TestHandleConnectionCheck_SkipsAuthWithoutIdentity(t *testing.T) {
 				p.Name, p.Result, p.Diagnostic)
 		}
 	}
-	assert.False(t, resp.AllPass, "all_pass=false when auth probes skipped")
+	assert.False(t, resp.AllPass, "all_pass=false when identity-dependent probes are skipped")
 }
 
 // TestHandleConnectionCheck_ProbesHitInjectedEndpoint verifies that the
