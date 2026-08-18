@@ -200,6 +200,16 @@ func (p *ProcessEnvSecrets) Audit(ctx context.Context, machine model.Machine) ([
 			}
 			continue
 		}
+		if len(envBytes) == maxEnvBlockSize {
+			// The read hit the cap, so the bytes after the last NUL are an
+			// incomplete KEY=VALUE entry. Scanning it would hash a truncated
+			// value (unstable evidence) or match a truncated name, so the
+			// partial tail is dropped and the truncation surfaced.
+			envBytes = dropPartialEnvTail(envBytes)
+			slog.Warn("process_env_secrets: environ hit read cap; partial tail entry dropped",
+				"code", string(LogCodeProcessEnvEnvironTruncated),
+				"pid", pid, "cap_bytes", maxEnvBlockSize)
+		}
 
 		findings = append(findings,
 			scanProcessEnv(machine, pid, comm, envBytes, p.denyPrefixes, p.declaredNames, now)...)
@@ -337,6 +347,17 @@ func declaredEnvFinding(
 		CISControl:  processEnvSecretsCISControl,
 		Timestamp:   now,
 	}
+}
+
+// dropPartialEnvTail cuts a capped environ read back to its last complete
+// NUL-terminated entry. A block with no NUL at all is entirely one partial
+// entry and yields nil.
+func dropPartialEnvTail(b []byte) []byte {
+	idx := bytes.LastIndexByte(b, 0)
+	if idx < 0 {
+		return nil
+	}
+	return b[:idx+1]
 }
 
 // buildFilterSet returns a lowercase set of process names from filter, or

@@ -32,6 +32,12 @@ const (
 	// process_env surface — /proc env-var secret scanning
 	LogCodeProcessEnvReadProcFailed LogCode = "audit.process_env.read_proc_failed"
 	LogCodeProcessEnvMaxCapReached  LogCode = "audit.process_env.max_pids_cap_reached"
+	// LogCodeProcessEnvEnvironTruncated: a /proc/<pid>/environ read hit the
+	// 256 KiB cap, so the bytes after the last NUL are an incomplete entry.
+	// The partial tail is dropped rather than scanned — a truncated value
+	// would produce an unstable evidence hash and a truncated name could
+	// shadow a longer variable (RFC-0153 hardening).
+	LogCodeProcessEnvEnvironTruncated LogCode = "audit.process_env.environ_truncated"
 
 	// secrets surface — repository content scanning
 	LogCodeSecretsMissingPathTag LogCode = "audit.secrets.missing_path_tag"

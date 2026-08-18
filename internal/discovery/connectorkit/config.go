@@ -8,6 +8,7 @@
 package connectorkit
 
 import (
+	"log/slog"
 	"os"
 	"strings"
 
@@ -113,15 +114,37 @@ func cfgString(cfg map[string]any, key string) string {
 // value is returned — cloned, because os.Getenv strings share the process
 // environment's backing memory, which Zero must never scribble on. An empty or
 // unset variable resolves to "", preserving each connector's existing
-// missing-credential graceful skip.
+// missing-credential graceful skip, and emits LogCodeEnvUnresolved so the
+// misconfiguration is diagnosable. A value with leading/trailing whitespace is
+// used verbatim but flagged with LogCodeEnvWhitespace — trimming is not safe
+// (a secret may legitimately contain whitespace), but the warning turns an
+// opaque downstream auth failure into a pointer at the injection pipeline.
 func cfgSecret(cfg map[string]any, key string) string {
 	if v, ok := cfg[key].(string); ok && v != "" {
 		return strings.Clone(v)
 	}
 	if envName, ok := cfg[key+"_env"].(string); ok && envName != "" {
-		if v := os.Getenv(envName); v != "" {
-			return strings.Clone(v)
+		v, set := os.LookupEnv(envName)
+		if v == "" {
+			reason := "unset"
+			if set {
+				reason = "set_but_empty"
+			}
+			slog.Warn("connectorkit: declared credential env var did not resolve",
+				"code", string(LogCodeEnvUnresolved),
+				"field", key,
+				"env_var", envName,
+				"reason", reason)
+			return ""
 		}
+		if strings.TrimSpace(v) != v {
+			slog.Warn("connectorkit: credential env var value has leading/trailing whitespace",
+				"code", string(LogCodeEnvWhitespace),
+				"field", key,
+				"env_var", envName,
+				"hint", "likely a trailing newline from file-based injection; the value is used verbatim")
+		}
+		return strings.Clone(v)
 	}
 	return ""
 }
