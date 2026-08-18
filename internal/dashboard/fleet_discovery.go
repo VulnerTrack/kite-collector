@@ -58,6 +58,29 @@ type fleetDiscoveryStatus struct {
 	CurrentMachineKeys []string
 }
 
+type fleetDiscoveryAPIResponse struct {
+	Network     string                      `json:"network"`
+	CompletedAt string                      `json:"completed_at"`
+	Error       string                      `json:"error,omitempty"`
+	Found       int                         `json:"found"`
+	Inserted    int                         `json:"inserted"`
+	Updated     int                         `json:"updated"`
+	Computers   []fleetDiscoveryAPIComputer `json:"computers"`
+}
+
+type fleetDiscoveryAPIComputer struct {
+	Hostname         string `json:"hostname"`
+	Address          string `json:"address,omitempty"`
+	OS               string `json:"os,omitempty"`
+	Arch             string `json:"arch,omitempty"`
+	DiscoverySource  string `json:"discovery_source,omitempty"`
+	Detection        string `json:"detection,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+	Target           string `json:"target,omitempty"`
+	Compatible       bool   `json:"compatible"`
+	NeedsOSSelection bool   `json:"needs_os_selection"`
+}
+
 type fleetDiscoveryController struct {
 	detect          func() (fleetLocalNetwork, error)
 	discover        func(context.Context, map[string]any) ([]model.Machine, error)
@@ -475,16 +498,91 @@ func handleFleetDiscovery(
 	logger *slog.Logger,
 	controller *fleetDiscoveryController,
 ) {
+	wantsJSON := strings.Contains(strings.ToLower(r.Header.Get("Accept")), "application/json")
 	if !fleetDiscoverySameOrigin(r) {
-		http.Error(w, "cross-site network discovery is not allowed", http.StatusForbidden)
+		if wantsJSON {
+			writeFleetDiscoveryJSON(w, fleetDiscoveryAPIResponse{Error: "cross-site network discovery is not allowed"}, http.StatusForbidden)
+		} else {
+			http.Error(w, "cross-site network discovery is not allowed", http.StatusForbidden)
+		}
 		return
 	}
-	if err := controller.run(r.Context(), st); err != nil {
+	runErr := controller.run(r.Context(), st)
+	if runErr != nil {
 		logger.Error("dashboard: fleet network discovery failed",
 			"code", string(LogCodeFleetDiscovery),
-			"error", err)
+			"error", runErr)
+	}
+	if wantsJSON {
+		response, responseErr := fleetDiscoveryResponse(r.Context(), st, controller.snapshot())
+		if responseErr != nil && runErr == nil {
+			runErr = responseErr
+		}
+		if runErr != nil {
+			response.Error = runErr.Error()
+			statusCode := http.StatusInternalServerError
+			if errors.Is(runErr, errFleetDiscoveryRunning) {
+				statusCode = http.StatusConflict
+			}
+			writeFleetDiscoveryJSON(w, response, statusCode)
+			return
+		}
+		writeFleetDiscoveryJSON(w, response, http.StatusOK)
+		return
 	}
 	http.Redirect(w, r, "/fleet", http.StatusSeeOther)
+}
+
+func handleFleetDiscoveryResults(
+	w http.ResponseWriter,
+	r *http.Request,
+	st store.Store,
+	controller *fleetDiscoveryController,
+) {
+	if !fleetDiscoverySameOrigin(r) {
+		writeFleetDiscoveryJSON(w, fleetDiscoveryAPIResponse{Error: "cross-site discovery results are not allowed"}, http.StatusForbidden)
+		return
+	}
+	status := controller.snapshot()
+	if !status.HasRun {
+		writeFleetDiscoveryJSON(w, fleetDiscoveryAPIResponse{Error: "no completed fleet discovery is available; run `kite-collector fleet discover` first"}, http.StatusConflict)
+		return
+	}
+	response, err := fleetDiscoveryResponse(r.Context(), st, status)
+	if err != nil {
+		response.Error = err.Error()
+		writeFleetDiscoveryJSON(w, response, http.StatusInternalServerError)
+		return
+	}
+	writeFleetDiscoveryJSON(w, response, http.StatusOK)
+}
+
+func fleetDiscoveryResponse(ctx context.Context, st store.Store, status fleetDiscoveryStatus) (fleetDiscoveryAPIResponse, error) {
+	response := fleetDiscoveryAPIResponse{
+		Network: status.Network, CompletedAt: status.CompletedAt, Error: status.Error,
+		Found: status.Found, Inserted: status.Inserted, Updated: status.Updated,
+	}
+	machines, err := st.ListMachines(ctx, store.MachineFilter{Limit: maxFleetTargets})
+	if err != nil {
+		return response, fmt.Errorf("list discovered computers: %w", err)
+	}
+	machines = fleetMachinesFromLatestDiscovery(machines, status.CurrentMachineKeys)
+	for _, candidate := range fleetCandidatesFromMachines(machines) {
+		response.Computers = append(response.Computers, fleetDiscoveryAPIComputer{
+			Hostname: candidate.Hostname, Address: candidate.Address, OS: candidate.OS,
+			Arch: candidate.Arch, DiscoverySource: candidate.DiscoverySource,
+			Detection: candidate.Detection, Reason: candidate.Reason,
+			Target: candidate.TargetLine, Compatible: candidate.Compatible,
+			NeedsOSSelection: candidate.NeedsOSSelection,
+		})
+	}
+	return response, nil
+}
+
+func writeFleetDiscoveryJSON(w http.ResponseWriter, response fleetDiscoveryAPIResponse, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func fleetDiscoverySameOrigin(r *http.Request) bool {
