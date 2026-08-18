@@ -2711,6 +2711,102 @@ kbd {
   flex-direction: column;
   gap: 1rem;
 }
+
+/* PKI certificate inventory — semantic key/value cards replace the former
+   wide table so long identifiers remain readable without horizontal scroll. */
+.pki-key-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 1rem 0 0;
+  border: 1px solid var(--palette-divider, #e5e7eb);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--palette-background-paper, #fff);
+}
+.pki-key-value {
+  min-width: 0;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--palette-divider, #e5e7eb);
+}
+.pki-key-value:nth-child(odd) {
+  border-right: 1px solid var(--palette-divider, #e5e7eb);
+}
+.pki-key-value--wide {
+  grid-column: 1 / -1;
+  border-right: 0 !important;
+}
+.pki-key-value dt {
+  margin: 0 0 0.35rem;
+  color: var(--palette-text-secondary, #637381);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.pki-key-value dd {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  margin: 0;
+}
+.pki-key-value dd code,
+.pki-key-value dd > span:not(.badge) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.pki-copy-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid var(--palette-divider, #dfe3e8);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--palette-text-secondary, #637381);
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.pki-copy-button:hover {
+  border-color: var(--palette-primary-main, #e11d48);
+  color: var(--palette-primary-main, #e11d48);
+  background: rgba(225, 29, 72, 0.05);
+}
+.pki-copy-button svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pki-copy-check { display: none; }
+.pki-copy-button.is-copied {
+  border-color: var(--palette-success-main, #16a34a);
+  color: var(--palette-success-main, #16a34a);
+  background: rgba(22, 163, 74, 0.07);
+}
+.pki-copy-button.is-copied .pki-copy-icon { display: none; }
+.pki-copy-button.is-copied .pki-copy-check { display: block; }
+.pki-certificate-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+.pki-key-values--detail { margin-bottom: 1rem; }
+@media (max-width: 760px) {
+  .pki-key-values { grid-template-columns: 1fr; }
+  .pki-key-value,
+  .pki-key-value:nth-child(odd) { border-right: 0; }
+  .pki-key-value--wide { grid-column: auto; }
+}
 .observability-hero {
   overflow: hidden;
   position: relative;

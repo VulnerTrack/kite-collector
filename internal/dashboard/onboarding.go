@@ -43,9 +43,12 @@ type onboardingDeps struct {
 	Logger           *slog.Logger
 	ProbeClient      *http.Client
 	ProbeDuration    *prometheus.HistogramVec
+	PKIReader        pkiCertificateReader
+	PKIOperatorToken func(context.Context) (string, error)
 	AppVersion       string
 	Commit           string
 	PlatformEndpoint string
+	PKIEndpoint      string
 	CertsDir         string
 	WrapKey          []byte
 	OAuth            OAuthOptions
@@ -168,7 +171,7 @@ const onboardingBody = `<div id="onboarding-toasts" class="toasts" aria-live="po
 
     <section class="card onboarding-step-card" id="check-card">
       <h2>3. Connection check</h2>
-      <p class="muted">Six probes verify DNS, TLS, endpoint reach, mTLS auth,
+      <p class="muted">Five probes verify DNS, TLS, endpoint reach,
          clock skew, and OTLP handshake. Click &ldquo;Run check&rdquo; after
          enrolling.</p>
       <div id="check-fragment"
@@ -859,7 +862,7 @@ func writeEnrollFragment(w http.ResponseWriter, logger *slog.Logger, view enroll
 // Connection check
 // ===========================================================================
 
-// probeName is the canonical identifier for each of the six probes.
+// probeName is the canonical identifier for connection probes.
 type probeName string
 
 const (
@@ -944,8 +947,8 @@ func onboardingProbeClient(deps onboardingDeps, tlsSettings config.TLSConfig) (*
 	}, nil
 }
 
-// runAllProbes executes the six probes against the enrolled identity. Five
-// of the six (DNS, TLS, reach, auth, OTLP) are independent and run in
+// runAllProbes executes the five probes against the enrolled identity. Four
+// of the five (DNS, TLS, reach, OTLP) are independent and run in
 // parallel; clock waits on reach so it can parse the Date header from the
 // reach response (the same HTTP round-trip provides the skew baseline).
 //
@@ -954,14 +957,14 @@ func onboardingProbeClient(deps onboardingDeps, tlsSettings config.TLSConfig) (*
 // single probe (~5-8s). The connection-check fragment becomes responsive
 // enough that operators no longer wonder if the dashboard hung.
 //
-// When no identity is present probes 3–6 return SKIP with "no identity
+// When no identity is present probes 3–5 return SKIP with "no identity
 // enrolled" per RFC §4.3. When deps.Store is nil (read-only dashboard) the
 // same SKIP applies.
 func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
-	// Fixed-index slice keeps the canonical DNS→TLS→reach→auth→clock→OTLP
+	// Fixed-index slice keeps the canonical DNS→TLS→reach→clock→OTLP
 	// order in the UI even though goroutines complete out of order. Each
 	// position is written by exactly one goroutine — no mutex needed.
-	results := make([]probeResult, 6)
+	results := make([]probeResult, 5)
 
 	var (
 		endpoint    = deps.PlatformEndpoint
@@ -995,7 +998,7 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 	}
 
 	if os.Getenv("KITE_ONBOARDING_SKIP_CHECKS") == "true" {
-		names := []probeName{probeDNS, probeTLS, probeReach, probeAuth, probeClock, probeOTLP}
+		names := []probeName{probeDNS, probeTLS, probeReach, probeClock, probeOTLP}
 		for i, name := range names {
 			results[i] = probeResult{
 				Name:       name,
@@ -1034,7 +1037,7 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 	var reachDateHeader string
 
 	var wg sync.WaitGroup
-	wg.Add(6)
+	wg.Add(5)
 
 	go func() {
 		defer wg.Done()
@@ -1083,29 +1086,13 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 
 	go func() {
 		defer wg.Done()
-		results[3] = timeProbe(deps, probeAuth, func() probeResult {
-			if readOnly {
-				return probeResult{Result: "skip", Diagnostic: "read-only inspector mode"}
-			}
-			if !haveID {
-				return probeResult{Result: "skip", Diagnostic: "no identity enrolled"}
-			}
-			if probeClientErr != nil {
-				return probeResult{Result: "fail", Diagnostic: "PKI credentials: " + probeClientErr.Error()}
-			}
-			return runAuthProbe(ctx, probeClient, endpoint, apiKey)
-		})
-	}()
-
-	go func() {
-		defer wg.Done()
 		// Clock depends on reach for the Date header. Block on reachDone so
 		// reachDateHeader is safe to read; ctx cancellation unblocks early.
 		select {
 		case <-reachDone:
 		case <-ctx.Done():
 		}
-		results[4] = timeProbe(deps, probeClock, func() probeResult {
+		results[3] = timeProbe(deps, probeClock, func() probeResult {
 			if readOnly {
 				return probeResult{Result: "skip", Diagnostic: "read-only inspector mode"}
 			}
@@ -1121,7 +1108,7 @@ func runAllProbes(ctx context.Context, deps onboardingDeps) []probeResult {
 
 	go func() {
 		defer wg.Done()
-		results[5] = timeProbe(deps, probeOTLP, func() probeResult {
+		results[4] = timeProbe(deps, probeOTLP, func() probeResult {
 			if readOnly {
 				return probeResult{Result: "skip", Diagnostic: "read-only inspector mode"}
 			}

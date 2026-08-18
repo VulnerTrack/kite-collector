@@ -149,6 +149,32 @@ func TestEnrollKiteOAuthToken_PKIFailureDoesNotPersistIdentity(t *testing.T) {
 	require.Error(t, identityErr, "PKI failure must not leave the collector marked as enrolled")
 }
 
+func TestEnrollKiteOAuthToken_FleetLoginReusesExistingPKICredentials(t *testing.T) {
+	st, err := sqlite.New(filepath.Join(t.TempDir(), "kite.db"))
+	require.NoError(t, err)
+	require.NoError(t, st.Migrate(context.Background()))
+	t.Cleanup(func() { _ = st.Close() })
+
+	certsDir := t.TempDir()
+	for _, name := range []string{"ca.pem", "agent.pem", "agent-key.pem"} {
+		require.NoError(t, os.WriteFile(filepath.Join(certsDir, name), []byte("existing"), 0o600))
+	}
+	pki := &fakeKitePKIEnroller{err: errors.New("PKI must not be called")}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/callback", nil)
+	req.AddCookie(&http.Cookie{Name: kiteOAuthDashboardCookie, Value: "/fleet"})
+	err = enrollKiteOAuthToken(req, kiteOAuthEnrollmentOptions{
+		Store: st, WrapKey: []byte("01234567890123456789012345678901"),
+		CertsDir: certsDir, PKIClient: pki,
+	}, "fleet-operator-token")
+	require.NoError(t, err)
+	assert.Empty(t, pki.token)
+	identity, err := st.GetEnrolledIdentity(context.Background())
+	require.NoError(t, err)
+	unwrapped, err := sqlite.AEADUnwrap([]byte("01234567890123456789012345678901"), identity.ApiKeyWrapped)
+	require.NoError(t, err)
+	assert.Equal(t, "fleet-operator-token", string(unwrapped))
+}
+
 func TestEnrollKiteOAuthToken_CertificateWriteFailureDoesNotPersistIdentity(t *testing.T) {
 	st, err := sqlite.New(filepath.Join(t.TempDir(), "kite.db"))
 	require.NoError(t, err)
