@@ -137,9 +137,12 @@ func TestFleetMachinesFromLatestDiscovery_ExcludesHistoricalMachines(t *testing.
 	assert.Equal(t, "CURRENT-PC", current[1].Hostname)
 }
 
-func TestFleetMachinesFromLatestDiscovery_IsEmptyBeforeFirstScan(t *testing.T) {
+func TestFleetMachinesFromLatestDiscovery_UnfilteredBeforeFirstScan(t *testing.T) {
+	// No discovery session yet (nil keys): the page promises the local
+	// Machines inventory, so an empty key set means "no narrowing", not
+	// "hide everything" (see fleetMachinesFromLatestDiscovery).
 	machines := []model.Machine{{Hostname: "ROBERTO-PC", DiscoverySource: "wsdiscovery"}}
-	assert.Empty(t, fleetMachinesFromLatestDiscovery(machines, nil))
+	assert.Equal(t, machines, fleetMachinesFromLatestDiscovery(machines, nil))
 }
 
 func TestMergeFleetTargetInputs_CombinesSelectionsAndManualTargets(t *testing.T) {
