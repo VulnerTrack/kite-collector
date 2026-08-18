@@ -1,33 +1,33 @@
 Package: kite-collector
-Version: 0.42.5
+Version: 0.48.1
 Architecture: amd64
 Maintainer: VulnerTrack <hello@vulnertrack.dev>
-Installed-Size: 31558
+Installed-Size: 31774
 Conflicts: kite-collector-osquery
-Filename: dists/stable/main/binary-amd64/kite-collector_0.42.5_linux_amd64.deb
-Size: 11905182
-MD5sum: 0818b901ade96abd5f4951cf2bceb5a3
-SHA1: 6883a291c044aaf72636c7ff766b10e808628e83
-SHA256: 7da19e1ffbd76c4a9f74874af641b904f45ce86b6813c04589669ada402e6024
+Filename: dists/stable/main/binary-amd64/kite-collector_0.48.1_linux_amd64.deb
+Size: 11995928
+MD5sum: 9c7b98690e647afd9ac0d29f8499dfef
+SHA1: 5dc704c3b0c2ab9c714a83aa94781e112ee3730a
+SHA256: 5209d0632904050907ea106014f30b0a40d71ec504fd1db19405d053a0e1e893
 Priority: optional
 Homepage: https://github.com/VulnerTrack/kite-collector
 Description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
 Architecture-Variant: amd64v1
 
 Package: kite-collector-osquery
-Version: 0.42.5
+Version: 0.48.1
 Architecture: amd64
 Maintainer: VulnerTrack <hello@vulnertrack.dev>
-Installed-Size: 116996
+Installed-Size: 117212
 Depends: libc6 (>= 2.12), zlib1g
 Conflicts: kite-collector
 Replaces: kite-collector
 Provides: kite-collector
-Filename: dists/stable/main/binary-amd64/kite-collector-osquery_0.42.5_amd64.deb
-Size: 43530440
-MD5sum: 330185bb1279ebab817b3f70494d6055
-SHA1: df1f11424d36f9778b0f20da4b9a1a972e82861c
-SHA256: b0ef98c628a2d252cb965e433678e6a08cbd207289fbd8865ddd059a31051dbf
+Filename: dists/stable/main/binary-amd64/kite-collector-osquery_0.48.1_amd64.deb
+Size: 43620234
+MD5sum: e7d716d71d68a0acd2e15da3e9fe8bdd
+SHA1: 025987dbd6a00dac0f44ae96b445bd6b2e304a84
+SHA256: 1eb46ff2fb7d332c0ddd2cad8e329298df37631b99935e75b415ffb404eb3582
 Section: admin
 Priority: optional
 Homepage: https://github.com/VulnerTrack/kite-collector

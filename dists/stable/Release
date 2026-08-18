@@ -6,12 +6,12 @@ Architectures: amd64 arm64
 Components: main
 Description: Repositorio oficial de APT para Kite Collector
 MD5Sum:
- f0d879bfdf39b42274e8a9652dc374fb 1517 main/binary-amd64/Packages
- 61a043da7e9a456ce110feb7f6455816 735 main/binary-amd64/Packages.gz
- 97940736546b7f63840445201c414a2c 590 main/binary-arm64/Packages
- 4770ba4db87966f16957726c1224a325 428 main/binary-arm64/Packages.gz
+ 42b133e820f702713ebf86c48c641628 1517 main/binary-amd64/Packages
+ 6af56b9a047de1749f2018d0535c365d 730 main/binary-amd64/Packages.gz
+ 8dcc6d16a66c1e44305c2f3cbbf7a0a9 590 main/binary-arm64/Packages
+ 65b69472a2e28b1cab0c678e3bd91272 429 main/binary-arm64/Packages.gz
 SHA256:
- c286c9054d319c69fe7fb1a6e7e69333f5bea0079c19d76fcdcfba86b1ead707 1517 main/binary-amd64/Packages
- 330f0edead302671efd33146891107b724a310f9762960b8e8b753eced73d9c3 735 main/binary-amd64/Packages.gz
- d3c8b4976698cd6363edcc543bb12d00b5749304488e9435cc483a643bc517d1 590 main/binary-arm64/Packages
- 416e277a67ed711a10b0ca74564c1cdfcce9a5f757d7f1649c66693b92094bec 428 main/binary-arm64/Packages.gz
+ 9965c76bc921fc327927414f891144f700165af741a855a4d18c8b87496821e8 1517 main/binary-amd64/Packages
+ dbc663855372581cd92ea21ee2a3cd2a24cd2d546b318385b65789307e8cd7e9 730 main/binary-amd64/Packages.gz
+ 092572633e5f4fc780f32400d63bdc2965e414a67a7713376220d4c1abab180a 590 main/binary-arm64/Packages
+ 52e855f9e5120a8c32136533c34abcf14ee54d46a18864cdc13d71b2f9a78c11 429 main/binary-arm64/Packages.gz
