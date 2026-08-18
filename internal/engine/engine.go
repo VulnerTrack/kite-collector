@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -133,6 +134,128 @@ var sourceEnvVars = map[string]map[string]string{ //#nosec G101 -- values are en
 	},
 }
 
+// legacySecretEnvNames returns the deduplicated set of well-known env var
+// names from sourceEnvVars that supply secret-bearing fields (password,
+// token, api_key, client_secret). RFC-0153 R9: these feed the
+// process_env_secrets declared-name detection so a globally-exported
+// KITE_*_PASSWORD-style variable is flagged when other processes carry it.
+// Non-secret entries (api_url, tenant_id, ...) are excluded.
+func legacySecretEnvNames() []string {
+	secretKeys := map[string]bool{
+		"password": true, "token": true, "api_key": true, "client_secret": true,
+	}
+	seen := make(map[string]struct{})
+	for _, fields := range sourceEnvVars {
+		for key, envVar := range fields {
+			if secretKeys[key] {
+				seen[envVar] = struct{}{}
+			}
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// secretEnvCompanions maps each secret-bearing config key to its *_env
+// indirection companion (RFC-0153). The legacy env overlay must not fill a
+// key whose companion is declared: explicit operator intent beats the
+// implicit well-known variable (R3).
+var secretEnvCompanions = map[string]string{
+	"password":      "password_env",
+	"token":         "token_env",
+	"api_key":       "api_key_env",
+	"client_secret": "client_secret_env",
+}
+
+// buildSourceConfigMap assembles the per-source config map handed to
+// DiscoverAll for one discovery source, applying the credential precedence
+// order pinned by RFC-0153 R3: inline YAML value > declared *_env
+// indirection (resolved later inside connectorkit.LoadCredentials, R2) >
+// legacy well-known env var from sourceEnvVars.
+func buildSourceConfigMap(name string, src config.SourceConfig) map[string]any {
+	m := map[string]any{
+		"scope":              src.Scope,
+		"paths":              src.Paths,
+		"max_depth":          src.MaxDepth,
+		"tcp_ports":          src.TCPPorts,
+		"timeout":            src.Timeout,
+		"max_concurrent":     src.MaxConcurrent,
+		"collect_software":   src.CollectSoftware,
+		"collect_interfaces": src.CollectInterfaces,
+		"host":               src.Host,
+		"endpoint":           src.Endpoint,
+		"site":               src.Site,
+		"community":          src.Community,
+		"enabled":            src.Enabled,
+		// LDAP-specific (RFC-0121); harmless when other sources read them.
+		"tls_mode":             src.TLSMode,
+		"tls_ca_file":          src.TLSCAFile,
+		"tls_skip_verify":      src.TLSSkipVerify,
+		"bind_dn":              src.BindDN,
+		"bind_password_env":    src.BindPasswordEnv,
+		"base_dn":              src.BaseDN,
+		"domain_controllers":   stringSliceToAny(src.DomainControllers),
+		"page_size":            src.PageSize,
+		"stale_threshold_days": src.StaleThresholdDays,
+		"max_objects":          src.MaxObjects,
+		"collect_users":        src.CollectUsers,
+		"collect_groups":       src.CollectGroups,
+		"collect_ous":          src.CollectOUs,
+		"collect_gpos":         src.CollectGPOs,
+		// Entra-specific (RFC-0121); harmless when other sources read them.
+		"stale_account_days":     src.StaleAccountDays,
+		"max_users":              src.MaxUsers,
+		"max_service_principals": src.MaxServicePrincipals,
+		"max_groups":             src.MaxGroups,
+		"max_devices":            src.MaxDevices,
+		// MDM/CMDB connector fields (RFC-0135 R4). Sourced from SourceConfig
+		// so the YAML file is the real configuration surface; empty values
+		// fall back to the env vars overlaid below.
+		"api_url":       src.APIURL,
+		"instance_url":  src.InstanceURL,
+		"username":      src.Username,
+		"password":      src.Password,
+		"token":         src.Token,
+		"api_key":       src.APIKey,
+		"tenant_id":     src.TenantID,
+		"client_id":     src.ClientID,
+		"client_secret": src.ClientSecret,
+		"table":         src.Table,
+		"site_id":       src.SiteID,
+		// Declared secret env indirection (RFC-0153 R1). These carry env var
+		// NAMES, not secrets; connectorkit.LoadCredentials resolves them at
+		// credential-load time under the clone-and-zero contract (R2).
+		"password_env":      src.PasswordEnv,
+		"token_env":         src.TokenEnv,
+		"api_key_env":       src.APIKeyEnv,
+		"client_secret_env": src.ClientSecretEnv,
+	}
+	// Overlay MDM/CMDB credential environment variables onto the config
+	// map so connectors receive them via the standard cfg parameter.
+	// SourceConfig (YAML) takes precedence: an env var only fills a field
+	// the YAML left empty (R4), and never one whose *_env companion is
+	// declared (RFC-0153 R3) — even when the declared variable is unset,
+	// explicit intent wins over the implicit well-known name.
+	for key, envVar := range sourceEnvVars[name] {
+		if existing, ok := m[key].(string); ok && existing != "" {
+			continue
+		}
+		if companion := secretEnvCompanions[key]; companion != "" {
+			if declared, ok := m[companion].(string); ok && declared != "" {
+				continue
+			}
+		}
+		if val := os.Getenv(envVar); val != "" {
+			m[key] = val
+		}
+	}
+	return m
+}
+
 func New(
 	st store.Store,
 	reg *discovery.Registry,
@@ -201,70 +324,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 
 	configs := make(map[string]map[string]any)
 	for name, src := range cfg.Discovery.Sources {
-		m := map[string]any{
-			"scope":              src.Scope,
-			"paths":              src.Paths,
-			"max_depth":          src.MaxDepth,
-			"tcp_ports":          src.TCPPorts,
-			"timeout":            src.Timeout,
-			"max_concurrent":     src.MaxConcurrent,
-			"collect_software":   src.CollectSoftware,
-			"collect_interfaces": src.CollectInterfaces,
-			"host":               src.Host,
-			"endpoint":           src.Endpoint,
-			"site":               src.Site,
-			"community":          src.Community,
-			"enabled":            src.Enabled,
-			// LDAP-specific (RFC-0121); harmless when other sources read them.
-			"tls_mode":             src.TLSMode,
-			"tls_ca_file":          src.TLSCAFile,
-			"tls_skip_verify":      src.TLSSkipVerify,
-			"bind_dn":              src.BindDN,
-			"bind_password_env":    src.BindPasswordEnv,
-			"base_dn":              src.BaseDN,
-			"domain_controllers":   stringSliceToAny(src.DomainControllers),
-			"page_size":            src.PageSize,
-			"stale_threshold_days": src.StaleThresholdDays,
-			"max_objects":          src.MaxObjects,
-			"collect_users":        src.CollectUsers,
-			"collect_groups":       src.CollectGroups,
-			"collect_ous":          src.CollectOUs,
-			"collect_gpos":         src.CollectGPOs,
-			// Entra-specific (RFC-0121); harmless when other sources read them.
-			"stale_account_days":     src.StaleAccountDays,
-			"max_users":              src.MaxUsers,
-			"max_service_principals": src.MaxServicePrincipals,
-			"max_groups":             src.MaxGroups,
-			"max_devices":            src.MaxDevices,
-			// MDM/CMDB connector fields (RFC-0135 R4). Sourced from SourceConfig
-			// so the YAML file is the real configuration surface; empty values
-			// fall back to the env vars overlaid below.
-			"api_url":       src.APIURL,
-			"instance_url":  src.InstanceURL,
-			"username":      src.Username,
-			"password":      src.Password,
-			"token":         src.Token,
-			"api_key":       src.APIKey,
-			"tenant_id":     src.TenantID,
-			"client_id":     src.ClientID,
-			"client_secret": src.ClientSecret,
-			"table":         src.Table,
-			"site_id":       src.SiteID,
-		}
-		// Overlay MDM/CMDB credential environment variables onto the config
-		// map so connectors receive them via the standard cfg parameter.
-		// SourceConfig (YAML) takes precedence: an env var only fills a field
-		// the YAML left empty (R4). Credentials never appear in config files
-		// unless the operator puts them there explicitly.
-		for key, envVar := range sourceEnvVars[name] {
-			if existing, ok := m[key].(string); ok && existing != "" {
-				continue
-			}
-			if val := os.Getenv(envVar); val != "" {
-				m[key] = val
-			}
-		}
-		configs[name] = m
+		configs[name] = buildSourceConfigMap(name, src)
 	}
 
 	// Bind a scan-scoped heartbeat recorder so DiscoverAll emits one
@@ -435,6 +495,11 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					Processes:         cfg.Audit.ProcessEnvSecrets.ProcessFilter,
 					ExtraDenyPrefixes: cfg.Audit.ProcessEnvSecrets.DenyList,
 					MaxPIDs:           cfg.Audit.ProcessEnvSecrets.MaxPIDs,
+					// RFC-0153 R5/R9: env var names the config declares as
+					// secret-bearing, plus the legacy well-known credential
+					// vars, become name-based detection targets.
+					DeclaredSecretEnvNames: append(
+						cfg.DeclaredSecretEnvNames(), legacySecretEnvNames()...),
 				}))
 			}
 

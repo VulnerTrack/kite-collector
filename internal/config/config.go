@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -247,12 +249,24 @@ type SourceConfig struct {
 	// APIKey, ClientSecret) are never persisted to SQLite, logs, or ontology
 	// properties; the connector zeroes them post-auth. SourceConfig values take
 	// precedence over env vars when both are set (see engine.go).
-	APIURL             string   `mapstructure:"api_url"`
-	InstanceURL        string   `mapstructure:"instance_url"`
-	Username           string   `mapstructure:"username"`
-	Password           string   `mapstructure:"password" json:"-"`
-	Token              string   `mapstructure:"token" json:"-"`
-	APIKey             string   `mapstructure:"api_key" json:"-"`
+	APIURL      string `mapstructure:"api_url"`
+	InstanceURL string `mapstructure:"instance_url"`
+	Username    string `mapstructure:"username"`
+	Password    string `mapstructure:"password" json:"-"`
+	Token       string `mapstructure:"token" json:"-"`
+	APIKey      string `mapstructure:"api_key" json:"-"`
+	// Declared secret env indirection (RFC-0153 R1). Each *_env field names
+	// the environment variable that supplies the matching secret field, so
+	// secret material stays out of the YAML file. Resolution happens inside
+	// connectorkit.LoadCredentials under the clone-and-zero contract (R2);
+	// precedence is inline value > *_env indirection > legacy well-known env
+	// var (R3). These fields hold env var NAMES — safe to log and persist —
+	// and Validate rejects anything that is not a POSIX env name so a secret
+	// pasted here by mistake can never persist via scan_runs.ScopeConfig (R4).
+	PasswordEnv        string   `mapstructure:"password_env"`
+	TokenEnv           string   `mapstructure:"token_env"`
+	APIKeyEnv          string   `mapstructure:"api_key_env"`
+	ClientSecretEnv    string   `mapstructure:"client_secret_env"`
 	TenantID           string   `mapstructure:"tenant_id"`
 	ClientID           string   `mapstructure:"client_id"`
 	ClientSecret       string   `mapstructure:"client_secret" json:"-"`
@@ -516,6 +530,29 @@ func (c *Config) validate() error {
 		}
 	}
 
+	// Validate declared secret env indirection names (RFC-0153 R4). The
+	// scan_runs.ScopeConfig snapshot serializes these fields, so rejecting
+	// non-name values here is what guarantees a secret pasted into a *_env
+	// field by mistake never persists. Pre-existing bind_password_env and
+	// auth_token_env are deliberately not newly validated (R8).
+	for name, src := range c.Discovery.Sources {
+		for field, val := range map[string]string{
+			"password_env":      src.PasswordEnv,
+			"token_env":         src.TokenEnv,
+			"api_key_env":       src.APIKeyEnv,
+			"client_secret_env": src.ClientSecretEnv,
+		} {
+			if val == "" {
+				continue
+			}
+			if !envNameRe.MatchString(val) {
+				return fmt.Errorf(
+					"discovery.sources.%s.%s %q is not a valid environment variable name: expected a name like KITE_%s_SECRET, not a secret value",
+					name, field, val, strings.ToUpper(name))
+			}
+		}
+	}
+
 	// Streaming interval must be parseable when set.
 	if c.Streaming.Interval != "" {
 		if _, err := time.ParseDuration(c.Streaming.Interval); err != nil {
@@ -643,4 +680,39 @@ func (c *Config) IsSourceEnabled(name string) bool {
 // source does not exist, a zero-value SourceConfig is returned.
 func (c *Config) SourceCfg(name string) SourceConfig {
 	return c.Discovery.Sources[name]
+}
+
+// envNameRe matches POSIX environment variable names. RFC-0153 R4: *_env
+// fields must hold names, never secret material.
+var envNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// DeclaredSecretEnvNames returns the sorted, deduplicated set of environment
+// variable names the configuration declares as secret-bearing: the four
+// *_env indirection fields plus the LDAP bind_password_env, across all
+// discovery sources (RFC-0153). Declarations from disabled sources are
+// included — a disabled source's secret is still a secret. The tunnel
+// auth_token_env is deliberately excluded: the tunnel contract delivers that
+// variable to a provider child process by design, so flagging it in the
+// process_env_secrets auditor would be structural noise.
+func (c *Config) DeclaredSecretEnvNames() []string {
+	seen := make(map[string]struct{})
+	for _, src := range c.Discovery.Sources {
+		for _, name := range []string{
+			src.PasswordEnv,
+			src.TokenEnv,
+			src.APIKeyEnv,
+			src.ClientSecretEnv,
+			src.BindPasswordEnv,
+		} {
+			if name != "" {
+				seen[name] = struct{}{}
+			}
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
