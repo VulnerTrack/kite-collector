@@ -16,14 +16,14 @@
       "roles": ["epoch"],
       "architectures": ["amd64"],
       "version_pattern": "^[0-9]+:",
-      "known_issues": ["epoch_version_mismatch"]
+      "known_issues": []
     },
     {
       "name": "bsdutils",
       "roles": ["epoch", "baseline"],
       "architectures": ["amd64"],
       "version_pattern": "^[0-9]+:",
-      "known_issues": ["epoch_version_mismatch"]
+      "known_issues": []
     },
     {
       "name": "libc6",

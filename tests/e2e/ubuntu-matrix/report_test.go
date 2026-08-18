@@ -141,9 +141,13 @@ func TestReportPathHonoursOverride(t *testing.T) {
 }
 
 // R6: the PR summary shows a package-level expected-vs-actual diff, so a
-// maintainer never has to dig through raw `go test -v` output.
+// maintainer never has to dig through raw `go test -v` output. The waived
+// exemplar is a fabricated epoch re-mangle: the fixed collector no longer
+// produces one for real, so the test simulates the regression and waives it.
 func TestStepSummaryRendersPackageLevelDiff(t *testing.T) {
 	obs := baselineObservation()
+	obs.Packages[0] = mangledPkg("vim", "2:9.0.2114-1ubuntu1", "amd64")
+	obs.Expectation.Packages[0].KnownIssues = []string{FindingEpochVersionMismatch}
 	obs.Packages = append(obs.Packages, pkg("zlib1g:i386", "1:1.2.11", "i386"))
 	run := NewRun(obs, Evaluate(obs), time.Now(), time.Now())
 

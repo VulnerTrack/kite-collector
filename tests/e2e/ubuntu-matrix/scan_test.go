@@ -22,6 +22,16 @@ func pkg(name, version, arch string) Package {
 	}
 }
 
+// mangledPkg fabricates the pre-fix collector output for an epoch package:
+// normalizeComponent used to delete the colon instead of splitting the epoch
+// off, fusing the epoch digit into the CPE version (2:9.0.2114 → 29.0.2114).
+// The checks must keep flagging that shape if it ever comes back.
+func mangledPkg(name, version, arch string) Package {
+	p := pkg(name, version, arch)
+	p.CPE23 = software.BuildCPE23WithArch("", name, strings.Replace(version, ":", "", 1), arch)
+	return p
+}
+
 func TestParseScanOutput(t *testing.T) {
 	raw := []byte(`[
 	  {"hostname":"box","software":[
