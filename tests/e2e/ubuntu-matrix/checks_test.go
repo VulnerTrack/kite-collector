@@ -14,9 +14,10 @@ func pinnedTarget() Target {
 	return t
 }
 
-// baselineExpectation mirrors the shipped fixtures: an epoch package whose
-// known CPE mangle is acknowledged, a multi-arch package, a plain baseline,
-// and a purge probe.
+// baselineExpectation mirrors the shipped fixtures: an epoch package guarding
+// the CPE epoch split, a multi-arch package, a plain baseline, and a purge
+// probe. No waiver ships since the epoch-splitting fix in software/cpe.go;
+// tests that exercise the waiver path add it explicitly.
 func baselineExpectation() Expectation {
 	return Expectation{
 		Target:          "ubuntu-22.04",
@@ -29,7 +30,6 @@ func baselineExpectation() Expectation {
 				Roles:          []string{RoleEpoch},
 				Architectures:  []string{"amd64"},
 				VersionPattern: `^[0-9]+:`,
-				KnownIssues:    []string{FindingEpochVersionMismatch},
 			},
 			{
 				Name:          "libc6",
@@ -70,28 +70,22 @@ func findingsOfType(findings []Finding, findingType string) []Finding {
 	return out
 }
 
-// The happy path still produces the acknowledged epoch finding — that is the
-// design: a known issue stays visible and queryable, it just stops failing
-// the leg.
+// Since the epoch-splitting fix in software/cpe.go the happy path is
+// genuinely clean: the collector derives `9.0.2114` from `2:9.0.2114`, so no
+// epoch finding fires at all and the leg passes without any waiver.
 func TestEvaluateCleanRunPasses(t *testing.T) {
 	findings := Evaluate(baselineObservation())
 	require.Equal(t, StatusPass, StatusFor(findings))
-
-	epoch := findingsOfType(findings, FindingEpochVersionMismatch)
-	require.Len(t, epoch, 1, "the epoch CPE mangle must still be reported")
-	require.Equal(t, RemediationAcknowledged, epoch[0].RemediationStatus)
-	require.Equal(t, SeverityHigh, epoch[0].Severity)
-	require.Equal(t, "vim|amd64", epoch[0].PackageNameRef)
-	require.Equal(t, "2026-07-24T14:02:11Z", epoch[0].DetectedAt)
+	require.Empty(t, findingsOfType(findings, FindingEpochVersionMismatch),
+		"the fixed CPE builder must not trip its own epoch assertion")
 }
 
-// The epoch colon is stripped by CPE normalisation, so `2:9.0.2114-1` becomes
-// version `29.0.2114-1` — a string NVD will never match. Without the fixture
-// waiver this fails the leg, which is what makes removing the waiver the way
-// to make the fix mandatory.
+// The pre-fix collector deleted the epoch colon, so `2:9.0.2114-1` became
+// version `29.0.2114-1` — a string NVD will never match. If that shape ever
+// comes back, it fails the leg: there is no fixture waiver any more.
 func TestEvaluateEpochMangleFailsWhenNotWaived(t *testing.T) {
 	obs := baselineObservation()
-	obs.Expectation.Packages[0].KnownIssues = nil
+	obs.Packages[0] = mangledPkg("vim", "2:9.0.2114-1ubuntu1", "amd64")
 
 	findings := Evaluate(obs)
 	require.Equal(t, StatusFail, StatusFor(findings))
@@ -101,6 +95,30 @@ func TestEvaluateEpochMangleFailsWhenNotWaived(t *testing.T) {
 	require.Equal(t, RemediationOpen, epoch[0].RemediationStatus)
 	require.Contains(t, epoch[0].ExpectedValue, ":vim:9.0.2114-1ubuntu1:")
 	require.Contains(t, epoch[0].ActualValue, ":vim:29.0.2114-1ubuntu1:")
+}
+
+// A waived finding is still emitted and downgraded to acknowledged — but the
+// waiver is no longer a green light: the harness also rebuilds the CPE with
+// the fixed builder, and that unwaived cpe_generation_mismatch keeps a
+// re-mangling collector failing the leg.
+func TestEvaluateWaivedEpochMangleStaysVisibleButStillFails(t *testing.T) {
+	obs := baselineObservation()
+	obs.Packages[0] = mangledPkg("vim", "2:9.0.2114-1ubuntu1", "amd64")
+	obs.Expectation.Packages[0].KnownIssues = []string{FindingEpochVersionMismatch}
+
+	findings := Evaluate(obs)
+
+	epoch := findingsOfType(findings, FindingEpochVersionMismatch)
+	require.Len(t, epoch, 1, "the waived finding must still be reported")
+	require.Equal(t, RemediationAcknowledged, epoch[0].RemediationStatus)
+	require.Equal(t, SeverityHigh, epoch[0].Severity)
+	require.Equal(t, "vim|amd64", epoch[0].PackageNameRef)
+	require.Equal(t, "2026-07-24T14:02:11Z", epoch[0].DetectedAt)
+
+	cpe := findingsOfType(findings, FindingCPEGenerationMismatch)
+	require.Len(t, cpe, 1)
+	require.Equal(t, RemediationOpen, cpe[0].RemediationStatus)
+	require.Equal(t, StatusFail, StatusFor(findings))
 }
 
 // A package that stops carrying an epoch is a different regression from the

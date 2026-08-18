@@ -44,7 +44,7 @@ injected at run time instead.
 
 | Package | Shape | What it protects |
 |---|---|---|
-| `vim` | epoch version (`2:9.x`) | CPE normalisation strips `:`, fusing the epoch onto the upstream version. This is the exact line that has sat unreferenced in `internal/discovery/agent/software/testdata/dpkg_input.txt`. |
+| `vim` | epoch version (`2:9.x`) | The CPE builder must split the epoch off rather than delete the colon — deletion fused the epoch digit into the version (`29.x`), a shape NVD never matches. This is the exact line that has sat unreferenced in `internal/discovery/agent/software/testdata/dpkg_input.txt`. |
 | `libc6:i386` | architecture-qualified multi-arch | `dpkg-query` then emits two rows named `libc6` differing only in `${Architecture}`; collapsing or suffix-mangling either loses a real package. |
 | `hello` | installed, then purged | A removed package must not linger in discovery output as a phantom CVE exposure. |
 | `bsdutils` | epoch version, already in the base image | Proves the base image — not just the seeded packages — parses correctly, at zero install cost. |
@@ -66,11 +66,15 @@ the whole target. A waived finding is **still produced, still ingested, and
 still shown in the PR summary** — as `acknowledged` — it simply does not fail
 the leg. Removing the annotation is how a known issue becomes blocking again.
 
-One waiver ships today: `epoch_version_mismatch` on the epoch packages.
-`BuildCPE23` normalises `2:9.0.2114-1` to `29.0.2114-1`, which will never match
-NVD's `9.0.2114`. Per RFC-0149 §2.2 this RFC is a *verification* RFC — surfacing
-that is the deliverable; fixing `cpe.go` is a separate change. The waiver is
-narrow: a package that stops carrying an epoch at all still fails, unwaived.
+No waiver ships today. RFC-0149 originally waived `epoch_version_mismatch` on
+the epoch packages — `BuildCPE23` normalised `2:9.0.2114-1` to `29.0.2114-1`,
+which will never match NVD's `9.0.2114` — because per §2.2 it is a
+*verification* RFC: surfacing the mangle was the deliverable, fixing `cpe.go` a
+separate change. That fix has since landed (`cpe.go` splits the epoch off
+before normalisation), so the waiver is retired and any recurrence is blocking
+again — twice over, in fact: `epoch_version_mismatch` plus an unwaived
+`cpe_generation_mismatch` from the harness rebuilding the CPE with the fixed
+builder.
 
 ## Finding types
 

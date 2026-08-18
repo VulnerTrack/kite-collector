@@ -508,10 +508,11 @@ func checkVersions(set *findingSet, want ExpectedPackage, found []Package) {
 }
 
 // checkEpoch is the epoch-version assertion R2 calls for. `dpkg-query` emits
-// `2:9.0.2114-1`; CPE component normalisation strips characters outside
-// [a-z0-9_.-], so the colon disappears and the version becomes `29.0.2114-1`
-// — a string that will never match NVD's `9.0.2114`. That is a false-negative
-// CVE match, not a crash, which is precisely why it needs a live assertion.
+// `2:9.0.2114-1`; the CPE builder must split the epoch off rather than merely
+// delete the colon — deletion fuses the epoch digit into the version
+// (`29.0.2114-1`), a string that will never match NVD's `9.0.2114`. That
+// false-negative CVE match shipped for real until software/cpe.go learned to
+// split epochs; this live assertion is what keeps it from coming back.
 func checkEpoch(set *findingSet, want ExpectedPackage, found []Package) {
 	if !want.HasRole(RoleEpoch) {
 		return
