@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 475 codes across 58 packages.
+**Catalog size:** 489 codes across 58 packages.
 
 ---
 
@@ -94,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 26 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 27 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -130,6 +130,7 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 |---|---|---|
 | `agent.api.starting` | `LogCodeAPIStarting` | — |
 | `agent.api.server_failed` | `LogCodeAPIServerFailed` | — |
+| `agent.api.disabled` | `LogCodeAPIDisabled` | — |
 
 **dashboard surface — embedded dashboard server lifecycle**
 
@@ -1182,7 +1183,7 @@ Source: [`internal/emitter/logcodes.go`](../internal/emitter/logcodes.go) · 1 c
 
 ## `endpoint` (internal/endpoint)
 
-Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 5 codes
+Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 14 codes
 
 **manager surface — connection lifecycle and configuration**
 
@@ -1203,6 +1204,25 @@ Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 5
 | Code | Constant | Description |
 |---|---|---|
 | `endpoint.tofu.fingerprint_mismatch` | `LogCodeTOFUMismatch` | — |
+
+**queue surface — durable offline buffer capacity management**
+
+| Code | Constant | Description |
+|---|---|---|
+| `endpoint.queue.capacity_check_failed` | `LogCodeQueueCapacityCheckFailed` | — |
+| `endpoint.queue.evict_failed` | `LogCodeQueueEvictFailed` | — |
+| `endpoint.queue.evicted` | `LogCodeQueueEvicted` | — |
+
+**durable emitter surface — spool-on-failure and background drain**
+
+| Code | Constant | Description |
+|---|---|---|
+| `endpoint.durable.spooled` | `LogCodeDurableSpooled` | — |
+| `endpoint.durable.spool_failed` | `LogCodeDurableSpoolFailed` | — |
+| `endpoint.durable.drained` | `LogCodeDurableDrained` | — |
+| `endpoint.durable.drain_failed` | `LogCodeDurableDrainFailed` | — |
+| `endpoint.durable.dropped_poison` | `LogCodeDurableDroppedPoison` | — |
+| `endpoint.durable.dropped_corrupt` | `LogCodeDurableDroppedCorrupt` | — |
 
 ## `engine` (internal/engine)
 
@@ -1290,13 +1310,22 @@ Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 35 co
 
 ## `enrollment` (internal/enrollment)
 
-Source: [`internal/enrollment/logcodes.go`](../internal/enrollment/logcodes.go) · 4 codes
+Source: [`internal/enrollment/logcodes.go`](../internal/enrollment/logcodes.go) · 8 codes
 
 **renewal surface — periodic cert-renewal manager**
 
 | Code | Constant | Description |
 |---|---|---|
 | `enrollment.renewal.cert_check_failed` | `LogCodeEnrollmentCertCheckFailed` | — |
+
+**https surface — PKI HTTPS heartbeat + renewal lifecycle**
+
+| Code | Constant | Description |
+|---|---|---|
+| `enrollment.https.heartbeat_failed` | `LogCodeEnrollmentHeartbeatFailed` | — |
+| `enrollment.https.cert_check_failed` | `LogCodeEnrollmentHTTPSCertCheckFailed` | — |
+| `enrollment.https.renewal_failed` | `LogCodeEnrollmentRenewalFailed` | — |
+| `enrollment.https.renewal_completed` | `LogCodeEnrollmentRenewalCompleted` | — |
 
 **client surface — PKI enrollment client**
 
