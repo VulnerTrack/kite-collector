@@ -18,6 +18,10 @@ import (
 type indexPageView struct {
 	ActiveTab      string
 	InitialContent template.HTML
+	// SidebarTree is the static (count-less) resource tree, pre-rendered so
+	// navigation works before — and without — JS. Once the page is up, HTMX
+	// swaps in the counted variant from /fragments/sidebar-tree.
+	SidebarTree template.HTML
 }
 
 // indexPageTemplate is the dashboard shell. The layout is a CSS grid with a
@@ -40,7 +44,7 @@ const indexPageTemplate = `<!DOCTYPE html>
 <meta name="htmx-config" content='{"historyCacheSize": 20}'>
 <title>kite-collector dashboard</title>
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.1">
+<link rel="stylesheet" href="/static/style.css?v=1.0.2">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
@@ -58,17 +62,11 @@ const indexPageTemplate = `<!DOCTYPE html>
     <span class="brand-sub">kite-collector &middot; Cybersecurity Machine Discovery Agent</span>
   </a>
   <div class="topbar-nav">
-    <a href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true"
-       class="btn btn-ghost {{ if eq .ActiveTab "onboarding" }}active{{ end }}"
-       onclick="setActive(this)">Onboarding</a>
-    <a href="/fleet" hx-get="/fleet" hx-target="#content" hx-push-url="true"
-       class="btn btn-ghost {{ if eq .ActiveTab "fleet" }}active{{ end }}"
-       onclick="setActive(this)">Mass deployment</a>
     <span id="onboarding-status-badge"
           hx-get="/fragments/onboarding-status-badge"
           hx-trigger="load, every 30s, refresh-agent-state from:body"
           hx-swap="innerHTML"
-          title="Agent onboarding health — click Onboarding to drill in"
+          title="Agent onboarding health — drill in via Settings &rarr; Onboarding"
           aria-label="Agent health summary"></span>
   </div>
   <div class="topbar-actions">
@@ -85,33 +83,15 @@ const indexPageTemplate = `<!DOCTYPE html>
 </header>
 
 <aside class="sidenav" aria-label="Primary navigation">
-  <nav>
-    <div class="sidenav-section">
-      <h4>Views</h4>
-      <a href="/machines" hx-get="/machines" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "machines" }}active{{ end }}"
-         onclick="setActive(this)">Machines</a>
-      <a href="/software" hx-get="/software" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "software" }}active{{ end }}"
-         onclick="setActive(this)">Software</a>
-      <a href="/findings" hx-get="/findings" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "findings" }}active{{ end }}"
-         onclick="setActive(this)">Findings</a>
-      <a href="/scans" hx-get="/scans" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "scans" }}active{{ end }}"
-         onclick="setActive(this)">Scans</a>
-      <a href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "tables" }}active{{ end }}"
-         onclick="setActive(this)">All Tables</a>
-      <a href="/observability" hx-get="/observability" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "observability" }}active{{ end }}"
-         onclick="setActive(this)">Observability</a>
-      <a href="/fleet" hx-get="/fleet" hx-target="#content" hx-push-url="true" class="{{ if eq .ActiveTab "fleet" }}active{{ end }}"
-         onclick="setActive(this)">Fleet deployment</a>
-    </div>
-    <div class="sidenav-section">
-      <h4>Tables</h4>
-      <div id="sidebar-tables"
-           hx-get="/fragments/sidebar-tables"
-           hx-trigger="load"
-           hx-swap="innerHTML">
-        <span class="muted small">Loading&hellip;</span>
-      </div>
-    </div>
+  <div class="sidenav-filter">
+    <input type="search" id="sidenav-filter" placeholder="Filter resources, views, tables"
+           aria-label="Filter navigation" oninput="filterSidenav(this.value)" autocomplete="off">
+  </div>
+  <nav id="sidenav-tree"
+       hx-get="/fragments/sidebar-tree?active={{.ActiveTab}}"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+{{ .SidebarTree }}
   </nav>
 </aside>
 
@@ -150,6 +130,45 @@ function closeRowDrawer() {
 // Back-compat shims — older fragment HTML still calls openSidebar/closeSidebar.
 function openSidebar() { openRowDrawer(); }
 function closeSidebar() { closeRowDrawer(); }
+// Sidebar filter — hides non-matching links and any section left empty. A
+// match inside the collapsed "All tables" group pops it open so hits are
+// visible; clearing the query re-collapses it.
+function filterSidenav(q) {
+  q = (q || '').trim().toLowerCase();
+  document.querySelectorAll('#sidenav-tree .sidenav-section').forEach(function(section) {
+    var any = false;
+    section.querySelectorAll('a').forEach(function(a) {
+      var hit = !q || a.textContent.toLowerCase().indexOf(q) !== -1;
+      a.style.display = hit ? '' : 'none';
+      if (a.parentElement && a.parentElement.tagName === 'LI') {
+        a.parentElement.style.display = hit ? '' : 'none';
+      }
+      if (hit) any = true;
+    });
+    section.style.display = any ? '' : 'none';
+    var det = section.querySelector('details');
+    if (det) { det.open = !!q && any; }
+  });
+}
+// Clipboard helper for docs snippets and SQL strips: copies the text content
+// of the element named by data-copy-target (or the data-copy attribute) and
+// flashes the button label as feedback.
+function copyText(btn) {
+  var targetID = btn.getAttribute('data-copy-target');
+  var text = '';
+  if (targetID) {
+    var el = document.getElementById(targetID);
+    if (el) text = el.textContent;
+  } else {
+    text = btn.getAttribute('data-copy') || '';
+  }
+  if (!text || !navigator.clipboard) return;
+  navigator.clipboard.writeText(text).then(function() {
+    var prev = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(function() { btn.textContent = prev; }, 1200);
+  });
+}
 // Tabulator integration — every server-rendered <table> wrapped in a
 // .data-grid container is upgraded into a Tabulator instance with sort,
 // per-column filter, pagination, and resizable/movable columns. The init
@@ -250,6 +269,7 @@ func renderIndexPage(w io.Writer, activeTab string, initialFragment func(io.Writ
 	view := indexPageView{
 		ActiveTab:      activeTab,
 		InitialContent: initialHTML,
+		SidebarTree:    renderSidebarTreeStatic(activeTab),
 	}
 	if err := indexPageTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("execute index page template: %w", err)

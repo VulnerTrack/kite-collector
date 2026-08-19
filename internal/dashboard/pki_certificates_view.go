@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -239,3 +241,41 @@ window.copyPKIValue = function(button) {
   input.remove();
 };
 </script>`))
+
+// certificatesPageTemplate is the Certificates page body: the shared PKI
+// inventory fragment with its tenant-scope explainer, served from the
+// sidebar's Settings group. The inventory div lazy-loads the same fragment
+// the Observability page embeds, so the two surfaces can never disagree.
+var certificatesPageTmpl = template.Must(template.New("certificatesPage").Parse(`<h2>Certificates</h2>
+<p class="muted">Tenant-scoped PKI inventory. A mass enrollment issues one certificate per computer; every certificate produced by that fleet enrollment appears here as soon as the remote computer completes enrollment.</p>
+<div id="pki-certificate-inventory"
+     hx-get="/fragments/observability/certificates"
+     hx-trigger="load, every 60s"
+     hx-swap="innerHTML">
+  <p class="muted">Loading certificates&hellip;</p>
+</div>`))
+
+// renderCertificatesPageFragment renders the Certificates page body.
+func renderCertificatesPageFragment(w io.Writer) error {
+	if err := certificatesPageTmpl.Execute(w, nil); err != nil {
+		return fmt.Errorf("render certificates page template: %w", err)
+	}
+	return nil
+}
+
+// serveCertificatesPage serves /certificates with the standard HX-Request
+// (fragment-only) vs. plain GET (full shell) split.
+func serveCertificatesPage(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Header.Get("HX-Request") == "true" {
+		if err := renderCertificatesPageFragment(w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	if err := renderIndexPage(w, "certificates", func(fragBuf io.Writer) error {
+		return renderCertificatesPageFragment(fragBuf)
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}

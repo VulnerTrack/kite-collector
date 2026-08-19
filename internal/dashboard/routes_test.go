@@ -42,11 +42,11 @@ func TestRoute_GET_MachinesPlain_ReturnsFullShell(t *testing.T) {
 	assert.Contains(t, body, "<h2>Machines", "shell should embed initial machines fragment")
 	// Machines link active.
 	assert.True(t,
-		strings.Contains(body, `href="/machines" hx-get="/machines" hx-target="#content" hx-push-url="true" class="active"`),
+		strings.Contains(body, `href="/machines" hx-get="/machines" hx-target="#content" hx-push-url="true" class="active sidenav-resource"`),
 		"Machines link should have active class; got body=%s", body)
 	// Other tabs MUST NOT be active.
 	for _, other := range []string{"/software", "/findings", "/scans", "/tables"} {
-		needle := `href="` + other + `" hx-get="` + other + `" hx-target="#content" hx-push-url="true" class="active"`
+		needle := `href="` + other + `" hx-get="` + other + `" hx-target="#content" hx-push-url="true" class="active sidenav-resource"`
 		assert.NotContains(t, body, needle, "%s link must not be active on /machines", other)
 	}
 }
@@ -80,10 +80,10 @@ func TestRoute_GET_FindingsPlain_HasActiveOnFindingsLink(t *testing.T) {
 	body := rec.Body.String()
 
 	assert.Contains(t, body,
-		`href="/findings" hx-get="/findings" hx-target="#content" hx-push-url="true" class="active"`,
+		`href="/findings" hx-get="/findings" hx-target="#content" hx-push-url="true" class="active sidenav-resource"`,
 		"Findings link should be active")
 	for _, other := range []string{"/machines", "/software", "/scans", "/tables"} {
-		needle := `href="` + other + `" hx-get="` + other + `" hx-target="#content" hx-push-url="true" class="active"`
+		needle := `href="` + other + `" hx-get="` + other + `" hx-target="#content" hx-push-url="true" class="active sidenav-resource"`
 		assert.NotContains(t, body, needle, "%s link must not be active on /findings", other)
 	}
 }
@@ -347,7 +347,7 @@ func TestRoute_GET_TablesByName_Plain_ReturnsFullShellWithTableContent(t *testin
 	assert.Contains(t, body, "scan_runs", "shell should embed the table-detail fragment")
 	// Tables nav link is active for any table-drill URL.
 	assert.Contains(t, body,
-		`href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="active"`,
+		`href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="active sidenav-resource"`,
 		"Tables nav link should be active when drilling into a table")
 }
 

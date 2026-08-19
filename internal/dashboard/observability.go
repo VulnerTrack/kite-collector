@@ -1585,6 +1585,12 @@ func registerObservabilityRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	mux.HandleFunc("GET /fragments/observability/certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
 		handlePKICertificateDetail(w, r, deps)
 	})
+	// Certificates as a first-class Settings page. The inventory fragment is
+	// the same one the Observability page embeds; this page gives it a home
+	// of its own in the sidebar's Settings group.
+	mux.HandleFunc("GET /certificates", func(w http.ResponseWriter, r *http.Request) {
+		serveCertificatesPage(w, r, deps)
+	})
 }
 
 // handleObservabilitySnapshot serves the observability data as a downloadable

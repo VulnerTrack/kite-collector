@@ -389,21 +389,6 @@ func rowCountBucket(n int64) string {
 	}
 }
 
-// renderSidebarTablesFragment renders the compact list of every content
-// table for the left sidebar. Each item is a clickable HTMX link to the
-// table-detail view with a row-count badge.
-func renderSidebarTablesFragment(w io.Writer, ctx context.Context, st store.Store) error {
-	tables, err := st.ListContentTables(ctx)
-	if err != nil {
-		return fmt.Errorf("list content tables: %w", err)
-	}
-	tmpl := template.Must(template.New("sidebarTables").Funcs(templateFuncs).Parse(sidebarTablesTemplate))
-	if err := tmpl.Execute(w, map[string]any{"Tables": tables}); err != nil {
-		return fmt.Errorf("render sidebar-tables template: %w", err)
-	}
-	return nil
-}
-
 // renderTablesFragment lists every content table discovered via introspection.
 func renderTablesFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
 	tables, err := st.ListContentTables(ctx)
@@ -481,21 +466,6 @@ func renderRowReportFragment(w io.Writer, ctx context.Context, st store.Store, n
 	}
 	return nil
 }
-
-const sidebarTablesTemplate = `{{ if .Tables -}}
-<ul class="sidenav-tables">
-{{- range .Tables }}
-  <li>
-    <a href="/tables/{{.Name}}" hx-get="/tables/{{.Name}}" hx-target="#content" hx-push-url="true" onclick="setActive(this)">
-      <span class="sidenav-table-name">{{.Name}}</span>
-      <span class="badge {{rowCountBucket .RowCount}}">{{ if lt .RowCount 0 }}?{{ else }}{{.RowCount}}{{ end }}</span>
-    </a>
-  </li>
-{{- end }}
-</ul>
-{{- else -}}
-<span class="muted small">No content tables.</span>
-{{- end }}`
 
 const tablesTemplate = `<h2>Tables ({{len .Tables}})</h2>
 <p class="muted">Every non-system content table in the live database.</p>

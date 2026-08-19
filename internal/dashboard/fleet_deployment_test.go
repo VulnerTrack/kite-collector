@@ -414,7 +414,7 @@ func TestRoute_GET_Fleet_ReturnsFullShellAndActiveNavigation(t *testing.T) {
 	assert.NotContains(t, body, `name="enrollment_token"`)
 	assert.Contains(t, body, "single-use, two-hour credential per computer")
 	assert.Contains(t, body, `href="/fleet" hx-get="/fleet" hx-target="#content" hx-push-url="true"`)
-	assert.Contains(t, body, `class="btn btn-ghost active"`)
+	assert.Contains(t, body, `href="/fleet" hx-get="/fleet" hx-target="#content" hx-push-url="true" class="active sidenav-resource"`)
 }
 
 func TestRoute_GET_Fleet_ListsCompatibleDiscoveredMachines(t *testing.T) {

@@ -200,6 +200,29 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("GET /fleet", serveTabRoute("fleet", func(w io.Writer, ctx context.Context) error {
 		return renderFleetDeploymentFragment(w, ctx, st, opts, fleetDiscovery)
 	}))
+
+	// Docs — copy-paste snippets that hand an external AI agent (or any
+	// script) read-only access to kite's data. Registered outside
+	// serveTabRoute because the curl examples embed the request's Host so
+	// they work as pasted.
+	mux.HandleFunc("GET /docs", func(w http.ResponseWriter, r *http.Request) {
+		render := func(buf io.Writer) error { return renderDocsFragment(buf, r.Host) }
+		if r.Header.Get("HX-Request") == "true" {
+			renderFragment(w, "docs", render)
+			return
+		}
+		var buf bytes.Buffer
+		if renderErr := renderIndexPage(&buf, "docs", render); renderErr != nil {
+			logger.Error("dashboard: render page docs",
+				"code", string(LogCodeServeTabPageRender),
+				"error", renderErr)
+			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(buf.Bytes())
+	})
+
 	mux.HandleFunc("POST /api/v1/fleet/discover", func(w http.ResponseWriter, r *http.Request) {
 		handleFleetDiscovery(w, r, st, logger, fleetDiscovery)
 	})
@@ -347,12 +370,15 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		})
 	})
 
-	// Sidebar table list — populates the left-sidebar "Tables" section.
-	// Loaded lazily by HTMX so the shell renders fast and the tables list
-	// reflects whatever was just inserted by the most recent scan.
-	mux.HandleFunc("GET /fragments/sidebar-tables", func(w http.ResponseWriter, r *http.Request) {
-		renderFragment(w, "sidebar-tables", func(buf io.Writer) error {
-			return renderSidebarTablesFragment(buf, r.Context(), st)
+	// Sidebar resource tree — the counted variant HTMX swaps in over the
+	// static tree baked into the shell. Loaded lazily so the shell renders
+	// fast and counts reflect whatever the most recent scan inserted.
+	// ?active carries the shell's ActiveTab so the swap keeps the right
+	// link highlighted.
+	mux.HandleFunc("GET /fragments/sidebar-tree", func(w http.ResponseWriter, r *http.Request) {
+		active := r.URL.Query().Get("active")
+		renderFragment(w, "sidebar-tree", func(buf io.Writer) error {
+			return renderSidebarTreeFragment(buf, r.Context(), st, active)
 		})
 	})
 
