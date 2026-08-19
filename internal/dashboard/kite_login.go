@@ -96,7 +96,10 @@ const kiteLoginTemplate = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Link Kite Collector - Vulnertrack</title>
-<link rel="stylesheet" href="/static/style.css?v=1.0.1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/static/style.css?v=1.0.4">
 <style>
   body.kite-auth-page {
     display: flex;
@@ -106,7 +109,7 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     margin: 0;
     padding: 24px;
     box-sizing: border-box;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background: radial-gradient(circle at 50% 50%, #fdfdfd 0%, #f4f5f7 100%);
     color: #1C252E;
   }
@@ -132,14 +135,14 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     object-fit: contain;
   }
   .kite-auth-title {
-    font-size: 1.5rem;
+    font-size: var(--text-2xl);
     font-weight: 800;
     margin: 0 0 12px 0;
     color: #1C252E;
     letter-spacing: -0.5px;
   }
   .kite-auth-desc {
-    font-size: 0.925rem;
+    font-size: var(--text-md);
     line-height: 1.5;
     color: #637381;
     margin: 0 0 32px 0;
@@ -158,7 +161,7 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     border-radius: 24px;
     background: #FF3131;
     color: #ffffff;
-    font-size: 0.95rem;
+    font-size: var(--text-md);
     font-weight: 700;
     text-decoration: none;
     transition: all 0.2s ease-in-out;
@@ -178,7 +181,7 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     background: transparent;
     border: 1px solid rgba(145, 158, 171, 0.32);
     color: #1C252E;
-    font-size: 0.95rem;
+    font-size: var(--text-md);
     font-weight: 700;
     text-decoration: none;
     transition: all 0.2s ease-in-out;
@@ -222,7 +225,7 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     100% { transform: scale(2.6); opacity: 0; }
   }
   .kite-auth-status-text {
-    font-size: 0.8rem;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: #22C55E;
     text-transform: uppercase;
@@ -239,7 +242,7 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     background: transparent;
     border: 1px solid rgba(145, 158, 171, 0.32);
     color: #637381;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     font-weight: 500;
     text-decoration: none;
     transition: all 0.2s ease-in-out;
@@ -252,13 +255,13 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     color: #1C252E;
   }
   .kite-auth-panel-btn code {
-    font-family: monospace;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background: #f4f6f8;
     padding: 2px 8px;
     border-radius: 4px;
     color: #1C252E;
     font-weight: 600;
-    font-size: 0.82rem;
+    font-size: var(--text-sm);
   }
   .kite-auth-panel-btn:hover code {
     background: rgba(145, 158, 171, 0.16);
@@ -269,13 +272,13 @@ const kiteLoginTemplate = `<!DOCTYPE html>
     border: 1px solid rgba(255, 86, 48, 0.22);
     border-radius: 12px;
     padding: 12px 14px;
-    font-size: 0.875rem;
+    font-size: var(--text-md);
     line-height: 1.45;
     margin: 0 0 24px 0;
   }
   .kite-auth-version {
     margin-top: 20px;
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     color: #919EAB;
     letter-spacing: 0.3px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
@@ -324,7 +327,10 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Welcome to Kite Collector</title>
-<link rel="stylesheet" href="/static/style.css?v=1.0.1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/static/style.css?v=1.0.4">
 <style>
   body.kite-success-page {
     display: flex;
@@ -336,7 +342,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
     box-sizing: border-box;
     background: radial-gradient(circle at 50% 50%, #fdfdfd 0%, #f4f5f7 100%);
     color: #1C252E;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
   .kite-success-card {
     background: #ffffff;
@@ -361,7 +367,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
     justify-content: center;
     gap: 12px;
     margin: 0 0 18px 0;
-    font-size: 1.6rem;
+    font-size: var(--text-2xl);
     font-weight: 700;
     color: #1C252E;
   }
@@ -374,7 +380,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
     border-radius: 50%;
     background: #22C55E;
     color: #ffffff;
-    font-size: 1.1rem;
+    font-size: var(--text-lg);
     font-weight: 800;
     line-height: 1;
     box-shadow: 0 4px 10px rgba(34, 197, 94, 0.2);
@@ -382,7 +388,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
   .kite-success-copy {
     margin: 0 0 16px 0;
     color: #637381;
-    font-size: 0.95rem;
+    font-size: var(--text-md);
     line-height: 1.5;
   }
   .kite-success-actions {
@@ -397,7 +403,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
     border-radius: 24px;
     background: #FF3131;
     color: #ffffff;
-    font-size: 0.95rem;
+    font-size: var(--text-md);
     font-weight: 700;
     text-decoration: none;
     box-shadow: 0 4px 12px rgba(255, 49, 49, 0.2);
@@ -410,7 +416,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
   }
   .kite-success-version {
     margin-top: 20px;
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     color: #919EAB;
     letter-spacing: 0.3px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;

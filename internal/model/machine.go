@@ -172,6 +172,14 @@ type NetworkInterface struct {
 }
 
 // InstalledSoftware records a software package found on an machine.
+//
+// Description/License/Homepage/InstallPath/Depth mirror the richer fields a
+// per-file scanner can surface (e.g. the npm node_modules scanner, matching
+// osquery's npm_packages columns). They are optional — most package-manager
+// collectors leave them empty — and default to ” / 0 for every existing row.
+// InstallPath makes otherwise-identical (name, version) packages installed in
+// multiple locations distinct rows, so a filesystem scan is faithful
+// row-for-row rather than collapsed to a unique set.
 type InstalledSoftware struct {
 	SoftwareName   string    `json:"software_name"`
 	Vendor         string    `json:"vendor"`
@@ -179,6 +187,11 @@ type InstalledSoftware struct {
 	CPE23          string    `json:"cpe23"`
 	PackageManager string    `json:"package_manager"`
 	Architecture   string    `json:"architecture,omitempty"`
+	Description    string    `json:"description,omitempty"`
+	License        string    `json:"license,omitempty"`
+	Homepage       string    `json:"homepage,omitempty"`
+	InstallPath    string    `json:"install_path,omitempty"`
 	ID             uuid.UUID `json:"id"`
 	MachineID      uuid.UUID `json:"machine_id"`
+	Depth          int       `json:"depth,omitempty"`
 }

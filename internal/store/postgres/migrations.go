@@ -48,8 +48,19 @@ CREATE TABLE IF NOT EXISTS installed_software (
     version         TEXT NOT NULL,
     cpe23           TEXT,
     package_manager TEXT,
-    architecture    TEXT
+    architecture    TEXT,
+    description     TEXT NOT NULL DEFAULT '',
+    license         TEXT NOT NULL DEFAULT '',
+    homepage        TEXT NOT NULL DEFAULT '',
+    install_path    TEXT NOT NULL DEFAULT '',
+    depth           INTEGER NOT NULL DEFAULT 0
 );
+-- Backfill columns on databases created before the npm-metadata change.
+ALTER TABLE installed_software ADD COLUMN IF NOT EXISTS description  TEXT NOT NULL DEFAULT '';
+ALTER TABLE installed_software ADD COLUMN IF NOT EXISTS license      TEXT NOT NULL DEFAULT '';
+ALTER TABLE installed_software ADD COLUMN IF NOT EXISTS homepage     TEXT NOT NULL DEFAULT '';
+ALTER TABLE installed_software ADD COLUMN IF NOT EXISTS install_path TEXT NOT NULL DEFAULT '';
+ALTER TABLE installed_software ADD COLUMN IF NOT EXISTS depth        INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS scan_runs (
     id                UUID PRIMARY KEY,

@@ -43,8 +43,11 @@ const indexPageTemplate = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="htmx-config" content='{"historyCacheSize": 20}'>
 <title>kite-collector dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.3">
+<link rel="stylesheet" href="/static/style.css?v=1.0.4">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

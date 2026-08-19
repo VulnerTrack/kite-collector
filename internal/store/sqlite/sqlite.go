@@ -1143,7 +1143,7 @@ func (s *SQLiteStore) MarkScanCancelRequested(ctx context.Context, id uuid.UUID,
 // Installed Software
 // ---------------------------------------------------------------------------
 
-const softwareColumns = `id, machine_id, software_name, vendor, version, cpe23, package_manager, architecture`
+const softwareColumns = `id, machine_id, software_name, vendor, version, cpe23, package_manager, architecture, description, license, homepage, install_path, depth`
 
 // scanSoftware reads a single row from the result set into an InstalledSoftware.
 func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSoftware, error) {
@@ -1165,6 +1165,11 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 		&cpe23,
 		&pkgMgr,
 		&arch,
+		&s.Description,
+		&s.License,
+		&s.Homepage,
+		&s.InstallPath,
+		&s.Depth,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan software: %w", err)
@@ -1210,7 +1215,7 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, machineID uuid.UUID, s
 		}
 
 		stmt, err := tx.PrepareContext(ctx,
-			`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+			`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
 			return fmt.Errorf("prepare insert software: %w", err)
 		}
@@ -1227,6 +1232,11 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, machineID uuid.UUID, s
 				nullStr(software[i].CPE23),
 				nullStr(software[i].PackageManager),
 				nullStr(software[i].Architecture),
+				software[i].Description, // NOT NULL DEFAULT ''
+				software[i].License,     // NOT NULL DEFAULT ''
+				software[i].Homepage,    // NOT NULL DEFAULT ''
+				software[i].InstallPath, // NOT NULL DEFAULT ''
+				software[i].Depth,       // NOT NULL DEFAULT 0
 			)
 			if err != nil {
 				return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)

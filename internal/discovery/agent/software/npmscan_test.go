@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -36,13 +38,23 @@ func buildNpmFixture(t *testing.T) string {
 	writeFile(t, filepath.Join(nm, "lodash", "lib", "package.json"),
 		`{"name":"lodash-subpath","version":"9.9.9"}`)
 	// duplicate (name, version) at another install location — same tarball,
-	// identical manifest — must dedupe to a single item
+	// identical manifest — becomes a SECOND per-location row
 	writeFile(t, filepath.Join(nm, "dup", "package.json"),
-		`{"name":"lodash","version":"4.17.21","author":"John Doe <j@e.com> (http://x)","license":"MIT"}`)
+		`{"name":"lodash","version":"4.17.21","author":"John Doe <j@e.com> (http://x)","license":"MIT","description":"utils","homepage":"http://lodash.com"}`)
 	// project-root package.json (not under node_modules) — ignored
 	writeFile(t, filepath.Join(root, "package.json"),
 		`{"name":"my-project","version":"0.0.0"}`)
 	return root
+}
+
+func itemsByName(items []model.InstalledSoftware, name string) []model.InstalledSoftware {
+	var out []model.InstalledSoftware
+	for _, it := range items {
+		if it.SoftwareName == name {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 func TestNpmScan_Collect(t *testing.T) {
@@ -53,24 +65,40 @@ func TestNpmScan_Collect(t *testing.T) {
 	res, err := s.Collect(context.Background())
 	require.NoError(t, err)
 
-	names := map[string]string{} // name -> version
-	vendors := map[string]string{}
 	for _, it := range res.Items {
 		assert.Equal(t, "npm", it.PackageManager)
 		assert.NotEmpty(t, it.CPE23)
-		names[it.SoftwareName] = it.Version
-		vendors[it.SoftwareName] = it.Vendor
+		assert.NotEmpty(t, it.InstallPath, "every row records its install location")
 	}
 
-	assert.Len(t, res.Items, 3, "distinct installed packages: lodash, @scope/pkg, nested")
-	assert.Equal(t, "4.17.21", names["lodash"])
-	assert.Equal(t, "1.0.0", names["@scope/pkg"])
-	assert.Equal(t, "2.0.0", names["nested"])
-	assert.NotContains(t, names, "lodash-subpath", "stray subtree package.json ignored")
-	assert.NotContains(t, names, "my-project", "project-root package.json ignored")
+	// Per-location semantics: lodash is installed at two paths → two rows.
+	assert.Len(t, res.Items, 4, "lodash x2 (two locations) + @scope/pkg + nested")
+	assert.Nil(t, itemsByName(res.Items, "lodash-subpath"), "stray subtree package.json ignored")
+	assert.Nil(t, itemsByName(res.Items, "my-project"), "project-root package.json ignored")
 
-	assert.Equal(t, "John Doe", vendors["lodash"], "author string decorations stripped")
-	assert.Equal(t, "Acme", vendors["@scope/pkg"], "author object name extracted")
+	lodash := itemsByName(res.Items, "lodash")
+	require.Len(t, lodash, 2, "two distinct install locations")
+	paths := []string{lodash[0].InstallPath, lodash[1].InstallPath}
+	assert.ElementsMatch(t,
+		[]string{filepath.Join(root, "node_modules", "lodash"), filepath.Join(root, "node_modules", "dup")},
+		paths)
+	// Metadata persists.
+	assert.Equal(t, "John Doe", lodash[0].Vendor, "author decorations stripped")
+	assert.Equal(t, "MIT", lodash[0].License)
+	assert.Equal(t, "utils", lodash[0].Description)
+	assert.Equal(t, "http://lodash.com", lodash[0].Homepage)
+	assert.Equal(t, 0, lodash[0].Depth)
+
+	scoped := itemsByName(res.Items, "@scope/pkg")
+	require.Len(t, scoped, 1)
+	assert.Equal(t, "Acme", scoped[0].Vendor, "author object name extracted")
+	assert.Equal(t, "Apache-2.0", scoped[0].License, "license object type extracted")
+	assert.Equal(t, 0, scoped[0].Depth)
+
+	nested := itemsByName(res.Items, "nested")
+	require.Len(t, nested, 1)
+	assert.Equal(t, 1, nested[0].Depth, "nested inside another package's node_modules")
+	assert.Equal(t, "BSD", nested[0].License, "license array first entry extracted")
 }
 
 func TestNpmScan_MaxPackagesCap(t *testing.T) {

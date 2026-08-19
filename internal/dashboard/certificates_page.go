@@ -87,20 +87,20 @@ type certRowView struct {
 
 // certLocalIdentity is the "This computer" card, read from disk.
 type certLocalIdentity struct {
-	AgentCode        string
-	HasCert          bool
-	NotAfter         string
-	DaysLeft         int
-	Expired          bool
-	Fingerprint      string // short display form
-	FingerprintFull  string
-	SubjectCN        string
-	CertsDir         string
-	ReadError        string
+	AgentCode       string
+	HasCert         bool
+	NotAfter        string
+	DaysLeft        int
+	Expired         bool
+	Fingerprint     string // short display form
+	FingerprintFull string
+	SubjectCN       string
+	CertsDir        string
+	ReadError       string
 	// PKIMatch: "match" | "drift" | "unverified" | "absent" | "" (no local cert)
-	PKIMatch           string
-	PKIActiveShort     string // PKI-active fingerprint when drifting
-	GaugePct           int    // 0–100 of validity remaining, for the ring
+	PKIMatch       string
+	PKIActiveShort string // PKI-active fingerprint when drifting
+	GaugePct       int    // 0–100 of validity remaining, for the ring
 }
 
 // certPageMode is the page-level state.
@@ -687,8 +687,8 @@ func renderCertificateDrawer(ctx context.Context, w io.Writer, deps onboardingDe
 	}
 	detail.StatusClass = pkiCertificateStatusClass(detail.Status)
 	var body strings.Builder
-	if err := pkiCertificateDetailTmpl.Execute(&body, detail); err != nil {
-		return fmt.Errorf("render certificate detail: %w", err)
+	if execErr := pkiCertificateDetailTmpl.Execute(&body, detail); execErr != nil {
+		return fmt.Errorf("render certificate detail: %w", execErr)
 	}
 	err = certDrawerTmpl.Execute(w, struct {
 		Title string

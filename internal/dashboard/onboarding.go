@@ -564,9 +564,9 @@ var enrollFragmentTmpl = template.Must(template.New("enroll").Parse(`
   {{- if .ReadOnly}}
     <p class="muted small">Read-only inspector mode &mdash; enroll disabled.</p>
   {{- else}}
-    {{- if .Error}}<p id="enroll-error-msg" class="enroll-error badge-red" role="alert" style="margin: 0 0 0.85rem 0; padding: 6px 10px; font-size: 0.8rem; border-radius: 8px;">{{.Error}}</p>{{end}}
+    {{- if .Error}}<p id="enroll-error-msg" class="enroll-error badge-red" role="alert" style="margin: 0 0 0.85rem 0; padding: 6px 10px; font-size: var(--text-sm); border-radius: 8px;">{{.Error}}</p>{{end}}
     <div style="padding: 1.25rem; border: 1px dashed var(--palette-divider, #e5e7eb); border-radius: 12px; background: rgba(145, 158, 171, 0.02);">
-      <h3 style="margin: 0 0 0.4rem 0; font-size: 0.9rem; font-weight: 600; color: var(--palette-text-primary, #1c252e);">Link via browser</h3>
+      <h3 style="margin: 0 0 0.4rem 0; font-size: var(--text-md); font-weight: 600; color: var(--palette-text-primary, #1c252e);">Link via browser</h3>
       <p class="muted small" style="margin-bottom: 0.85rem; line-height: 1.4;">Sign in securely from your browser and connect this collector to your VulnerTrack account.</p>
       <a class="btn btn-primary" href="/kite-login?dashboard=/onboarding#check-card" style="width: 100%; text-align: center; justify-content: center; box-shadow: none;">
         {{if .Enrolled}}Re-link collector{{else}}Link collector / Sign in &rarr;{{end}}

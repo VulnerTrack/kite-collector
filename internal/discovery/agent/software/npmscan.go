@@ -20,16 +20,15 @@ import (
 // every package's package.json — the coverage osquery's npm_packages table
 // provides, without depending on the npm binary or a running osqueryd.
 //
-// It reports the DISTINCT (name, version) set of installed Node packages
-// across all scanned roots. It never follows symlinks (filepath.WalkDir does
-// not), so symlinked/hoisted node_modules cannot cause cycles, and it is
-// bounded by MaxPackages and the scan context deadline.
+// It emits ONE row per install location (osquery npm_packages semantics), so
+// the same package installed in several projects yields several rows, each
+// with its own install_path and depth. It never follows symlinks
+// (filepath.WalkDir does not), so symlinked/hoisted node_modules cannot cause
+// cycles, and it is bounded by MaxPackages and the scan context deadline.
 //
-// package.json carries more than name+version — description, author, license,
-// homepage, plus each install path and nesting depth. NpmScan parses all of
-// it (see npmManifest), but the shared installed_software schema only persists
-// name/version/vendor today; the richer fields are extracted and ready for a
-// follow-up schema that stores them per osquery's npm_packages columns.
+// It captures the full npm_packages field set — name, version, author→vendor,
+// description, license, homepage, install path, and nesting depth — all of
+// which persist to installed_software.
 type NpmScan struct {
 	lookPath    func(string) (string, error)
 	userHome    func() (string, error)
@@ -149,11 +148,14 @@ func (n *NpmScan) scanRoot(ctx context.Context, root string, result *Result, see
 		if !ok {
 			return nil
 		}
-		key := m.Name + "\x00" + m.Version
-		if _, dup := seen[key]; dup {
+		// Key on the install directory: each install LOCATION is its own row
+		// (osquery npm_packages semantics), so the same package installed in
+		// several projects is faithfully represented. seen only guards against
+		// re-visiting a path when configured roots overlap.
+		if _, dup := seen[dir]; dup {
 			return nil
 		}
-		seen[key] = struct{}{}
+		seen[dir] = struct{}{}
 		result.Items = append(result.Items, model.InstalledSoftware{
 			ID:             uuid.Must(uuid.NewV7()),
 			SoftwareName:   m.Name,
@@ -161,9 +163,30 @@ func (n *NpmScan) scanRoot(ctx context.Context, root string, result *Result, see
 			Version:        m.Version,
 			PackageManager: "npm",
 			CPE23:          BuildCPE23WithTargetSW("", m.Name, m.Version, "node.js"),
+			Description:    m.Description,
+			License:        m.License,
+			Homepage:       m.Homepage,
+			InstallPath:    dir,
+			Depth:          nodeModulesDepth(dir),
 		})
 		return nil
 	})
+}
+
+// nodeModulesDepth returns the package's nesting depth: 0 for a direct
+// install (node_modules/<pkg>), 1 for a package nested inside another
+// package's node_modules, and so on — matching osquery npm_packages.depth.
+func nodeModulesDepth(dir string) int {
+	n := 0
+	for _, seg := range strings.Split(filepath.ToSlash(dir), "/") {
+		if seg == "node_modules" {
+			n++
+		}
+	}
+	if n <= 1 {
+		return 0
+	}
+	return n - 1
 }
 
 // isNodeModulesPackageDir reports whether dir is the root directory of an

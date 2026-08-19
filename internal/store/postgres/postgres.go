@@ -738,7 +738,7 @@ func (s *PostgresStore) MarkScanCancelRequested(ctx context.Context, id uuid.UUI
 // Installed Software
 // ---------------------------------------------------------------------------
 
-const softwareColumns = `id, machine_id, software_name, vendor, version, cpe23, package_manager, architecture`
+const softwareColumns = `id, machine_id, software_name, vendor, version, cpe23, package_manager, architecture, description, license, homepage, install_path, depth`
 
 // scanSoftware reads a single row into a model.InstalledSoftware.
 func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
@@ -757,6 +757,11 @@ func scanSoftware(row pgx.Row) (*model.InstalledSoftware, error) {
 		&cpe23,
 		&pkgMgr,
 		&arch,
+		&sw.Description,
+		&sw.License,
+		&sw.Homepage,
+		&sw.InstallPath,
+		&sw.Depth,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan software: %w", err)
@@ -785,7 +790,7 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, machineID uuid.UUID,
 	for i := range software {
 		_, err = tx.Exec(
 			ctx,
-			`INSERT INTO installed_software (`+softwareColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			`INSERT INTO installed_software (`+softwareColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 			software[i].ID,
 			machineID,
 			software[i].SoftwareName,
@@ -794,6 +799,11 @@ func (s *PostgresStore) UpsertSoftware(ctx context.Context, machineID uuid.UUID,
 			nullStr(software[i].CPE23),
 			nullStr(software[i].PackageManager),
 			nullStr(software[i].Architecture),
+			software[i].Description,
+			software[i].License,
+			software[i].Homepage,
+			software[i].InstallPath,
+			software[i].Depth,
 		)
 		if err != nil {
 			return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)
