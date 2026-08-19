@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -185,6 +187,53 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("GET /machines", serveTabRoute("machines", func(w io.Writer, ctx context.Context) error {
 		return renderMachinesFragment(w, ctx, st, rc)
 	}))
+
+	// Machine resource page — a machine is a page, not a drawer. ?tab picks
+	// the related-resource tab; the ActiveTab stays "machines" so the nav
+	// highlight is right when drilling in.
+	mux.HandleFunc("GET /machines/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, parseErr := uuid.Parse(r.PathValue("id"))
+		if parseErr != nil {
+			http.NotFound(w, r)
+			return
+		}
+		tab := r.URL.Query().Get("tab")
+		render := func(buf io.Writer, ctx context.Context) error {
+			return renderMachinePageFragment(buf, ctx, st, id, tab)
+		}
+		writeResult := func(renderErr error) bool {
+			if renderErr == nil {
+				return false
+			}
+			if errors.Is(renderErr, store.ErrNotFound) {
+				http.NotFound(w, r)
+				return true
+			}
+			logger.Error("dashboard: render machine page",
+				"code", string(LogCodeServeTabPageRender),
+				"machine_id", id.String(),
+				"error", renderErr)
+			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+			return true
+		}
+		if r.Header.Get("HX-Request") == "true" {
+			var buf bytes.Buffer
+			if writeResult(render(&buf, r.Context())) {
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(buf.Bytes())
+			return
+		}
+		var buf bytes.Buffer
+		if writeResult(renderIndexPage(&buf, "machines", func(fragBuf io.Writer) error {
+			return render(fragBuf, r.Context())
+		})) {
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(buf.Bytes())
+	})
 	mux.HandleFunc("GET /software", serveTabRoute("software", func(w io.Writer, ctx context.Context) error {
 		return renderSoftwareFragment(w, ctx, st, rc)
 	}))

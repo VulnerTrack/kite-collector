@@ -469,3 +469,105 @@ func TestRoute_GET_TablesByName_FacetFilterAppliesWhere(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "(1 rows matching)")
 }
+
+// seedMachineResource inserts one machine with a finding and a software row
+// and returns its id, for machine-page tests.
+func seedMachineResource(t *testing.T, st store.Store) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	id := uuid.Must(uuid.NewV7())
+	_, _, err := st.UpsertMachines(ctx, []model.Machine{{
+		ID:              id,
+		Hostname:        "resource-host",
+		MachineType:     model.MachineTypeWorkstation,
+		OSFamily:        "linux",
+		OSVersion:       "arch",
+		DiscoverySource: "test",
+		IsAuthorized:    model.AuthorizationAuthorized,
+		IsManaged:       model.ManagedManaged,
+		FirstSeenAt:     now,
+		LastSeenAt:      now,
+	}})
+	require.NoError(t, err)
+
+	require.NoError(t, st.UpsertSoftware(ctx, id, []model.InstalledSoftware{{
+		SoftwareName: "openssh", Version: "9.8p1",
+	}}))
+
+	runID := uuid.Must(uuid.NewV7())
+	require.NoError(t, st.CreateScanRun(ctx, model.ScanRun{
+		ID: runID, StartedAt: now, Status: model.ScanStatusCompleted,
+	}))
+	require.NoError(t, st.InsertFindings(ctx, []model.ConfigFinding{{
+		ID: uuid.Must(uuid.NewV7()), MachineID: id, ScanRunID: runID,
+		Auditor: "test-auditor", CheckID: "KITE-TEST-001",
+		Title: "SSH root login permitted", Severity: model.SeverityCritical,
+		Timestamp: now,
+	}}))
+	return id
+}
+
+// TestRoute_GET_MachineByID_OverviewRendersIdentityAndPreviews — the machine
+// page shows breadcrumb, identity header with badges, counted tabs, and the
+// overview previews for findings and software.
+func TestRoute_GET_MachineByID_OverviewRendersIdentityAndPreviews(t *testing.T) {
+	st := testStore(t)
+	id := seedMachineResource(t, st)
+	handler := Serve(":0", st, testContext(), nil, Options{}).Handler
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/machines/"+id.String(), nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "<html", "plain GET returns the full shell")
+	assert.Contains(t, body, "resource-host")
+	assert.Contains(t, body, `class="machine-breadcrumb"`)
+	assert.Contains(t, body, "SSH root login permitted", "overview shows the findings preview")
+	assert.Contains(t, body, "openssh", "overview shows the software preview")
+	assert.Contains(t, body, `?tab=findings`, "tabs link to related resources")
+	// Machines nav link stays active for the drill-in page.
+	assert.Contains(t, body,
+		`href="/machines" hx-get="/machines" hx-target="#content" hx-push-url="true" class="active sidenav-resource"`)
+}
+
+// TestRoute_GET_MachineByID_SoftwareTab — ?tab=software renders the full
+// software grid for the machine.
+func TestRoute_GET_MachineByID_SoftwareTab(t *testing.T) {
+	st := testStore(t)
+	id := seedMachineResource(t, st)
+	handler := Serve(":0", st, testContext(), nil, Options{}).Handler
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"/machines/"+id.String()+"?tab=software", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "openssh")
+	assert.Contains(t, body, "9.8p1")
+	assert.NotContains(t, body, "<html", "HX-Request returns the fragment only")
+}
+
+// TestRoute_GET_MachineByID_UnknownIDReturns404 — a well-formed but unknown
+// id 404s; a malformed id 404s without hitting the store.
+func TestRoute_GET_MachineByID_UnknownIDReturns404(t *testing.T) {
+	st := testStore(t)
+	handler := Serve(":0", st, testContext(), nil, Options{}).Handler
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"/machines/"+uuid.Must(uuid.NewV7()).String(), nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/machines/not-a-uuid", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}

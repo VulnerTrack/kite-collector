@@ -265,7 +265,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}})</h2>
   <tbody>
   {{range .Machines}}
     <tr>
-      <td>{{.Hostname}}</td>
+      <td><a class="fk-link" href="/machines/{{.ID}}" hx-get="/machines/{{.ID}}" hx-target="#content" hx-push-url="true" onclick="event.stopPropagation();">{{.Hostname}}</a></td>
       <td>{{if .IPAddress}}<span class="machine-address"><strong>{{.IPLabel}}:</strong> <code>{{.IPAddress}}</code></span>{{else}}—{{end}}</td>
       <td>{{.MachineType}}</td>
       <td>{{.OSFamily}}{{if .OSVersion}} {{.OSVersion}}{{end}}</td>
