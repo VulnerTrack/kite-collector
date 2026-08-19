@@ -68,7 +68,7 @@ type ForeignKey struct {
 // WhereColumn, when non-empty, must also match a column of Table and
 // constrains rows to WhereColumn = WhereValue (the value is always bound as a
 // parameter, never interpolated). An empty WhereValue selects the "empty"
-// bucket — rows where the column is NULL or '' — matching how facets group
+// bucket — rows where the column is NULL or ” — matching how facets group
 // missing values.
 type RowsFilter struct {
 	Table       string
@@ -143,7 +143,7 @@ type SavedViewStore interface {
 
 // FacetValue is one bucket of a column facet: a distinct value and how many
 // rows carry it. Value is the stringified cell; the empty string is the
-// NULL-or-'' bucket.
+// NULL-or-” bucket.
 type FacetValue struct {
 	Value string
 	Count int64

@@ -77,7 +77,6 @@ func sidebarGroups() []sidebarGroup {
 	}
 }
 
-
 // viewSidebarEntries lists the built-in views plus the builder link. The
 // counted sidebar variant splices saved views in after the built-ins.
 func viewSidebarEntries() []sidebarEntry {
