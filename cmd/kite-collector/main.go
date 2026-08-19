@@ -192,9 +192,12 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "kite-collector",
 		Short: "Cybersecurity machine discovery and classification agent",
-		Long: `kite-collector discovers, deduplicates, classifies, and tracks IT machines
+		Long: fmt.Sprintf(`kite-collector %s (commit %s, built %s)
+
+kite-collector discovers, deduplicates, classifies, and tracks IT machines
 on your network. It stores results in a local SQLite database and can emit
-lifecycle events for downstream consumption.`,
+lifecycle events for downstream consumption.`, version, commit, date),
+		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

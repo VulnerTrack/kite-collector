@@ -1,9 +1,22 @@
-.PHONY: build build-host build-windows7 test test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host build-windows7 test test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite install-aur-osquery install-aur install-aur-bin install-aur-release test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
 # 1.26.4 unless GOTOOLCHAIN is already exported. Applies to every recipe.
 export GOTOOLCHAIN ?= auto
+
+# Version metadata stamped into a FROM-SOURCE build (build / build-host).
+# Unlike the goreleaser release (driven by the git TAG) and the AUR package
+# (pinned pkgver), a local source build points at the latest COMMIT:
+#   VERSION = git describe → e.g. v0.49.0-2-gdb5f961 (or -dirty with local edits)
+#   COMMIT  = the exact HEAD short sha (what `kite-collector version` prints)
+#   DATE    = build timestamp (UTC, RFC3339)
+# All three fall back cleanly outside a git checkout. Override any on the CLI:
+#   make build-host COMMIT=abc1234
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+GO_LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
 # Release matrix mirrored from .goreleaser.yaml. Catching cross-OS regressions
 # locally (e.g. syscall.Handle vs int on Windows) is the whole point of this
@@ -34,7 +47,7 @@ build: windows-resources build-windows7
 		[ "$$os" = "windows" ] && out=$${out}.exe; \
 		printf "%-22s " "$${os}/$${arch}"; \
 		if CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
-			go build -trimpath -ldflags="-s -w" -o $$out ./cmd/kite-collector 2>&1; then \
+			go build -trimpath -ldflags="-s -w $(GO_LDFLAGS)" -o $$out ./cmd/kite-collector 2>&1; then \
 			echo "OK  ($$out)"; \
 		else \
 			echo "FAIL"; \
@@ -124,7 +137,7 @@ validate-wxs:
 # `kite-collector` build, host platform only. Use this for iterative work;
 # use `build` before pushing to catch cross-OS regressions.
 build-host: build-windows7
-	CGO_ENABLED=0 go build -o bin/kite-collector ./cmd/kite-collector
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w $(GO_LDFLAGS)" -o bin/kite-collector ./cmd/kite-collector
 
 # Windows 7 uses the pinned Go 1.17 toolchain and a 32-bit binary. This intentionally builds
 # the isolated legacy module instead of weakening the modern collector.
@@ -237,6 +250,43 @@ test-osquery-kite:
 	  rc=$$?; \
 	  docker compose -f tests/e2e/osquery/docker-compose.osquery.yml down -v >/dev/null 2>&1 || true; \
 	  exit $$rc
+
+# Install osquery on an Arch/AUR host. Idempotent: if osqueryd is already on
+# PATH (e.g. the extra/osquery package is installed) it reports the version and
+# does nothing; otherwise it builds/installs via yay. `--needed` avoids a
+# redundant rebuild. Never run as root — yay refuses, and AUR builds must run
+# as an unprivileged user.
+install-aur-osquery:
+	@command -v osqueryd >/dev/null 2>&1 && \
+	  echo "osquery already installed: $$(osqueryd --version)" || \
+	  yay -S --needed osquery
+
+# kite-collector has three AUR packaging flavors in the sibling repo
+# (apps/kite-collector-aur); all ship the systemd unit + /var/osquery/osquery.em
+# drop-in, so pair any with `make install-aur-osquery`. Run as a NORMAL user:
+# makepkg refuses root and the pacman -i step prompts for sudo. Override the
+# repo location with AUR_DIR=<path>.
+AUR_DIR ?= ../kite-collector-aur
+
+# install-aur — LOCAL from-source build. Compiles the current working tree
+# (this checkout, including uncommitted edits) and stamps the LATEST COMMIT
+# into the binary, so `kite-collector version` shows the real HEAD sha. No
+# network. This is the default developer install.
+install-aur:
+	@test -f "$(AUR_DIR)/local/PKGBUILD" || { echo "no PKGBUILD in $(AUR_DIR)/local — set AUR_DIR=<path>"; exit 1; }
+	cd "$(AUR_DIR)/local" && makepkg -sfi
+
+# install-aur-bin — installs the prebuilt LATEST RELEASE binary from GitHub
+# (no compile). Reports the tagged release version.
+install-aur-bin:
+	@test -f "$(AUR_DIR)/bin/PKGBUILD" || { echo "no PKGBUILD in $(AUR_DIR)/bin — set AUR_DIR=<path>"; exit 1; }
+	cd "$(AUR_DIR)/bin" && makepkg -sfi
+
+# install-aur-release — builds the pinned release TAG from source (the
+# AUR-published root PKGBUILD). Reports the tag; commit/date stay unset.
+install-aur-release:
+	@test -f "$(AUR_DIR)/PKGBUILD" || { echo "no PKGBUILD in $(AUR_DIR) — set AUR_DIR=<path>"; exit 1; }
+	cd "$(AUR_DIR)" && makepkg -sfi
 
 test-cloud:
 	go test -tags cloud -count=1 -timeout 60s ./internal/discovery/cloud/...
