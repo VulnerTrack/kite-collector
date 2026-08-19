@@ -673,3 +673,116 @@ func TestRoute_ViewBuilder_PreviewAndSave(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Contains(t, rec.Body.String(), "name this view before saving")
 }
+
+// fakeOsqueryExplorer implements osqueryExplorer for route tests.
+type fakeOsqueryExplorer struct {
+	tables []string
+	rows   map[string][]map[string]string
+	errs   map[string]error
+}
+
+func (f *fakeOsqueryExplorer) Ping(context.Context) error { return nil }
+func (f *fakeOsqueryExplorer) LiveTables(context.Context) ([]string, error) {
+	return f.tables, nil
+}
+func (f *fakeOsqueryExplorer) TableRows(_ context.Context, table string, _ int) ([]map[string]string, error) {
+	if err := f.errs[table]; err != nil {
+		return nil, err
+	}
+	return f.rows[table], nil
+}
+
+func withFakeOsquery(t *testing.T, fake osqueryExplorer, socket string) {
+	t.Helper()
+	prev := newOsqueryExplorer
+	newOsqueryExplorer = func() (osqueryExplorer, string) { return fake, socket }
+	t.Cleanup(func() { newOsqueryExplorer = prev })
+}
+
+// TestRoute_GET_Osquery_CatalogListsAllTablesWithAvailability — the catalog
+// page documents every published osquery table and marks which ones the
+// connected daemon actually serves.
+func TestRoute_GET_Osquery_CatalogListsAllTablesWithAvailability(t *testing.T) {
+	withFakeOsquery(t, &fakeOsqueryExplorer{tables: []string{"processes", "os_version"}}, "/tmp/osq.em")
+	handler := newTestHandler(t)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Osquery")
+	assert.Contains(t, body, "/osquery/apps", "catalog links every table, including other-platform ones")
+	assert.Contains(t, body, "macOS applications installed in known search paths",
+		"catalog carries the published descriptions")
+	assert.Contains(t, body, `<span class="badge badge-green">live</span>`, "served tables are marked live")
+	assert.Contains(t, body, "2 tables served live")
+}
+
+// TestRoute_GET_OsqueryTable_LiveRowsAndSchema — a served table renders its
+// documented schema plus live rows behind a visible, copyable SQL statement.
+func TestRoute_GET_OsqueryTable_LiveRowsAndSchema(t *testing.T) {
+	withFakeOsquery(t, &fakeOsqueryExplorer{
+		tables: []string{"processes"},
+		rows: map[string][]map[string]string{
+			"processes": {{"pid": "780266", "name": "kite-collector"}},
+		},
+	}, "/tmp/osq.em")
+	handler := newTestHandler(t)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery/processes", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "All running processes on the host system",
+		"table description from the catalog")
+	assert.Contains(t, body, "The process path or shorthand argv[0]",
+		"column descriptions from the catalog")
+	assert.Contains(t, body, "SELECT * FROM processes LIMIT 200;")
+	assert.Contains(t, body, "kite-collector", "live rows render")
+}
+
+// TestRoute_GET_OsqueryTable_RequiredConstraintExplainedNotQueried — tables
+// like curl require a WHERE constraint; the page explains that with an
+// example instead of running a bare SELECT that cannot mean anything.
+func TestRoute_GET_OsqueryTable_RequiredConstraintExplainedNotQueried(t *testing.T) {
+	fake := &fakeOsqueryExplorer{tables: []string{"curl"}}
+	withFakeOsquery(t, fake, "/tmp/osq.em")
+	handler := newTestHandler(t)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery/curl", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "requires a WHERE constraint")
+	assert.Contains(t, body, "SELECT * FROM curl WHERE url =")
+	assert.NotContains(t, body, "Live rows", "no bare query is attempted")
+}
+
+// TestRoute_GET_OsqueryTable_NoDaemonStillDocumentsSchema — without a
+// running daemon the schema stays browsable; unknown tables 404.
+func TestRoute_GET_OsqueryTable_NoDaemonStillDocumentsSchema(t *testing.T) {
+	withFakeOsquery(t, nil, "")
+	handler := newTestHandler(t)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery/apps", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "macOS applications installed")
+	assert.Contains(t, body, "No running osqueryd to query")
+
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery/not_a_table", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}

@@ -128,6 +128,7 @@ const sidebarTreeTemplate = `{{ range .Groups -}}
   </details>
 {{- end }}
   <a href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="{{if .TablesActive}}active sidenav-resource{{else}}sidenav-resource{{end}}" onclick="setActive(this)"><span class="sidenav-label">Table catalog</span></a>
+  <a href="/osquery" hx-get="/osquery" hx-target="#content" hx-push-url="true" class="{{if .OsqueryActive}}active sidenav-resource{{else}}sidenav-resource{{end}}" onclick="setActive(this)"><span class="sidenav-label">Osquery tables</span></a>
 </div>`
 
 // sidebarEntryView decorates a sidebarEntry with its active state for the
@@ -161,13 +162,15 @@ func renderSidebarTree(w io.Writer, activeTab string, groups []sidebarGroup, tab
 		viewGroups = append(viewGroups, gv)
 	}
 	view := struct {
-		Groups       []sidebarGroupView
-		Tables       []store.TableSchema
-		TablesActive bool
+		Groups        []sidebarGroupView
+		Tables        []store.TableSchema
+		TablesActive  bool
+		OsqueryActive bool
 	}{
-		Groups:       viewGroups,
-		Tables:       tables,
-		TablesActive: activeTab == "tables",
+		Groups:        viewGroups,
+		Tables:        tables,
+		TablesActive:  activeTab == "tables",
+		OsqueryActive: activeTab == "osquery",
 	}
 	if err := sidebarTreeTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("render sidebar tree: %w", err)

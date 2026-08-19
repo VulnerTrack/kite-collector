@@ -250,6 +250,43 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		return renderFleetDeploymentFragment(w, ctx, st, opts, fleetDiscovery)
 	}))
 
+	// Osquery explorer — the full published table catalog fused with the
+	// live daemon's registry, plus bounded reads of any served table.
+	mux.HandleFunc("GET /osquery", serveTabRoute("osquery", func(w io.Writer, ctx context.Context) error {
+		return renderOsqueryCatalogFragment(w, ctx)
+	}))
+	mux.HandleFunc("GET /osquery/{table}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("table")
+		limit, _ := parsePaging(r)
+		render := func(buf io.Writer, ctx context.Context) error {
+			return renderOsqueryTableFragment(buf, ctx, name, limit)
+		}
+		writeResult := func(renderErr error, buf *bytes.Buffer) {
+			if renderErr == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_, _ = w.Write(buf.Bytes())
+				return
+			}
+			if errors.Is(renderErr, errOsqueryTableUnknown) {
+				http.NotFound(w, r)
+				return
+			}
+			logger.Error("dashboard: render osquery table page",
+				"code", string(LogCodeServeTabPageRender),
+				"osquery_table", name,
+				"error", renderErr)
+			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+		}
+		var buf bytes.Buffer
+		if r.Header.Get("HX-Request") == "true" {
+			writeResult(render(&buf, r.Context()), &buf)
+			return
+		}
+		writeResult(renderIndexPage(&buf, "osquery", func(fragBuf io.Writer) error {
+			return render(fragBuf, r.Context())
+		}), &buf)
+	})
+
 	// Views — saved joins rendered as ordinary grids, plus the builder.
 	mux.HandleFunc("GET /views/{slug}", func(w http.ResponseWriter, r *http.Request) {
 		slug := r.PathValue("slug")

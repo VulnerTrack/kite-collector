@@ -3750,3 +3750,36 @@ details.sidenav-alltables .sidenav-tables {
   margin-top: 18px;
 }
 .view-builder-save input[type="text"] { width: 320px; display: inline-block; }
+
+/* ---------------------------------------------------------------------------
+ * Osquery explorer — full table catalog + live table reads.
+ * ------------------------------------------------------------------------- */
+.osq-intro { max-width: 900px; margin-bottom: 18px; }
+.osq-desc { max-width: 480px; }
+.osq-platforms { color: var(--palette-text-disabled); }
+.osq-h3 {
+  margin: 24px 0 10px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.osq-schema td code { font-size: 0.78rem; }
+.osq-hidden-col td { color: var(--palette-text-disabled); }
+.osq-notice {
+  margin: 14px 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  background: rgba(255, 171, 0, 0.08);
+  border: 1px solid rgba(255, 171, 0, 0.24);
+}
+.osq-notice .osq-example { margin-top: 10px; }
+.osq-error {
+  margin: 14px 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: var(--palette-error-dark);
+  background: rgba(255, 86, 48, 0.08);
+  border: 1px solid rgba(255, 86, 48, 0.2);
+}
+.osq-scroll { overflow-x: auto; }
