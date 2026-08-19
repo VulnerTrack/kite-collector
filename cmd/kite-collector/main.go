@@ -1443,6 +1443,10 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		if enableDashboardInstall {
 			dashOpts.Installer = newRealInstaller()
 		}
+		// osqueryd, when present, is just another table source: its tables
+		// render through the same generic catalog and grids as kite.db
+		// tables. Absent or dead daemons degrade to an empty catalog.
+		dashOpts.TableSources = []store.TableSource{osquerydisc.NewTableSource()}
 		dashSrv = dashboard.Serve(dashboardAddr, st, rc, logger, dashOpts)
 		go func() {
 			slog.Info("dashboard server starting",
@@ -2656,6 +2660,7 @@ installed service uses, so this command Just Works after install.`,
 			if enableInstall {
 				opts.Installer = newRealInstaller()
 			}
+			opts.TableSources = []store.TableSource{osquerydisc.NewTableSource()}
 			srv := dashboard.Serve(addr, st, rc, logger, opts)
 
 			go func() {
@@ -3103,6 +3108,7 @@ func runPlatformLoginEnrollWithDeps(
 		PlatformEndpoint: platformEndpoint,
 		OAuth:            oauth,
 		CertsDir:         filepath.Dir(dbPath),
+		TableSources:     []store.TableSource{osquerydisc.NewTableSource()},
 	})
 
 	go func() {

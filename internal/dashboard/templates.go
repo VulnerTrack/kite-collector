@@ -390,8 +390,8 @@ func rowCountBucket(n int64) string {
 }
 
 // renderTablesFragment lists every content table discovered via introspection.
-func renderTablesFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
-	tables, err := st.ListContentTables(ctx)
+func renderTablesFragment(w io.Writer, ctx context.Context, ts store.TableSource, rc ReportContext) error {
+	tables, err := ts.ListContentTables(ctx)
 	if err != nil {
 		return fmt.Errorf("list content tables: %w", err)
 	}
@@ -419,8 +419,8 @@ const (
 // and an optional single-column equality filter selected from a facet.
 // filterCol/filterVal apply that filter; filtered distinguishes "filter on
 // the empty bucket" from "no filter".
-func renderTableFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext, name string, limit, offset int, filterCol, filterVal string, filtered bool) error {
-	schema, err := st.DescribeTable(ctx, name)
+func renderTableFragment(w io.Writer, ctx context.Context, ts store.TableSource, rc ReportContext, name string, limit, offset int, filterCol, filterVal string, filtered bool) error {
+	schema, err := ts.DescribeTable(ctx, name)
 	if err != nil {
 		return fmt.Errorf("describe table %q: %w", name, err)
 	}
@@ -434,13 +434,13 @@ func renderTableFragment(w io.Writer, ctx context.Context, st store.Store, rc Re
 		rf.WhereColumn = filterCol
 		rf.WhereValue = filterVal
 	}
-	rows, total, err := st.ListRows(ctx, rf)
+	rows, total, err := ts.ListRows(ctx, rf)
 	if err != nil {
 		return fmt.Errorf("list rows %q: %w", name, err)
 	}
 
 	// Facets are decoration: a probe failure must not take the grid down.
-	facets, facetErr := st.FacetTable(ctx, name, tableFacetMaxDistinct, tableFacetTopValues)
+	facets, facetErr := ts.FacetTable(ctx, name, tableFacetMaxDistinct, tableFacetTopValues)
 	if facetErr != nil {
 		facets = nil
 	}
@@ -559,6 +559,7 @@ const tablesTemplate = `<h2>Tables ({{len .Tables}})</h2>
 </div>`
 
 const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows{{if .Filtered}} matching{{end}})</span></h2>
+{{if .Schema.Description}}<p class="muted table-desc">{{.Schema.Description}}</p>{{end}}
 {{if .Filtered}}
 <div class="facet-active-chip">
   <code>{{.FilterCol}} = {{if .FilterVal}}'{{.FilterVal}}'{{else}}empty{{end}}</code>
@@ -602,8 +603,14 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
 <table>
   <thead>
     <tr>
+    {{if .Schema.Columns}}
     {{range .Schema.Columns}}
-      <th>{{.Name}}<br><span class="muted small">{{.Type}}</span></th>
+      <th{{if .Description}} title="{{.Description}}"{{end}}>{{.Name}}<br><span class="muted small">{{.Type}}</span></th>
+    {{end}}
+    {{else if .Rows}}
+    {{range (index .Rows 0).Columns}}
+      <th>{{.Name}}</th>
+    {{end}}
     {{end}}
     </tr>
   </thead>
@@ -611,7 +618,7 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
   {{$schema := .Schema}}
   {{range .Rows}}
     {{$pk := .PrimaryKey}}
-    <tr class="row-click" hx-get="/fragments/tables/{{$schema.Name}}/row?{{rowKeyQuery $pk}}" hx-target="#row-drawer" hx-swap="innerHTML" onclick="openRowDrawer()">
+    {{if $pk}}<tr class="row-click" hx-get="/fragments/tables/{{$schema.Name}}/row?{{rowKeyQuery $pk}}" hx-target="#row-drawer" hx-swap="innerHTML" onclick="openRowDrawer()">{{else}}<tr>{{end}}
     {{range .Columns}}
       {{$fk := cellFK $schema.ForeignKeys .Name}}
       <td>{{if $fk}}<a class="fk-link" href="/tables/{{$fk.ToTable}}" hx-get="/tables/{{$fk.ToTable}}" hx-target="#content" hx-push-url="true" onclick="event.stopPropagation();">{{renderCell .Value}}</a>{{else}}{{renderCell .Value}}{{end}}</td>

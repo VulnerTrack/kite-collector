@@ -127,8 +127,8 @@ func exportFindingsCSV(w io.Writer, ctx context.Context, st store.Store, rc Repo
 // exportTableCSV writes an arbitrary introspected table as CSV. The table name
 // is validated by Store.DescribeTable before any SQL is issued, so an unknown
 // table yields store.ErrUnknownTable without leaking the identifier into SQL.
-func exportTableCSV(w io.Writer, ctx context.Context, st store.Store, rc ReportContext, name string) error {
-	schema, err := st.DescribeTable(ctx, name)
+func exportTableCSV(w io.Writer, ctx context.Context, ts store.TableSource, rc ReportContext, name string) error {
+	schema, err := ts.DescribeTable(ctx, name)
 	if err != nil {
 		return fmt.Errorf("describe table %q: %w", name, err)
 	}
@@ -144,7 +144,7 @@ func exportTableCSV(w io.Writer, ctx context.Context, st store.Store, rc ReportC
 	}
 	_ = cw.Write(header)
 
-	rows, _, err := st.ListRows(ctx, store.RowsFilter{
+	rows, _, err := ts.ListRows(ctx, store.RowsFilter{
 		Table: name,
 		Limit: store.IntrospectionRowLimit,
 	})

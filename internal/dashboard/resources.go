@@ -128,7 +128,6 @@ const sidebarTreeTemplate = `{{ range .Groups -}}
   </details>
 {{- end }}
   <a href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="{{if .TablesActive}}active sidenav-resource{{else}}sidenav-resource{{end}}" onclick="setActive(this)"><span class="sidenav-label">Table catalog</span></a>
-  <a href="/osquery" hx-get="/osquery" hx-target="#content" hx-push-url="true" class="{{if .OsqueryActive}}active sidenav-resource{{else}}sidenav-resource{{end}}" onclick="setActive(this)"><span class="sidenav-label">Osquery tables</span></a>
 </div>`
 
 // sidebarEntryView decorates a sidebarEntry with its active state for the
@@ -162,15 +161,13 @@ func renderSidebarTree(w io.Writer, activeTab string, groups []sidebarGroup, tab
 		viewGroups = append(viewGroups, gv)
 	}
 	view := struct {
-		Groups        []sidebarGroupView
-		Tables        []store.TableSchema
-		TablesActive  bool
-		OsqueryActive bool
+		Groups       []sidebarGroupView
+		Tables       []store.TableSchema
+		TablesActive bool
 	}{
-		Groups:        viewGroups,
-		Tables:        tables,
-		TablesActive:  activeTab == "tables",
-		OsqueryActive: activeTab == "osquery",
+		Groups:       viewGroups,
+		Tables:       tables,
+		TablesActive: activeTab == "tables",
 	}
 	if err := sidebarTreeTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("render sidebar tree: %w", err)
@@ -195,8 +192,10 @@ func renderSidebarTreeStatic(activeTab string) template.HTML {
 
 // renderSidebarTreeFragment renders the counted tree for the HTMX swap:
 // resource counts from the introspection catalog plus the full table list.
-func renderSidebarTreeFragment(w io.Writer, ctx context.Context, st store.Store, activeTab string) error {
-	tables, err := st.ListContentTables(ctx)
+// ts is the source-agnostic catalog (durable store plus any extra backends);
+// st is still needed for saved views.
+func renderSidebarTreeFragment(w io.Writer, ctx context.Context, st store.Store, ts store.TableSource, activeTab string) error {
+	tables, err := ts.ListContentTables(ctx)
 	if err != nil {
 		return fmt.Errorf("list content tables: %w", err)
 	}

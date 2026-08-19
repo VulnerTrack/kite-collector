@@ -674,115 +674,143 @@ func TestRoute_ViewBuilder_PreviewAndSave(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "name this view before saving")
 }
 
-// fakeOsqueryExplorer implements osqueryExplorer for route tests.
-type fakeOsqueryExplorer struct {
-	tables []string
-	rows   map[string][]map[string]string
-	errs   map[string]error
+// fakeTableSource is an extra read-only table backend for transparency
+// tests: the dashboard must render its tables exactly like store tables.
+type fakeTableSource struct {
+	tables  []store.TableSchema
+	rows    map[string][]store.Row
+	listErr error
 }
 
-func (f *fakeOsqueryExplorer) Ping(context.Context) error { return nil }
-func (f *fakeOsqueryExplorer) LiveTables(context.Context) ([]string, error) {
-	return f.tables, nil
+func (f *fakeTableSource) ListContentTables(context.Context) ([]store.TableSchema, error) {
+	return f.tables, f.listErr
 }
-func (f *fakeOsqueryExplorer) TableRows(_ context.Context, table string, _ int) ([]map[string]string, error) {
-	if err := f.errs[table]; err != nil {
+
+func (f *fakeTableSource) DescribeTable(_ context.Context, table string) (*store.TableSchema, error) {
+	for i := range f.tables {
+		if f.tables[i].Name == table {
+			return &f.tables[i], nil
+		}
+	}
+	return nil, store.ErrUnknownTable
+}
+
+func (f *fakeTableSource) ListRows(_ context.Context, filter store.RowsFilter) ([]store.Row, int64, error) {
+	if _, err := f.DescribeTable(context.Background(), filter.Table); err != nil {
+		return nil, 0, err
+	}
+	rows := f.rows[filter.Table]
+	return rows, int64(len(rows)), nil
+}
+
+func (f *fakeTableSource) FacetTable(_ context.Context, table string, _, _ int) ([]store.ColumnFacet, error) {
+	if _, err := f.DescribeTable(context.Background(), table); err != nil {
 		return nil, err
 	}
-	return f.rows[table], nil
+	return []store.ColumnFacet{{Column: "state", Distinct: 2, Values: []store.FacetValue{
+		{Value: "running", Count: 3}, {Value: "sleeping", Count: 1},
+	}}}, nil
 }
 
-func withFakeOsquery(t *testing.T, fake osqueryExplorer, socket string) {
-	t.Helper()
-	prev := newOsqueryExplorer
-	newOsqueryExplorer = func() (osqueryExplorer, string) { return fake, socket }
-	t.Cleanup(func() { newOsqueryExplorer = prev })
-}
-
-// TestRoute_GET_Osquery_CatalogListsAllTablesWithAvailability — the catalog
-// page documents every published osquery table and marks which ones the
-// connected daemon actually serves.
-func TestRoute_GET_Osquery_CatalogListsAllTablesWithAvailability(t *testing.T) {
-	withFakeOsquery(t, &fakeOsqueryExplorer{tables: []string{"processes", "os_version"}}, "/tmp/osq.em")
-	handler := newTestHandler(t)
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "Osquery")
-	assert.Contains(t, body, "/osquery/apps", "catalog links every table, including other-platform ones")
-	assert.Contains(t, body, "macOS applications installed in known search paths",
-		"catalog carries the published descriptions")
-	assert.Contains(t, body, `<span class="badge badge-green">live</span>`, "served tables are marked live")
-	assert.Contains(t, body, "2 tables served live")
-}
-
-// TestRoute_GET_OsqueryTable_LiveRowsAndSchema — a served table renders its
-// documented schema plus live rows behind a visible, copyable SQL statement.
-func TestRoute_GET_OsqueryTable_LiveRowsAndSchema(t *testing.T) {
-	withFakeOsquery(t, &fakeOsqueryExplorer{
-		tables: []string{"processes"},
-		rows: map[string][]map[string]string{
-			"processes": {{"pid": "780266", "name": "kite-collector"}},
+func osqueryLikeSource() *fakeTableSource {
+	return &fakeTableSource{
+		tables: []store.TableSchema{{
+			Name:        "processes",
+			Description: "All running processes on the host system.",
+			RowCount:    -1,
+			Columns: []store.ColumnSchema{
+				{Name: "pid", Type: "bigint", Position: 1, Description: "Process (or thread) ID"},
+				{Name: "name", Type: "text", Position: 2, Description: "The process path or shorthand argv[0]"},
+				{Name: "state", Type: "text", Position: 3},
+			},
+		}},
+		rows: map[string][]store.Row{
+			"processes": {{
+				PrimaryKey: map[string]string{},
+				Columns: []store.ColumnValue{
+					{Name: "pid", Value: "780266"}, {Name: "name", Value: "kite-collector"}, {Name: "state", Value: "running"},
+				},
+			}},
 		},
-	}, "/tmp/osq.em")
-	handler := newTestHandler(t)
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery/processes", nil)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "All running processes on the host system",
-		"table description from the catalog")
-	assert.Contains(t, body, "The process path or shorthand argv[0]",
-		"column descriptions from the catalog")
-	assert.Contains(t, body, "SELECT * FROM processes LIMIT 200;")
-	assert.Contains(t, body, "kite-collector", "live rows render")
+	}
 }
 
-// TestRoute_GET_OsqueryTable_RequiredConstraintExplainedNotQueried — tables
-// like curl require a WHERE constraint; the page explains that with an
-// example instead of running a bare SELECT that cannot mean anything.
-func TestRoute_GET_OsqueryTable_RequiredConstraintExplainedNotQueried(t *testing.T) {
-	fake := &fakeOsqueryExplorer{tables: []string{"curl"}}
-	withFakeOsquery(t, fake, "/tmp/osq.em")
-	handler := newTestHandler(t)
+// TestRoute_TableSources_RenderTransparently — a table from an extra source
+// renders through the exact same catalog, sidebar, grid, facets, and SQL
+// strip as a kite.db table; the UI carries no source marker at all.
+func TestRoute_TableSources_RenderTransparently(t *testing.T) {
+	st := testStore(t)
+	handler := Serve(":0", st, testContext(), nil, Options{
+		TableSources: []store.TableSource{osqueryLikeSource()},
+	}).Handler
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery/curl", nil)
-	req.Header.Set("HX-Request", "true")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "requires a WHERE constraint")
-	assert.Contains(t, body, "SELECT * FROM curl WHERE url =")
-	assert.NotContains(t, body, "Live rows", "no bare query is attempted")
-}
-
-// TestRoute_GET_OsqueryTable_NoDaemonStillDocumentsSchema — without a
-// running daemon the schema stays browsable; unknown tables 404.
-func TestRoute_GET_OsqueryTable_NoDaemonStillDocumentsSchema(t *testing.T) {
-	withFakeOsquery(t, nil, "")
-	handler := newTestHandler(t)
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery/apps", nil)
+	// Catalog lists it next to the durable tables.
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/tables", nil)
 	req.Header.Set("HX-Request", "true")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
-	assert.Contains(t, body, "macOS applications installed")
-	assert.Contains(t, body, "No running osqueryd to query")
+	assert.Contains(t, body, "/tables/processes")
+	assert.Contains(t, body, "/tables/machines")
+	assert.NotContains(t, body, "osquery", "the UI must not know the source")
 
-	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/osquery/not_a_table", nil)
+	// Sidebar tree carries it in All tables.
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/fragments/sidebar-tree", nil)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusNotFound, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "/tables/processes")
+
+	// The generic grid renders it: description, documented headers, rows,
+	// SQL strip, facets — and no row drawer, since these rows have no PK.
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/tables/processes", nil)
+	req.Header.Set("HX-Request", "true")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	body = rec.Body.String()
+	assert.Contains(t, body, "All running processes on the host system.")
+	assert.Contains(t, body, `title="Process (or thread) ID"`, "column docs surface as header tooltips")
+	assert.Contains(t, body, "kite-collector")
+	assert.Contains(t, body, `class="sql-strip"`)
+	assert.Contains(t, body, `class="facet-rail"`)
+	assert.NotContains(t, body, "row-click", "PK-less rows must not offer the row drawer")
+}
+
+// TestRoute_TableSources_StoreWinsCollision — a secondary source can never
+// shadow a durable table of the same name.
+func TestRoute_TableSources_StoreWinsCollision(t *testing.T) {
+	st := testStore(t)
+	src := osqueryLikeSource()
+	src.tables[0].Name = "machines"
+	src.tables[0].Description = "SHADOW MARKER: must never render"
+	handler := Serve(":0", st, testContext(), nil, Options{
+		TableSources: []store.TableSource{src},
+	}).Handler
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/tables/machines", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "SHADOW MARKER")
+}
+
+// TestRoute_TableSources_DeadSecondaryDegrades — a failing extra backend
+// drops out of the catalog instead of breaking the page.
+func TestRoute_TableSources_DeadSecondaryDegrades(t *testing.T) {
+	st := testStore(t)
+	src := osqueryLikeSource()
+	src.listErr = context.DeadlineExceeded
+	handler := Serve(":0", st, testContext(), nil, Options{
+		TableSources: []store.TableSource{src},
+	}).Handler
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/tables", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "/tables/machines")
 }

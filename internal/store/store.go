@@ -41,6 +41,10 @@ type TableSchema struct {
 	PrimaryKey  []string
 	ForeignKeys []ForeignKey
 	RowCount    int64
+	// Description is optional human documentation for the table. The SQLite
+	// store leaves it empty; documented sources (e.g. osquery's published
+	// schema) fill it and the generic table UI shows it when present.
+	Description string
 }
 
 // ColumnSchema describes a single column of a TableSchema. Type is the
@@ -51,6 +55,9 @@ type ColumnSchema struct {
 	Type     string
 	NotNull  bool
 	Position int
+	// Description is optional human documentation for the column; see
+	// TableSchema.Description.
+	Description string
 }
 
 // ForeignKey describes a single foreign key relation from a column in the
@@ -217,6 +224,19 @@ type EventFilter struct {
 	EventType string
 	Limit     int
 	Offset    int
+}
+
+// TableSource is the read-only introspection surface the dashboard's generic
+// table machinery consumes: catalog, schema, paged rows, and value facets.
+// The SQLite store satisfies it natively; other backends (a live osqueryd,
+// future sources) implement it so their tables render through exactly the
+// same catalog, grid, facet, and SQL-strip code — the UI neither knows nor
+// cares where a table comes from.
+type TableSource interface {
+	ListContentTables(ctx context.Context) ([]TableSchema, error)
+	DescribeTable(ctx context.Context, table string) (*TableSchema, error)
+	ListRows(ctx context.Context, filter RowsFilter) (rows []Row, total int64, err error)
+	FacetTable(ctx context.Context, table string, maxDistinct, topValues int) ([]ColumnFacet, error)
 }
 
 // Store defines the persistence interface for the kite-collector.

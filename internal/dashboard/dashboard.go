@@ -59,6 +59,12 @@ type Options struct {
 	// injectable for non-browser embedding and tests; normal dashboards derive
 	// it from the encrypted enrolled identity.
 	FleetOperatorToken func(context.Context) (string, error)
+	// TableSources are additional read-only table backends (e.g. a live
+	// osqueryd) merged into the table catalog behind the durable store. The
+	// dashboard's generic table machinery renders them identically to store
+	// tables — it neither knows nor cares where a table comes from. On a
+	// name collision the store wins.
+	TableSources []store.TableSource
 }
 
 // Serve creates and returns an HTTP server for the dashboard.
@@ -74,6 +80,10 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	}
 
 	mux := http.NewServeMux()
+	// All table browsing goes through one source-agnostic catalog: the
+	// durable store first, then any additional backends.
+	tableSources := store.NewCompositeTableSource(
+		append([]store.TableSource{st}, opts.TableSources...)...)
 	fleetDiscovery := newFleetDiscoveryController()
 	fleetPackages := &fleetPackageService{
 		issuer: opts.FleetTokenIssuer, operatorToken: opts.FleetOperatorToken,
@@ -244,48 +254,11 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		return renderScansFragment(w, ctx, st, rc)
 	}))
 	mux.HandleFunc("GET /tables", serveTabRoute("tables", func(w io.Writer, ctx context.Context) error {
-		return renderTablesFragment(w, ctx, st, rc)
+		return renderTablesFragment(w, ctx, tableSources, rc)
 	}))
 	mux.HandleFunc("GET /fleet", serveTabRoute("fleet", func(w io.Writer, ctx context.Context) error {
 		return renderFleetDeploymentFragment(w, ctx, st, opts, fleetDiscovery)
 	}))
-
-	// Osquery explorer — the full published table catalog fused with the
-	// live daemon's registry, plus bounded reads of any served table.
-	mux.HandleFunc("GET /osquery", serveTabRoute("osquery", func(w io.Writer, ctx context.Context) error {
-		return renderOsqueryCatalogFragment(w, ctx)
-	}))
-	mux.HandleFunc("GET /osquery/{table}", func(w http.ResponseWriter, r *http.Request) {
-		name := r.PathValue("table")
-		limit, _ := parsePaging(r)
-		render := func(buf io.Writer, ctx context.Context) error {
-			return renderOsqueryTableFragment(buf, ctx, name, limit)
-		}
-		writeResult := func(renderErr error, buf *bytes.Buffer) {
-			if renderErr == nil {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				_, _ = w.Write(buf.Bytes())
-				return
-			}
-			if errors.Is(renderErr, errOsqueryTableUnknown) {
-				http.NotFound(w, r)
-				return
-			}
-			logger.Error("dashboard: render osquery table page",
-				"code", string(LogCodeServeTabPageRender),
-				"osquery_table", name,
-				"error", renderErr)
-			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
-		}
-		var buf bytes.Buffer
-		if r.Header.Get("HX-Request") == "true" {
-			writeResult(render(&buf, r.Context()), &buf)
-			return
-		}
-		writeResult(renderIndexPage(&buf, "osquery", func(fragBuf io.Writer) error {
-			return render(fragBuf, r.Context())
-		}), &buf)
-	})
 
 	// Views — saved joins rendered as ordinary grids, plus the builder.
 	mux.HandleFunc("GET /views/{slug}", func(w http.ResponseWriter, r *http.Request) {
@@ -439,7 +412,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		limit, offset := parsePaging(r)
 		filterCol, filterVal, filtered := parseFacetFilter(r)
 		render := func(buf io.Writer, ctx context.Context) error {
-			return renderTableFragment(buf, ctx, st, rc, name, limit, offset, filterCol, filterVal, filtered)
+			return renderTableFragment(buf, ctx, tableSources, rc, name, limit, offset, filterCol, filterVal, filtered)
 		}
 		if r.Header.Get("HX-Request") == "true" {
 			renderFragment(w, "table", func(buf io.Writer) error {
@@ -576,14 +549,14 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("GET /fragments/sidebar-tree", func(w http.ResponseWriter, r *http.Request) {
 		active := r.URL.Query().Get("active")
 		renderFragment(w, "sidebar-tree", func(buf io.Writer) error {
-			return renderSidebarTreeFragment(buf, r.Context(), st, active)
+			return renderSidebarTreeFragment(buf, r.Context(), st, tableSources, active)
 		})
 	})
 
 	// Tables browser — Datasette-style introspection.
 	mux.HandleFunc("GET /fragments/tables", func(w http.ResponseWriter, r *http.Request) {
 		renderFragment(w, "tables", func(buf io.Writer) error {
-			return renderTablesFragment(buf, r.Context(), st, rc)
+			return renderTablesFragment(buf, r.Context(), tableSources, rc)
 		})
 	})
 
@@ -592,7 +565,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		limit, offset := parsePaging(r)
 		filterCol, filterVal, filtered := parseFacetFilter(r)
 		renderFragment(w, "table", func(buf io.Writer) error {
-			return renderTableFragment(buf, r.Context(), st, rc, name, limit, offset, filterCol, filterVal, filtered)
+			return renderTableFragment(buf, r.Context(), tableSources, rc, name, limit, offset, filterCol, filterVal, filtered)
 		})
 	})
 
@@ -608,7 +581,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		name := r.PathValue("name")
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s_%s.csv", name, rc.ReportID[:8]))
-		if exportErr := exportTableCSV(w, r.Context(), st, rc, name); exportErr != nil {
+		if exportErr := exportTableCSV(w, r.Context(), tableSources, rc, name); exportErr != nil {
 			logger.Error("dashboard: export table csv",
 				"code", string(LogCodeExportTableCSV),
 				"table", name, "error", exportErr)
