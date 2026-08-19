@@ -143,6 +143,11 @@
               is hard-coded to the MSI's CERTSDIR property which resolves
               to the ProgramData folder entry below.
             -->
+            <!-- CERTSDIR is a Directory property and therefore ends in a
+                 backslash. A backslash immediately before the closing quote
+                 escapes that quote in Windows command-line parsing,
+                 preventing the process from connecting to SCM (7009).
+                 Compose the same path without a trailing separator. -->
             <ServiceInstall
                 Id="KiteCollectorService"
                 Name="kite-collector"
@@ -152,7 +157,7 @@
                 Start="auto"
                 ErrorControl="normal"
                 Account="LocalSystem"
-                Arguments="service run --certs-dir &quot;[CERTSDIR]&quot;"
+                Arguments="service run --certs-dir &quot;[CommonAppDataFolder]kite-collector&quot;"
                 Vital="yes"/>
 
             <!--
