@@ -66,8 +66,15 @@ func newFleetCmd() *cobra.Command {
 		Use:   "fleet",
 		Short: "Discover computers and deploy collectors",
 	}
-	cmd.AddCommand(newFleetDiscoverCmd())
-	cmd.AddCommand(newFleetDeployCmd())
+	discover := newFleetDiscoverCmd()
+	discover.GroupID = "fleet-discover"
+	deploy := newFleetDeployCmd()
+	deploy.GroupID = "fleet-deploy"
+	cmd.AddGroup(
+		&cobra.Group{ID: "fleet-discover", Title: "Step 1 — Discover computers:"},
+		&cobra.Group{ID: "fleet-deploy", Title: "Step 2 — Deploy collectors:"},
+	)
+	cmd.AddCommand(discover, deploy)
 	return cmd
 }
 
@@ -194,12 +201,12 @@ func newFleetDeployCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "deploy [hostname-or-address]",
-		Short: "Deploy collectors to all discovered remote computers",
+		Short: "Deploy collectors to all compatible discovered computers",
 		Long: `Discover remote computers, mint one short-lived enrollment credential
 per computer, and run one mass deployment interactively. Windows credentials
 are read by the deployment runner and are never sent to or stored by Kite.
 
-With no argument, the collector is deployed to every compatible remote computer found in the scan.
+With no argument, the collector is deployed to the local controller and every compatible remote computer found in the scan.
 An optional hostname or address limits deployment to that computer.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -236,7 +243,7 @@ func runFleetDeploy(cmd *cobra.Command, dashboardURL string, timeout time.Durati
 	if strings.TrimSpace(requested) == "" {
 		targets = fleetEnrollmentComputers(result.Computers)
 		if len(targets) == 0 {
-			return fmt.Errorf("no remote computer is currently available for deployment; make sure the targets are powered on and connected to this network, then run `kite-collector fleet discover` again")
+			return fmt.Errorf("no computer is currently available for deployment; run `kite-collector fleet discover` and verify the discovery result")
 		}
 	} else {
 		target, selectErr := selectFleetComputer(result.Computers, requested)
@@ -357,7 +364,7 @@ func fleetEnrollmentComputers(computers []fleetDiscoverComputer) []fleetDiscover
 	addressIndex := make(map[string]int)
 	for _, computer := range computers {
 		if computer.Compatible && !computer.NeedsOSSelection && strings.TrimSpace(computer.Target) != "" &&
-			!strings.EqualFold(strings.TrimSpace(computer.DiscoverySource), "local_controller") {
+			fleetComputerManagementReady(computer) {
 			address := strings.ToLower(strings.TrimSpace(computer.Address))
 			if index, exists := addressIndex[address]; address != "" && exists {
 				// Discovery methods may report the same Windows host once by IP and
@@ -374,6 +381,18 @@ func fleetEnrollmentComputers(computers []fleetDiscoverComputer) []fleetDiscover
 		}
 	}
 	return available
+}
+
+func fleetComputerManagementReady(computer fleetDiscoverComputer) bool {
+	source := strings.TrimSpace(computer.DiscoverySource)
+	if strings.EqualFold(source, "local_controller") {
+		return true
+	}
+	// The active TCP scanner emits network_scan only after the host answered
+	// during the latest discovery. Identity protocols can retain stale IPs
+	// advertised by a machine before it moved networks; those records remain
+	// useful inventory, but must never mint credentials or enter deployment.
+	return strings.EqualFold(source, "network_scan")
 }
 
 func selectFleetComputer(computers []fleetDiscoverComputer, requested string) (fleetDiscoverComputer, error) {
@@ -407,6 +426,9 @@ func selectFleetComputer(computers []fleetDiscoverComputer, requested string) (f
 			reason = "the target is not compatible with automatic deployment"
 		}
 		return fleetDiscoverComputer{}, fmt.Errorf("cannot enroll %s: %s", target.Hostname, reason)
+	}
+	if !fleetComputerManagementReady(target) {
+		return fleetDiscoverComputer{}, fmt.Errorf("cannot enroll %s: its management port did not answer in the latest discovery; run `kite-collector fleet discover` after the computer is online", target.Hostname)
 	}
 	return target, nil
 }

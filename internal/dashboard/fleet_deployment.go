@@ -824,6 +824,7 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		"inventory/group_vars/all.yml":           fleetAllVarsYAML(req),
 		"playbooks/deploy.yml":                   fleetPlaybookYAML,
 		"preflight.py":                           fleetPreflightPython,
+		"regenerate-package.sh":                  fleetRegenerateScript(targets),
 		"targets.csv":                            fleetTargetsCSV(targets),
 	}
 	manifest, err := json.MarshalIndent(map[string]any{
@@ -852,7 +853,7 @@ func writeFleetBundle(w io.Writer, req fleetBundleRequest, targets []fleetTarget
 		// makes generated bundles reproducible without showing a misleading
 		// 1969 date in time zones west of UTC.
 		header.Modified = time.Date(1980, time.January, 1, 12, 0, 0, 0, time.UTC)
-		if name == "deploy.sh" || name == "preflight.py" {
+		if name == "deploy.sh" || name == "preflight.py" || name == "regenerate-package.sh" {
 			header.SetMode(0o700)
 		} else {
 			header.SetMode(0o600)
@@ -957,7 +958,7 @@ Windows preparation without copying files:
 
     %s
 
-This command only enables WinRM and limits the firewall rule to the local subnet. It contains no enrollment token, credential, or computer-specific value and does not install Kite. A line containing :5985 confirms the listener. After it succeeds, run ./deploy.sh once from Linux to install and enroll the complete batch. For every Windows target, the script dynamically suggests COMPUTER-NAME\Administrator; press Enter to accept it or type another administrative account.
+This command only enables WinRM and limits the firewall rule to the local subnet. It contains no enrollment token, credential, or computer-specific value and does not install Kite. A line containing :5985 confirms the listener. If preflight previously failed, generate a fresh package from the Fleet deployment screen, or run ./regenerate-package.sh to reuse the same target addresses; do not reuse the failed package. Then run ./deploy.sh from the new package to install and enroll the complete batch. For every Windows target, the script dynamically suggests COMPUTER-NAME\Administrator; press Enter to accept it or type another administrative account.
 
 Windows 7 compatibility is automatic: the playbook reads the remote Windows version and processor architecture. Windows 7 or 32-bit computers receive the isolated `+"`kite-collector-legacy`"+` service; supported 64-bit Windows versions continue to receive the full MSI. The legacy service writes its transactional inventory to C:\ProgramData\kite-collector\kite.db, scans at startup and every six hours, exposes a loopback-only dashboard at http://127.0.0.1:9090, and synchronizes the asset summary plus every complete inventory category through the enrolled mTLS OTLP connection. Failed upstream deliveries remain pending locally and retry every five minutes. No operator selection or PowerShell upgrade is required.
 
@@ -1080,7 +1081,10 @@ if failed:
     if any(target["os"] == "windows" for target, _, _ in failed):
         print("\nOn each unreachable Windows computer, open Command Prompt (CMD) as Administrator and paste this single command:\n")
         print(%s)
-        print("\nThen rerun ./deploy.sh. No file needs to be copied to Windows.")
+        print("\nGenerate a fresh deployment package before trying again (do not reuse this package):")
+        print("  1. Recommended if an IP may have changed: return to the Fleet deployment screen, discover/select the computers again, and click Generate deployment package.")
+        print("  2. From this terminal, using the same target addresses: ./regenerate-package.sh")
+        print("Extract the new ZIP and run ./deploy.sh from that new package. No file needs to be copied to Windows.")
     sys.exit(2)
 `, strconv.Quote(fleetWindowsBootstrapCommand))
 
@@ -1092,6 +1096,67 @@ func countFleetOS(targets []fleetTarget, osName string) int {
 		}
 	}
 	return count
+}
+
+func fleetRegenerateScript(targets []fleetTarget) string {
+	var targetLines strings.Builder
+	for _, target := range targets {
+		connection := ""
+		if target.Local {
+			connection = "local"
+		} else if target.Address != "" {
+			connection = target.Address
+		}
+		fmt.Fprintf(&targetLines, "%s,%s,%s,%s\n", target.Hostname, target.OS, target.Arch, connection)
+	}
+
+	return fmt.Sprintf(`#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+
+dashboard_url="${KITE_DASHBOARD_URL:-http://127.0.0.1:9090}"
+output="kite-deployment-$(date +%%Y%%m%%d-%%H%%M%%S).zip"
+targets_file="$(mktemp)"
+download_file="$(mktemp)"
+trap 'rm -f "$targets_file" "$download_file"' EXIT
+
+cat >"$targets_file" <<'KITE_TARGETS'
+%sKITE_TARGETS
+
+echo "Generating a fresh deployment package from ${dashboard_url}..."
+status="$(curl --silent --show-error --output "$download_file" --write-out '%%{http_code}' \
+  --request POST --data-urlencode "targets@${targets_file}" \
+  "${dashboard_url}/api/v1/fleet/package")"
+
+if [ "$status" = "303" ]; then
+  echo "error: VulnerTrack sign-in is required. Open ${dashboard_url}/fleet, sign in, then run this command again." >&2
+  exit 1
+fi
+if [ "$status" != "200" ]; then
+  echo "error: package generation failed with HTTP ${status}" >&2
+  if [ -s "$download_file" ]; then cat "$download_file" >&2; fi
+  exit 1
+fi
+if ! python3 - "$download_file" <<'PY'
+import sys
+import zipfile
+
+try:
+    with zipfile.ZipFile(sys.argv[1]) as package:
+        if package.testzip() is not None or "deploy.sh" not in package.namelist():
+            raise ValueError("invalid deployment archive")
+except (OSError, ValueError, zipfile.BadZipFile) as exc:
+    print("error: dashboard response is not a valid deployment package: %%s" %% exc, file=sys.stderr)
+    raise SystemExit(1)
+PY
+then
+  exit 1
+fi
+
+mv "$download_file" "$output"
+echo "Created ${output}"
+echo "Extract it and run ./deploy.sh from the new package."
+`, targetLines.String())
 }
 
 const fleetAnsibleConfig = `[defaults]
@@ -1238,11 +1303,18 @@ if %t; then
 	    read -r -p "Windows administrator [${KITE_WINDOWS_USER_DEFAULT}] (press Enter if this is the correct user): " KITE_WINDOWS_USER
 	    KITE_WINDOWS_USER="${KITE_WINDOWS_USER:-$KITE_WINDOWS_USER_DEFAULT}"
 	    KITE_WINDOWS_USER="${KITE_WINDOWS_USER//\//\\}"
+	    KITE_WINDOWS_LOCAL_USER="${KITE_WINDOWS_USER##*\\}"
 	    while [ -z "$KITE_WINDOWS_PASSWORD" ]; do
 	      read -r -s -p "Windows password for ${KITE_WINDOWS_USER}: " KITE_WINDOWS_PASSWORD
 	      echo
 	      if [ -z "$KITE_WINDOWS_PASSWORD" ]; then
-	        echo "Windows password is required; deployment cannot continue without it." >&2
+	        echo "This Windows account has no password, so WinRM cannot authenticate it." >&2
+	        echo "On ${windows_target}, open Command Prompt (CMD) as Administrator and run:" >&2
+	        echo >&2
+	        printf '  net.exe user "%%s" *\n' "$KITE_WINDOWS_LOCAL_USER" >&2
+	        echo >&2
+	        echo "Windows will ask you to create and confirm a password without displaying it." >&2
+	        echo "Then return to this terminal and enter that new password below." >&2
 	      fi
 	    done
 	    export KITE_WINDOWS_USER KITE_WINDOWS_PASSWORD
@@ -1417,6 +1489,15 @@ const fleetPlaybookYAML = `---
         $process = Start-Process -FilePath msiexec.exe -ArgumentList '/i','{{ kite_msi_path }}','/qn','/norestart' -Wait -PassThru
         if (@(0, 1641, 3010) -notcontains $process.ExitCode) { throw "msiexec failed with exit code $($process.ExitCode)" }
       when: not kite_windows_legacy | bool
+    - name: Normalize modern Windows service command line
+      ansible.builtin.raw: |
+        $binaryPath = '"{{ kite_executable }}" service run --certs-dir "{{ kite_data_dir }}"'
+        $service = Get-CimInstance -ClassName Win32_Service -Filter "Name = 'kite-collector'"
+        if ($null -eq $service) { throw 'kite-collector service was not registered by the MSI' }
+        $result = Invoke-CimMethod -InputObject $service -MethodName Change -Arguments @{ PathName = $binaryPath }
+        if ($result.ReturnValue -ne 0) { throw "Failed to configure kite-collector service (Win32_Service.Change=$($result.ReturnValue))" }
+      changed_when: false
+      when: not kite_windows_legacy | bool
     - name: Install Windows 7 legacy service without starting it
       ansible.builtin.raw: |
         $exe = 'C:\ProgramData\VulnerTrack\packages\kite-collector-legacy.exe'
@@ -1563,28 +1644,40 @@ const fleetPlaybookYAML = `---
     kite_stage_dir: "/tmp/kite-collector-{{ kite_version }}"
     kite_data_dir: "/var/lib/kite-collector"
   tasks:
+    - name: Read installed collector version
+      ansible.builtin.command: /usr/local/bin/kite-collector version
+      register: kite_installed_version
+      failed_when: false
+      changed_when: false
+    - name: Decide whether the collector binary needs an update
+      ansible.builtin.set_fact:
+        kite_install_required: "{{ (kite_installed_version.rc != 0) or (('kite-collector ' ~ kite_version) not in kite_installed_version.stdout) }}"
     - name: Create staging directory
       ansible.builtin.file:
         path: "{{ kite_stage_dir }}"
         state: directory
         mode: '0700'
+      when: kite_install_required | bool
     - name: Download and verify release archive
       ansible.builtin.get_url:
         url: "{{ kite_release_base }}/{{ kite_archive_name }}"
         dest: "{{ kite_stage_dir }}/{{ kite_archive_name }}"
         checksum: "sha256:{{ kite_release_base }}/checksums.txt"
         mode: '0600'
+      when: kite_install_required | bool
     - name: Extract release archive
       ansible.builtin.unarchive:
         src: "{{ kite_stage_dir }}/{{ kite_archive_name }}"
         dest: "{{ kite_stage_dir }}"
         remote_src: true
+      when: kite_install_required | bool
     - name: Install collector binary
       ansible.builtin.copy:
         src: "{{ kite_stage_dir }}/kite-collector"
         dest: /usr/local/bin/kite-collector
         remote_src: true
         mode: '0755'
+      when: kite_install_required | bool
     - name: Check enrollment certificate
       ansible.builtin.stat:
         path: "{{ kite_data_dir }}/agent.pem"
