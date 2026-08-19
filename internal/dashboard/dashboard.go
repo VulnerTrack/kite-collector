@@ -240,8 +240,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("GET /tables/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		limit, offset := parsePaging(r)
+		filterCol, filterVal, filtered := parseFacetFilter(r)
 		render := func(buf io.Writer, ctx context.Context) error {
-			return renderTableFragment(buf, ctx, st, rc, name, limit, offset)
+			return renderTableFragment(buf, ctx, st, rc, name, limit, offset, filterCol, filterVal, filtered)
 		}
 		if r.Header.Get("HX-Request") == "true" {
 			renderFragment(w, "table", func(buf io.Writer) error {
@@ -392,8 +393,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("GET /fragments/tables/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		limit, offset := parsePaging(r)
+		filterCol, filterVal, filtered := parseFacetFilter(r)
 		renderFragment(w, "table", func(buf io.Writer) error {
-			return renderTableFragment(buf, r.Context(), st, rc, name, limit, offset)
+			return renderTableFragment(buf, r.Context(), st, rc, name, limit, offset, filterCol, filterVal, filtered)
 		})
 	})
 
@@ -494,6 +496,21 @@ func OpenBrowser(url string) {
 
 // parsePaging extracts limit/offset query parameters, clamping to the
 // introspection row cap and defaulting to store.IntrospectionDefaultPageSize.
+// parseFacetFilter reads the facet filter from the query string. fcol names
+// the column; fval is the value ("" selects the NULL-or-empty bucket). The
+// filter is active whenever fcol is present, so an empty fval still filters.
+func parseFacetFilter(r *http.Request) (col, val string, filtered bool) {
+	q := r.URL.Query()
+	if !q.Has("fcol") {
+		return "", "", false
+	}
+	col = q.Get("fcol")
+	if col == "" {
+		return "", "", false
+	}
+	return col, q.Get("fval"), true
+}
+
 func parsePaging(r *http.Request) (limit, offset int) {
 	limit = store.IntrospectionDefaultPageSize
 	if v := r.URL.Query().Get("limit"); v != "" {

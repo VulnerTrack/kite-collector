@@ -9,9 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -389,4 +392,80 @@ func TestRoute_GET_NavLinks_HavePushURLTrue(t *testing.T) {
 		assert.Contains(t, body, hrefAttr, "nav link to %s should expose href fallback", tab)
 		assert.Contains(t, body, pushAttr, "nav link to %s should push URL into history", tab)
 	}
+}
+
+// seedFacetMachines inserts machines with a known os_family split (2 linux,
+// 1 windows, 1 empty) so facet tests can assert exact bucket counts.
+func seedFacetMachines(t *testing.T, st store.Store) {
+	t.Helper()
+	now := time.Now().UTC()
+	machines := []model.Machine{
+		{Hostname: "facet-linux-a", OSFamily: "linux"},
+		{Hostname: "facet-linux-b", OSFamily: "linux"},
+		{Hostname: "facet-windows", OSFamily: "windows"},
+		{Hostname: "facet-blank", OSFamily: ""},
+	}
+	for i := range machines {
+		machines[i].ID = uuid.Must(uuid.NewV7())
+		machines[i].MachineType = model.MachineTypeServer
+		machines[i].DiscoverySource = "test"
+		machines[i].IsAuthorized = model.AuthorizationUnknown
+		machines[i].IsManaged = model.ManagedUnknown
+		machines[i].FirstSeenAt = now
+		machines[i].LastSeenAt = now
+	}
+	_, _, err := st.UpsertMachines(context.Background(), machines)
+	require.NoError(t, err)
+}
+
+// TestRoute_GET_TablesByName_RendersFacetsAndSQLStrip — the table grid must
+// carry the facet rail (low-cardinality columns with value counts) and the
+// copyable SQL strip showing the query behind the grid.
+func TestRoute_GET_TablesByName_RendersFacetsAndSQLStrip(t *testing.T) {
+	st := testStore(t)
+	seedFacetMachines(t, st)
+	handler := Serve(":0", st, testContext(), nil, Options{}).Handler
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/tables/machines", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `class="sql-strip"`, "grid must show its SQL")
+	assert.Contains(t, body, "SELECT * FROM machines", "SQL strip carries the query text")
+	assert.Contains(t, body, `class="facet-rail"`, "facet rail must render")
+	assert.Contains(t, body, "os_family", "os_family is low-cardinality and must be faceted")
+	assert.Contains(t, body, "fcol=os_family", "facet values link to the filtered grid")
+}
+
+// TestRoute_GET_TablesByName_FacetFilterAppliesWhere — selecting a facet
+// value filters the grid: the row count reflects matches only, the active
+// filter chip renders, and the SQL strip shows the WHERE clause.
+func TestRoute_GET_TablesByName_FacetFilterAppliesWhere(t *testing.T) {
+	st := testStore(t)
+	seedFacetMachines(t, st)
+	handler := Serve(":0", st, testContext(), nil, Options{}).Handler
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"/tables/machines?fcol=os_family&fval=linux", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "(2 rows matching)", "filtered total counts matches only")
+	assert.Contains(t, body, `class="facet-active-chip"`, "active filter chip renders")
+	assert.Contains(t, body, "WHERE os_family = &#39;linux&#39;", "SQL strip shows the WHERE clause")
+
+	// The empty value selects the NULL-or-'' bucket.
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"/tables/machines?fcol=os_family&fval=", nil)
+	req.Header.Set("HX-Request", "true")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "(1 rows matching)")
 }

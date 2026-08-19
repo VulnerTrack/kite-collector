@@ -370,14 +370,31 @@ func (s *SQLiteStore) ListRows(ctx context.Context, filter store.RowsFilter) ([]
 		orderCol = schema.Columns[0].Name
 	}
 
+	where := ""
+	var whereArgs []any
+	if filter.WhereColumn != "" {
+		if !columnExists(schema.Columns, filter.WhereColumn) {
+			return nil, 0, store.ErrUnknownColumn
+		}
+		col := identQuote(filter.WhereColumn)
+		if filter.WhereValue == "" {
+			// The facets' "empty" bucket groups NULL and '' together.
+			where = ` WHERE (` + col + ` IS NULL OR ` + col + ` = '')`
+		} else {
+			where = ` WHERE ` + col + ` = ?`
+			whereArgs = append(whereArgs, filter.WhereValue)
+		}
+	}
+
 	colList := buildColumnList(schema.Columns)
-	query := `SELECT ` + colList + ` FROM ` + identQuote(schema.Name) // #nosec G202 -- identifiers validated
+	query := `SELECT ` + colList + ` FROM ` + identQuote(schema.Name) + where // #nosec G202 -- identifiers validated
 	if orderCol != "" {
 		query += ` ORDER BY ` + identQuote(orderCol)
 	}
 	query += ` LIMIT ? OFFSET ?`
 
-	rows, err := s.db.QueryContext(ctx, query, limit, offset)
+	args := append(append([]any{}, whereArgs...), limit, offset)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list rows %s: %w", schema.Name, err)
 	}
@@ -387,7 +404,91 @@ func (s *SQLiteStore) ListRows(ctx context.Context, filter store.RowsFilter) ([]
 	if err != nil {
 		return nil, 0, err
 	}
-	return result, schema.RowCount, nil
+
+	total := schema.RowCount
+	if where != "" {
+		countQuery := `SELECT COUNT(*) FROM ` + identQuote(schema.Name) + where // #nosec G202 -- identifiers validated
+		if err := s.db.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("count filtered rows %s: %w", schema.Name, err)
+		}
+	}
+	return result, total, nil
+}
+
+// facetMaxColumns bounds how many columns FacetTable probes and facetMaxFacets
+// how many facets it returns, so a very wide table cannot stall the page.
+const (
+	facetMaxColumns = 24
+	facetMaxFacets  = 6
+)
+
+// FacetTable computes value facets for the named table: columns with at most
+// maxDistinct distinct values, each with its topValues most common values.
+// Primary-key columns are skipped (always unique); every probe runs under
+// rowCountProbeTimeout and a column that cannot be counted in time is skipped
+// rather than failing the whole call.
+func (s *SQLiteStore) FacetTable(ctx context.Context, table string, maxDistinct, topValues int) ([]store.ColumnFacet, error) {
+	schema, err := s.DescribeTable(ctx, table)
+	if err != nil {
+		return nil, err
+	}
+	if maxDistinct <= 0 {
+		maxDistinct = 20
+	}
+	if topValues <= 0 {
+		topValues = 5
+	}
+
+	pk := make(map[string]bool, len(schema.PrimaryKey))
+	for _, col := range schema.PrimaryKey {
+		pk[col] = true
+	}
+
+	var facets []store.ColumnFacet
+	probed := 0
+	for _, col := range schema.Columns {
+		if len(facets) >= facetMaxFacets || probed >= facetMaxColumns {
+			break
+		}
+		if pk[col.Name] {
+			continue
+		}
+		probed++
+
+		probeCtx, cancel := context.WithTimeout(ctx, rowCountProbeTimeout)
+		q := `SELECT COUNT(DISTINCT ` + identQuote(col.Name) + `) FROM ` + identQuote(schema.Name) // #nosec G202 -- identifiers validated
+		var distinct int64
+		err := s.db.QueryRowContext(probeCtx, q).Scan(&distinct)
+		cancel()
+		if err != nil || distinct < 1 || distinct > int64(maxDistinct) {
+			continue
+		}
+
+		probeCtx, cancel = context.WithTimeout(ctx, rowCountProbeTimeout)
+		q = `SELECT ` + identQuote(col.Name) + `, COUNT(*) FROM ` + identQuote(schema.Name) + // #nosec G202 -- identifiers validated
+			` GROUP BY ` + identQuote(col.Name) + ` ORDER BY COUNT(*) DESC LIMIT ?`
+		rows, err := s.db.QueryContext(probeCtx, q, topValues)
+		if err != nil {
+			cancel()
+			continue
+		}
+		facet := store.ColumnFacet{Column: col.Name, Distinct: distinct}
+		for rows.Next() {
+			var value sql.NullString
+			var count int64
+			if scanErr := rows.Scan(&value, &count); scanErr != nil {
+				facet.Values = nil
+				break
+			}
+			facet.Values = append(facet.Values, store.FacetValue{Value: value.String, Count: count})
+		}
+		_ = rows.Close()
+		cancel()
+		if rows.Err() == nil && len(facet.Values) > 0 {
+			facets = append(facets, facet)
+		}
+	}
+	return facets, nil
 }
 
 // GetRowReport fetches the primary row addressed by pk, then populates

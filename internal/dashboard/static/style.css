@@ -3296,3 +3296,132 @@ details.sidenav-alltables .sidenav-tables {
 }
 .docs-rule h4 { margin: 0 0 4px; font-size: 0.85rem; font-weight: 700; }
 .btn.btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+/* ---------------------------------------------------------------------------
+ * Table grid: facet rail + SQL strip (dashboard redesign)
+ *
+ * Facets are auto-suggested from columns with few distinct values — the most
+ * common values with counts, selectable to filter. The SQL strip shows the
+ * exact query behind the grid, copyable.
+ * ------------------------------------------------------------------------- */
+.facet-rail { margin-bottom: 18px; }
+.facet-rail-head {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--palette-text-secondary);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.facet-cards {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.facet-card {
+  min-width: 190px;
+  flex: 1;
+  max-width: 280px;
+  border: 1px solid rgba(145, 158, 171, 0.2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--palette-background-paper);
+}
+.facet-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.facet-card-head code {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--palette-grey-600);
+}
+.facet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px;
+  margin: 0 -8px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--palette-text-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+.facet-row:hover { background: rgba(145, 158, 171, 0.06); }
+.facet-row.facet-selected {
+  background: rgba(225, 29, 72, 0.06);
+  color: var(--palette-primary-dark);
+  font-weight: 600;
+}
+.facet-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.facet-count {
+  font-size: 0.72rem;
+  color: var(--palette-text-disabled);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.facet-active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  margin-bottom: 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--palette-grey-700);
+  background: rgba(225, 29, 72, 0.06);
+  border: 1px solid rgba(225, 29, 72, 0.16);
+}
+.facet-active-chip code { font-size: 0.75rem; }
+.facet-active-chip a {
+  color: var(--palette-primary-dark);
+  font-weight: 700;
+  text-decoration: none;
+}
+.sql-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  background: var(--palette-grey-900);
+  border-radius: 10px;
+  padding: 10px 16px;
+}
+.sql-strip-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--palette-grey-500);
+}
+.sql-strip-text {
+  flex-grow: 1;
+  font-family: ui-monospace, "JetBrains Mono", "Fira Code", Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--palette-grey-300);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sql-strip-copy {
+  background: transparent;
+  border: none;
+  color: var(--palette-info-light);
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+}

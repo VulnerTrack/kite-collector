@@ -406,19 +406,43 @@ func renderTablesFragment(w io.Writer, ctx context.Context, st store.Store, rc R
 	return nil
 }
 
-// renderTableFragment renders a paginated grid of rows for a single table.
-func renderTableFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext, name string, limit, offset int) error {
+// tableFacetMaxDistinct is the facet threshold: columns with at most this
+// many distinct values get a facet card (most common values, selectable to
+// filter). tableFacetTopValues caps the values listed per card.
+const (
+	tableFacetMaxDistinct = 20
+	tableFacetTopValues   = 5
+)
+
+// renderTableFragment renders a paginated grid of rows for a single table:
+// a facet rail for pattern spotting, the exact SQL the grid runs (copyable),
+// and an optional single-column equality filter selected from a facet.
+// filterCol/filterVal apply that filter; filtered distinguishes "filter on
+// the empty bucket" from "no filter".
+func renderTableFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext, name string, limit, offset int, filterCol, filterVal string, filtered bool) error {
 	schema, err := st.DescribeTable(ctx, name)
 	if err != nil {
 		return fmt.Errorf("describe table %q: %w", name, err)
 	}
-	rows, total, err := st.ListRows(ctx, store.RowsFilter{
+
+	rf := store.RowsFilter{
 		Table:  name,
 		Limit:  limit,
 		Offset: offset,
-	})
+	}
+	if filtered {
+		rf.WhereColumn = filterCol
+		rf.WhereValue = filterVal
+	}
+	rows, total, err := st.ListRows(ctx, rf)
 	if err != nil {
 		return fmt.Errorf("list rows %q: %w", name, err)
+	}
+
+	// Facets are decoration: a probe failure must not take the grid down.
+	facets, facetErr := st.FacetTable(ctx, name, tableFacetMaxDistinct, tableFacetTopValues)
+	if facetErr != nil {
+		facets = nil
 	}
 
 	nextOffset := offset + limit
@@ -428,6 +452,14 @@ func renderTableFragment(w io.Writer, ctx context.Context, st store.Store, rc Re
 	prevOffset := offset - limit
 	if prevOffset < 0 {
 		prevOffset = -1
+	}
+
+	// FilterQS rides pager links so paging keeps the active filter. It is
+	// built from query-escaped parts and marked template.URL so the template
+	// can append it verbatim.
+	filterQS := ""
+	if filtered {
+		filterQS = "&fcol=" + url.QueryEscape(filterCol) + "&fval=" + url.QueryEscape(filterVal)
 	}
 
 	tmpl := template.Must(template.New("table").Funcs(templateFuncs).Parse(tableTemplate))
@@ -440,10 +472,44 @@ func renderTableFragment(w io.Writer, ctx context.Context, st store.Store, rc Re
 		"NextOffset": nextOffset,
 		"PrevOffset": prevOffset,
 		"Context":    rc,
+		"Facets":     facets,
+		"Filtered":   filtered,
+		"FilterCol":  filterCol,
+		"FilterVal":  filterVal,
+		"FilterQS":   template.URL(filterQS), // #nosec G203 -- built from QueryEscape'd parts above
+		"SQLText":    tableSQLText(schema, filterCol, filterVal, filtered, limit, offset),
 	}); err != nil {
 		return fmt.Errorf("render table template: %w", err)
 	}
 	return nil
+}
+
+// tableSQLText reconstructs the query behind the grid — the same statement
+// the store executes — so the page can show and copy it. Values are inlined
+// with doubled quotes purely for display; the executed query always binds
+// them as parameters.
+func tableSQLText(schema *store.TableSchema, filterCol, filterVal string, filtered bool, limit, offset int) string {
+	var b strings.Builder
+	b.WriteString("SELECT * FROM ")
+	b.WriteString(schema.Name)
+	if filtered {
+		if filterVal == "" {
+			b.WriteString(" WHERE (" + filterCol + " IS NULL OR " + filterCol + " = '')")
+		} else {
+			b.WriteString(" WHERE " + filterCol + " = '" + strings.ReplaceAll(filterVal, "'", "''") + "'")
+		}
+	}
+	orderCol := ""
+	if len(schema.PrimaryKey) > 0 {
+		orderCol = schema.PrimaryKey[0]
+	} else if len(schema.Columns) > 0 {
+		orderCol = schema.Columns[0].Name
+	}
+	if orderCol != "" {
+		b.WriteString(" ORDER BY " + orderCol)
+	}
+	fmt.Fprintf(&b, " LIMIT %d OFFSET %d;", limit, offset)
+	return b.String()
 }
 
 // renderRowReportFragment renders the sidebar for a single primary row.
@@ -492,10 +558,46 @@ const tablesTemplate = `<h2>Tables ({{len .Tables}})</h2>
 </table>
 </div>`
 
-const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows)</span></h2>
+const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows{{if .Filtered}} matching{{end}})</span></h2>
+{{if .Filtered}}
+<div class="facet-active-chip">
+  <code>{{.FilterCol}} = {{if .FilterVal}}'{{.FilterVal}}'{{else}}empty{{end}}</code>
+  <a href="/tables/{{.Schema.Name}}" hx-get="/tables/{{.Schema.Name}}" hx-target="#content" hx-push-url="true" title="Clear filter">&times;</a>
+</div>
+{{end}}
 <div class="table-actions">
   <a href="/api/v1/tables/{{.Schema.Name}}/export.csv" class="btn">Export CSV</a>
   <a href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="btn btn-outline">Back to tables</a>
+</div>
+{{if .Facets}}
+<div class="facet-rail">
+  <div class="facet-rail-head">Facets <span class="muted small">columns with at most 20 distinct values &mdash; select a value to filter the grid</span></div>
+  <div class="facet-cards">
+  {{$root := .}}
+  {{range .Facets}}
+    {{$col := .Column}}
+    <div class="facet-card">
+      <div class="facet-card-head"><code>{{.Column}}</code><span class="muted small">{{.Distinct}} values</span></div>
+      {{range .Values}}
+      {{if and $root.Filtered (eq $root.FilterCol $col) (eq $root.FilterVal .Value)}}
+      <a class="facet-row facet-selected" href="/tables/{{$root.Schema.Name}}" hx-get="/tables/{{$root.Schema.Name}}" hx-target="#content" hx-push-url="true" title="Clear filter">
+        <span class="facet-value">{{if .Value}}{{.Value}}{{else}}&mdash; empty{{end}}</span><span class="facet-count">{{.Count}} &times;</span>
+      </a>
+      {{else}}
+      <a class="facet-row" href="/tables/{{$root.Schema.Name}}?fcol={{$col | urlquery}}&fval={{.Value | urlquery}}" hx-get="/tables/{{$root.Schema.Name}}?fcol={{$col | urlquery}}&fval={{.Value | urlquery}}" hx-target="#content" hx-push-url="true">
+        <span class="facet-value">{{if .Value}}{{.Value}}{{else}}&mdash; empty{{end}}</span><span class="facet-count">{{.Count}}</span>
+      </a>
+      {{end}}
+      {{end}}
+    </div>
+  {{end}}
+  </div>
+</div>
+{{end}}
+<div class="sql-strip">
+  <span class="sql-strip-label">SQL</span>
+  <code class="sql-strip-text" id="table-sql-text">{{.SQLText}}</code>
+  <button type="button" class="sql-strip-copy" data-copy-target="table-sql-text" onclick="copyText(this)">Copy</button>
 </div>
 <table>
   <thead>
@@ -520,11 +622,11 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
 </table>
 <div class="pager">
   {{if ge .PrevOffset 0}}
-    <a class="btn btn-outline" href="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}" hx-get="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}" hx-target="#content" hx-push-url="true">Previous</a>
+    <a class="btn btn-outline" href="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}{{.FilterQS}}" hx-get="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}{{.FilterQS}}" hx-target="#content" hx-push-url="true">Previous</a>
   {{end}}
   <span class="muted">rows {{.Offset}}&ndash;{{add .Offset (len .Rows)}}</span>
   {{if ge .NextOffset 0}}
-    <a class="btn btn-outline" href="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.NextOffset}}" hx-get="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.NextOffset}}" hx-target="#content" hx-push-url="true">Next</a>
+    <a class="btn btn-outline" href="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.NextOffset}}{{.FilterQS}}" hx-get="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.NextOffset}}{{.FilterQS}}" hx-target="#content" hx-push-url="true">Next</a>
   {{end}}
 </div>`
 

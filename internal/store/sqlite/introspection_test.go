@@ -189,3 +189,80 @@ func TestGetRowReport_UnknownTableRejected(t *testing.T) {
 		errors.Is(err, store.ErrUnknownTable) || errors.Is(err, store.ErrUnknownColumn),
 		"injection-shaped table name must be rejected, got: %v", err)
 }
+
+func TestListRows_WhereFilterEqualityAndEmptyBucket(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	linuxA := makeMachine("facet-linux-a", model.MachineTypeServer)
+	linuxA.OSFamily = "linux"
+	linuxB := makeMachine("facet-linux-b", model.MachineTypeServer)
+	linuxB.OSFamily = "linux"
+	windows := makeMachine("facet-windows", model.MachineTypeWorkstation)
+	windows.OSFamily = "windows"
+	blank := makeMachine("facet-blank", model.MachineTypeServer)
+	blank.OSFamily = ""
+	for _, m := range []model.Machine{linuxA, linuxB, windows, blank} {
+		require.NoError(t, s.UpsertMachine(ctx, m))
+	}
+
+	rows, total, err := s.ListRows(ctx, store.RowsFilter{
+		Table: "machines", WhereColumn: "os_family", WhereValue: "linux",
+	})
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, total, "filtered total must count matches, not the whole table")
+	assert.Len(t, rows, 2)
+
+	// Empty value selects the NULL-or-'' bucket.
+	rows, total, err = s.ListRows(ctx, store.RowsFilter{
+		Table: "machines", WhereColumn: "os_family", WhereValue: "",
+	})
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, total)
+	require.Len(t, rows, 1)
+
+	// Unknown filter column is rejected before any SQL is built.
+	_, _, err = s.ListRows(ctx, store.RowsFilter{
+		Table: "machines", WhereColumn: "no_such_column", WhereValue: "x",
+	})
+	assert.ErrorIs(t, err, store.ErrUnknownColumn)
+}
+
+func TestFacetTable_MachinesOSFamily(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		m := makeMachine("facet-l-"+string(rune('a'+i)), model.MachineTypeServer)
+		m.OSFamily = "linux"
+		require.NoError(t, s.UpsertMachine(ctx, m))
+	}
+	w := makeMachine("facet-w", model.MachineTypeWorkstation)
+	w.OSFamily = "windows"
+	require.NoError(t, s.UpsertMachine(ctx, w))
+
+	facets, err := s.FacetTable(ctx, "machines", 20, 5)
+	require.NoError(t, err)
+	require.NotEmpty(t, facets, "machines has low-cardinality columns, facets expected")
+
+	var osFacet *store.ColumnFacet
+	for i := range facets {
+		if facets[i].Column == "os_family" {
+			osFacet = &facets[i]
+		}
+		// Primary key columns are never facetable.
+		assert.NotEqual(t, "id", facets[i].Column)
+	}
+	require.NotNil(t, osFacet, "os_family has 2 distinct values and must be faceted")
+	assert.EqualValues(t, 2, osFacet.Distinct)
+	require.NotEmpty(t, osFacet.Values)
+	// Most common value first.
+	assert.Equal(t, "linux", osFacet.Values[0].Value)
+	assert.EqualValues(t, 3, osFacet.Values[0].Count)
+}
+
+func TestFacetTable_UnknownTableRejected(t *testing.T) {
+	s := newTestStore(t)
+	_, err := s.FacetTable(context.Background(), "definitely_not_a_table", 20, 5)
+	assert.ErrorIs(t, err, store.ErrUnknownTable)
+}

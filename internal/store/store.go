@@ -64,11 +64,35 @@ type ForeignKey struct {
 // RowsFilter constrains which rows are returned by ListRows. Table is required
 // and is validated against the live introspected catalog before any SQL is
 // constructed. OrderBy, when non-empty, must match a column of Table.
+//
+// WhereColumn, when non-empty, must also match a column of Table and
+// constrains rows to WhereColumn = WhereValue (the value is always bound as a
+// parameter, never interpolated). An empty WhereValue selects the "empty"
+// bucket — rows where the column is NULL or '' — matching how facets group
+// missing values.
 type RowsFilter struct {
-	Table   string
-	OrderBy string
-	Limit   int
-	Offset  int
+	Table       string
+	OrderBy     string
+	WhereColumn string
+	WhereValue  string
+	Limit       int
+	Offset      int
+}
+
+// FacetValue is one bucket of a column facet: a distinct value and how many
+// rows carry it. Value is the stringified cell; the empty string is the
+// NULL-or-'' bucket.
+type FacetValue struct {
+	Value string
+	Count int64
+}
+
+// ColumnFacet describes a facetable column — one whose distinct-value count
+// is small enough to enumerate — with its most common values.
+type ColumnFacet struct {
+	Column   string
+	Distinct int64
+	Values   []FacetValue // ordered by Count DESC
 }
 
 // Row is a single result row. PrimaryKey carries stringified PK column values
@@ -266,8 +290,17 @@ type Store interface {
 	// and OrderBy column (if set) are validated against the introspected
 	// catalog before any SQL is constructed. Limit is capped at
 	// IntrospectionRowLimit. total is the estimated row count (same source as
-	// TableSchema.RowCount).
+	// TableSchema.RowCount), or the exact filtered count when WhereColumn is
+	// set.
 	ListRows(ctx context.Context, filter RowsFilter) (rows []Row, total int64, err error)
+
+	// FacetTable computes value facets for the named content table: for each
+	// column whose distinct-value count is at most maxDistinct, the top
+	// topValues values with their row counts. Facets power the dashboard's
+	// pattern-spotting rail; implementations bound each per-column probe with
+	// a short timeout, skip columns that cannot be counted in time, and cap
+	// how many facets they return.
+	FacetTable(ctx context.Context, table string, maxDistinct, topValues int) ([]ColumnFacet, error)
 
 	// GetRowReport builds the full detail report for a single row addressed
 	// by its primary key. It fetches the primary row, each inbound group of

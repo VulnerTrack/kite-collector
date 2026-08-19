@@ -333,21 +333,49 @@ func (s *PostgresStore) ListRows(ctx context.Context, filter store.RowsFilter) (
 			orderCol = schema.Columns[0].Name
 		}
 
+		where := ""
+		var whereArgs []any
+		if filter.WhereColumn != "" {
+			if !columnExists(schema.Columns, filter.WhereColumn) {
+				return store.ErrUnknownColumn
+			}
+			col := identQuote(filter.WhereColumn)
+			if filter.WhereValue == "" {
+				// The facets' "empty" bucket groups NULL and '' together.
+				where = ` WHERE (` + col + ` IS NULL OR ` + col + `::text = '')`
+			} else {
+				where = ` WHERE ` + col + `::text = $1`
+				whereArgs = append(whereArgs, filter.WhereValue)
+			}
+		}
+
 		colList := buildColumnList(schema.Columns)
-		query := `SELECT ` + colList + ` FROM ` + identQuote(schema.Name) // #nosec G202 -- identifiers validated
+		query := `SELECT ` + colList + ` FROM ` + identQuote(schema.Name) + where // #nosec G202 -- identifiers validated
 		if orderCol != "" {
 			query += ` ORDER BY ` + identQuote(orderCol)
 		}
-		query += ` LIMIT $1 OFFSET $2`
+		limitPos := len(whereArgs) + 1
+		query += fmt.Sprintf(` LIMIT $%d OFFSET $%d`, limitPos, limitPos+1)
 
-		rows, err := tx.Query(ctx, query, limit, offset)
+		args := append(append([]any{}, whereArgs...), limit, offset)
+		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("list rows %s: %w", schema.Name, err)
 		}
 		defer rows.Close()
 
 		result, err = scanGenericRows(rows, schema)
-		return err
+		if err != nil {
+			return err
+		}
+
+		if where != "" {
+			countQuery := `SELECT COUNT(*) FROM ` + identQuote(schema.Name) + where // #nosec G202 -- identifiers validated
+			if err := tx.QueryRow(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
+				return fmt.Errorf("count filtered rows %s: %w", schema.Name, err)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, 0, err
@@ -629,4 +657,98 @@ func stringifyValue(v any) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// facetMaxColumns bounds how many columns FacetTable probes and facetMaxFacets
+// how many facets it returns, so a very wide table cannot stall the page.
+const (
+	facetMaxColumns = 24
+	facetMaxFacets  = 6
+)
+
+// FacetTable computes value facets for the named table: columns with at most
+// maxDistinct distinct values, each with its topValues most common values.
+// Primary-key columns are skipped (always unique); every probe runs under
+// rowCountProbeTimeout and a column that cannot be counted in time is skipped
+// rather than failing the whole call.
+func (s *PostgresStore) FacetTable(ctx context.Context, table string, maxDistinct, topValues int) ([]store.ColumnFacet, error) {
+	if maxDistinct <= 0 {
+		maxDistinct = 20
+	}
+	if topValues <= 0 {
+		topValues = 5
+	}
+	var facets []store.ColumnFacet
+	err := s.withIntrospectionTx(ctx, func(tx pgx.Tx) error {
+		names, err := listTableNames(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if !containsString(names, table) {
+			return store.ErrUnknownTable
+		}
+		schema, err := describeTable(ctx, tx, table)
+		if err != nil {
+			return err
+		}
+
+		pk := make(map[string]bool, len(schema.PrimaryKey))
+		for _, col := range schema.PrimaryKey {
+			pk[col] = true
+		}
+
+		probed := 0
+		for _, col := range schema.Columns {
+			if len(facets) >= facetMaxFacets || probed >= facetMaxColumns {
+				break
+			}
+			if pk[col.Name] {
+				continue
+			}
+			probed++
+
+			probeCtx, cancel := context.WithTimeout(ctx, rowCountProbeTimeout)
+			q := `SELECT COUNT(DISTINCT ` + identQuote(col.Name) + `) FROM ` + identQuote(schema.Name) // #nosec G202 -- identifiers validated
+			var distinct int64
+			scanErr := tx.QueryRow(probeCtx, q).Scan(&distinct)
+			cancel()
+			if scanErr != nil || distinct < 1 || distinct > int64(maxDistinct) {
+				continue
+			}
+
+			probeCtx, cancel = context.WithTimeout(ctx, rowCountProbeTimeout)
+			q = `SELECT ` + identQuote(col.Name) + `::text, COUNT(*) FROM ` + identQuote(schema.Name) + // #nosec G202 -- identifiers validated
+				` GROUP BY ` + identQuote(col.Name) + ` ORDER BY COUNT(*) DESC LIMIT $1`
+			rows, queryErr := tx.Query(probeCtx, q, topValues)
+			if queryErr != nil {
+				cancel()
+				continue
+			}
+			facet := store.ColumnFacet{Column: col.Name, Distinct: distinct}
+			for rows.Next() {
+				var value *string
+				var count int64
+				if scanErr := rows.Scan(&value, &count); scanErr != nil {
+					facet.Values = nil
+					break
+				}
+				v := ""
+				if value != nil {
+					v = *value
+				}
+				facet.Values = append(facet.Values, store.FacetValue{Value: v, Count: count})
+			}
+			rowsErr := rows.Err()
+			rows.Close()
+			cancel()
+			if rowsErr == nil && len(facet.Values) > 0 {
+				facets = append(facets, facet)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return facets, nil
 }
