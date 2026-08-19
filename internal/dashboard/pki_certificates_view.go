@@ -242,22 +242,31 @@ window.copyPKIValue = function(button) {
 };
 </script>`))
 
-// certificatesPageTemplate is the Certificates page body: the shared PKI
-// inventory fragment with its tenant-scope explainer, served from the
-// sidebar's Settings group. The inventory div lazy-loads the same fragment
-// the Observability page embeds, so the two surfaces can never disagree.
-var certificatesPageTmpl = template.Must(template.New("certificatesPage").Parse(`<h2>Certificates</h2>
-<p class="muted">Tenant-scoped PKI inventory. A mass enrollment issues one certificate per computer; every certificate produced by that fleet enrollment appears here as soon as the remote computer completes enrollment.</p>
-<div id="pki-certificate-inventory"
-     hx-get="/fragments/observability/certificates"
-     hx-trigger="load, every 60s"
-     hx-swap="innerHTML">
-  <p class="muted">Loading certificates&hellip;</p>
+// certificatesPageTemplate is the Certificates page shell: a skeleton in the
+// final layout that lazy-loads the full fleet-identity fragment
+// (/fragments/certificates), carrying any filter/history/paused params from
+// the page URL so bookmarked views resolve.
+var certificatesPageTmpl = template.Must(template.New("certificatesPage").Parse(`<div id="certificates-root"
+     hx-get="{{.FragmentURL}}"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+  <h2>Certificates</h2>
+  <p class="muted small cert-tenant">VulnerTrack PKI · fleet identity</p>
+  <section class="card cert-card"><h4 class="cert-card-label">This computer</h4>
+    <div class="cert-skel" style="width: 55%;"></div><div class="cert-skel" style="width: 70%;"></div></section>
+  <section class="card cert-card"><h4 class="cert-card-label">Tenant inventory</h4>
+    <div class="cert-skel"></div><div class="cert-skel" style="width: 92%;"></div><div class="cert-skel" style="width: 96%;"></div></section>
 </div>`))
 
 // renderCertificatesPageFragment renders the Certificates page body.
-func renderCertificatesPageFragment(w io.Writer) error {
-	if err := certificatesPageTmpl.Execute(w, nil); err != nil {
+// rawQuery carries the page URL's filter/history/paused params into the
+// lazy-loaded fragment.
+func renderCertificatesPageFragment(w io.Writer, rawQuery string) error {
+	fragmentURL := "/fragments/certificates"
+	if rawQuery != "" {
+		fragmentURL += "?" + rawQuery
+	}
+	if err := certificatesPageTmpl.Execute(w, struct{ FragmentURL string }{fragmentURL}); err != nil {
 		return fmt.Errorf("render certificates page template: %w", err)
 	}
 	return nil
@@ -268,13 +277,13 @@ func renderCertificatesPageFragment(w io.Writer) error {
 func serveCertificatesPage(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if r.Header.Get("HX-Request") == "true" {
-		if err := renderCertificatesPageFragment(w); err != nil {
+		if err := renderCertificatesPageFragment(w, r.URL.RawQuery); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 	if err := renderIndexPage(w, "certificates", func(fragBuf io.Writer) error {
-		return renderCertificatesPageFragment(fragBuf)
+		return renderCertificatesPageFragment(fragBuf, r.URL.RawQuery)
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

@@ -115,6 +115,7 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	// stats. Pulls from the same store the onboarding flow uses, so all
 	// the data shown is computed on this host (no external scrapers).
 	registerObservabilityRoutes(mux, deps)
+	registerCertificatesRoutes(mux, deps)
 }
 
 // onboardingBody is the server-rendered fragment that wires up the four

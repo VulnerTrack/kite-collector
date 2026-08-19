@@ -40,8 +40,9 @@ func newStorageFingerprintCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "storage-fingerprint",
-		Short: "Detect S3-compatible storage providers from a URL or JS file",
+		Use:        "storage-fingerprint",
+		Deprecated: `recon tooling is moving out of the agent CLI`,
+		Short:      "Detect S3-compatible storage providers from a URL or JS file",
 		Long: `Analyse a target URL or a local JavaScript bundle for evidence of
 S3-compatible object-storage providers (AWS S3, Supabase Storage, GCS, Azure
 Blob, Backblaze B2, Cloudflare R2, DigitalOcean Spaces, MinIO, Wasabi,

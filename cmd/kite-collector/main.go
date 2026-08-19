@@ -188,6 +188,37 @@ type ChangedMachine struct {
 // Root command
 // ---------------------------------------------------------------------------
 
+// currentStateSummary renders the "where are my files + am I enrolled" block
+// shown at the foot of `kite-collector --help`. It reports the install-time
+// default locations (installer.DetectDefaults) and detects enrollment by the
+// presence of the three enrollment PEMs in the certs dir — os.Stat succeeds
+// even when the PEMs themselves are root-only, since only directory traversal
+// is needed. It never errors: unknown facts degrade to a shown default.
+func currentStateSummary() string {
+	opts := installer.DetectDefaults().Options
+	certsDir := opts.CertsDir
+
+	enrolled := certsDir != ""
+	for _, name := range installer.EnrollmentFiles {
+		if _, err := os.Stat(filepath.Join(certsDir, name)); err != nil {
+			enrolled = false
+			break
+		}
+	}
+	enrollment := "not enrolled — run: kite-collector enroll --certs-dir " + certsDir
+	if enrolled {
+		enrollment = "enrolled"
+	}
+
+	var b strings.Builder
+	b.WriteString("Current state:\n")
+	fmt.Fprintf(&b, "  config file:     %s (override with --config)\n", "kite-collector.yaml")
+	fmt.Fprintf(&b, "  data directory:  %s (enrollment certs + kite.db)\n", certsDir)
+	fmt.Fprintf(&b, "  database:        %s\n", opts.DbPath)
+	fmt.Fprintf(&b, "  enrollment:      %s", enrollment)
+	return b.String()
+}
+
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "kite-collector",
@@ -202,9 +233,23 @@ lifecycle events for downstream consumption.`, version, commit, date),
 		SilenceErrors: true,
 	}
 
+	// Append the live "current state" block (file locations + enrollment
+	// status) to the ROOT help only. Wrapping the help func keeps the probe
+	// lazy — it runs when someone reads `kite-collector --help`, never on the
+	// hot path of `scan`/`agent`, and subcommand help stays uncluttered.
+	defaultHelp := root.HelpFunc()
+	root.SetHelpFunc(func(c *cobra.Command, args []string) {
+		defaultHelp(c, args)
+		if !c.HasParent() {
+			fmt.Fprintf(c.OutOrStdout(), "\n%s\n", currentStateSummary())
+		}
+	})
+
 	root.AddCommand(
 		newScanCmd(),
 		newAgentCmd(),
+		newStatusCmd(),
+		newDoctorCmd(),
 		newStreamCmd(),
 		newDiffCmd(),
 		newReportCmd(),
@@ -244,18 +289,24 @@ func newScanCmd() *cobra.Command {
 		sources       []string
 		verbose       bool
 		autoDiscovery bool
+		detectOnly    bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "scan",
-		Short: "Run an machine discovery scan",
+		Short: "Run a machine discovery scan",
 		Long: `Execute a full scan cycle: discover machines from enabled sources, deduplicate
 against the local database, classify authorization and managed state, evaluate
 policy rules, persist results, and emit lifecycle events.
 
 Use --auto to run infrastructure auto-discovery first and enable all ready
-sources automatically.`,
+sources automatically. Use --detect to only probe for reachable
+infrastructure services and report what --auto would enable, without
+scanning.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if detectOnly {
+				return runDiscoverServices(output, verbose)
+			}
 			return runScan(cfgFile, scope, output, dbPath, sources, verbose, autoDiscovery)
 		},
 	}
@@ -267,6 +318,7 @@ sources automatically.`,
 	cmd.Flags().StringSliceVar(&sources, "source", nil, "discovery sources to enable")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable debug logging")
 	cmd.Flags().BoolVar(&autoDiscovery, "auto", false, "auto-discover infrastructure services and enable ready sources")
+	cmd.Flags().BoolVar(&detectOnly, "detect", false, "probe for reachable infrastructure services and exit without scanning")
 
 	return cmd
 }
@@ -551,8 +603,9 @@ func newDiffCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "diff <db1> <db2>",
-		Short: "Compare two scan databases",
+		Use:        "diff <db1> <db2>",
+		Deprecated: `scan history lives in the dashboard and the VulnerTrack platform`,
+		Short:      "Compare two scan databases",
 		Long: `Open two SQLite databases produced by previous scans and compare their
 machine inventories. Machines are matched by their natural key (hostname + machine_type).
 The output shows new, removed, changed, and optionally unchanged machines.`,
@@ -788,8 +841,9 @@ func newDiscoverServicesCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "discover-services",
-		Short: "Detect reachable infrastructure APIs",
+		Use:        "discover-services",
+		Deprecated: `use "kite-collector scan --detect"`,
+		Short:      "Detect reachable infrastructure APIs",
 		Long: `Probe the local machine and network gateway for known infrastructure services
 (Docker, Wazuh, Proxmox, ClickHouse, etc.) and report what was found. This
 helps identify which discovery sources can be enabled without manual
@@ -948,8 +1002,9 @@ func newStreamCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "stream",
-		Short: "Start continuous machine discovery (streaming mode)",
+		Use:        "stream",
+		Deprecated: `superseded — the installed service runs "service run" and containers run "agent --stream"`,
+		Short:      "Start continuous machine discovery (streaming mode)",
 		Long: `Start the agent in continuous streaming mode.
 
 Equivalent to 'agent --stream'. All discovered machines are emitted as OTLP
@@ -1513,8 +1568,9 @@ func newReportCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "report",
-		Short: "Generate machine inventory report",
+		Use:        "report",
+		Deprecated: `use the dashboard ("kite-collector dashboard") and its CSV/JSON exports`,
+		Short:      "Generate machine inventory report",
 		Long: `Read the SQLite database and produce a report in the requested format.
 Supported formats: json, csv, table, html.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1606,8 +1662,9 @@ func newQueryCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "query <target>",
-		Short: "Query the SQLite database",
+		Use:        "query <target>",
+		Deprecated: `use the dashboard tables browser, or sqlite3 directly (docs/sqlite-cheatsheet.md)`,
+		Short:      "Query the SQLite database",
 		Long: `Run a human-friendly query against the kite-collector SQLite database.
 
 Targets:
@@ -1723,8 +1780,9 @@ func newDBCmd() *cobra.Command {
 	var dbPath string
 
 	cmd := &cobra.Command{
-		Use:   "db",
-		Short: "Open SQLite shell with table formatting",
+		Use:        "db",
+		Deprecated: `use the dashboard tables browser, or sqlite3 directly (docs/sqlite-cheatsheet.md)`,
+		Short:      "Open SQLite shell with table formatting",
 		Long: `Launch the sqlite3 CLI with human-friendly defaults (.mode table,
 .headers on) pre-configured. Requires sqlite3 to be installed.
 
@@ -1808,8 +1866,9 @@ func newErrorCmd() *cobra.Command {
 	var listAll bool
 
 	cmd := &cobra.Command{
-		Use:   "error [code]",
-		Short: "Look up a kite-collector error code",
+		Use:        "error [code]",
+		Deprecated: `"kite-collector status" and "doctor" print error hints inline; see docs/errors.md`,
+		Short:      "Look up a kite-collector error code",
 		Long: `Display detailed information about a kite-collector error code including
 the cause and OS-specific remediation steps.
 
@@ -1880,8 +1939,9 @@ func newMigrateCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "migrate",
-		Short: "Run or inspect database migrations",
+		Use:    "migrate",
+		Hidden: true,
+		Short:  "Run or inspect database migrations",
 		Long: `Apply pending embedded SQL migrations to the SQLite database,
 show migration status, or repair a failed migration entry.
 
@@ -2750,9 +2810,10 @@ func newEndpointsCmd() *cobra.Command {
 	var cfgFile string
 
 	cmd := &cobra.Command{
-		Use:   "endpoints",
-		Short: "Show status of all configured endpoints",
-		Long:  `Display the health state, priority, routes, and last-seen time for each configured backend endpoint.`,
+		Use:        "endpoints",
+		Deprecated: `it only echoed config (the failover manager was never wired); see "kite-collector status" — removal planned`,
+		Short:      "Show status of all configured endpoints",
+		Long:       `Display the health state, priority, routes, and last-seen time for each configured backend endpoint.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runEndpoints(cfgFile)
 		},
@@ -2811,8 +2872,9 @@ func newTrustCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "trust <endpoint-name>",
-		Short: "Manage TOFU certificate pinning for an endpoint",
+		Use:        "trust <endpoint-name>",
+		Deprecated: `TOFU pinning is not enforced by the agent's connections — removal planned`,
+		Short:      "Manage TOFU certificate pinning for an endpoint",
 		Long: `Reset the pinned server certificate fingerprint for the named endpoint.
 This is required when the server's TLS certificate has been legitimately
 rotated, causing a TOFU fingerprint mismatch.
@@ -3595,9 +3657,9 @@ func newCheckOTLPCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:     "check-otlp",
-		Aliases: []string{"check"},
-		Short:   "Test connectivity to the OTLP collector",
+		Use:        "check-otlp",
+		Deprecated: `use "kite-collector doctor" (alias: check) — the same probes plus service, config, database, and certificate checks`,
+		Short:      "Test connectivity to the OTLP collector",
 		Long: `Run three staged connectivity checks against the OTLP collector:
 
   1. tcp-dial      — verify the host:port is reachable
@@ -3625,6 +3687,19 @@ Example:
 }
 
 func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool) error {
+	stages, err := collectOTLPStages(endpoint, certsDir, timeout)
+	if err != nil {
+		return err
+	}
+	return printOTLPResults(stages, jsonOut)
+}
+
+// collectOTLPStages runs the staged connectivity probes (tcp-dial,
+// tls-handshake, otlp-ping) and returns their results, stopping after the
+// first failed stage. Hard setup errors (bad endpoint URL, unreadable certs)
+// are returned as an error instead of a stage result. Shared by the doctor
+// command and the deprecated check-otlp command.
+func collectOTLPStages(endpoint, certsDir string, timeout time.Duration) ([]otlpCheckStage, error) {
 	certFile := filepath.Join(certsDir, "agent.pem")
 	keyFile := filepath.Join(certsDir, "agent-key.pem")
 	caFile := filepath.Join(certsDir, "ca.pem")
@@ -3635,7 +3710,7 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 	// Parse host:port from the endpoint URL for the TCP and TLS stages.
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return fmt.Errorf("parse endpoint %q: %w", endpoint, err)
+		return nil, fmt.Errorf("parse endpoint %q: %w", endpoint, err)
 	}
 	host := u.Host
 	if !strings.Contains(host, ":") {
@@ -3665,7 +3740,7 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 		}
 		stages = append(stages, s)
 		if !s.OK {
-			return printOTLPResults(stages, jsonOut)
+			return stages, nil
 		}
 	}
 
@@ -3678,7 +3753,7 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 			tlsCfg, buildErr := otlpBuildTLSConfig(certFile, keyFile, caFile)
 			if buildErr != nil {
 				_ = tcpConn.Close()
-				return fmt.Errorf("build TLS config: %w", buildErr)
+				return nil, fmt.Errorf("build TLS config: %w", buildErr)
 			}
 			tlsCfg.ServerName = u.Hostname()
 			tlsConn := tls.Client(tcpConn, tlsCfg)
@@ -3709,7 +3784,7 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 		}
 		stages = append(stages, s)
 		if !s.OK {
-			return printOTLPResults(stages, jsonOut)
+			return stages, nil
 		}
 	}
 
@@ -3722,7 +3797,7 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 		if useTLS {
 			tlsCfg, buildErr := otlpBuildTLSConfig(certFile, keyFile, caFile)
 			if buildErr != nil {
-				return fmt.Errorf("build TLS config for ping: %w", buildErr)
+				return nil, fmt.Errorf("build TLS config for ping: %w", buildErr)
 			}
 			transport.TLSClientConfig = tlsCfg
 		}
@@ -3759,7 +3834,7 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 		body, _ := json.Marshal(payload)
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, pingURL, bytes.NewReader(body))
 		if reqErr != nil {
-			return fmt.Errorf("build ping request: %w", reqErr)
+			return nil, fmt.Errorf("build ping request: %w", reqErr)
 		}
 		req.Header.Set("Content-Type", "application/json")
 
@@ -3782,7 +3857,7 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 		stages = append(stages, s)
 	}
 
-	return printOTLPResults(stages, jsonOut)
+	return stages, nil
 }
 
 // otlpBuildTLSConfig builds a *tls.Config that works for both public-CA

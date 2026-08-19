@@ -309,13 +309,28 @@ See `configs/kite-collector.example.yaml` for all options.
 
 ## Commands
 
-| Command            | Description                                |
-| ------------------ | ------------------------------------------ |
-| `scan`             | One-shot discovery + configuration audit   |
-| `agent --stream`   | Continuous mode with configurable interval |
-| `diff <db1> <db2>` | Compare two scan databases                 |
-| `report`           | Generate asset report                      |
-| `version`          | Print version, commit, build date          |
+| Command          | Description                                                     |
+| ---------------- | --------------------------------------------------------------- |
+| `install`        | Install as a service and sign in (`--agent-code` + `--token` for headless) |
+| `uninstall`      | Remove the service                                              |
+| `enroll`         | Enroll with VulnerTrack (browser, sign-in code, or scoped token) |
+| `unenroll`       | Remove the local enrollment                                     |
+| `scan`           | One-shot discovery + configuration audit (`--detect` probes only) |
+| `agent --stream` | Continuous mode with configurable interval                      |
+| `service`        | Start/stop/restart/status of the installed service              |
+| `status`         | Agent state at a glance (`--json` for scripts)                  |
+| `doctor`         | Staged diagnostics with remediation hints (alias: `check`)      |
+| `dashboard`      | Browser-based local UI — data exploration lives here            |
+| `fleet`          | Discover computers and deploy collectors                        |
+| `version`        | Print version, commit, build date                               |
+
+The golden path is two commands: `install`, then `status`. When something
+looks wrong, `doctor` says why and what to run next.
+
+Deprecated (still work, hidden from help, removal planned): `stream`,
+`check-otlp`, `endpoints`, `trust`, `error`, `report`, `query`, `db`,
+`diff`, `discover-services`, `web-fingerprint`, `storage-fingerprint`.
+Each prints a pointer to its replacement when invoked.
 
 ## Asset classification
 

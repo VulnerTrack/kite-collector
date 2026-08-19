@@ -44,7 +44,7 @@ const indexPageTemplate = `<!DOCTYPE html>
 <meta name="htmx-config" content='{"historyCacheSize": 20}'>
 <title>kite-collector dashboard</title>
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.2">
+<link rel="stylesheet" href="/static/style.css?v=1.0.3">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

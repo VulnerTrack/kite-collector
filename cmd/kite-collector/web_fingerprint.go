@@ -54,8 +54,9 @@ func newWebFingerprintCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "web-fingerprint",
-		Short: "Identify the stack behind a URL (TLS + headers + JS + files + APIs)",
+		Use:        "web-fingerprint",
+		Deprecated: `recon tooling is moving out of the agent CLI`,
+		Short:      "Identify the stack behind a URL (TLS + headers + JS + files + APIs)",
 		Long: `Run a concurrent multi-surface fingerprint sweep against one URL
 (or every URL in a newline-delimited file) and print the synthesised
 stack: hosting/CDN, web server, runtime, framework, auth, analytics,
