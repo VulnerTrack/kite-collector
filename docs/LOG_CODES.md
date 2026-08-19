@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 493 codes across 59 packages.
+**Catalog size:** 512 codes across 60 packages.
 
 ---
 
@@ -263,13 +263,22 @@ Source: [`internal/copilot/fsm/logcodes.go`](../internal/copilot/fsm/logcodes.go
 
 ## `dashboard` (internal/dashboard)
 
-Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 32 codes
+Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 36 codes
 
 **observability surface — /observability page + /api/v1/observability/***
 
 | Code | Constant | Description |
 |---|---|---|
 | `dashboard.observability.snapshot_marshal_failed` | `LogCodeObservabilitySnapshotMarshal` | — |
+
+**containers surface — /containers page + /api/v1/containers/***
+
+| Code | Constant | Description |
+|---|---|---|
+| `dashboard.containers.list_failed` | `LogCodeContainersList` | — |
+| `dashboard.containers.stats_fetch_failed` | `LogCodeContainersStats` | — |
+| `dashboard.containers.render_failed` | `LogCodeContainersRender` | — |
+| `dashboard.containers.snapshot_marshal_failed` | `LogCodeContainersSnapshotMarshal` | — |
 
 **onboarding/enroll surface — POST /api/v1/agent/enroll**
 
@@ -507,7 +516,7 @@ Source: [`internal/discovery/agent/scheduled/logcodes.go`](../internal/discovery
 
 ## `software` (internal/discovery/agent/software)
 
-Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/agent/software/logcodes.go) · 2 codes
+Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/agent/software/logcodes.go) · 4 codes
 
 **registry surface — per-collector lifecycle and aggregation errors when the multi-package-manager registry runs the fan-out**
 
@@ -520,6 +529,18 @@ Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/
 | Code | Constant | Description |
 |---|---|---|
 | `agent_software.pipx.non_zero_exit_diagnostic` | `LogCodePipxNonZeroExitDiagnostic` | — |
+
+**brew surface — environment conditions that make Homebrew inventory unavailable rather than failed (brew hard-refuses to run as root, the normal state for a sudo-started agent)**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_software.brew.root_refused` | `LogCodeBrewRootRefused` | — |
+
+**swiftpm surface — project-scope conditions detected at collect time (no Package.swift at or above the working directory)**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_software.swiftpm.no_manifest` | `LogCodeSwiftPMNoManifest` | — |
 
 ## `vms` (internal/discovery/agent/vms)
 
@@ -1081,6 +1102,63 @@ Source: [`internal/discovery/unifi/logcodes.go`](../internal/discovery/unifi/log
 |---|---|---|
 | `unifi.local.list_clients_failed` | `LogCodeLocalListClientsFailed` | — |
 | `unifi.local.list_devices_failed` | `LogCodeLocalListDevicesFailed` | — |
+
+## `vpn` (internal/discovery/vpn)
+
+Source: [`internal/discovery/vpn/logcodes.go`](../internal/discovery/vpn/logcodes.go) · 13 codes
+
+**--- source-level (vpn.go) --------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `vpn_discovery.source.enumerator_failed` | `LogCodeEnumeratorFailed` | — |
+| `vpn_discovery.source.host_cap_reached` | `LogCodeHostCapReached` | — |
+| `vpn_discovery.source.discovery_complete` | `LogCodeDiscoveryComplete` | — |
+
+**--- tailscale --------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `vpn_discovery.tailscale.cli_failed` | `LogCodeTailscaleCLIFailed` | — |
+| `vpn_discovery.tailscale.api_failed` | `LogCodeTailscaleAPIFailed` | — |
+| `vpn_discovery.tailscale.decode_failed` | `LogCodeTailscaleDecodeFail` | — |
+
+**--- wireguard --------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `vpn_discovery.wireguard.dump_failed` | `LogCodeWireGuardDumpFailed` | — |
+
+**--- zerotier ---------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `vpn_discovery.zerotier.cli_failed` | `LogCodeZeroTierCLIFailed` | — |
+
+**--- netbird ----------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `vpn_discovery.netbird.cli_failed` | `LogCodeNetBirdCLIFailed` | — |
+| `vpn_discovery.netbird.api_failed` | `LogCodeNetBirdAPIFailed` | — |
+
+**--- ipsec / strongswan -----------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `vpn_discovery.ipsec.cli_failed` | `LogCodeIPSecCLIFailed` | — |
+
+**--- openvpn ----------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `vpn_discovery.openvpn.status_read_failed` | `LogCodeOpenVPNStatusReadFailed` | — |
+
+**--- nebula -----------------------------------------------------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `vpn_discovery.nebula.config_read_failed` | `LogCodeNebulaConfigReadFailed` | — |
 
 ## `vps` (internal/discovery/vps)
 

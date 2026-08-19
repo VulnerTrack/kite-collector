@@ -137,6 +137,12 @@ build-windows7:
 run:
 	CGO_ENABLED=0 go run ./cmd/kite-collector
 
+# Container observability TUI over this app's dev compose stack, using the
+# monorepo lazydocker config (custom stat graphs, health icons, image layers).
+# For the full vulnertrack stack use ../../scripts/lazydocker.sh instead.
+observe:
+	CONFIG_DIR=$(abspath ../../configs/lazydocker) lazydocker -f docker-compose.yml
+
 # test runs the suite without the race detector. The sqlite + dashboard
 # packages perform full schema migrations per t.TempDir, and under -race
 # each migration runs ~10× slower; chained across ~250 tests the package

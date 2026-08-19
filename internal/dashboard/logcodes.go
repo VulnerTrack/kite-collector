@@ -23,6 +23,12 @@ const (
 	// observability surface — /observability page + /api/v1/observability/*
 	LogCodeObservabilitySnapshotMarshal LogCode = "dashboard.observability.snapshot_marshal_failed"
 
+	// containers surface — /containers page + /api/v1/containers/*
+	LogCodeContainersList            LogCode = "dashboard.containers.list_failed"
+	LogCodeContainersStats           LogCode = "dashboard.containers.stats_fetch_failed"
+	LogCodeContainersRender          LogCode = "dashboard.containers.render_failed"
+	LogCodeContainersSnapshotMarshal LogCode = "dashboard.containers.snapshot_marshal_failed"
+
 	// onboarding/enroll surface — POST /api/v1/agent/enroll
 	LogCodeEnrollMissingWrapKey LogCode = "dashboard.enroll.missing_wrap_key"
 	LogCodeEnrollAEADWrap       LogCode = "dashboard.enroll.aead_wrap_failed"

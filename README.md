@@ -469,6 +469,27 @@ without a manual reload:
 ></div>
 ```
 
+## Container observability (dashboard)
+
+The dashboard's **Containers** page is a live view of the local Docker /
+Podman / docker-compose environment, inspired by lazydocker and built on the
+Engine API directly (no SDK, no external tooling):
+
+- **State at a glance** — every container with an icon status + health,
+  grouped by compose project, auto-refreshing every 10 s with pause/resume.
+- **Custom metric graphs** — CPU % and Memory % sparklines by default
+  (`docker stats`-accurate math), plus a column for **any** numeric field of
+  the Engine stats document by dotted stat path
+  (`?graph=memory_stats.stats.pgmajfault`). Each container's *Graphs* drawer
+  lists every available path with its current value — click *Graph* to add
+  it. Customised views live in the URL, so bookmark them.
+- **Image ancestor layers** — `docker history` for any image, from the image
+  inventory or a container's image link.
+
+A JSON snapshot mirrors the page for scripted monitoring:
+`GET /api/v1/containers/snapshot.json`. Full details, engine resolution
+order, and the collection model: [docs/container-observability.md](docs/container-observability.md).
+
 ## Streaming to OpenTelemetry
 
 kite-collector pushes asset lifecycle events to any OTLP-compatible collector (Grafana Alloy, OpenTelemetry Collector, Datadog Agent, etc.) as **OTLP log records over HTTP/JSON**.

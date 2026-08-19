@@ -19,4 +19,13 @@ const (
 	// pipx surface — diagnostics scraped from pipx CLI stderr on
 	// non-zero exit codes
 	LogCodePipxNonZeroExitDiagnostic LogCode = "agent_software.pipx.non_zero_exit_diagnostic"
+
+	// brew surface — environment conditions that make Homebrew
+	// inventory unavailable rather than failed (brew hard-refuses to
+	// run as root, the normal state for a sudo-started agent)
+	LogCodeBrewRootRefused LogCode = "agent_software.brew.root_refused"
+
+	// swiftpm surface — project-scope conditions detected at collect
+	// time (no Package.swift at or above the working directory)
+	LogCodeSwiftPMNoManifest LogCode = "agent_software.swiftpm.no_manifest"
 )

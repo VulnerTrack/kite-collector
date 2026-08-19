@@ -16,6 +16,10 @@ import (
 func TestLogCodes_FollowConvention(t *testing.T) {
 	codes := []LogCode{
 		LogCodeObservabilitySnapshotMarshal,
+		LogCodeContainersList,
+		LogCodeContainersStats,
+		LogCodeContainersRender,
+		LogCodeContainersSnapshotMarshal,
 		LogCodeEnrollMissingWrapKey,
 		LogCodeEnrollAEADWrap,
 		LogCodeEnrollUpsert,

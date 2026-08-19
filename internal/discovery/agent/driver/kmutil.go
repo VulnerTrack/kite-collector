@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 )
 
 // KmutilShowloaded enumerates loaded macOS kernel extensions via
-// `kmutil showloaded --no-symbols`. Available on macOS 10.15+.
+// `kmutil showloaded`. Available on macOS 11+ (Big Sur introduced kmutil).
 type KmutilShowloaded struct {
 	now    func() time.Time
 	binary string
@@ -37,8 +38,13 @@ func (k *KmutilShowloaded) Name() string { return "darwin-kmutil-showloaded" }
 func (k *KmutilShowloaded) Available() bool { return runtime.GOOS == "darwin" }
 
 // Collect runs kmutil and parses each row into a LoadedDriver.
+//
+// Invoked as plain `kmutil showloaded`: per kmutil(8) the showloaded
+// subcommand accepts --list-only, --no-kernel-components, --sort, etc. —
+// there is no --no-symbols option, and kmutil rejects unknown options
+// with a usage error and exit status 1.
 func (k *KmutilShowloaded) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, k.binary, "showloaded", "--no-symbols")
+	out, err := runWithLimits(ctx, k.binary, "showloaded")
 	if err != nil {
 		return nil, fmt.Errorf("kmutil showloaded: %w", err)
 	}
@@ -60,12 +66,14 @@ func (k *KmutilShowloaded) Collect(ctx context.Context) (*Result, error) {
 }
 
 // ParseKmutilShowloaded parses the column-aligned output of
-// `kmutil showloaded --no-symbols`. Format:
+// `kmutil showloaded`. Format:
 //
 //	Index Refs Address            Size       Wired      Name (Version) UUID <Linked Against>
 //
-// We extract Index, Name, Version. The fixed-column header is detected and
-// skipped; everything else is treated as a row.
+// We extract Index, Name, Version. Real kmutil opens with preamble
+// chatter ("No variant specified, falling back to release") before the
+// column header; anything ahead of the header that does not lead with a
+// numeric Index is skipped as preamble rather than mis-parsed as a row.
 func ParseKmutilShowloaded(raw string) *Result {
 	res := &Result{}
 	scanner := bufio.NewScanner(strings.NewReader(raw))
@@ -79,9 +87,14 @@ func ParseKmutilShowloaded(raw string) *Result {
 		if line == "" {
 			continue
 		}
-		if !headerSeen && strings.HasPrefix(line, "Index Refs") {
-			headerSeen = true
-			continue
+		if !headerSeen {
+			if strings.HasPrefix(line, "Index Refs") {
+				headerSeen = true
+				continue
+			}
+			if !leadsWithIndex(line) {
+				continue // preamble chatter, not a kext row
+			}
 		}
 
 		fields := strings.Fields(line)
@@ -116,6 +129,18 @@ func ParseKmutilShowloaded(raw string) *Result {
 		})
 	}
 	return res
+}
+
+// leadsWithIndex reports whether the line's first whitespace-separated
+// field is an unsigned integer — the shape of a kextstat-style row's
+// Index column.
+func leadsWithIndex(line string) bool {
+	f := strings.Fields(line)
+	if len(f) == 0 {
+		return false
+	}
+	_, err := strconv.ParseUint(f[0], 10, 64)
+	return err == nil
 }
 
 // vendorFromBundleID extracts a guessable vendor from a reverse-DNS bundle ID.

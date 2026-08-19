@@ -220,6 +220,7 @@ type containerSummary struct {
 	Image   string        `json:"Image"`
 	ImageID string        `json:"ImageID"`
 	State   string        `json:"State"`
+	Status  string        `json:"Status"`
 	Names   []string      `json:"Names"`
 	Ports   []portMapping `json:"Ports"`
 	Created int64         `json:"Created"`

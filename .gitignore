@@ -44,6 +44,10 @@ dist/
 # Runtime data
 data/
 
+# Local dev PKI (mTLS agent identity + certs). Contains private keys —
+# must never be committed; regenerate with the dev enrollment flow.
+.kite-dev/
+
 # Claude Code
 .claude/
 /kite-collector

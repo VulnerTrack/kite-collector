@@ -175,19 +175,29 @@ const (
 // security.machine.discovery.source attribute (§4.4.1) and as the
 // discover.<source> span suffix (§4.5).
 var AllowedDiscoverySources = map[string]struct{}{
-	"agent":           {},
-	"arp":             {},
-	"icmp":            {},
-	"tcp_syn":         {},
-	"docker":          {},
-	"cloud.aws":       {},
-	"cloud.gcp":       {},
-	"cloud.azure":     {},
-	"vpn.tailscale":   {},
-	"vpn.netbird":     {},
-	"dns":             {},
-	"ssh-known-hosts": {},
-	"ldap":            {},
+	"agent":       {},
+	"arp":         {},
+	"icmp":        {},
+	"tcp_syn":     {},
+	"docker":      {},
+	"cloud.aws":   {},
+	"cloud.gcp":   {},
+	"cloud.azure": {},
+	// VPN host-discovery source (internal/discovery/vpn): one label per
+	// fabric, emitted as the discovery_source suffix on peers it enumerates.
+	"vpn.tailscale":        {},
+	"vpn.netbird":          {},
+	"vpn.wireguard":        {},
+	"vpn.zerotier":         {},
+	"vpn.ipsec":            {},
+	"vpn.openvpn":          {},
+	"vpn.nebula":           {},
+	"vpn.cisco-anyconnect": {},
+	"vpn.mullvad":          {},
+	"vpn.globalprotect":    {},
+	"dns":                  {},
+	"ssh-known-hosts":      {},
+	"ldap":                 {},
 }
 
 // LDAP/Active Directory machine tag keys per RFC-0121 §5.4. These keys are

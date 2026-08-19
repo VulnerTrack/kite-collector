@@ -33,7 +33,8 @@ func TestParseKmutilShowloaded_RealishOutput(t *testing.T) {
 
 func TestParseKmutilShowloaded_MalformedLineCaptured(t *testing.T) {
 	t.Parallel()
-	raw := "broken-line\n   1   2 0xff 0xff 0xff com.apple.foo (1.0)\n"
+	raw := "Index Refs Address            Size       Wired      Name (Version) UUID <Linked Against>\n" +
+		"broken-line\n   1   2 0xff 0xff 0xff com.apple.foo (1.0)\n"
 	res := ParseKmutilShowloaded(raw)
 	require.Len(t, res.Errs, 1)
 	require.Len(t, res.Drivers, 1)

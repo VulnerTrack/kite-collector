@@ -86,7 +86,9 @@
           "enum": [
             "agent", "arp", "icmp", "tcp_syn", "docker",
             "cloud.aws", "cloud.gcp", "cloud.azure",
-            "vpn.tailscale", "vpn.netbird",
+            "vpn.tailscale", "vpn.netbird", "vpn.wireguard", "vpn.zerotier",
+            "vpn.ipsec", "vpn.openvpn", "vpn.nebula", "vpn.cisco-anyconnect",
+            "vpn.mullvad", "vpn.globalprotect",
             "dns", "ssh-known-hosts", "ldap"
           ]
         }

@@ -373,6 +373,16 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		_, _ = w.Write(buf.Bytes())
 	})
 
+	// Containers page — live Docker/compose observability. The engine host
+	// honors the docker discovery source's configured host when one is set;
+	// otherwise the controller autodetects (KITE_DOCKER_HOST → sockets).
+	dockerHost := ""
+	if opts.BaseConfig != nil {
+		if src, ok := opts.BaseConfig.Discovery.Sources["docker"]; ok {
+			dockerHost = src.Host
+		}
+	}
+	registerContainerRoutes(mux, newContainersController(dockerHost, logger), logger)
 	mux.HandleFunc("POST /api/v1/fleet/discover", func(w http.ResponseWriter, r *http.Request) {
 		handleFleetDiscovery(w, r, st, logger, fleetDiscovery)
 	})

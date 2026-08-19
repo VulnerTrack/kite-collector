@@ -61,6 +61,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/proxmox"
 	"github.com/vulnertrack/kite-collector/internal/discovery/snmp"
 	"github.com/vulnertrack/kite-collector/internal/discovery/unifi"
+	vpndisc "github.com/vulnertrack/kite-collector/internal/discovery/vpn"
 	"github.com/vulnertrack/kite-collector/internal/discovery/vps"
 	wazuhdisc "github.com/vulnertrack/kite-collector/internal/discovery/wazuh"
 	"github.com/vulnertrack/kite-collector/internal/emitter"
@@ -383,6 +384,7 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(dockerdisc.New())
 	registry.Register(osquerydisc.New())
 	registry.Register(unifi.New())
+	registry.Register(vpndisc.New())
 	registry.Register(proxmox.New())
 	registry.Register(snmp.New())
 	registry.Register(ldapdisc.New())
@@ -1141,6 +1143,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	registry.Register(dockerdisc.New())
 	registry.Register(osquerydisc.New())
 	registry.Register(unifi.New())
+	registry.Register(vpndisc.New())
 	registry.Register(proxmox.New())
 	registry.Register(snmp.New())
 	registry.Register(ldapdisc.New())

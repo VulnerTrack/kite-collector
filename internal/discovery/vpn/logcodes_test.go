@@ -1,4 +1,4 @@
-package software
+package vpn
 
 import (
 	"strings"
@@ -7,21 +7,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// allLogCodes is the single source of truth for the convention and
+// uniqueness checks — add every new LogCode here.
+var allLogCodes = []LogCode{
+	LogCodeEnumeratorFailed,
+	LogCodeHostCapReached,
+	LogCodeDiscoveryComplete,
+	LogCodeTailscaleCLIFailed,
+	LogCodeTailscaleAPIFailed,
+	LogCodeTailscaleDecodeFail,
+	LogCodeWireGuardDumpFailed,
+	LogCodeZeroTierCLIFailed,
+	LogCodeNetBirdCLIFailed,
+	LogCodeNetBirdAPIFailed,
+	LogCodeIPSecCLIFailed,
+	LogCodeOpenVPNStatusReadFailed,
+	LogCodeNebulaConfigReadFailed,
+}
+
 func TestLogCodes_FollowConvention(t *testing.T) {
-	codes := []LogCode{
-		LogCodeRegistryCollectorFailed,
-		LogCodePipxNonZeroExitDiagnostic,
-		LogCodeBrewRootRefused,
-		LogCodeSwiftPMNoManifest,
-	}
-	for _, c := range codes {
+	for _, c := range allLogCodes {
 		s := string(c)
 		t.Run(s, func(t *testing.T) {
 			parts := strings.Split(s, ".")
 			assert.GreaterOrEqual(t, len(parts), 3,
 				"code %q must have at least 3 dot-separated segments", s)
-			assert.Equal(t, "agent_software", parts[0],
-				"code %q must lead with the agent_software namespace prefix", s)
+			assert.Equal(t, "vpn_discovery", parts[0],
+				"code %q must lead with the vpn_discovery namespace prefix", s)
 			assert.Equal(t, strings.ToLower(s), s,
 				"code %q must be all lowercase for grep-friendliness", s)
 			assert.NotContains(t, s, " ",
@@ -32,13 +44,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 
 func TestLogCodes_AreUnique(t *testing.T) {
 	seen := map[LogCode]bool{}
-	all := []LogCode{
-		LogCodeRegistryCollectorFailed,
-		LogCodePipxNonZeroExitDiagnostic,
-		LogCodeBrewRootRefused,
-		LogCodeSwiftPMNoManifest,
-	}
-	for _, c := range all {
+	for _, c := range allLogCodes {
 		assert.False(t, seen[c],
 			"duplicate log code %q — every call site must have a unique identifier", string(c))
 		seen[c] = true

@@ -3183,6 +3183,105 @@ kbd {
   margin-top: 4px;
 }
 
+/* ------------------------------------------------------------------ */
+/* Containers page — live Docker/compose observability                 */
+/* ------------------------------------------------------------------ */
+.containers-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+.containers-card { margin-top: 1rem; }
+.containers-group-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+.containers-monitor-note { margin: 0.5rem 0 0; }
+.containers-invalid-graphs {
+  margin: 0.5rem 0 0;
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+  font-size: 0.85rem;
+}
+.containers-graph-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.75rem 0 0;
+}
+.containers-graph-input {
+  flex: 1 1 22rem;
+  max-width: 34rem;
+  padding: 0.35rem 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+.containers-table td { vertical-align: middle; }
+.containers-table .state-icon {
+  display: inline-block;
+  min-width: 1.6rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+.metric-col code { font-size: 0.75rem; }
+.metric-col-remove {
+  text-decoration: none;
+  font-weight: 700;
+  opacity: 0.7;
+}
+.metric-col-remove:hover { opacity: 1; }
+.metric-cell { white-space: nowrap; }
+.metric-cell .metric-value {
+  display: inline-block;
+  min-width: 4rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+.metric-spark { vertical-align: middle; }
+.container-detail-meta { margin: 0.25rem 0; }
+.container-graphs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+.container-graph {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+}
+.container-graph .metric-spark {
+  width: 100%;
+  height: 3rem;
+}
+.container-graph-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+.container-graph-current {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.container-paths summary { cursor: pointer; }
+.container-paths table { margin-top: 0.5rem; }
+.layers-table .layer-cmd {
+  display: inline-block;
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-size: 0.8rem;
+}
+.layer-missing td { opacity: 0.65; }
+
 /* ---------------------------------------------------------------------------
  * Sidebar resource tree (dashboard redesign)
  *

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/osutil"
@@ -27,6 +28,11 @@ const (
 	// execTimeout is the wall-clock limit for any single package manager
 	// invocation.
 	execTimeout = 60 * time.Second
+
+	// maxStderrErrBytes bounds the stderr excerpt folded into an
+	// exit-status error. Big enough for real diagnostics ("Running
+	// Homebrew as root is…"), small enough for a single log line.
+	maxStderrErrBytes = 512
 )
 
 // cappedBuffer is a write-only bytes.Buffer that silently drops anything
@@ -54,19 +60,40 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 }
 
 // runWithLimits executes a command with a 60-second timeout and reads at most
-// 64 MB of stdout. A non-zero exit code is folded into the returned error;
-// callers that want to tolerate exit codes (e.g. composer/pipx, which exit
-// 1 on the benign "no packages" condition) should use
-// runWithLimitsTolerateExit instead.
+// 64 MB of stdout. A non-zero exit code is folded into the returned error —
+// together with a bounded excerpt of the tool's stderr, so a collector
+// failure is diagnosable from its log line alone; callers that want to
+// tolerate exit codes (e.g. composer/pipx, which exit 1 on the benign
+// "no packages" condition) should use runWithLimitsTolerateExit instead.
 func runWithLimits(ctx context.Context, name string, args ...string) ([]byte, error) {
-	out, _, exitCode, err := runWithLimitsTolerateExit(ctx, name, args...)
+	out, stderr, exitCode, err := runWithLimitsTolerateExit(ctx, name, args...)
 	if err != nil {
 		return nil, err
 	}
 	if exitCode != 0 {
-		return nil, fmt.Errorf("wait %s: exit status %d", name, exitCode)
+		return nil, exitError(name, exitCode, stderr)
 	}
 	return out, nil
+}
+
+// exitError renders a non-zero exit as an error carrying the tool's
+// stderr excerpt. Shared by runWithLimits and by tolerant-exec callers
+// that decide a non-zero exit is genuinely fatal.
+func exitError(name string, exitCode int, stderr []byte) error {
+	if tail := stderrTail(stderr); tail != "" {
+		return fmt.Errorf("wait %s: exit status %d: %s", name, exitCode, tail)
+	}
+	return fmt.Errorf("wait %s: exit status %d", name, exitCode)
+}
+
+// stderrTail collapses captured stderr into a single space-separated
+// line bounded to maxStderrErrBytes, suitable for embedding in an error.
+func stderrTail(stderr []byte) string {
+	s := strings.Join(strings.Fields(string(stderr)), " ")
+	if len(s) > maxStderrErrBytes {
+		s = s[:maxStderrErrBytes] + "…"
+	}
+	return s
 }
 
 // runWithLimitsTolerateExit is the form used by collectors whose underlying

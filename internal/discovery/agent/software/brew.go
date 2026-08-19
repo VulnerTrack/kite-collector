@@ -2,9 +2,11 @@ package software
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 
@@ -29,10 +31,28 @@ func (b *Brew) Available() bool {
 }
 
 // Collect runs brew list --versions and returns parsed results.
+//
+// Homebrew hard-refuses to run as root ("Running Homebrew as root is
+// extremely dangerous and no longer supported") and exits 1 — the
+// normal state for a privileged agent started with sudo. That is an
+// environment condition, not a collector failure: it is reported once
+// as an actionable Warn and the inventory is returned empty. Any other
+// non-zero exit surfaces as an error carrying brew's stderr.
 func (b *Brew) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "brew", "list", "--versions")
+	out, stderr, exitCode, err := runWithLimitsTolerateExit(ctx, "brew", "list", "--versions")
 	if err != nil {
 		return nil, fmt.Errorf("brew list --versions: %w", err)
+	}
+	if exitCode != 0 {
+		if bytes.Contains(stderr, []byte("Running Homebrew as root")) {
+			slog.Warn(
+				"software: brew refuses to run as root; skipping Homebrew inventory",
+				"code", string(LogCodeBrewRootRefused),
+				"hint", "run the agent as the Homebrew-owning user (or without sudo) to inventory brew packages",
+			)
+			return &Result{}, nil
+		}
+		return nil, fmt.Errorf("brew list --versions: %w", exitError("brew", exitCode, stderr))
 	}
 	return ParseBrewOutput(string(out)), nil
 }
