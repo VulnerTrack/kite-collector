@@ -250,6 +250,107 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		return renderFleetDeploymentFragment(w, ctx, st, opts, fleetDiscovery)
 	}))
 
+	// Views — saved joins rendered as ordinary grids, plus the builder.
+	mux.HandleFunc("GET /views/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		slug := r.PathValue("slug")
+		limit, offset := parsePaging(r)
+		render := func(buf io.Writer, ctx context.Context) error {
+			return renderViewFragment(buf, ctx, st, slug, limit, offset)
+		}
+		writeResult := func(renderErr error, buf *bytes.Buffer) bool {
+			if renderErr == nil {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_, _ = w.Write(buf.Bytes())
+				return true
+			}
+			if errors.Is(renderErr, store.ErrNotFound) {
+				http.NotFound(w, r)
+				return true
+			}
+			logger.Error("dashboard: render view page",
+				"code", string(LogCodeServeTabPageRender),
+				"view_slug", slug,
+				"error", renderErr)
+			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+			return true
+		}
+		var buf bytes.Buffer
+		if r.Header.Get("HX-Request") == "true" {
+			writeResult(render(&buf, r.Context()), &buf)
+			return
+		}
+		writeResult(renderIndexPage(&buf, "views:"+slug, func(fragBuf io.Writer) error {
+			return render(fragBuf, r.Context())
+		}), &buf)
+	})
+
+	mux.HandleFunc("GET /views/new", func(w http.ResponseWriter, r *http.Request) {
+		render := func(buf io.Writer) error {
+			return renderViewBuilderFragment(buf, r.Context(), st, builderSelection{}, "")
+		}
+		if r.Header.Get("HX-Request") == "true" {
+			renderFragment(w, "view-builder", render)
+			return
+		}
+		var buf bytes.Buffer
+		if renderErr := renderIndexPage(&buf, "views-new", render); renderErr != nil {
+			logger.Error("dashboard: render view builder page",
+				"code", string(LogCodeServeTabPageRender),
+				"error", renderErr)
+			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(buf.Bytes())
+	})
+
+	// Builder re-render on every form change (server-driven form).
+	mux.HandleFunc("POST /fragments/views/builder", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		sel := parseBuilderForm(r.PostForm)
+		renderFragment(w, "view-builder", func(buf io.Writer) error {
+			return renderViewBuilderFragment(buf, r.Context(), st, sel, "")
+		})
+	})
+
+	// Save a builder selection as a named view. Success redirects (via
+	// HX-Redirect for HTMX callers) to the new view; validation problems
+	// re-render the builder inline with the error.
+	mux.HandleFunc("POST /api/v1/views", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		sel := parseBuilderForm(r.PostForm)
+		slug, saveErr := saveViewFromSelection(r.Context(), st, sel)
+		if saveErr == nil {
+			if r.Header.Get("HX-Request") == "true" {
+				w.Header().Set("HX-Redirect", "/views/"+slug)
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			http.Redirect(w, r, "/views/"+slug, http.StatusSeeOther)
+			return
+		}
+		message := saveErr.Error()
+		if !errors.Is(saveErr, errViewValidation) {
+			if sqlite.ErrIsUniqueViolation(saveErr) {
+				message = "a view with that name already exists"
+			} else {
+				logger.Error("dashboard: save view",
+					"code", string(LogCodeServeFragmentRender),
+					"error", saveErr)
+				message = "could not save the view"
+			}
+		}
+		renderFragment(w, "view-builder", func(buf io.Writer) error {
+			return renderViewBuilderFragment(buf, r.Context(), st, sel, message)
+		})
+	})
+
 	// Docs — copy-paste snippets that hand an external AI agent (or any
 	// script) read-only access to kite's data. Registered outside
 	// serveTabRoute because the curl examples embed the request's Host so

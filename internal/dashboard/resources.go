@@ -68,12 +68,27 @@ func sidebarGroups() []sidebarGroup {
 			{Label: "Observability", Href: "/observability", Tab: "observability"},
 			{Label: "Docs", Href: "/docs", Tab: "docs"},
 		}},
+		{Title: "Views", Entries: viewSidebarEntries()},
 		{Title: "Settings", Entries: []sidebarEntry{
 			{Label: "Onboarding", Href: "/onboarding", Tab: "onboarding"},
 			{Label: "Mass deployment", Href: "/fleet", Tab: "fleet"},
 			{Label: "Certificates", Href: "/certificates", Tab: "certificates"},
 		}},
 	}
+}
+
+
+// viewSidebarEntries lists the built-in views plus the builder link. The
+// counted sidebar variant splices saved views in after the built-ins.
+func viewSidebarEntries() []sidebarEntry {
+	entries := make([]sidebarEntry, 0, 4)
+	for _, v := range builtinViews() {
+		entries = append(entries, sidebarEntry{
+			Label: v.Name, Href: "/views/" + v.Slug, Tab: "views:" + v.Slug, Count: -1,
+		})
+	}
+	entries = append(entries, sidebarEntry{Label: "New view", Href: "/views/new", Tab: "views-new", Count: -1})
+	return entries
 }
 
 // sidebarTreeView is the data model for sidebarTreeTemplate.
@@ -196,6 +211,26 @@ func renderSidebarTreeFragment(w io.Writer, ctx context.Context, st store.Store,
 			}
 			if n, ok := counts[e.Table]; ok {
 				e.Count = n
+			}
+		}
+	}
+
+	// Saved views join the Views group between the built-ins and "New view".
+	if svs, ok := st.(store.SavedViewStore); ok {
+		if saved, listErr := svs.ListSavedViews(ctx); listErr == nil && len(saved) > 0 {
+			for gi := range groups {
+				if groups[gi].Title != "Views" {
+					continue
+				}
+				entries := groups[gi].Entries
+				tail := entries[len(entries)-1] // "New view"
+				entries = entries[:len(entries)-1]
+				for _, sv := range saved {
+					entries = append(entries, sidebarEntry{
+						Label: sv.Name, Href: "/views/" + sv.Slug, Tab: "views:" + sv.Slug, Count: -1,
+					})
+				}
+				groups[gi].Entries = append(entries, tail)
 			}
 		}
 	}

@@ -266,3 +266,109 @@ func TestFacetTable_UnknownTableRejected(t *testing.T) {
 	_, err := s.FacetTable(context.Background(), "definitely_not_a_table", 20, 5)
 	assert.ErrorIs(t, err, store.ErrUnknownTable)
 }
+
+func TestListJoinedRows_LeftKeepsUnmatchedBaseRows(t *testing.T) {
+	s := newTestStore(t)
+	machine := seedMachineWithChildren(t, s) // has software; no findings
+	clean := makeMachine("join-clean-host", model.MachineTypeServer)
+	require.NoError(t, s.UpsertMachine(context.Background(), clean))
+
+	rows, err := s.ListJoinedRows(context.Background(), store.JoinFilter{
+		Base: "machines", Join: "installed_software", Type: store.JoinLeft,
+		OnBase: "id", OnJoin: "machine_id",
+		Columns: []store.JoinColumn{
+			{Table: "machines", Column: "hostname"},
+			{Table: "installed_software", Column: "software_name"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "left join keeps the machine with no software")
+
+	byHost := map[string]any{}
+	for _, row := range rows {
+		require.Len(t, row.Columns, 2)
+		assert.Equal(t, "machines.hostname", row.Columns[0].Name)
+		assert.Equal(t, "installed_software.software_name", row.Columns[1].Name)
+		host, _ := row.Columns[0].Value.(string)
+		byHost[host] = row.Columns[1].Value
+	}
+	assert.NotNil(t, byHost[machine.Hostname])
+	assert.Nil(t, byHost[clean.Hostname], "unmatched joined column must be NULL")
+
+	// Inner join drops the machine without software.
+	rows, err = s.ListJoinedRows(context.Background(), store.JoinFilter{
+		Base: "machines", Join: "installed_software", Type: store.JoinInner,
+		OnBase: "id", OnJoin: "machine_id",
+		Columns: []store.JoinColumn{{Table: "machines", Column: "hostname"}},
+	})
+	require.NoError(t, err)
+	assert.Len(t, rows, 1)
+}
+
+func TestListJoinedRows_RejectsUnknownIdentifiers(t *testing.T) {
+	s := newTestStore(t)
+	base := store.JoinFilter{
+		Base: "machines", Join: "installed_software", Type: store.JoinLeft,
+		OnBase: "id", OnJoin: "machine_id",
+		Columns: []store.JoinColumn{{Table: "machines", Column: "hostname"}},
+	}
+
+	bad := base
+	bad.Join = "no_such_table"
+	_, err := s.ListJoinedRows(context.Background(), bad)
+	assert.ErrorIs(t, err, store.ErrUnknownTable)
+
+	bad = base
+	bad.OnJoin = "no_such_column"
+	_, err = s.ListJoinedRows(context.Background(), bad)
+	assert.ErrorIs(t, err, store.ErrUnknownColumn)
+
+	bad = base
+	bad.Columns = []store.JoinColumn{{Table: "machines", Column: "no_such_column"}}
+	_, err = s.ListJoinedRows(context.Background(), bad)
+	assert.ErrorIs(t, err, store.ErrUnknownColumn)
+
+	bad = base
+	bad.Columns = nil
+	_, err = s.ListJoinedRows(context.Background(), bad)
+	assert.Error(t, err)
+}
+
+func TestSavedViews_RoundTrip(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	view := store.SavedView{
+		Name: "Machines without software",
+		Slug: "machines-without-software",
+		Join: store.JoinFilter{
+			Base: "machines", Join: "installed_software", Type: store.JoinLeft,
+			OnBase: "id", OnJoin: "machine_id",
+			Columns: []store.JoinColumn{
+				{Table: "machines", Column: "hostname"},
+				{Table: "installed_software", Column: "software_name"},
+			},
+		},
+	}
+	require.NoError(t, s.SaveView(ctx, view))
+
+	got, err := s.GetSavedViewBySlug(ctx, view.Slug)
+	require.NoError(t, err)
+	assert.Equal(t, view.Name, got.Name)
+	assert.Equal(t, store.JoinLeft, got.Join.Type)
+	assert.Equal(t, view.Join.Columns, got.Join.Columns)
+	assert.False(t, got.CreatedAt.IsZero())
+
+	// Duplicate slug is a unique violation the handler can translate.
+	err = s.SaveView(ctx, view)
+	require.Error(t, err)
+	assert.True(t, ErrIsUniqueViolation(err))
+
+	all, err := s.ListSavedViews(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+
+	require.NoError(t, s.DeleteSavedView(ctx, view.Slug))
+	_, err = s.GetSavedViewBySlug(ctx, view.Slug)
+	assert.ErrorIs(t, err, store.ErrNotFound)
+}

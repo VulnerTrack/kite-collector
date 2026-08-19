@@ -571,3 +571,105 @@ func TestRoute_GET_MachineByID_UnknownIDReturns404(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
+
+// TestRoute_GET_ViewBySlug_BuiltinLeftJoinRendersSQLAndRows — the built-in
+// "Machine findings coverage" view renders its description, the join SQL,
+// and — because it is a LEFT JOIN — keeps machines that have no findings.
+func TestRoute_GET_ViewBySlug_BuiltinLeftJoinRendersSQLAndRows(t *testing.T) {
+	st := testStore(t)
+	seedMachineResource(t, st) // resource-host: one finding
+	// A machine with no findings must still appear in the left join.
+	_, _, err := st.UpsertMachines(context.Background(), []model.Machine{{
+		ID: uuid.Must(uuid.NewV7()), Hostname: "clean-host",
+		MachineType: model.MachineTypeServer, DiscoverySource: "test",
+		IsAuthorized: model.AuthorizationUnknown, IsManaged: model.ManagedUnknown,
+		FirstSeenAt: time.Now().UTC(), LastSeenAt: time.Now().UTC(),
+	}})
+	require.NoError(t, err)
+	handler := Serve(":0", st, testContext(), nil, Options{}).Handler
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"/views/machine-findings-coverage", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "Machine findings coverage")
+	assert.Contains(t, body, "LEFT JOIN config_findings", "the SQL behind the view stays visible")
+	assert.Contains(t, body, "resource-host")
+	assert.Contains(t, body, "SSH root login permitted")
+	assert.Contains(t, body, "clean-host", "left join keeps machines with no findings")
+
+	// Unknown slugs 404.
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/views/nope", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TestRoute_ViewBuilder_PreviewAndSave — the builder renders with FK-derived
+// defaults, previews the join, and Save persists a view that then renders at
+// its own URL and appears in the sidebar tree.
+func TestRoute_ViewBuilder_PreviewAndSave(t *testing.T) {
+	st := testStore(t)
+	seedMachineResource(t, st)
+	handler := Serve(":0", st, testContext(), nil, Options{}).Handler
+
+	// Builder page with defaults.
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/views/new", nil)
+	req.Header.Set("HX-Request", "true")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `id="view-builder"`)
+	assert.Contains(t, body, "Left &mdash; keep all", "join type is a plain-language toggle")
+
+	// Save a view.
+	form := url.Values{
+		"base":     {"machines"},
+		"join":     {"config_findings"},
+		"jointype": {"left"},
+		"onbase":   {"id"},
+		"onjoin":   {"machine_id"},
+		"cols":     {"machines.hostname", "config_findings.title"},
+		"name":     {"Findings per host"},
+	}
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost,
+		"/api/v1/views", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Equal(t, "/views/findings-per-host", rec.Header().Get("HX-Redirect"))
+
+	// The saved view renders at its slug.
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"/views/findings-per-host", nil)
+	req.Header.Set("HX-Request", "true")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "resource-host")
+
+	// And appears in the counted sidebar tree.
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet,
+		"/fragments/sidebar-tree", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Findings per host")
+
+	// A validation problem re-renders the builder with the error inline.
+	form.Set("name", "")
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost,
+		"/api/v1/views", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "name this view before saving")
+}

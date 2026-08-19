@@ -79,6 +79,68 @@ type RowsFilter struct {
 	Offset      int
 }
 
+// JoinType selects how ListJoinedRows combines the base and joined tables.
+type JoinType string
+
+// Join types supported by ListJoinedRows. Left keeps every base row —
+// unmatched join columns come back NULL — which is what coverage-style
+// views ("machines with and without findings") rely on.
+const (
+	JoinInner JoinType = "inner"
+	JoinLeft  JoinType = "left"
+)
+
+// JoinColumn addresses one output column of a join: a column of either the
+// base or the joined table.
+type JoinColumn struct {
+	Table  string
+	Column string
+}
+
+// JoinFilter describes a two-table equi-join over content tables. Every
+// identifier — both tables, the ON columns, and each output column — is
+// validated against the introspected catalog before any SQL is constructed.
+type JoinFilter struct {
+	Base string
+	Join string
+	Type JoinType
+	// ON: Join.OnJoin = Base.OnBase.
+	OnBase string
+	OnJoin string
+	// Columns is the output projection; it must be non-empty and every
+	// entry must belong to Base or Join.
+	Columns []JoinColumn
+	Limit   int
+	Offset  int
+}
+
+// SavedView is a user-defined two-table join view created in the dashboard's
+// view builder. Slug is the URL identity (/views/{slug}); the JoinFilter's
+// Limit/Offset are ignored at rest and supplied per render.
+type SavedView struct {
+	ID        uuid.UUID
+	Name      string
+	Slug      string
+	Join      JoinFilter
+	CreatedAt time.Time
+}
+
+// SavedViewStore is the optional persistence surface for saved views. The
+// dashboard type-asserts for it: stores that do not implement it simply get
+// a read-only Views experience (built-in views keep working).
+type SavedViewStore interface {
+	// ListSavedViews returns every saved view ordered by name.
+	ListSavedViews(ctx context.Context) ([]SavedView, error)
+	// GetSavedViewBySlug returns the saved view with the given slug, or
+	// ErrNotFound.
+	GetSavedViewBySlug(ctx context.Context, slug string) (*SavedView, error)
+	// SaveView inserts a new saved view. Name and Slug must be unique.
+	SaveView(ctx context.Context, view SavedView) error
+	// DeleteSavedView removes the saved view with the given slug; deleting
+	// an unknown slug is a no-op.
+	DeleteSavedView(ctx context.Context, slug string) error
+}
+
 // FacetValue is one bucket of a column facet: a distinct value and how many
 // rows carry it. Value is the stringified cell; the empty string is the
 // NULL-or-'' bucket.
@@ -293,6 +355,12 @@ type Store interface {
 	// TableSchema.RowCount), or the exact filtered count when WhereColumn is
 	// set.
 	ListRows(ctx context.Context, filter RowsFilter) (rows []Row, total int64, err error)
+
+	// ListJoinedRows executes a validated two-table equi-join and returns a
+	// page of rows. Output column names are qualified as "table.column".
+	// Rows are ordered by the base table's primary key for stable paging;
+	// Limit is capped at IntrospectionRowLimit.
+	ListJoinedRows(ctx context.Context, filter JoinFilter) ([]Row, error)
 
 	// FacetTable computes value facets for the named content table: for each
 	// column whose distinct-value count is at most maxDistinct, the top

@@ -777,3 +777,107 @@ func stringifyValue(v any) string {
 		return fmt.Sprintf("%v", v)
 	}
 }
+
+// ListJoinedRows executes a validated two-table equi-join. Every identifier
+// is checked against the introspected catalog before SQL is constructed;
+// values never enter the SQL text. Output columns are named "table.column".
+func (s *SQLiteStore) ListJoinedRows(ctx context.Context, filter store.JoinFilter) ([]store.Row, error) {
+	baseSchema, err := s.DescribeTable(ctx, filter.Base)
+	if err != nil {
+		return nil, err
+	}
+	joinSchema, err := s.DescribeTable(ctx, filter.Join)
+	if err != nil {
+		return nil, err
+	}
+
+	joinKeyword := ""
+	switch filter.Type {
+	case store.JoinInner, "":
+		joinKeyword = "JOIN"
+	case store.JoinLeft:
+		joinKeyword = "LEFT JOIN"
+	default:
+		return nil, fmt.Errorf("unsupported join type %q", filter.Type)
+	}
+
+	if !columnExists(baseSchema.Columns, filter.OnBase) {
+		return nil, fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, filter.Base, filter.OnBase)
+	}
+	if !columnExists(joinSchema.Columns, filter.OnJoin) {
+		return nil, fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, filter.Join, filter.OnJoin)
+	}
+	if len(filter.Columns) == 0 {
+		return nil, fmt.Errorf("join requires at least one output column")
+	}
+
+	selects := make([]string, 0, len(filter.Columns))
+	names := make([]string, 0, len(filter.Columns))
+	for _, col := range filter.Columns {
+		var alias string
+		switch col.Table {
+		case filter.Base:
+			if !columnExists(baseSchema.Columns, col.Column) {
+				return nil, fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, col.Table, col.Column)
+			}
+			alias = "b"
+		case filter.Join:
+			if !columnExists(joinSchema.Columns, col.Column) {
+				return nil, fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, col.Table, col.Column)
+			}
+			alias = "j"
+		default:
+			return nil, fmt.Errorf("%w: %s is neither the base nor the joined table", store.ErrUnknownTable, col.Table)
+		}
+		selects = append(selects, alias+"."+identQuote(col.Column))
+		names = append(names, col.Table+"."+col.Column)
+	}
+
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = store.IntrospectionDefaultPageSize
+	}
+	if limit > store.IntrospectionRowLimit {
+		limit = store.IntrospectionRowLimit
+	}
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := `SELECT ` + strings.Join(selects, ", ") +
+		` FROM ` + identQuote(baseSchema.Name) + ` b ` +
+		joinKeyword + ` ` + identQuote(joinSchema.Name) + ` j ON j.` +
+		identQuote(filter.OnJoin) + ` = b.` + identQuote(filter.OnBase) // #nosec G202 -- identifiers validated above
+	if len(baseSchema.PrimaryKey) > 0 {
+		query += ` ORDER BY b.` + identQuote(baseSchema.PrimaryKey[0])
+	}
+	query += ` LIMIT ? OFFSET ?`
+
+	rows, err := s.db.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("join %s/%s: %w", filter.Base, filter.Join, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var result []store.Row
+	for rows.Next() {
+		values := make([]any, len(names))
+		ptrs := make([]any, len(names))
+		for i := range values {
+			ptrs[i] = &values[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, fmt.Errorf("scan join row: %w", err)
+		}
+		row := store.Row{PrimaryKey: map[string]string{}}
+		for i, name := range names {
+			row.Columns = append(row.Columns, store.ColumnValue{Name: name, Value: values[i]})
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate join rows: %w", err)
+	}
+	return result, nil
+}

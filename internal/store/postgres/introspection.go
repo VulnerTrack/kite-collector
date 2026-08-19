@@ -752,3 +752,117 @@ func (s *PostgresStore) FacetTable(ctx context.Context, table string, maxDistinc
 	}
 	return facets, nil
 }
+
+// ListJoinedRows executes a validated two-table equi-join. Every identifier
+// is checked against the introspected catalog before SQL is constructed;
+// values never enter the SQL text. Output columns are named "table.column".
+func (s *PostgresStore) ListJoinedRows(ctx context.Context, filter store.JoinFilter) ([]store.Row, error) {
+	var result []store.Row
+	err := s.withIntrospectionTx(ctx, func(tx pgx.Tx) error {
+		names, err := listTableNames(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if !containsString(names, filter.Base) || !containsString(names, filter.Join) {
+			return store.ErrUnknownTable
+		}
+		baseSchema, err := describeTable(ctx, tx, filter.Base)
+		if err != nil {
+			return err
+		}
+		joinSchema, err := describeTable(ctx, tx, filter.Join)
+		if err != nil {
+			return err
+		}
+
+		joinKeyword := ""
+		switch filter.Type {
+		case store.JoinInner, "":
+			joinKeyword = "JOIN"
+		case store.JoinLeft:
+			joinKeyword = "LEFT JOIN"
+		default:
+			return fmt.Errorf("unsupported join type %q", filter.Type)
+		}
+
+		if !columnExists(baseSchema.Columns, filter.OnBase) {
+			return fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, filter.Base, filter.OnBase)
+		}
+		if !columnExists(joinSchema.Columns, filter.OnJoin) {
+			return fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, filter.Join, filter.OnJoin)
+		}
+		if len(filter.Columns) == 0 {
+			return fmt.Errorf("join requires at least one output column")
+		}
+
+		selects := make([]string, 0, len(filter.Columns))
+		outNames := make([]string, 0, len(filter.Columns))
+		for _, col := range filter.Columns {
+			var alias string
+			switch col.Table {
+			case filter.Base:
+				if !columnExists(baseSchema.Columns, col.Column) {
+					return fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, col.Table, col.Column)
+				}
+				alias = "b"
+			case filter.Join:
+				if !columnExists(joinSchema.Columns, col.Column) {
+					return fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, col.Table, col.Column)
+				}
+				alias = "j"
+			default:
+				return fmt.Errorf("%w: %s is neither the base nor the joined table", store.ErrUnknownTable, col.Table)
+			}
+			selects = append(selects, alias+"."+identQuote(col.Column))
+			outNames = append(outNames, col.Table+"."+col.Column)
+		}
+
+		limit := filter.Limit
+		if limit <= 0 {
+			limit = store.IntrospectionDefaultPageSize
+		}
+		if limit > store.IntrospectionRowLimit {
+			limit = store.IntrospectionRowLimit
+		}
+		offset := filter.Offset
+		if offset < 0 {
+			offset = 0
+		}
+
+		query := `SELECT ` + strings.Join(selects, ", ") +
+			` FROM ` + identQuote(baseSchema.Name) + ` b ` +
+			joinKeyword + ` ` + identQuote(joinSchema.Name) + ` j ON j.` +
+			identQuote(filter.OnJoin) + ` = b.` + identQuote(filter.OnBase) // #nosec G202 -- identifiers validated above
+		if len(baseSchema.PrimaryKey) > 0 {
+			query += ` ORDER BY b.` + identQuote(baseSchema.PrimaryKey[0])
+		}
+		query += ` LIMIT $1 OFFSET $2`
+
+		rows, err := tx.Query(ctx, query, limit, offset)
+		if err != nil {
+			return fmt.Errorf("join %s/%s: %w", filter.Base, filter.Join, err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			values, err := rows.Values()
+			if err != nil {
+				return fmt.Errorf("scan join row: %w", err)
+			}
+			row := store.Row{PrimaryKey: map[string]string{}}
+			for i, name := range outNames {
+				var v any
+				if i < len(values) {
+					v = values[i]
+				}
+				row.Columns = append(row.Columns, store.ColumnValue{Name: name, Value: v})
+			}
+			result = append(result, row)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
