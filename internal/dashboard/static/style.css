@@ -3425,3 +3425,56 @@ details.sidenav-alltables .sidenav-tables {
   cursor: pointer;
   padding: 2px 6px;
 }
+
+/* ---------------------------------------------------------------------------
+ * Grid copy bar — appears above a data grid once rows are selected.
+ * ------------------------------------------------------------------------- */
+.grid-copy-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  background: rgba(225, 29, 72, 0.05);
+  border: 1px solid rgba(225, 29, 72, 0.16);
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+.grid-copy-count {
+  font-weight: 700;
+  color: var(--palette-primary-dark);
+}
+.grid-copy-label { color: var(--palette-text-disabled); }
+.grid-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--palette-grey-700);
+  background: rgba(145, 158, 171, 0.1);
+  border: 1px solid rgba(145, 158, 171, 0.2);
+  cursor: pointer;
+}
+.grid-copy-btn:hover { background: rgba(145, 158, 171, 0.18); }
+.grid-copy-select {
+  width: auto;
+  display: inline-block;
+  padding: 4px 28px 4px 10px;
+  font-size: 0.76rem;
+  border-radius: 8px;
+  margin-left: 6px;
+}
+.grid-copy-clear {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--palette-grey-600);
+  cursor: pointer;
+}

@@ -190,6 +190,8 @@ function initDataGrids(root) {
       paginationCounter: 'rows',
       movableColumns: true,
       resizableColumns: true,
+      selectableRows: true,
+      selectableRowsPersistence: false,
       placeholder: 'No rows',
       // columnDefaults applies to every column, including those parsed
       // from <thead> on HTML-table init. autoColumnsDefinitions only
@@ -211,7 +213,129 @@ function initDataGrids(root) {
         htmx.process(host);
       }
     });
+    attachCopyBar(host, instance);
   });
+}
+
+// --- Grid copy affordances -------------------------------------------------
+// Selected rows (or the visible grid) copy to the clipboard as CSV, TSV,
+// Markdown, or JSON; a single column copies as one value per line. The bar
+// appears above a grid once rows are selected.
+function gridPlainText(value) {
+  if (value === null || value === undefined) return '';
+  var div = document.createElement('div');
+  div.innerHTML = String(value);
+  return div.textContent || '';
+}
+function gridColumnDefs(instance) {
+  return instance.getColumnDefinitions().filter(function(def) { return !!def.field; });
+}
+function gridRowsToText(defs, rows, format) {
+  var headers = defs.map(function(def) { return gridPlainText(def.title || def.field); });
+  var table = rows.map(function(row) {
+    return defs.map(function(def) { return gridPlainText(row[def.field]); });
+  });
+  if (format === 'json') {
+    return JSON.stringify(table.map(function(vals) {
+      var obj = {};
+      headers.forEach(function(h, i) { obj[h] = vals[i]; });
+      return obj;
+    }), null, 2);
+  }
+  if (format === 'tsv') {
+    return [headers.join('\t')].concat(table.map(function(vals) { return vals.join('\t'); })).join('\n');
+  }
+  if (format === 'markdown') {
+    var lines = ['| ' + headers.join(' | ') + ' |',
+                 '| ' + headers.map(function() { return '---'; }).join(' | ') + ' |'];
+    table.forEach(function(vals) {
+      lines.push('| ' + vals.map(function(v) { return v.replace(/\|/g, '\\|'); }).join(' | ') + ' |');
+    });
+    return lines.join('\n');
+  }
+  var esc = function(v) { return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  return [headers.map(esc).join(',')].concat(table.map(function(vals) {
+    return vals.map(esc).join(',');
+  })).join('\n');
+}
+function gridCopy(text, btn) {
+  if (!navigator.clipboard) return;
+  navigator.clipboard.writeText(text).then(function() {
+    var prev = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(function() { btn.textContent = prev; }, 1200);
+  });
+}
+function attachCopyBar(host, instance) {
+  if (host.previousElementSibling && host.previousElementSibling.classList &&
+      host.previousElementSibling.classList.contains('grid-copy-bar')) {
+    return;
+  }
+  var bar = document.createElement('div');
+  bar.className = 'grid-copy-bar';
+  bar.style.display = 'none';
+  host.parentNode.insertBefore(bar, host);
+
+  function copyButton(label, getText) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'grid-copy-btn';
+    btn.textContent = label;
+    btn.addEventListener('click', function() { gridCopy(getText(), btn); });
+    return btn;
+  }
+
+  function render() {
+    var selected = instance.getSelectedData();
+    if (!selected.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+    var defs = gridColumnDefs(instance);
+    bar.innerHTML = '';
+    bar.style.display = '';
+
+    var count = document.createElement('span');
+    count.className = 'grid-copy-count';
+    count.textContent = selected.length + ' row' + (selected.length === 1 ? '' : 's') + ' selected';
+    bar.appendChild(count);
+
+    var label = document.createElement('span');
+    label.className = 'grid-copy-label';
+    label.textContent = 'copy as';
+    bar.appendChild(label);
+
+    ['csv', 'tsv', 'markdown', 'json'].forEach(function(format) {
+      bar.appendChild(copyButton(format.toUpperCase().replace('MARKDOWN', 'Markdown'), function() {
+        return gridRowsToText(defs, instance.getSelectedData(), format);
+      }));
+    });
+
+    var colSelect = document.createElement('select');
+    colSelect.className = 'grid-copy-select';
+    defs.forEach(function(def) {
+      var opt = document.createElement('option');
+      opt.value = def.field;
+      opt.textContent = def.title || def.field;
+      colSelect.appendChild(opt);
+    });
+    bar.appendChild(colSelect);
+    bar.appendChild(copyButton('Copy column', function() {
+      return instance.getSelectedData().map(function(row) {
+        return gridPlainText(row[colSelect.value]);
+      }).join('\n');
+    }));
+
+    bar.appendChild(copyButton('Copy visible grid', function() {
+      return gridRowsToText(defs, instance.getData('active'), 'csv');
+    }));
+
+    var clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'grid-copy-clear';
+    clear.textContent = 'Clear';
+    clear.addEventListener('click', function() { instance.deselectRow(); });
+    bar.appendChild(clear);
+  }
+
+  instance.on('rowSelectionChanged', render);
 }
 function renderTurnstileWidgets(root) {
   if (!window.turnstile) {
