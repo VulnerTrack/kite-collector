@@ -64,6 +64,21 @@ func TestFleetDiscoverCommandIsRegistered(t *testing.T) {
 	assert.NoError(t, cmd.ValidateArgs([]string{}))
 }
 
+func TestFleetHelpShowsDiscoverBeforeDeploy(t *testing.T) {
+	cmd := newFleetCmd()
+	output := &strings.Builder{}
+	cmd.SetOut(output)
+	cmd.SetArgs([]string{"--help"})
+	require.NoError(t, cmd.Execute())
+
+	help := output.String()
+	discover := strings.Index(help, "Step 1 — Discover computers:")
+	deploy := strings.Index(help, "Step 2 — Deploy collectors:")
+	require.NotEqual(t, -1, discover)
+	require.NotEqual(t, -1, deploy)
+	assert.Less(t, discover, deploy)
+}
+
 func TestRunFleetEnrollGeneratesPackageForNamedComputer(t *testing.T) {
 	bundle := testFleetBundle(t, "#!/usr/bin/env bash\necho deployed\n")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -72,8 +87,8 @@ func TestRunFleetEnrollGeneratesPackageForNamedComputer(t *testing.T) {
 			assert.Equal(t, http.MethodGet, r.Method)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"computers":[
-                  {"hostname":"192.168.1.75","address":"192.168.1.75","os":"windows","arch":"amd64","target":"192.168.1.75,windows,amd64,192.168.1.75","compatible":true},
-                  {"hostname":"ROBERTO-PC","address":"192.168.1.75","os":"windows","arch":"amd64","target":"ROBERTO-PC,windows,amd64,192.168.1.75","compatible":true}
+                  {"hostname":"192.168.1.75","address":"192.168.1.75","os":"windows","arch":"amd64","discovery_source":"network_scan","target":"192.168.1.75,windows,amd64,192.168.1.75","compatible":true},
+                  {"hostname":"ROBERTO-PC","address":"192.168.1.75","os":"windows","arch":"amd64","discovery_source":"network_scan","target":"ROBERTO-PC,windows,amd64,192.168.1.75","compatible":true}
                 ]}`))
 		case "/api/v1/fleet/package":
 			require.NoError(t, r.ParseForm())
@@ -102,7 +117,7 @@ func TestRunFleetEnrollPackageOnlyWritesPrivateZIP(t *testing.T) {
 		if r.URL.Path == "/api/v1/fleet/discover" {
 			assert.Equal(t, http.MethodGet, r.Method)
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"computers":[{"hostname":"ROBERTO-PC","address":"192.168.1.75","os":"windows","arch":"amd64","target":"ROBERTO-PC,windows,amd64,192.168.1.75","compatible":true}]}`))
+			_, _ = w.Write([]byte(`{"computers":[{"hostname":"ROBERTO-PC","address":"192.168.1.75","os":"windows","arch":"amd64","discovery_source":"network_scan","target":"ROBERTO-PC,windows,amd64,192.168.1.75","compatible":true}]}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/zip")
@@ -119,22 +134,23 @@ func TestRunFleetEnrollPackageOnlyWritesPrivateZIP(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
-func TestRunFleetEnrollWithoutArgumentPackagesAllDiscoveredRemoteComputers(t *testing.T) {
+func TestRunFleetEnrollWithoutArgumentPackagesLocalAndRemoteComputers(t *testing.T) {
 	bundle := testFleetBundle(t, "#!/usr/bin/env bash\nexit 0\n")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/fleet/discover" {
 			assert.Equal(t, http.MethodGet, r.Method)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"computers":[
-                  {"hostname":"controller","address":"192.168.1.81","os":"linux","arch":"amd64","discovery_source":"local_controller","target":"controller,linux,amd64,192.168.1.81","compatible":true},
-                  {"hostname":"192.168.1.75","address":"192.168.1.75","os":"windows","arch":"amd64","target":"192.168.1.75,windows,amd64,192.168.1.75","compatible":true},
-                  {"hostname":"DESKTOP-A","address":"192.168.1.75","os":"windows","arch":"amd64","target":"DESKTOP-A,windows,amd64,192.168.1.75","compatible":true},
-                  {"hostname":"SERVER-B","address":"192.168.1.90","os":"linux","arch":"amd64","target":"SERVER-B,linux,amd64,192.168.1.90","compatible":true}
+                  {"hostname":"controller","address":"192.168.1.81","os":"linux","arch":"amd64","discovery_source":"local_controller","target":"controller,linux,amd64,local","compatible":true},
+                  {"hostname":"192.168.1.75","address":"192.168.1.75","os":"windows","arch":"amd64","discovery_source":"network_scan","target":"192.168.1.75,windows,amd64,192.168.1.75","compatible":true},
+                  {"hostname":"DESKTOP-A","address":"192.168.1.75","os":"windows","arch":"amd64","discovery_source":"network_scan","target":"DESKTOP-A,windows,amd64,192.168.1.75","compatible":true},
+                  {"hostname":"SERVER-B","address":"192.168.1.90","os":"linux","arch":"amd64","discovery_source":"network_scan","target":"SERVER-B,linux,amd64,192.168.1.90","compatible":true}
                 ]}`))
 			return
 		}
 		require.NoError(t, r.ParseForm())
 		assert.Equal(t, []string{
+			"controller,linux,amd64,local",
 			"DESKTOP-A,windows,amd64,192.168.1.75",
 			"SERVER-B,linux,amd64,192.168.1.90",
 		}, r.Form["discovered_target"])
@@ -148,16 +164,16 @@ func TestRunFleetEnrollWithoutArgumentPackagesAllDiscoveredRemoteComputers(t *te
 	cmd.SetOut(output)
 	path := filepath.Join(t.TempDir(), "deployment.zip")
 	require.NoError(t, runFleetDeploy(cmd, server.URL, time.Second, "", true, path))
-	assert.Contains(t, output.String(), "Computers selected for deployment: 2")
+	assert.Contains(t, output.String(), "Computers selected for deployment: 3")
 	assert.Contains(t, output.String(), "DESKTOP-A")
 	assert.Contains(t, output.String(), "SERVER-B")
-	assert.NotContains(t, output.String(), "controller")
+	assert.Contains(t, output.String(), "controller")
 }
 
 func TestSelectFleetComputerPrefersExactHostnameOverDuplicateAddress(t *testing.T) {
 	computers := []fleetDiscoverComputer{
-		{Hostname: "192.168.1.75", Address: "192.168.1.75", Compatible: true, Target: "first"},
-		{Hostname: "ROBERTO-PC", Address: "192.168.1.75", Compatible: true, Target: "second"},
+		{Hostname: "192.168.1.75", Address: "192.168.1.75", DiscoverySource: "network_scan", Compatible: true, Target: "first"},
+		{Hostname: "ROBERTO-PC", Address: "192.168.1.75", DiscoverySource: "network_scan", Compatible: true, Target: "second"},
 	}
 	target, err := selectFleetComputer(computers, "192.168.1.75")
 	require.NoError(t, err)
@@ -184,7 +200,7 @@ func TestRunFleetDeployOpensLoginWaitsAndRetriesPackage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/fleet/discover":
-			_, _ = w.Write([]byte(`{"computers":[{"hostname":"DESKTOP-A","address":"192.168.1.75","os":"windows","arch":"amd64","target":"DESKTOP-A,windows,amd64,192.168.1.75","compatible":true}]}`))
+			_, _ = w.Write([]byte(`{"computers":[{"hostname":"DESKTOP-A","address":"192.168.1.75","os":"windows","arch":"amd64","discovery_source":"network_scan","target":"DESKTOP-A,windows,amd64,192.168.1.75","compatible":true}]}`))
 		case "/api/v1/fleet/package":
 			packageRequests++
 			if packageRequests == 1 {
@@ -234,21 +250,34 @@ func TestFleetDeployCommandIsRegistered(t *testing.T) {
 func TestFleetEnrollmentComputersReturnsAllRemoteComputersAndDeduplicates(t *testing.T) {
 	computers := []fleetDiscoverComputer{
 		{Hostname: "controller", DiscoverySource: "local_controller", Compatible: true, Target: "local"},
-		{Hostname: "192.168.1.75", Address: "192.168.1.75", OS: "windows", Arch: "amd64", Compatible: true, Target: "duplicate"},
-		{Hostname: "ROBERTO-PC", Address: "192.168.1.75", OS: "windows", Arch: "amd64", Compatible: true, Target: "remote"},
-		{Hostname: "SERVER-01", Address: "192.168.1.90", OS: "linux", Arch: "amd64", Compatible: true, Target: "server"},
+		{Hostname: "192.168.1.75", Address: "192.168.1.75", OS: "windows", Arch: "amd64", DiscoverySource: "network_scan", Compatible: true, Target: "duplicate"},
+		{Hostname: "ROBERTO-PC", Address: "192.168.1.75", OS: "windows", Arch: "amd64", DiscoverySource: "network_scan", Compatible: true, Target: "remote"},
+		{Hostname: "SERVER-01", Address: "192.168.1.90", OS: "linux", Arch: "amd64", DiscoverySource: "network_scan", Compatible: true, Target: "server"},
 	}
 	targets := fleetEnrollmentComputers(computers)
-	require.Len(t, targets, 2)
-	assert.Equal(t, "ROBERTO-PC", targets[0].Hostname)
-	assert.Equal(t, "SERVER-01", targets[1].Hostname)
+	require.Len(t, targets, 3)
+	assert.Equal(t, "controller", targets[0].Hostname)
+	assert.Equal(t, "ROBERTO-PC", targets[1].Hostname)
+	assert.Equal(t, "SERVER-01", targets[2].Hostname)
 }
 
-func TestFleetEnrollmentComputersRejectsLocalControllerOnly(t *testing.T) {
+func TestFleetEnrollmentComputersAcceptsLocalControllerOnly(t *testing.T) {
 	computers := []fleetDiscoverComputer{
 		{Hostname: "controller", DiscoverySource: "local_controller", Compatible: true, Target: "local"},
 	}
-	assert.Empty(t, fleetEnrollmentComputers(computers))
+	targets := fleetEnrollmentComputers(computers)
+	require.Len(t, targets, 1)
+	assert.Equal(t, "controller", targets[0].Hostname)
+}
+
+func TestFleetEnrollmentComputersRejectsStaleIdentityAddress(t *testing.T) {
+	computers := []fleetDiscoverComputer{
+		{Hostname: "DESKTOP-OLD", Address: "192.168.1.110", OS: "windows", Arch: "amd64", DiscoverySource: "wsdiscovery", Compatible: true, Target: "stale"},
+		{Hostname: "192.168.100.115", Address: "192.168.100.115", OS: "windows", Arch: "amd64", DiscoverySource: "network_scan", Compatible: true, Target: "current"},
+	}
+	targets := fleetEnrollmentComputers(computers)
+	require.Len(t, targets, 1)
+	assert.Equal(t, "192.168.100.115", targets[0].Address)
 }
 
 func testFleetBundle(t *testing.T, deployScript string) []byte {
