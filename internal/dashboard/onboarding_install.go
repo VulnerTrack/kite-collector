@@ -893,9 +893,10 @@ var onboardingHeaderTmpl = template.Must(template.New("onboarding-header").Funcs
 // renderOnboardingHeaderFragment composes the stepper / mode chip / CTA from
 // the current agent state. It mirrors the data handleAgentState exposes via
 // JSON so the visual progress and the API contract cannot drift.
-func renderOnboardingHeaderFragment(w io.Writer, ctx context.Context, deps onboardingDeps) error {
-	// Reuse the aggregate state computation so the visual progress and the
-	// /api/v1/agent/state JSON are always in lock-step.
+// computeAgentStateView aggregates install, identity, and stream state — the
+// single source every onboarding surface (header, steps flow, topbar badge)
+// derives its view from, so they can never disagree.
+func computeAgentStateView(ctx context.Context, deps onboardingDeps) (agentStateView, installer.Detected) {
 	d := installer.DetectDefaults()
 	if deps.PlatformEndpoint != "" {
 		d.Options.Endpoint = deps.PlatformEndpoint
@@ -912,6 +913,13 @@ func renderOnboardingHeaderFragment(w io.Writer, ctx context.Context, deps onboa
 		stateView.Stream = streamViewFromCtrl(deps.StreamCtrl)
 	}
 	stateView.OverallStatus = overallStatus(stateView)
+	return stateView, d.Detected
+}
+
+func renderOnboardingHeaderFragment(w io.Writer, ctx context.Context, deps onboardingDeps) error {
+	// Reuse the aggregate state computation so the visual progress and the
+	// /api/v1/agent/state JSON are always in lock-step.
+	stateView, detected := computeAgentStateView(ctx, deps)
 
 	showLauncher := stateView.OverallStatus == "ready" || stateView.OverallStatus == "streaming"
 	view := onboardingHeaderView{
@@ -924,10 +932,10 @@ func renderOnboardingHeaderFragment(w io.Writer, ctx context.Context, deps onboa
 		ShowScanCTA:   showLauncher && deps.ScanEnabled,
 		WriteEnabled:  deps.Installer != nil,
 		InspectorOnly: deps.Installer == nil,
-		Steps:         buildStepperSteps(stateView, d.Detected),
+		Steps:         buildStepperSteps(stateView, detected),
 		LastScan:      loadLastScanSummary(ctx, deps),
 	}
-	view.ModeLabel, view.ModeBadge, view.PrivilegeHint = headerModeDescriptor(deps, d.Detected)
+	view.ModeLabel, view.ModeBadge, view.PrivilegeHint = headerModeDescriptor(deps, detected)
 
 	if err := onboardingHeaderTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("render onboarding-header: %w", err)
@@ -1051,7 +1059,7 @@ func anchorForAction(action string) string {
 	case installer.ActionStartService:
 		return "#stream-card"
 	case installer.ActionReady, "streaming":
-		return "#check-card"
+		return "#stream-card"
 	}
 	return "#install-card"
 }

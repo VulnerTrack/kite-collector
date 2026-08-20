@@ -113,9 +113,29 @@ func TestOnboardingPage_Renders(t *testing.T) {
 	rec := h.do(t, "GET", "/onboarding", nil, nil)
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
-	assert.Contains(t, body, "enroll-fragment")
-	assert.Contains(t, body, "check-fragment")
-	assert.Contains(t, body, "stream-fragment")
+	// The page is an intro plus the server-rendered three-step flow; the
+	// step panels live in the steps fragment, not the page shell.
+	assert.Contains(t, body, `id="onboarding-steps"`)
+	assert.Contains(t, body, "/fragments/onboarding-steps")
+	assert.Contains(t, body, "Three steps.")
+	assert.Contains(t, body, "no agent data leaves this host")
+}
+
+func TestOnboardingStepsFragment_RendersThreeSteps(t *testing.T) {
+	h := newOnboardingHarness(t, nil)
+	rec := h.do(t, "GET", "/fragments/onboarding-steps", nil, nil)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	// Whatever the host state, exactly the three step rows render — the
+	// connection check is a gate inside the stream step, never a card.
+	assert.Contains(t, body, `id="install-card"`)
+	assert.Contains(t, body, `id="enroll-card"`)
+	assert.Contains(t, body, `id="stream-card"`)
+	assert.NotContains(t, body, `id="check-card"`,
+		"the connection check must not be a step of its own")
+	// Exactly one step is expanded (current) unless everything is done.
+	current := strings.Count(body, `aria-current="step"`)
+	assert.LessOrEqual(t, current, 1, "at most one step renders expanded")
 }
 
 func TestEnrollFragment_InitiallyEmpty(t *testing.T) {

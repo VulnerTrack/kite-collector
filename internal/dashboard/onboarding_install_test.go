@@ -281,11 +281,10 @@ func TestInstallStatusFragment_ShowsInstallButtonWhenEnabled(t *testing.T) {
 
 func TestOnboardingPage_IncludesInstallCard(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
+	rec := h.do(t, "GET", "/fragments/onboarding-steps", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "install-fragment",
-		"onboarding shell must wire the install card")
+	assert.Contains(t, rec.Body.String(), `id="install-card"`,
+		"the steps flow must always carry the install step")
 }
 
 // errBoom is the sentinel returned by the install-failure test's fake
@@ -365,51 +364,68 @@ func TestAgentInstall_UserModeQueryParam_ForcesUserModeOptions(t *testing.T) {
 // Card numbering consistency — match the "four steps" copy + 4-pill stepper
 // ---------------------------------------------------------------------------
 
-func TestOnboardingPage_CardsAreNumberedOneToFour(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
+func TestBuildOnboardingSteps_ThreeStepStates(t *testing.T) {
+	det := installer.Detected{}
 
-	// Card headings must be numbered 1-4 to match the "Get your agent online
-	// in four steps" copy + the 4-pill stepper. Before iteration 22 they
-	// were 0-3, which created off-by-one cognitive friction — first-time
-	// operators wondered "is step 0 optional? a pre-step?"
-	for _, want := range []string{
-		"1. Install agent",
-		"2. Connect collector",
-		"3. Connection check",
-		"4. Streaming",
-	} {
-		assert.Contains(t, body, want,
-			"card heading %q must be 1-indexed to match the 'four steps' copy", want)
-	}
+	// Fresh host: install is current, everything else pending.
+	fresh := agentStateView{Install: installer.State{NextAction: installer.ActionInstall}}
+	steps := buildOnboardingSteps(fresh, det)
+	require.Len(t, steps, 3, "the flow is three steps — check is a gate, not a step")
+	assert.Equal(t, "current", steps[0].Status)
+	assert.Equal(t, "pending", steps[1].Status)
+	assert.Equal(t, "pending", steps[2].Status)
 
-	// And the old 0-indexed headings must be gone — assert explicitly so a
-	// future template edit can't silently re-introduce the off-by-one.
-	for _, gone := range []string{
-		">0. Install agent<",
-		">1. Connect collector<",
-		">2. Connection check<",
-		">3. Streaming<",
-	} {
-		assert.NotContains(t, body, gone,
-			"old 0-indexed heading %q must NOT appear — would re-introduce the off-by-one inconsistency", gone)
+	// Installed but not enrolled: connect is the one action.
+	installed := agentStateView{Install: installer.State{NextAction: installer.ActionEnroll}}
+	steps = buildOnboardingSteps(installed, det)
+	assert.Equal(t, "done", steps[0].Status)
+	assert.Equal(t, "current", steps[1].Status)
+	assert.Equal(t, "pending", steps[2].Status)
+
+	// Enrolled but never checked: stream is current — the check runs inside
+	// it, so there is no separate "check" stop on the way.
+	enrolled := agentStateView{
+		Install:  installer.State{NextAction: installer.ActionReady},
+		Identity: &identityStateView{Enrolled: true, FingerprintShort: "9f3a2c1b"},
 	}
+	steps = buildOnboardingSteps(enrolled, det)
+	assert.Equal(t, "done", steps[1].Status)
+	assert.Contains(t, steps[1].Receipt, "9f3a2c1b", "connect receipt carries the fingerprint")
+	assert.Equal(t, "current", steps[2].Status)
+
+	// Streaming: everything collapses to receipts.
+	streaming := enrolled
+	streaming.Identity.LastCheckPassedAt = "2026-08-19T00:00:00Z"
+	streaming.Stream = &streamStateView{State: "running"}
+	steps = buildOnboardingSteps(streaming, det)
+	assert.Equal(t, "done", steps[0].Status)
+	assert.Equal(t, "done", steps[1].Status)
+	assert.Equal(t, "done", steps[2].Status)
+	assert.Contains(t, steps[2].Receipt, "running")
 }
 
-func TestOnboardingPage_TrustPanelStepReferencesMatchNewNumbering(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
+func TestOnboardingSteps_TrustPanelRendersOnConnectStep(t *testing.T) {
+	// Render the template directly with connect current, so the assertion is
+	// independent of this host's real install state.
+	view := onboardingStepsView{Steps: []onboardingStepView{
+		{Key: "install", CardID: "install-card", Title: "Install", Status: "done", Receipt: "binary + service registered", FragmentURL: "/fragments/install-status"},
+		{Key: "connect", CardID: "enroll-card", Title: "Connect this collector", Status: "current", FragmentURL: "/fragments/enroll-form"},
+		{Key: "stream", CardID: "stream-card", Title: "Start streaming", Status: "pending", Pending: "the connection check runs automatically before streaming starts"},
+	}}
+	var buf strings.Builder
+	require.NoError(t, onboardingStepsTmpl.Execute(&buf, view))
+	body := buf.String()
 
-	// Trust panel back-references must match the new 1-4 numbering. "Step 3"
-	// (old) → "Step 4" (new) for streaming, "Step 2" → "Step 3" for check.
-	assert.Contains(t, body, `"Start streaming" in step&nbsp;4`,
-		"trust panel back-reference must point at step 4 (streaming) under the new 1-indexed scheme")
-	assert.Contains(t, body, `connection check (step&nbsp;3)`,
-		"trust panel back-reference must point at step 3 (connection check) under the new 1-indexed scheme")
+	assert.Contains(t, body, "What gets stored?",
+		"connect step must keep the trust disclosure")
+	assert.Contains(t, body, "AES-256-GCM")
+	assert.Contains(t, body, "Wrap key is in-memory")
+	assert.Contains(t, body, "No exfiltration before streaming")
+	// The simplified copy drops the step-number back-references entirely.
+	assert.NotContains(t, body, "step&nbsp;3")
+	assert.NotContains(t, body, "step&nbsp;4")
+	// One-line trust summary sits outside the disclosure.
+	assert.Contains(t, body, "only its <code>sha256[:8]</code> fingerprint is ever shown")
 }
 
 // ---------------------------------------------------------------------------
@@ -449,64 +465,6 @@ func TestEnrollFragment_EnrolledStateRendersRelativeTimeWithTimestampTooltip(t *
 // ---------------------------------------------------------------------------
 // Keyboard hint discoverability — floating ? button (completes iteration 18)
 // ---------------------------------------------------------------------------
-
-func TestOnboardingPage_IncludesKeyboardHintButton(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-
-	// Hint button must exist — iteration 18's keyboard shortcuts were
-	// invisible without a visible affordance. The button is a real <button>
-	// so screen-reader + keyboard users can also discover the help via Tab,
-	// not just by knowing the magic ? key.
-	assert.Contains(t, body, `id="kbd-hint"`,
-		"shell must include the floating kbd-hint button so the iteration 18 keyboard shortcut feature is discoverable")
-	assert.Contains(t, body, `class="kbd-hint"`,
-		"hint button must use the kbd-hint class for the floating bottom-right styling")
-	assert.Contains(t, body, `type="button"`,
-		"hint must be explicitly type='button' so it doesn't accidentally submit a parent form")
-
-	// ARIA attributes wire the button to the help dialog.
-	assert.Contains(t, body, `aria-haspopup="dialog"`,
-		"hint must declare aria-haspopup='dialog' so AT users know clicking opens a dialog")
-	assert.Contains(t, body, `aria-controls="kbd-help"`,
-		"hint must declare aria-controls pointing at the help dialog id")
-	assert.Contains(t, body, `aria-expanded="false"`,
-		"hint must initialize aria-expanded='false' (dialog starts hidden)")
-	assert.Contains(t, body, `aria-label="Show keyboard shortcuts"`,
-		"hint must have a contextual aria-label — the '?' character alone is ambiguous for screen readers")
-
-	// Hint button must precede the dialog in DOM order so tab focus lands on
-	// the hint first (acts as the toggle), not on the (initially-hidden) dialog.
-	hintIdx := strings.Index(body, `id="kbd-hint"`)
-	helpIdx := strings.Index(body, `id="kbd-help"`)
-	require.Greater(t, hintIdx, 0)
-	require.Greater(t, helpIdx, 0)
-	assert.Less(t, hintIdx, helpIdx,
-		"hint must precede the help dialog in DOM order so it's the natural Tab target")
-}
-
-func TestOnboardingPage_KeyboardHintWiresToHelpDialog(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-
-	// JS click handler must be installed on the hint button.
-	assert.Contains(t, body, `hint.addEventListener('click'`,
-		"hint button must have a click listener that toggles the help dialog")
-
-	// toggleHelp must update aria-expanded so AT users hear the state
-	// change when the dialog opens/closes.
-	assert.Contains(t, body, "aria-expanded",
-		"toggleHelp must update aria-expanded on the hint button so AT mirrors visual state")
-
-	// The hint must hide itself when the help dialog opens — they share
-	// the bottom-right corner and would visually overlap otherwise.
-	assert.Contains(t, body, "hint.style.display",
-		"toggleHelp must show/hide the hint button so it doesn't overlap the help dialog when open")
-}
 
 // ---------------------------------------------------------------------------
 // Topbar onboarding-status badge — cross-page agent-health visibility
@@ -581,98 +539,6 @@ func TestDashboardShell_TopbarIncludesOnboardingStatusBadge(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Keyboard shortcuts (?, i/e/c/s) — composes with iteration 14-16 a11y baseline
 // ---------------------------------------------------------------------------
-
-func TestOnboardingPage_IncludesKeyboardShortcutHelp(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-
-	// Help dialog markup must be present (hidden by default — toggled by ?).
-	assert.Contains(t, body, `id="kbd-help"`,
-		"shell must include the keyboard-help dialog so the ? shortcut has something to toggle")
-	assert.Contains(t, body, `role="dialog"`,
-		"help dialog must declare role='dialog' for screen-reader navigation")
-	assert.Contains(t, body, `aria-labelledby="kbd-help-title"`,
-		"dialog must be linked to its title via aria-labelledby")
-	assert.Contains(t, body, "Keyboard shortcuts",
-		"help dialog title must explain its purpose")
-
-	// All six shortcut bindings must be documented in the dialog (i / e / c
-	// / s / ? / Esc). Operators don't know what's available otherwise.
-	for _, k := range []string{"<kbd>i</kbd>", "<kbd>e</kbd>", "<kbd>c</kbd>", "<kbd>s</kbd>", "<kbd>?</kbd>", "<kbd>Esc</kbd>"} {
-		assert.Contains(t, body, k,
-			"shortcut key %s must be documented inside a <kbd> element in the help dialog", k)
-	}
-}
-
-func TestOnboardingPage_KeyboardHandlerSkipsFormFields(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-
-	// The skip-on-typing guard is the universal vim/GitHub/Notion pattern —
-	// without it, keyboard shortcuts hijack typing in the api_key input,
-	// destroying the operator's paste.
-	assert.Contains(t, body, "isTyping",
-		"keyboard handler must declare an isTyping() guard so shortcuts don't hijack typing in form fields")
-	assert.Contains(t, body, "INPUT",
-		"isTyping() must check for INPUT tag (api_key field) so paste isn't broken by shortcuts")
-	assert.Contains(t, body, "TEXTAREA",
-		"isTyping() must also cover TEXTAREA")
-	assert.Contains(t, body, "isContentEditable",
-		"isTyping() must also cover contenteditable elements")
-}
-
-func TestOnboardingPage_KeyboardHandlerWiresAllShortcuts(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-
-	// Each shortcut must have a case arm in the keydown switch.
-	for _, arm := range []string{
-		`case '?'`,
-		`case 'Escape'`,
-		`case 'i'`,
-		`case 'e'`,
-		`case 'c'`,
-		`case 's'`,
-	} {
-		assert.Contains(t, body, arm,
-			"keyboard handler must have a switch case for %s", arm)
-	}
-
-	// The e shortcut must focus the api_key input after the scroll, matching
-	// the iteration-6 smooth-scroll-then-focus pattern.
-	assert.Contains(t, body, `'e':`,
-		"shortcut 'e' case must be present")
-	assert.Contains(t, body, `'api_key'`,
-		"shortcut 'e' must reference the api_key input id so it gets focused after scroll")
-
-	// Modifier-combo guard — shortcuts should not fire with Ctrl/Cmd/Alt
-	// so they don't conflict with browser/OS shortcuts.
-	assert.Contains(t, body, "ctrlKey",
-		"keyboard handler must bail on Ctrl-combos to avoid browser-shortcut conflicts")
-	assert.Contains(t, body, "metaKey",
-		"keyboard handler must bail on Cmd-combos (macOS) similarly")
-}
-
-func TestOnboardingPage_KeyboardHandlerRespectsPrefersReducedMotion(t *testing.T) {
-	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-
-	// Composition with iteration 14: jumpTo() must check matchMedia and use
-	// 'auto' (instant) scroll for reduced-motion users. Otherwise the
-	// keyboard shortcuts re-introduce the motion problem the iteration-14
-	// scroll-to-step JS already solved.
-	count := strings.Count(body, "prefers-reduced-motion")
-	assert.GreaterOrEqual(t, count, 2,
-		"prefers-reduced-motion must be checked in BOTH the scroll-to-step listener (iteration 14) AND the keyboard jumpTo() helper — found %d occurrences", count)
-}
 
 // ---------------------------------------------------------------------------
 // Skip-to-content (WCAG 2.4.1 Bypass Blocks, Level A)
@@ -817,20 +683,22 @@ func TestInstallStatusFragment_CopyButtonsHaveContextualAriaLabel(t *testing.T) 
 		"CLI hint copy button must carry a contextual aria-label so screen readers know *what* would be copied")
 }
 
-func TestOnboardingPage_RespectsPrefersReducedMotion(t *testing.T) {
+func TestOnboardingPage_WizardChromeRemoved(t *testing.T) {
+	// The simplified flow renders step visibility server-side: the client
+	// wizard (stepper scraping, scroll-to-step animation, keyboard shortcut
+	// dialog) must be gone. The only page scripts left are the error-toast
+	// pipeline and the clipboard helper.
 	h := newInstallHarness(t, nil)
 	rec := h.do(t, "GET", "/onboarding", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
-	// JS path: scroll-to-step listener must branch on matchMedia so reduced-
-	// motion users get instant scroll + quick focus instead of the 500ms
-	// animation. Without this, the smooth-scroll feature actively harms a
-	// subset of operators (WCAG 2.3.3 explicitly calls this out).
-	assert.Contains(t, body, "prefers-reduced-motion",
-		"scroll-to-step JS must check window.matchMedia for prefers-reduced-motion (WCAG 2.3.3)")
-	assert.Contains(t, body, "reduceMotion ? 'auto' : 'smooth'",
-		"scrollIntoView behavior must switch to 'auto' (instant) when reduced motion is preferred")
+	assert.NotContains(t, body, "kbd-hint", "keyboard shortcut hint button removed")
+	assert.NotContains(t, body, "kbd-help", "keyboard shortcut dialog removed")
+	assert.NotContains(t, body, "syncActiveStep", "client-side step bookkeeping removed")
+	assert.NotContains(t, body, "scrollIntoView", "scroll-to-step animation removed")
+	assert.Contains(t, body, "copyFromBtn", "clipboard helper stays — fragments call it")
+	assert.Contains(t, body, "htmx:sendError", "error-toast pipeline stays")
 }
 
 // ---------------------------------------------------------------------------
@@ -899,7 +767,9 @@ func TestOnboardingPage_FocusStep_HighlightsMatchingCard(t *testing.T) {
 	}{
 		{step: "install", wantSelector: "#install-card", wantHighlight: true},
 		{step: "enroll", wantSelector: "#enroll-card", wantHighlight: true},
-		{step: "check", wantSelector: "#check-card", wantHighlight: true},
+		// The check folded into the stream step; old ?step=check links keep
+		// working by highlighting the stream card.
+		{step: "check", wantSelector: "#stream-card", wantHighlight: true},
 		{step: "stream", wantSelector: "#stream-card", wantHighlight: true},
 	}
 	for _, tc := range cases {
@@ -1411,16 +1281,16 @@ func TestShowScanCTAFormula_DependsOnLauncherAndScanEnabled(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOnboardingPage_IncludesTrustPanel(t *testing.T) {
+	// The trust disclosure moved into the connect step of the steps flow,
+	// which only expands while enrollment is the current action — a state
+	// this host may or may not be in. The content assertions live in
+	// TestOnboardingSteps_TrustPanelRendersOnConnectStep (template-level,
+	// host-independent); here we only pin that the page wires the flow.
 	h := newInstallHarness(t, nil)
 	rec := h.do(t, "GET", "/onboarding", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "What gets stored?",
-		"enroll card must surface the trust-panel disclosure so security-conscious operators can self-serve the answer")
-	assert.Contains(t, body, "AES-256-GCM",
-		"trust panel must explicitly name the wrapping algorithm (operators search for this)")
-	assert.Contains(t, body, "Wrap key is in-memory",
-		"trust panel must explain the in-memory wrap-key design so operators understand restart-invalidates behaviour")
+	assert.Contains(t, rec.Body.String(), "/fragments/onboarding-steps",
+		"page must load the steps flow that carries the trust disclosure")
 }
 
 func TestAgentInstall_SuccessEmitsScrollToEnroll(t *testing.T) {
@@ -1452,19 +1322,16 @@ func TestEnroll_SuccessEmitsScrollToCheck(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "refresh-agent-state", rec.Header().Get("HX-Trigger"))
 	assert.Contains(t, rec.Header().Get("HX-Trigger-After-Settle"),
-		`"target":"#check-card"`,
-		"successful enroll must request a smooth-scroll to the check card so the OOB-swapped probe results are visible")
+		`"target":"#stream-card"`,
+		"successful enroll points at the stream card — the check is its gate now")
 }
 
-func TestOnboardingPage_IncludesScrollToStepListener(t *testing.T) {
+func TestOnboardingSteps_TrustCopyHasNoStaleCardReferences(t *testing.T) {
+	// The steps fragment must never mention the retired check card.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/onboarding", nil, nil)
+	rec := h.do(t, "GET", "/fragments/onboarding-steps", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, "scroll-to-step",
-		"onboarding shell must register the scroll-to-step listener so HX-Trigger-After-Settle events actually scroll the page")
-	assert.Contains(t, body, "scrollIntoView",
-		"listener must use smooth scrollIntoView (not jump-to-anchor) for the wizard feel")
+	assert.NotContains(t, rec.Body.String(), "check-card")
 }
 
 // ---------------------------------------------------------------------------
