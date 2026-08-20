@@ -101,7 +101,7 @@ func resolveView(ctx context.Context, st store.Store, slug string) (*dashView, e
 	}
 	saved, err := svs.GetSavedViewBySlug(ctx, slug)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load saved view %q: %w", slug, err)
 	}
 	return &dashView{
 		Slug: saved.Slug,
@@ -399,7 +399,7 @@ func suggestJoinColumns(base, join *store.TableSchema) (onBase, onJoin string) {
 // defaultProjection picks up to two non-key columns from each table so a
 // fresh builder shows something meaningful immediately.
 func defaultProjection(base, join *store.TableSchema) []store.JoinColumn {
-	var cols []store.JoinColumn
+	cols := make([]store.JoinColumn, 0, 4)
 	cols = append(cols, pickDefaultColumns(base, 2)...)
 	cols = append(cols, pickDefaultColumns(join, 2)...)
 	return cols
@@ -548,10 +548,10 @@ func saveViewFromSelection(ctx context.Context, st store.Store, sel builderSelec
 	dry := view.Join
 	dry.Limit = 1
 	if _, dryErr := st.ListJoinedRows(ctx, dry); dryErr != nil {
-		return "", fmt.Errorf("%w: %v", errViewValidation, dryErr)
+		return "", fmt.Errorf("%w: %w", errViewValidation, dryErr)
 	}
 	if saveErr := svs.SaveView(ctx, view); saveErr != nil {
-		return "", saveErr
+		return "", fmt.Errorf("save view %q: %w", slug, saveErr)
 	}
 	return slug, nil
 }

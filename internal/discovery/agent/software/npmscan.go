@@ -94,7 +94,7 @@ func (n *NpmScan) Collect(ctx context.Context) (*Result, error) {
 	}
 
 	result.Sort()
-	return result, nil
+	return result, nil //nolint:nilerr // a canceled walk still reports the packages found so far
 }
 
 // effectiveRoots returns the directories to walk. Explicit roots (tests,
@@ -128,7 +128,7 @@ func (n *NpmScan) effectiveRoots() []string {
 func (n *NpmScan) scanRoot(ctx context.Context, root string, result *Result, seen map[string]struct{}) {
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // unreadable dir (permissions) — skip, don't abort
+			return nil //nolint:nilerr // unreadable dir (permissions) — skip, don't abort
 		}
 		if ctx.Err() != nil || len(result.Items) >= n.maxPackages {
 			return filepath.SkipAll
@@ -140,9 +140,9 @@ func (n *NpmScan) scanRoot(ctx context.Context, root string, result *Result, see
 		if !isNodeModulesPackageDir(dir) {
 			return nil // a package.json not at an installed-package root
 		}
-		data, rerr := os.ReadFile(path) //#nosec G304 -- path from WalkDir under scanned root
+		data, rerr := os.ReadFile(path) //#nosec G304 G122 -- path from WalkDir under scanned root; read-only inventory, a TOCTOU swap yields at worst a bogus manifest
 		if rerr != nil {
-			return nil
+			return nil //nolint:nilerr // unreadable manifest — skip this package, keep walking
 		}
 		m, ok := parseNpmManifest(data)
 		if !ok {

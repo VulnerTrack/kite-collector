@@ -34,11 +34,11 @@ type lookPather func(string) (string, error)
 // tests so enumerators that parse config/state files stay hermetic.
 type fileReader func(string) ([]byte, error)
 
-// dirReader lists a directory. os.ReadDir in production.
-type dirReader func(string) ([]os.DirEntry, error)
-
 // osReadFile is the production fileReader.
-func osReadFile(p string) ([]byte, error) { return os.ReadFile(p) } //#nosec G304 -- caller passes fixed system paths
-
-// osReadDir is the production dirReader.
-func osReadDir(p string) ([]os.DirEntry, error) { return os.ReadDir(p) }
+func osReadFile(p string) ([]byte, error) {
+	data, err := os.ReadFile(p) //#nosec G304 -- caller passes fixed system paths
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", p, err)
+	}
+	return data, nil
+}

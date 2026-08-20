@@ -121,9 +121,8 @@ func parseSwanctlSAs(raw string) []Peer {
 			}
 		case strings.HasPrefix(trimmed, "remote ") && !strings.Contains(trimmed, "@"):
 			// Child traffic selector: "remote 10.2.0.0/16 10.3.0.0/16".
-			for _, cidr := range strings.Fields(strings.TrimPrefix(trimmed, "remote ")) {
-				childSubnets = append(childSubnets, cidr)
-			}
+			childSubnets = append(childSubnets,
+				strings.Fields(strings.TrimPrefix(trimmed, "remote "))...)
 		}
 	}
 	flush()

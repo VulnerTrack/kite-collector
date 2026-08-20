@@ -61,23 +61,30 @@ func ramdiskCandidatesForOS() []string {
 	}
 }
 
+// ramDirWritable reports whether candidate is a directory this process
+// can create files in.
+func ramDirWritable(candidate string) bool {
+	info, err := os.Stat(candidate)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	f, err := os.CreateTemp(candidate, ".kite-probe-*")
+	if err != nil {
+		return false
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return true
+}
+
 // ramDirAvailable returns the first writable RAM-backed directory,
 // or "" if none is usable.
 func ramDirAvailable() string {
 	for _, candidate := range ramdiskCandidates {
-		info, err := os.Stat(candidate)
-		if err != nil || !info.IsDir() {
-			continue
+		if ramDirWritable(candidate) {
+			return candidate
 		}
-		// Test writability.
-		f, err := os.CreateTemp(candidate, ".kite-probe-*")
-		if err != nil {
-			continue
-		}
-		name := f.Name()
-		_ = f.Close()
-		_ = os.Remove(name)
-		return candidate
 	}
 	return ""
 }
@@ -118,17 +125,25 @@ func workingPath(encPath string, logger *slog.Logger) (path string, onRAMDisk bo
 	base := filepath.Base(encPath) + ".work"
 	ns := namespaceForEncPath(encPath)
 
-	// Try RAM-backed directory first.
-	if ramDir := ramDirAvailable(); ramDir != "" {
-		nsDir := filepath.Join(ramDir, "kite-collector", ns)
-		if err := os.MkdirAll(nsDir, 0o700); err == nil { // #nosec G703 -- nsDir is a hash-namespaced subdir under a validated ramdisk root
-			p := filepath.Join(nsDir, base)
-			logger.Info("using RAM-backed directory for decrypted working copy",
-				"code", string(LogCodeEncryptedUsingRAMDir),
-				"ramdisk_path", p,
-				"os", runtime.GOOS)
-			return p, true
+	// Try RAM-backed directories in order. A candidate can be writable at
+	// its root yet refuse the namespace dir — e.g. /dev/shm/kite-collector
+	// already owned 0700 by a root-run collector on the same host — so a
+	// failed namespace MkdirAll moves on to the next candidate instead of
+	// abandoning RAM backing altogether.
+	for _, ramDir := range ramdiskCandidates {
+		if !ramDirWritable(ramDir) {
+			continue
 		}
+		nsDir := filepath.Join(ramDir, "kite-collector", ns)
+		if err := os.MkdirAll(nsDir, 0o700); err != nil { // #nosec G703 -- nsDir is a hash-namespaced subdir under a validated ramdisk root
+			continue
+		}
+		p := filepath.Join(nsDir, base)
+		logger.Info("using RAM-backed directory for decrypted working copy",
+			"code", string(LogCodeEncryptedUsingRAMDir),
+			"ramdisk_path", p,
+			"os", runtime.GOOS)
+		return p, true
 	}
 
 	// Fall back to OS temp directory — not RAM but at least not next to

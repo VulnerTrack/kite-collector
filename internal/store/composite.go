@@ -34,7 +34,7 @@ func (c *CompositeTableSource) ListContentTables(ctx context.Context) ([]TableSc
 		tables, err := src.ListContentTables(ctx)
 		if err != nil {
 			if i == 0 {
-				return nil, err
+				return nil, fmt.Errorf("composite: primary source catalog: %w", err)
 			}
 			continue
 		}
@@ -67,10 +67,11 @@ func (c *CompositeTableSource) DescribeTable(ctx context.Context, table string) 
 	var schema *TableSchema
 	err := c.route(ctx, table, func(src TableSource) error {
 		s, err := src.DescribeTable(ctx, table)
-		if err == nil {
-			schema = s
+		if err != nil {
+			return fmt.Errorf("describe %s: %w", table, err)
 		}
-		return err
+		schema = s
+		return nil
 	})
 	return schema, err
 }
@@ -83,10 +84,11 @@ func (c *CompositeTableSource) ListRows(ctx context.Context, filter RowsFilter) 
 	)
 	err := c.route(ctx, filter.Table, func(src TableSource) error {
 		r, t, err := src.ListRows(ctx, filter)
-		if err == nil {
-			rows, total = r, t
+		if err != nil {
+			return fmt.Errorf("list rows %s: %w", filter.Table, err)
 		}
-		return err
+		rows, total = r, t
+		return nil
 	})
 	return rows, total, err
 }
@@ -96,10 +98,11 @@ func (c *CompositeTableSource) FacetTable(ctx context.Context, table string, max
 	var facets []ColumnFacet
 	err := c.route(ctx, table, func(src TableSource) error {
 		f, err := src.FacetTable(ctx, table, maxDistinct, topValues)
-		if err == nil {
-			facets = f
+		if err != nil {
+			return fmt.Errorf("facet %s: %w", table, err)
 		}
-		return err
+		facets = f
+		return nil
 	})
 	return facets, err
 }

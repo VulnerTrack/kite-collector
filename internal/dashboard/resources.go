@@ -90,15 +90,6 @@ func viewSidebarEntries() []sidebarEntry {
 	return entries
 }
 
-// sidebarTreeView is the data model for sidebarTreeTemplate.
-type sidebarTreeView struct {
-	Groups []sidebarGroup
-	// Tables is the full content-table catalog for the collapsible
-	// "All tables" group; nil in the static variant.
-	Tables       []store.TableSchema
-	TablesActive bool
-}
-
 // sidebarTreeTemplate renders the resource tree. The <a> attribute order
 // (href, hx-get, hx-target, hx-push-url, class) is load-bearing: tests and
 // the HTMX history integration match on it.

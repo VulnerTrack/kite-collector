@@ -1,13 +1,20 @@
 package vpn
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 )
 
 // defaultLookPath is the production binary resolver.
-func defaultLookPath(name string) (string, error) { return exec.LookPath(name) }
+func defaultLookPath(name string) (string, error) {
+	p, err := exec.LookPath(name)
+	if err != nil {
+		return "", fmt.Errorf("lookpath %s: %w", name, err)
+	}
+	return p, nil
+}
 
 // defaultGetenv is the production env reader. Enumerators route env access
 // through a seam so tests set credentials/config without os.Setenv races

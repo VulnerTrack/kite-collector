@@ -166,18 +166,18 @@ func (e *netbirdEnumerator) enumerateAPI(ctx context.Context, mgmt, token string
 func netbirdGet(ctx context.Context, client *http.Client, url, token string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("netbird: build request: %w", err)
 	}
 	req.Header.Set("Authorization", "Token "+token)
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("netbird: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("netbird: read response: %w", err)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, fmt.Errorf("HTTP 401 — invalid NetBird API token")

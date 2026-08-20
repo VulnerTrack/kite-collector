@@ -472,23 +472,34 @@ func (s *SQLiteStore) FacetTable(ctx context.Context, table string, maxDistinct,
 			cancel()
 			continue
 		}
-		facet := store.ColumnFacet{Column: col.Name, Distinct: distinct}
-		for rows.Next() {
-			var value sql.NullString
-			var count int64
-			if scanErr := rows.Scan(&value, &count); scanErr != nil {
-				facet.Values = nil
-				break
-			}
-			facet.Values = append(facet.Values, store.FacetValue{Value: value.String, Count: count})
-		}
-		_ = rows.Close()
+		values := scanFacetValues(rows)
 		cancel()
-		if rows.Err() == nil && len(facet.Values) > 0 {
-			facets = append(facets, facet)
+		if len(values) > 0 {
+			facets = append(facets, store.ColumnFacet{
+				Column: col.Name, Distinct: distinct, Values: values,
+			})
 		}
 	}
 	return facets, nil
+}
+
+// scanFacetValues drains one facet probe's rows. Any scan or iteration
+// error returns nil — the column is skipped, never fatal to the call.
+func scanFacetValues(rows *sql.Rows) []store.FacetValue {
+	defer func() { _ = rows.Close() }()
+	var values []store.FacetValue
+	for rows.Next() {
+		var value sql.NullString
+		var count int64
+		if err := rows.Scan(&value, &count); err != nil {
+			return nil
+		}
+		values = append(values, store.FacetValue{Value: value.String, Count: count})
+	}
+	if rows.Err() != nil {
+		return nil
+	}
+	return values
 }
 
 // GetRowReport fetches the primary row addressed by pk, then populates

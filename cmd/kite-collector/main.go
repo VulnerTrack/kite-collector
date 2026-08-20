@@ -241,7 +241,7 @@ lifecycle events for downstream consumption.`, version, commit, date),
 	root.SetHelpFunc(func(c *cobra.Command, args []string) {
 		defaultHelp(c, args)
 		if !c.HasParent() {
-			fmt.Fprintf(c.OutOrStdout(), "\n%s\n", currentStateSummary())
+			_, _ = fmt.Fprintf(c.OutOrStdout(), "\n%s\n", currentStateSummary())
 		}
 	})
 
