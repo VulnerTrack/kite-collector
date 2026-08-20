@@ -17,7 +17,7 @@ func TestMarshalTags_DeterministicAcrossPermutations(t *testing.T) {
 	for trial := 0; trial < 1000; trial++ {
 		perm := make(map[string]string, len(base))
 		keys := []string{"role", "env", "team", "owner"}
-		rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] })
+		rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] }) //nolint:gosec // test-only shuffle of map insertion order; not security-sensitive.
 		for _, k := range keys {
 			perm[k] = base[k]
 		}

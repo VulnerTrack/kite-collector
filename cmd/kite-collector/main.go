@@ -4040,7 +4040,7 @@ func main() {
 		// is build-tagged to Windows; on every other platform runWizard
 		// returns an error and we fall back to the text-mode menu so the
 		// double-click flow stays useful for dev work on macOS/Linux.
-		if err := runWizard(); err != nil {
+		if err := runWizard(); err != nil { //nolint:staticcheck // SA4023: always true only on non-Windows builds; the Windows runWizard can return nil.
 			osutil.ShowConsole()
 			fmt.Printf("Wizard initialization failed: %v\n", err)
 			runInteractiveMenu()

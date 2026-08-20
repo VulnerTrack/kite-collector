@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -337,12 +338,15 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		sel := parseBuilderForm(r.PostForm)
 		slug, saveErr := saveViewFromSelection(r.Context(), st, sel)
 		if saveErr == nil {
+			// slug comes from slugifyViewName, so it is [a-z0-9-] only; the
+			// escape keeps the redirect target a single trusted path segment.
+			target := "/views/" + url.PathEscape(slug)
 			if r.Header.Get("HX-Request") == "true" {
-				w.Header().Set("HX-Redirect", "/views/"+slug)
+				w.Header().Set("HX-Redirect", target)
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
-			http.Redirect(w, r, "/views/"+slug, http.StatusSeeOther)
+			http.Redirect(w, r, target, http.StatusSeeOther) // #nosec G710 -- server-generated slug, path-escaped, site-relative target
 			return
 		}
 		message := saveErr.Error()
