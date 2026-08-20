@@ -38,6 +38,7 @@ func NewRegistry() *Registry {
 			// Phase 2 — Language
 			NewPip(),
 			NewPipx(),
+			NewUv(),
 			// NpmScan (native filesystem walk of node_modules) supersedes the
 			// global-only Npm collector; it reports all installed Node packages,
 			// not just `npm list -g`.

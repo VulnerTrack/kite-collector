@@ -47,7 +47,7 @@ const indexPageTemplate = `<!DOCTYPE html>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.4">
+<link rel="stylesheet" href="/static/style.css?v=1.0.5">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

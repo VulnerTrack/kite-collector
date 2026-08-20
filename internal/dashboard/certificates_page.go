@@ -424,8 +424,11 @@ func renewalHorizonSVG(rows []certRowView, now time.Time) template.HTML {
 	}
 	const width, height = 900, 46
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="certificate expiries over the next %d days">`,
-		width, height, certHorizonDays)
+	// Intrinsic width/height keep the strip icon-sized even when a stale
+	// build serves this markup without the page's CSS — a viewBox-only SVG
+	// would otherwise balloon to the container width.
+	fmt.Fprintf(&b, `<svg viewBox="0 0 %d %d" width="100%%" height="%d" preserveAspectRatio="none" role="img" aria-label="certificate expiries over the next %d days">`,
+		width, height, height, certHorizonDays)
 	b.WriteString(`<line x1="0" y1="30" x2="900" y2="30" stroke="currentColor" stroke-opacity="0.25" stroke-width="1.5"/>`)
 	for i, lbl := range []string{"today", "+30d", "+60d", "+90d"} {
 		x := 4 + i*290

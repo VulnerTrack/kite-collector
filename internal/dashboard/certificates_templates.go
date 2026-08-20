@@ -12,7 +12,7 @@ var certificatesFragmentTmpl = template.Must(template.New("certificates").Parse(
   {{if .Local.HasCert}}
     <div class="cert-idcard">
       <div class="cert-gauge" role="img" aria-label="{{.Local.DaysLeft}} days of certificate validity remaining">
-        <svg viewBox="0 0 72 72">
+        <svg viewBox="0 0 72 72" width="72" height="72">
           <circle cx="36" cy="36" r="30" fill="none" stroke="currentColor" stroke-opacity="0.12" stroke-width="7"/>
           <circle cx="36" cy="36" r="30" fill="none" stroke="{{if .Local.Expired}}#dc2626{{else if lt .Local.DaysLeft 30}}#e8a13d{{else}}#22c55e{{end}}" stroke-width="7"
                   stroke-dasharray="{{.Local.GaugePct}} 100" pathLength="100" stroke-linecap="round" transform="rotate(-90 36 36)"/>

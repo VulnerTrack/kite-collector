@@ -164,7 +164,7 @@ func TestNewRegistry_ContainsAllCollectors(t *testing.T) {
 		// Phase 2 — Universal + AUR
 		"snap", "flatpak", "scoop", "nix", "yay",
 		// Phase 2 — Language
-		"pip", "pipx", "npm", "pnpm", "gem", "cargo",
+		"pip", "pipx", "uv", "npm", "pnpm", "gem", "cargo",
 		// Phase 3 — OS (RFC-0058)
 		"dnf", "zypper", "freebsdpkg", "portage",
 		"xbps", "opkg", "pkgsrc", "macports",

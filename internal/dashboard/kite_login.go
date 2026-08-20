@@ -99,7 +99,7 @@ const kiteLoginTemplate = `<!DOCTYPE html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=1.0.4">
+<link rel="stylesheet" href="/static/style.css?v=1.0.5">
 <style>
   body.kite-auth-page {
     display: flex;
@@ -330,7 +330,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=1.0.4">
+<link rel="stylesheet" href="/static/style.css?v=1.0.5">
 <style>
   body.kite-success-page {
     display: flex;
