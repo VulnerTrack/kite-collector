@@ -282,6 +282,14 @@ func (m *memStore) DescribeTable(_ context.Context, _ string) (*store.TableSchem
 	return nil, store.ErrUnknownTable
 }
 
+func (m *memStore) FacetTable(_ context.Context, _ string, _, _ int) ([]store.ColumnFacet, error) {
+	return nil, store.ErrUnknownTable
+}
+
+func (m *memStore) ListJoinedRows(_ context.Context, _ store.JoinFilter) ([]store.Row, error) {
+	return nil, store.ErrUnknownTable
+}
+
 func (m *memStore) ListRows(_ context.Context, _ store.RowsFilter) ([]store.Row, int64, error) {
 	return nil, 0, store.ErrUnknownTable
 }

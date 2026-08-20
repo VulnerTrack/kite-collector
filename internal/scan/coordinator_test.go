@@ -218,6 +218,14 @@ func (s *fakeStore) DescribeTable(_ context.Context, _ string) (*store.TableSche
 	return nil, store.ErrUnknownTable
 }
 
+func (s *fakeStore) FacetTable(_ context.Context, _ string, _, _ int) ([]store.ColumnFacet, error) {
+	return nil, store.ErrUnknownTable
+}
+
+func (s *fakeStore) ListJoinedRows(_ context.Context, _ store.JoinFilter) ([]store.Row, error) {
+	return nil, store.ErrUnknownTable
+}
+
 func (s *fakeStore) ListRows(_ context.Context, _ store.RowsFilter) ([]store.Row, int64, error) {
 	return nil, 0, store.ErrUnknownTable
 }

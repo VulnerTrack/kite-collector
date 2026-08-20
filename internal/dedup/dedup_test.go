@@ -167,6 +167,14 @@ func (m *mockStore) DescribeTable(_ context.Context, _ string) (*store.TableSche
 	return nil, store.ErrUnknownTable
 }
 
+func (m *mockStore) FacetTable(_ context.Context, _ string, _, _ int) ([]store.ColumnFacet, error) {
+	return nil, store.ErrUnknownTable
+}
+
+func (m *mockStore) ListJoinedRows(_ context.Context, _ store.JoinFilter) ([]store.Row, error) {
+	return nil, store.ErrUnknownTable
+}
+
 func (m *mockStore) ListRows(_ context.Context, _ store.RowsFilter) ([]store.Row, int64, error) {
 	return nil, 0, store.ErrUnknownTable
 }
