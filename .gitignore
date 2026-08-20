@@ -50,6 +50,7 @@ data/
 
 # Claude Code
 .claude/
+.claude-merge-tmp/
 /kite-collector
 /kite-collector.new
 /kite-collector.release
