@@ -2,6 +2,7 @@ package software
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"strings"
 
@@ -30,7 +31,7 @@ func (w *WindowsRegistry) Available() bool { return runtime.GOOS == "windows" }
 func (w *WindowsRegistry) Collect(ctx context.Context) (*Result, error) {
 	inventory, err := w.collector.Collect(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("windows uninstall registry: %w", err)
 	}
 	return WindowsProgramsToSoftware(inventory.Programs), nil
 }
