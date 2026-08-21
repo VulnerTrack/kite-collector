@@ -112,6 +112,8 @@ type observabilityView struct {
 	Endpoint                   string                  `json:"endpoint,omitempty"`
 	EnrolledUserID             string                  `json:"enrolled_user_id,omitempty"`
 	EnrolledUserEmail          string                  `json:"enrolled_user_email,omitempty"`
+	TenantID                   string                  `json:"tenant_id,omitempty"`
+	TenantOrgName              string                  `json:"tenant_org_name,omitempty"`
 	HealthSummary              string                  `json:"health_summary"`
 	HealthDetail               string                  `json:"health_detail,omitempty"` // iter-33: names of fail/warn subsystems beside the rollup badge
 	HealthClass                string                  `json:"-"`                       // CSS class, UI-only
@@ -1510,6 +1512,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   <table class="kv observability-kv">
     <tr><td>Enrolled user ID</td><td>{{if .EnrolledUserID}}<code>{{.EnrolledUserID}}</code>{{else}}<span class="muted">not available</span>{{end}}</td></tr>
     <tr><td>Enrolled user email</td><td>{{if .EnrolledUserEmail}}{{.EnrolledUserEmail}}{{else}}<span class="muted">not available</span>{{end}}</td></tr>
+    <tr><td>Organization (tenant)</td><td>{{if .TenantOrgName}}{{.TenantOrgName}} {{end}}{{if .TenantID}}<code>{{.TenantID}}</code>{{end}}{{if and (not .TenantOrgName) (not .TenantID)}}<span class="muted">not available</span>{{end}}</td></tr>
     <tr><td colspan="2" class="kv-section-header"><span class="muted small">Process</span></td></tr>
     <tr><td>Go version</td><td><code>{{.Runtime.GoVersion}}</code></td></tr>
     <tr><td>Heap allocated</td><td>{{.Runtime.HeapAlloc}} <span class="spark-cell">{{.Runtime.HeapTrendSVG}}</span></td></tr>
@@ -1750,6 +1753,12 @@ func renderObservabilityMarkdown(view observabilityView) string {
 	if view.EnrolledUserEmail != "" {
 		fmt.Fprintf(&b, "- Enrolled user email: %s\n", view.EnrolledUserEmail)
 	}
+	if view.TenantOrgName != "" {
+		fmt.Fprintf(&b, "- Organization: %s\n", view.TenantOrgName)
+	}
+	if view.TenantID != "" {
+		fmt.Fprintf(&b, "- Tenant ID: `%s`\n", view.TenantID)
+	}
 	fmt.Fprintf(&b, "- Go: `%s`\n", view.Runtime.GoVersion)
 	fmt.Fprintf(&b, "- Heap allocated: %s\n", view.Runtime.HeapAlloc)
 	fmt.Fprintf(&b, "- Goroutines: %d\n", view.Runtime.Goroutines)
@@ -1784,9 +1793,13 @@ func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabil
 		Endpoint:    deps.PlatformEndpoint,
 	}
 	if certsDir := strings.TrimSpace(deps.CertsDir); certsDir != "" {
-		view.EnrolledUserID, view.EnrolledUserEmail = telresource.UserFromCertFile(
-			filepath.Join(certsDir, "agent.pem"),
-		)
+		agentCert := filepath.Join(certsDir, "agent.pem")
+		view.EnrolledUserID, view.EnrolledUserEmail = telresource.UserFromCertFile(agentCert)
+		// Tenant identity as PKI stamped it into the Subject
+		// Organization: the tenant UUID always, the human org name once
+		// certificates carry it as the additional O value. Older certs
+		// show the UUID alone.
+		view.TenantID, view.TenantOrgName = telresource.TenantOrgFromCertFile(agentCert)
 	}
 	view.Health = computeHealthChecks(ctx, deps)
 	view.HealthSummary, view.HealthClass, view.HealthDetail = rollupHealth(view.Health)

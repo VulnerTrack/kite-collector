@@ -63,3 +63,32 @@ func TestResolveTenantID_FallsBackToEnv(t *testing.T) {
 	assert.Equal(t, "env-tenant", ResolveTenantID(writeCert(t), "env-tenant"))
 	assert.Empty(t, ResolveTenantID("", ""))
 }
+
+// PKI can stamp the human organization name as an additional non-UUID
+// Organization value alongside the tenant UUID; both halves must come
+// back regardless of order, and certs predating name stamping yield the
+// UUID alone.
+func TestTenantOrgFromCertFile_UUIDAndName(t *testing.T) {
+	id, name := TenantOrgFromCertFile(writeCert(t, testTenant, "Acme Corp"))
+	assert.Equal(t, testTenant, id)
+	assert.Equal(t, "Acme Corp", name)
+
+	id, name = TenantOrgFromCertFile(writeCert(t, "Acme Corp", testTenant))
+	assert.Equal(t, testTenant, id, "order of O values must not matter")
+	assert.Equal(t, "Acme Corp", name)
+}
+
+func TestTenantOrgFromCertFile_UUIDOnlyLegacyCert(t *testing.T) {
+	id, name := TenantOrgFromCertFile(writeCert(t, testTenant))
+	assert.Equal(t, testTenant, id)
+	assert.Empty(t, name, "pre-org-name certs have no name to show")
+}
+
+func TestTenantOrgFromCertFile_Absent(t *testing.T) {
+	id, name := TenantOrgFromCertFile(writeCert(t))
+	assert.Empty(t, id)
+	assert.Empty(t, name)
+	id, name = TenantOrgFromCertFile("/no/such/cert.pem")
+	assert.Empty(t, id)
+	assert.Empty(t, name)
+}

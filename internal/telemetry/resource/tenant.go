@@ -25,21 +25,37 @@ import (
 // values agree; the agent cannot assert a tenant the collector would disagree
 // with.
 func TenantFromCertFile(certPath string) string {
+	id, _ := TenantOrgFromCertFile(certPath)
+	return id
+}
+
+// TenantOrgFromCertFile returns both tenant identifiers PKI can stamp
+// into the Subject Organization at enrollment: the tenant UUID (RFC-0063
+// §5.1) and, when the PKI includes one, the human-readable organization
+// name carried as an additional non-UUID Organization value (multi-valued
+// O is standard X.509). Either half is "" when absent — certificates
+// issued before org-name stamping carry only the UUID, and both are ""
+// when the file is missing or unparseable.
+//
+// Same authority note as TenantFromCertFile: display/log material, never
+// load-bearing — the collector re-derives tenancy from the presented
+// certificate server-side.
+func TenantOrgFromCertFile(certPath string) (tenantID, orgName string) {
 	if strings.TrimSpace(certPath) == "" {
-		return ""
+		return "", ""
 	}
 	pemBytes, err := os.ReadFile(certPath) //#nosec G304 -- operator-configured cert path
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	return tenantFromCertPEM(pemBytes)
+	return tenantOrgFromCertPEM(pemBytes)
 }
 
-func tenantFromCertPEM(pemBytes []byte) string {
+func tenantOrgFromCertPEM(pemBytes []byte) (tenantID, orgName string) {
 	for {
 		block, rest := pem.Decode(pemBytes)
 		if block == nil {
-			return ""
+			return "", ""
 		}
 		pemBytes = rest
 		if block.Type != "CERTIFICATE" {
@@ -50,12 +66,22 @@ func tenantFromCertPEM(pemBytes []byte) string {
 			continue
 		}
 		for _, org := range cert.Subject.Organization {
-			if t, perr := uuid.Parse(strings.TrimSpace(org)); perr == nil {
-				return t.String()
+			org = strings.TrimSpace(org)
+			if org == "" {
+				continue
+			}
+			if t, perr := uuid.Parse(org); perr == nil {
+				if tenantID == "" {
+					tenantID = t.String()
+				}
+				continue
+			}
+			if orgName == "" {
+				orgName = org
 			}
 		}
 		// First leaf certificate wins; do not fall through to CA certs.
-		return ""
+		return tenantID, orgName
 	}
 }
 
