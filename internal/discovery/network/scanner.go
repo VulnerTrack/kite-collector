@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
@@ -220,6 +221,15 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 	scanID := uuid.Must(uuid.NewV7()).String()
 	startedAt := time.Now().UTC()
 	parsed := parseScannerConfig(cfg)
+
+	// No scope configured means there is nothing to scan — an operator
+	// choice, not a scan failure. Returning before validateAndClamp
+	// keeps the ip_count_cap safety guard from firing (and logging a
+	// WARN) on every scheduled scan of an unconfigured agent.
+	if len(parsed.Scope) == 0 {
+		return nil, fmt.Errorf("network: scope (target CIDRs) is not configured: %w",
+			discovery.ErrNotConfigured)
+	}
 
 	totalIPs, guardEvents, err := s.validateAndClamp(ctx, &parsed)
 	for _, ge := range guardEvents {

@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 517 codes across 60 packages.
+**Catalog size:** 519 codes across 60 packages.
 
 ---
 
@@ -387,7 +387,7 @@ Source: [`internal/dedup/logcodes.go`](../internal/dedup/logcodes.go) · 5 codes
 
 ## `discovery` (internal/discovery)
 
-Source: [`internal/discovery/logcodes.go`](../internal/discovery/logcodes.go) · 3 codes
+Source: [`internal/discovery/logcodes.go`](../internal/discovery/logcodes.go) · 4 codes
 
 **--- registry surface (per-source orchestration) -----------------**
 
@@ -395,6 +395,7 @@ Source: [`internal/discovery/logcodes.go`](../internal/discovery/logcodes.go) ·
 |---|---|---|
 | `discovery.registry.source_circuit_open` | `LogCodeRegistrySourceCircuitOpen` | — |
 | `discovery.registry.source_failed` | `LogCodeRegistrySourceFailed` | — |
+| `discovery.registry.source_not_configured` | `LogCodeRegistrySourceNotConfigured` | — |
 
 **--- heartbeat surface -------------------------------------------**
 
@@ -526,7 +527,7 @@ Source: [`internal/discovery/agent/scheduled/logcodes.go`](../internal/discovery
 
 ## `software` (internal/discovery/agent/software)
 
-Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/agent/software/logcodes.go) · 4 codes
+Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/agent/software/logcodes.go) · 5 codes
 
 **registry surface — per-collector lifecycle and aggregation errors when the multi-package-manager registry runs the fan-out**
 
@@ -545,6 +546,12 @@ Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/
 | Code | Constant | Description |
 |---|---|---|
 | `agent_software.brew.root_refused` | `LogCodeBrewRootRefused` | — |
+
+**cocoapods surface — same environment condition as brew: CocoaPods hard-refuses to run as root, the normal state for a privileged agent, so the inventory is skipped rather than failed**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_software.cocoapods.root_refused` | `LogCodeCocoaPodsRootRefused` | — |
 
 **swiftpm surface — project-scope conditions detected at collect time (no Package.swift at or above the working directory)**
 

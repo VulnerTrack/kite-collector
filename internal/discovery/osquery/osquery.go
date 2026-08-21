@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -81,7 +82,8 @@ type FileEvent struct {
 func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine, error) {
 	socket := resolveSocket(cfg)
 	if socket == "" {
-		return nil, fmt.Errorf("osquery: no extensions socket found; set KITE_OSQUERY_SOCKET or sources.osquery.socket, or install osqueryd")
+		return nil, fmt.Errorf("osquery: no extensions socket found; set KITE_OSQUERY_SOCKET or sources.osquery.socket, or install osqueryd: %w",
+			discovery.ErrNotConfigured)
 	}
 
 	client := s.newClient(socket)

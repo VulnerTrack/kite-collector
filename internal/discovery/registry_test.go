@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/safety"
 )
 
 // captureRecorder collects every heartbeat the registry emits so tests can
@@ -323,4 +325,66 @@ func TestRegistry_DiscoverAll_NilRecorderIsNoop(t *testing.T) {
 	machines, err := reg.DiscoverAll(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Len(t, machines, 1)
+}
+
+// notConfiguredSource wraps discovery.ErrNotConfigured the way real
+// sources do (fmt.Errorf with %w) when required config is absent.
+type notConfiguredSource struct {
+	name string
+}
+
+func (s *notConfiguredSource) Name() string { return s.name }
+
+func (s *notConfiguredSource) Discover(_ context.Context, _ map[string]any) ([]model.Machine, error) {
+	return nil, fmt.Errorf("%s: KITE_TEST_ENDPOINT required: %w", s.name, ErrNotConfigured)
+}
+
+// A source with nothing configured is deliberately idle, not broken:
+// it must log an INFO skip with its own code — never the WARN
+// source_failed envelope that buries real failures.
+func TestRegistry_NotConfiguredSource_LogsInfoSkipNotFailure(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	reg := NewRegistry()
+	reg.Register(&notConfiguredSource{name: "wazuh"})
+
+	_, err := reg.DiscoverAll(context.Background(), map[string]map[string]any{"wazuh": {}})
+	require.NoError(t, err)
+
+	var skip map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var m map[string]any
+		if json.Unmarshal([]byte(line), &m) == nil {
+			require.NotEqual(t, "discovery source failed", m["msg"],
+				"not-configured must not be reported as a source failure")
+			if m["code"] == string(LogCodeRegistrySourceNotConfigured) {
+				skip = m
+			}
+		}
+	}
+	require.NotNil(t, skip, "expected a source_not_configured log line")
+	assert.Equal(t, "INFO", skip["level"])
+	assert.Equal(t, "wazuh", skip["source"])
+	assert.Contains(t, skip["reason"], "KITE_TEST_ENDPOINT",
+		"the reason must name what the operator has to set")
+}
+
+// The circuit breaker must not accumulate failures for deliberately
+// unconfigured sources — a permanently open circuit for them would be
+// noise, and the transition WARN would defeat the quiet skip.
+func TestRegistry_NotConfiguredSource_DoesNotTripCircuitBreaker(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&notConfiguredSource{name: "proxmox"})
+	breaker := safety.NewCircuitBreaker(safety.DefaultCircuitBreakerConfig())
+	reg.SetCircuitBreaker(breaker)
+
+	for range 10 {
+		_, err := reg.DiscoverAll(context.Background(), map[string]map[string]any{"proxmox": {}})
+		require.NoError(t, err)
+	}
+	assert.False(t, breaker.ShouldSkip("proxmox"),
+		"not-configured skips must never open the circuit")
 }

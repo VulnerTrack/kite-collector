@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
@@ -51,7 +52,8 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Machi
 	password := os.Getenv("KITE_WAZUH_PASSWORD")
 
 	if endpoint == "" || username == "" || password == "" {
-		return nil, fmt.Errorf("wazuh: KITE_WAZUH_ENDPOINT, KITE_WAZUH_USERNAME, KITE_WAZUH_PASSWORD required")
+		return nil, fmt.Errorf("wazuh: KITE_WAZUH_ENDPOINT, KITE_WAZUH_USERNAME, KITE_WAZUH_PASSWORD required: %w",
+			discovery.ErrNotConfigured)
 	}
 
 	// Validate user-provided endpoints (skip for test override via baseURL).

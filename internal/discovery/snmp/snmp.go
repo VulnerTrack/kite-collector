@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -55,7 +56,8 @@ func (s *SNMP) Discover(ctx context.Context, cfg map[string]any) ([]model.Machin
 
 	targets := toStringSlice(cfg["scope"])
 	if len(targets) == 0 {
-		return nil, fmt.Errorf("snmp: scope (target CIDRs) is required")
+		return nil, fmt.Errorf("snmp: scope (target CIDRs) is required: %w",
+			discovery.ErrNotConfigured)
 	}
 
 	timeout := defaultTimeout

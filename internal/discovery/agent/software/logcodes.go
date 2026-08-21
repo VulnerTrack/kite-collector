@@ -25,6 +25,11 @@ const (
 	// run as root, the normal state for a sudo-started agent)
 	LogCodeBrewRootRefused LogCode = "agent_software.brew.root_refused"
 
+	// cocoapods surface — same environment condition as brew: CocoaPods
+	// hard-refuses to run as root, the normal state for a privileged
+	// agent, so the inventory is skipped rather than failed
+	LogCodeCocoaPodsRootRefused LogCode = "agent_software.cocoapods.root_refused"
+
 	// swiftpm surface — project-scope conditions detected at collect
 	// time (no Package.swift at or above the working directory)
 	LogCodeSwiftPMNoManifest LogCode = "agent_software.swiftpm.no_manifest"

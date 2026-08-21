@@ -13,8 +13,9 @@ type LogCode string
 
 const (
 	// --- registry surface (per-source orchestration) -----------------
-	LogCodeRegistrySourceCircuitOpen LogCode = "discovery.registry.source_circuit_open"
-	LogCodeRegistrySourceFailed      LogCode = "discovery.registry.source_failed"
+	LogCodeRegistrySourceCircuitOpen   LogCode = "discovery.registry.source_circuit_open"
+	LogCodeRegistrySourceFailed        LogCode = "discovery.registry.source_failed"
+	LogCodeRegistrySourceNotConfigured LogCode = "discovery.registry.source_not_configured"
 
 	// --- heartbeat surface -------------------------------------------
 	LogCodeHeartbeatRecordFailed LogCode = "discovery.heartbeat.record_failed"

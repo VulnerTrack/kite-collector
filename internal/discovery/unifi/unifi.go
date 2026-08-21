@@ -29,6 +29,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
@@ -276,9 +277,10 @@ func (u *UniFi) discoverLocal(ctx context.Context, cfg map[string]any) ([]model.
 
 	if endpoint == "" || username == "" || password == "" {
 		return nil, fmt.Errorf(
-			"unifi: set KITE_UNIFI_API_KEY (cloud) or " +
-				"KITE_UNIFI_ENDPOINT + KITE_UNIFI_USERNAME + " +
-				"KITE_UNIFI_PASSWORD (local)",
+			"unifi: set KITE_UNIFI_API_KEY (cloud) or "+
+				"KITE_UNIFI_ENDPOINT + KITE_UNIFI_USERNAME + "+
+				"KITE_UNIFI_PASSWORD (local): %w",
+			discovery.ErrNotConfigured,
 		)
 	}
 

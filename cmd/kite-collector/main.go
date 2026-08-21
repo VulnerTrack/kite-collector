@@ -1457,9 +1457,11 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				"addr", apiAddr)
 			if srvErr := apiSrv.ListenAndServe(); srvErr != nil && srvErr != http.ErrServerClosed {
 				slog.Error("REST API server exited with error",
-					"code", string(LogCodeAPIServerFailed),
-					"error", srvErr,
-					"addr", apiAddr)
+					append([]any{
+						"code", string(LogCodeAPIServerFailed),
+						"error", srvErr,
+						"addr", apiAddr,
+					}, addrInUseHint(srvErr, apiAddr, "api.addr / KITE_API_ADDR")...)...)
 			}
 		}()
 	} else {
@@ -1498,9 +1500,11 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				"commit", commit)
 			if srvErr := dashSrv.ListenAndServe(); srvErr != nil && srvErr != http.ErrServerClosed {
 				slog.Error("dashboard server exited with error",
-					"code", string(LogCodeDashboardServerFailed),
-					"error", srvErr,
-					"addr", dashboardAddr)
+					append([]any{
+						"code", string(LogCodeDashboardServerFailed),
+						"error", srvErr,
+						"addr", dashboardAddr,
+					}, addrInUseHint(srvErr, dashboardAddr, "--dashboard-addr / dashboard.addr")...)...)
 			}
 		}()
 	}

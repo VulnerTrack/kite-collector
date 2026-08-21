@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -43,7 +44,8 @@ func (p *Proxmox) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 	tokenSecret := os.Getenv("KITE_PROXMOX_TOKEN_SECRET")
 
 	if endpoint == "" || tokenID == "" || tokenSecret == "" {
-		return nil, fmt.Errorf("proxmox: KITE_PROXMOX_ENDPOINT, KITE_PROXMOX_TOKEN_ID, and KITE_PROXMOX_TOKEN_SECRET are required")
+		return nil, fmt.Errorf("proxmox: KITE_PROXMOX_ENDPOINT, KITE_PROXMOX_TOKEN_ID, and KITE_PROXMOX_TOKEN_SECRET are required: %w",
+			discovery.ErrNotConfigured)
 	}
 
 	valOpts := []safenet.Option{safenet.AllowPrivate()}

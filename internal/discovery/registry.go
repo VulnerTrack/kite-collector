@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -125,6 +126,19 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 			elapsed := time.Since(start)
 
 			if err != nil {
+				// A source with nothing configured to act on is inactive by
+				// operator choice, not broken: log at INFO with its own code,
+				// keep the circuit closed, and report a healthy zero-machine
+				// heartbeat so the reconciler sees "alive, deliberately idle"
+				// rather than a permanent failure floor.
+				if errors.Is(err, ErrNotConfigured) {
+					slog.Info("discovery source skipped: not configured",
+						"code", string(LogCodeRegistrySourceNotConfigured),
+						"source", src.Name(),
+						"reason", err.Error())
+					r.emitHeartbeat(ctx, src.Name(), model.HeartbeatOK, 0, elapsed)
+					return nil
+				}
 				// Emit the flat structured envelope (error_code/error_message/
 				// hint/error_context) so a source returning a *kiteerrors.Error
 				// surfaces its catalog code and remediation as top-level log
