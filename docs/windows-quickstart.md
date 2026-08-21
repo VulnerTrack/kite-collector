@@ -1,138 +1,74 @@
-# Windows Quickstart
+# Installing Kite Collector on Windows
 
-This guide walks you through installing and running kite-collector on Windows.
+This guide explains how to install Kite Collector on Windows and connect it to
+VulnerTrack.
 
-## Install
+## 1. Download Kite Collector
 
-### Option 1: PowerShell one-liner (recommended)
+1. Go to the [Kite Collector releases page](https://github.com/VulnerTrack/kite-collector/releases).
+2. Open the release marked as **Latest**.
+3. Under **Assets**, download
+   `kite-collector_windows_amd64_bin.exe`.
+4. Wait for the download to finish.
 
-Open PowerShell and run:
+> Download the `.exe` file directly. You do not need to download or extract
+> the `.tar.gz` archive.
 
-```powershell
-irm https://get.kite-collector.dev/install.ps1 | iex
+## 2. Start the installation
+
+> **Administrator access is required.** The installer must be run as an
+> administrator so it can register and start the Kite Collector Windows
+> service.
+
+1. Open the Windows **Downloads** folder.
+2. Right-click `kite-collector_windows_amd64_bin.exe` and select
+   **Run as administrator**.
+3. When the User Account Control window appears, click **Yes**.
+4. In the **Vulnertrack Kite Collector Setup** window, click **Install**.
+5. Wait until the **Installation complete!** message appears.
+
+## 3. Open the portal
+
+1. When the installation is complete, click **Launch Portal**.
+2. Kite Collector will open the portal in your default browser.
+
+If the browser does not open automatically, go to:
+
+```text
+http://127.0.0.1:9090/kite-login
 ```
 
-This downloads the latest binary directly to `%LOCALAPPDATA%\kite-collector\`, adds it to your user PATH, and registers the per-user service.
+## 4. Sign in
 
-For the fastest binary-only install, skip service registration:
+1. In the portal, click **Sign in**.
+2. Sign in with your VulnerTrack account.
+3. If the browser asks for permission to continue, approve the request.
 
-```powershell
-& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService
-```
+## 5. Select an organization
 
-### Option 2: Direct setup download
+1. Select the organization you want to associate with the computer.
+2. Confirm your selection.
+3. Wait while Kite Collector completes the enrollment.
 
-1. Go to [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases)
-2. Download `kite-collector_windows_amd64_bin.exe`
-3. Rename it to `kite-collector.exe`
-4. Double-click it to open setup
+## 6. Open the dashboard
 
-Use the direct `.exe` asset, not the `.tar.gz` archive. Opening the executable
-from inside the archive triggers Windows' compressed-folder warning.
+When enrollment is complete, the Kite Collector dashboard will open. From the
+dashboard, you can confirm that the computer is connected and view:
 
-## First scan
+- Operating system information.
+- Installed software and license status.
+- Hardware and computer configuration.
+- Findings detected by Kite Collector.
 
-Open a command prompt or PowerShell and run:
+Installation and enrollment are now complete.
 
-```
-kite-collector scan
-```
+## If Windows blocks the file
 
-This scans the local machine and stores results in `.\data\kite.db`.
+If the **Windows protected your PC** message appears:
 
-## Interactive setup
+1. Click **More info**.
+2. Confirm that the downloaded file is the Kite Collector executable.
+3. Click **Run anyway**.
 
-Install the agent as a service and sign in with your Vulnertrack account:
-
-```
-kite-collector install --agent-code <code>
-```
-
-The command prints a sign-in URL — open it in any browser, approve the
-collector, and paste the code back into the terminal. Double-clicking
-`kite-collector.exe` from File Explorer opens the graphical installer
-instead. For source discovery and credential configuration, use the
-browser dashboard (`kite-collector dashboard`).
-
-## Docker on Windows
-
-kite-collector automatically detects Docker Desktop via:
-1. The Windows named pipe `\\.\pipe\docker_engine`
-2. TCP fallback on `localhost:2375`
-
-If Docker Desktop is running, it will be detected by `kite-collector scan --auto`.
-
-### Enabling TCP access
-
-If named pipe access fails, enable TCP in Docker Desktop:
-1. Open Docker Desktop Settings
-2. Go to General
-3. Check "Expose daemon on tcp://localhost:2375 without TLS"
-
-## Environment variables
-
-On Windows CMD:
-```cmd
-set KITE_WAZUH_USERNAME=admin
-set KITE_WAZUH_PASSWORD=secret
-kite-collector scan --auto
-```
-
-On Windows PowerShell:
-```powershell
-$env:KITE_WAZUH_USERNAME="admin"
-$env:KITE_WAZUH_PASSWORD="secret"
-kite-collector scan --auto
-```
-
-kite-collector automatically detects CMD vs PowerShell and shows the correct syntax in its output.
-
-## Query results
-
-```
-kite-collector query assets
-kite-collector query software --limit 20
-kite-collector query findings
-kite-collector query scans
-```
-
-## Dashboard
-
-Open the browser dashboard:
-
-```
-kite-collector dashboard
-```
-
-This starts a local web server on `http://localhost:9876` and opens your browser. The dashboard works fully offline -- all assets are embedded in the binary.
-
-## Error lookup
-
-If you encounter an error code, look it up:
-
-```
-kite-collector error KITE-E001
-```
-
-This shows the error message, cause, and Windows-specific remediation steps.
-
-## Troubleshooting
-
-### "kite-collector is not recognized"
-
-The binary is not in your PATH. Either:
-- Run the PowerShell installer (adds to PATH automatically)
-- Add the directory containing `kite-collector.exe` to your PATH manually
-- Use the full path: `C:\path\to\kite-collector.exe scan`
-
-### "Docker not accessible" (KITE-E001)
-
-1. Ensure Docker Desktop is running
-2. Check Settings > General > "Expose daemon on tcp://localhost:2375"
-3. Run: `kite-collector error KITE-E001` for detailed instructions
-
-### "Permission denied" (KITE-E008)
-
-Run the command prompt or PowerShell as Administrator:
-- Right-click > "Run as Administrator"
-- Or run from an elevated prompt
+For advanced options or automated deployments, see the
+[complete installation documentation](window_install.md).

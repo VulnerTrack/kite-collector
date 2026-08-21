@@ -258,3 +258,10 @@ func TestSortInfosDeterministic(t *testing.T) {
 		t.Fatalf("sort: %+v", in)
 	}
 }
+
+func TestDisplayName(t *testing.T) {
+	got := DisplayName(Info{OSProductName: "Windows 11 Pro", OSDisplayVersion: "23H2", OSVersion: "10.0.22631"})
+	if got != "Windows 11 Pro 23H2 (10.0.22631)" {
+		t.Fatalf("DisplayName=%q", got)
+	}
+}

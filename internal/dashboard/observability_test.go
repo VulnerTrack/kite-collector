@@ -2,8 +2,17 @@ package dashboard
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
+	"math/big"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +24,37 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
+
+func TestObservability_RendersEnrolledUserIdentity(t *testing.T) {
+	const (
+		userID = "33333333-3333-4333-8333-333333333333"
+		email  = "operator@example.com"
+	)
+	certsDir := t.TempDir()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	cert := &x509.Certificate{
+		SerialNumber:   big.NewInt(1),
+		Subject:        pkix.Name{CommonName: "kite-agent", OrganizationalUnit: []string{userID}},
+		EmailAddresses: []string{email},
+		NotBefore:      time.Now().Add(-time.Hour),
+		NotAfter:       time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, cert, cert, &key.PublicKey, key)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "agent.pem"), pem.EncodeToMemory(&pem.Block{
+		Type: "CERTIFICATE", Bytes: der,
+	}), 0o600))
+
+	view := buildObservabilityView(context.Background(), onboardingDeps{CertsDir: certsDir})
+	assert.Equal(t, userID, view.EnrolledUserID)
+	assert.Equal(t, email, view.EnrolledUserEmail)
+
+	var rendered strings.Builder
+	require.NoError(t, observabilityTmpl.Execute(&rendered, view))
+	assert.Contains(t, rendered.String(), userID)
+	assert.Contains(t, rendered.String(), email)
+}
 
 // TestObservability_PageRendersAllSections asserts the /observability page
 // includes all four expected sections (healthchecks, probe metrics, scan

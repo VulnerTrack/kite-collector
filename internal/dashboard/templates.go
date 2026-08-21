@@ -174,6 +174,7 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 		Version        string
 		PackageManager string
 		CPE23          string
+		License        string
 	}
 
 	var rows []softwareRow
@@ -189,6 +190,7 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 				Version:        s.Version,
 				PackageManager: s.PackageManager,
 				CPE23:          s.CPE23,
+				License:        s.License,
 			})
 			if len(rows) >= 500 {
 				break
@@ -290,6 +292,7 @@ const softwareTemplate = `<h2>Software ({{len .Software}})</h2>
       <th>Host</th>
       <th>Package</th>
       <th>Version</th>
+      <th>License</th>
       <th>Manager</th>
       <th>CPE 2.3</th>
     </tr>
@@ -300,6 +303,7 @@ const softwareTemplate = `<h2>Software ({{len .Software}})</h2>
       <td>{{.Hostname}}</td>
       <td>{{.SoftwareName}}</td>
       <td>{{.Version}}</td>
+      <td>{{if .License}}{{.License}}{{else}}unknown{{end}}</td>
       <td>{{.PackageManager}}</td>
       <td><code>{{.CPE23}}</code></td>
     </tr>

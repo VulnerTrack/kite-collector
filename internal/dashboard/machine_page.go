@@ -206,10 +206,10 @@ const machinePageTemplate = `<div class="machine-breadcrumb">
   </div>
   {{if .SoftwarePreview}}
   <table>
-    <thead><tr><th>Name</th><th>Vendor</th><th>Version</th><th>CPE 2.3</th><th>Manager</th></tr></thead>
+    <thead><tr><th>Name</th><th>Vendor</th><th>Version</th><th>License</th><th>CPE 2.3</th><th>Manager</th></tr></thead>
     <tbody>
     {{range .SoftwarePreview}}
-      <tr><td>{{.SoftwareName}}</td><td>{{.Vendor}}</td><td><code>{{.Version}}</code></td><td><code>{{.CPE23}}</code></td><td>{{.PackageManager}}</td></tr>
+      <tr><td>{{.SoftwareName}}</td><td>{{.Vendor}}</td><td><code>{{.Version}}</code></td><td>{{if .License}}{{.License}}{{else}}unknown{{end}}</td><td><code>{{.CPE23}}</code></td><td>{{.PackageManager}}</td></tr>
     {{end}}
     </tbody>
   </table>
@@ -222,10 +222,10 @@ const machinePageTemplate = `<div class="machine-breadcrumb">
 {{if eq .Tab "software"}}
 <div class="data-grid">
 <table>
-  <thead><tr><th>Name</th><th>Vendor</th><th>Version</th><th>CPE 2.3</th><th>Manager</th><th>Architecture</th></tr></thead>
+  <thead><tr><th>Name</th><th>Vendor</th><th>Version</th><th>License</th><th>CPE 2.3</th><th>Manager</th><th>Architecture</th></tr></thead>
   <tbody>
   {{range .Software}}
-    <tr><td>{{.SoftwareName}}</td><td>{{.Vendor}}</td><td><code>{{.Version}}</code></td><td><code>{{.CPE23}}</code></td><td>{{.PackageManager}}</td><td>{{.Architecture}}</td></tr>
+    <tr><td>{{.SoftwareName}}</td><td>{{.Vendor}}</td><td><code>{{.Version}}</code></td><td>{{if .License}}{{.License}}{{else}}unknown{{end}}</td><td><code>{{.CPE23}}</code></td><td>{{.PackageManager}}</td><td>{{.Architecture}}</td></tr>
   {{end}}
   </tbody>
 </table>

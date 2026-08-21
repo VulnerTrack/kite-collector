@@ -154,9 +154,10 @@ func TestRegistry_Register(t *testing.T) {
 }
 
 func TestNewRegistry_ContainsAllCollectors(t *testing.T) {
-	// RFC-0056 (18) + RFC-0058 (29) = 47 total.
+	// Includes the mandatory Windows operating-system inventory collector.
 	// Update this list when adding new collectors.
 	expected := []string{
+		"windows-os", "windows-registry",
 		// Phase 0 — Linux
 		"dpkg", "pacman", "rpm",
 		// Phase 1 — OS package managers

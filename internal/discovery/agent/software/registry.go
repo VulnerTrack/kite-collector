@@ -19,6 +19,14 @@ type Registry struct {
 func NewRegistry() *Registry {
 	return &Registry{
 		collectors: []Collector{
+			// The operating system is itself licensed software and must always
+			// be represented in Windows inventories, even when winget/choco are
+			// missing from PATH.
+			NewWindowsOS(),
+			// Windows Uninstall registry (HKLM 64/32-bit + every loaded HKCU
+			// profile). This is the authoritative fallback for vendor EXE/MSI
+			// installers such as Chrome that may not be known to winget/choco.
+			NewWindowsRegistry(),
 			// Linux
 			NewDpkg(),
 			NewPacman(),

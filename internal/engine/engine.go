@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 	"sort"
 	"time"
 
@@ -444,7 +445,14 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	var softwareCount, softwareErrors int
 	if scanCtx.Err() == nil {
 		if agentCfg, ok := configs["agent"]; ok {
-			if cs, ok := agentCfg["collect_software"].(bool); ok && cs {
+			// Windows itself is a mandatory inventory record: enrollment must
+			// expose its edition and activation status even when optional
+			// third-party software collection has been disabled.
+			collectSoftware := runtime.GOOS == "windows"
+			if cs, ok := agentCfg["collect_software"].(bool); ok {
+				collectSoftware = collectSoftware || cs
+			}
+			if collectSoftware {
 				if agentID := findAgentMachineID(machines); agentID != uuid.Nil {
 					swReg := software.NewRegistry()
 					swResult := swReg.Collect(scanCtx)

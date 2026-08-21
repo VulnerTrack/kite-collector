@@ -30,7 +30,10 @@ func (w *Winget) Available() bool {
 
 // Collect runs winget list and returns parsed results.
 func (w *Winget) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "winget", "list", "--source", "winget", "--disable-interactivity")
+	// Do not constrain `list` to the winget source. Installed applications can
+	// be correlated with winget, Microsoft Store, or no configured source at
+	// all; --source winget silently hid the latter two groups.
+	out, err := runWithLimits(ctx, "winget", "list", "--disable-interactivity")
 	if err != nil {
 		return nil, fmt.Errorf("winget list: %w", err)
 	}
