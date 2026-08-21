@@ -96,10 +96,13 @@ const kiteLoginTemplate = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Link Kite Collector - Vulnertrack</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
+<link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
+<link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=1.0.5">
+<link rel="stylesheet" href="/static/style.css?v=1.0.6">
 <style>
   body.kite-auth-page {
     display: flex;
@@ -330,7 +333,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=1.0.5">
+<link rel="stylesheet" href="/static/style.css?v=1.0.6">
 <style>
   body.kite-success-page {
     display: flex;

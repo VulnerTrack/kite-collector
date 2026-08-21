@@ -43,11 +43,14 @@ const indexPageTemplate = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="htmx-config" content='{"historyCacheSize": 20}'>
 <title>kite-collector dashboard</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
+<link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
+<link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.5">
+<link rel="stylesheet" href="/static/style.css?v=1.0.6">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

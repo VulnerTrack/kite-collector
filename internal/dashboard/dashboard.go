@@ -98,6 +98,13 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			"error", err)
 	} else {
 		mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
+		// Browsers request /favicon.ico unprompted (address-bar,
+		// bookmarks, non-HTML responses) — serve the VT mark there
+		// too instead of a 404. The <link rel="icon"> tags in the
+		// page heads point at the PNG variants under /static/img/.
+		mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFileFS(w, r, staticSub, "img/favicon.ico")
+		})
 	}
 
 	mux.HandleFunc("GET /kite-login", func(w http.ResponseWriter, r *http.Request) {
