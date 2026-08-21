@@ -269,6 +269,71 @@ Notes:
 - A collector-only install from the bundle MSI is possible with
   `msiexec /i ... ADDLOCAL=ProductFeature`.
 
+## Self-contained installer (`kite-collector-osquery_windows_amd64.exe`)
+
+The same collector + osqueryd payload as the bundle MSI, in one double-clickable
+`.exe` that needs **no `msiexec` and no second download**. Use it when MSI
+installs are blocked by policy, or when you just want the friendly wizard —
+which, before this artifact existed, was the one Windows path that could never
+install osquery.
+
+```powershell
+# Interactive: download and double-click, or
+.\kite-collector-osquery_windows_amd64.exe
+
+# Unattended (SCCM / Intune / GPO), from an elevated context
+.\kite-collector-osquery_windows_amd64.exe /SILENT
+.\kite-collector-osquery_windows_amd64.exe /VERYSILENT /DIR="C:\Program Files\Kite Collector"
+
+# Or via the bootstrap script, which verifies the published SHA256 first.
+# `| iex` cannot forward parameters, so build a scriptblock to pass -Osquery.
+& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -Osquery
+```
+
+| Switch | Effect |
+| --- | --- |
+| `/SILENT` | No window, no prompts |
+| `/VERYSILENT` | As `/SILENT`, and no completion notice either |
+| `/DIR="<path>"` | Install directory; validated to sit under `%ProgramFiles%` or `%LOCALAPPDATA%` |
+| `/LOG="<path>"` | Extra log destination (the canonical log is always written, see below) |
+| `/NORESTART`, `/SUPPRESSMSGBOXES` | Accepted and ignored — this installer never reboots and shows no dialogs when silent |
+| `/?`, `/HELP` | Print the switch list |
+
+Anything that is not a recognised setup switch falls through to the normal CLI,
+so `kite-collector-osquery.exe install --user` still works.
+
+How it differs from the bundle MSI:
+
+- **Same on-disk layout, same service names, same pipe.** The table above
+  applies verbatim; the two channels install byte-identical trees.
+- **SCM failure recovery is configured** for `kite-osqueryd` (restart after
+  60s, 60s, then 120s; failure count resets after 24h), which the MSI's
+  `<ServiceInstall>` never did. A crashed daemon now self-heals instead of
+  staying dead until the next reboot — parity with the Linux unit's
+  `Restart=on-failure`.
+- **Pre-flight upgrade detection.** If a prior Kite Collector MSI is installed,
+  the payload is written into *that* directory rather than a second tree, so
+  the two channels cannot end up fighting over the `kite-collector` service
+  name. Pass `/DIR=` to override.
+- **Fail-closed integrity.** The embedded osqueryd is verified twice: its
+  upstream package hash is pinned at build time (`scripts/osquery-pin.env`) and
+  baked into the binary at link time, and every extracted file is re-hashed on
+  disk before either service is registered.
+- **Structured install log** at
+  `%ProgramData%\kite-collector\install.log` (JSON lines, ACL'd to
+  Administrators + SYSTEM). Read it first when a silent install exits non-zero.
+- **Uninstall** removes both services:
+  `kite-collector-osquery.exe uninstall`.
+
+Check both services at any time:
+
+```powershell
+sc.exe query kite-collector
+sc.exe query kite-osqueryd
+sc.exe qfailure kite-osqueryd     # recovery actions
+curl http://127.0.0.1:9090/api/v1/install/status
+```
+
 ## Troubleshooting
 
 ### `install` fails with `Access is denied`

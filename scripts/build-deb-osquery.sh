@@ -27,31 +27,25 @@ set -euo pipefail
 
 VERSION="${1:-0.0.0-dev}"
 
-# osquery payload pin. Same version as the Windows bundle (build-msi.sh) and
-# the e2e sim (tests/e2e/osquery/Dockerfile.osquery); the daily osquery-smoke
-# workflow drift-checks against latest, so a needed bump surfaces there
-# first. Update BOTH lines together; the SHA256 is of the official deb asset
-# on the osquery GitHub release.
-OSQUERY_VERSION="5.15.0"
-OSQUERY_DEB_SHA256="bb20b589037665aab60060d313a10d2d2c0b2e5955e7fba52a2dc88b445eb8cd"
-OSQUERY_DEB_URL="https://github.com/osquery/osquery/releases/download/${OSQUERY_VERSION}/osquery_${OSQUERY_VERSION}-1.linux_amd64.deb"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# nfpm pin — bump deliberately, it's the packager, not a runtime dep.
+# osquery payload pin. OSQUERY_VERSION, OSQUERY_DEB_SHA256, OSQUERY_DEB_URL
+# and OSQUERY_LINUX_PACKS live in the shared scripts/osquery-pin.env, which
+# build-msi.sh and stage-osquery-embed.sh source too, so the Windows and Linux
+# bundles can never drift onto different upstream releases (RFC-0156 Phase 1).
+# Bump the pin file, never a copy here.
+# shellcheck source=scripts/osquery-pin.env
+. "$REPO_ROOT/scripts/osquery-pin.env"
+
+# Space-separated in the pin file (it has to stay POSIX-sh sourceable and
+# $GITHUB_ENV-exportable); split back into the array the staging loop wants.
+read -r -a OSQUERY_PACKS <<< "$OSQUERY_LINUX_PACKS"
+
+# nfpm pin — bump deliberately, it's the packager, not a runtime dep. Stays
+# here rather than in osquery-pin.env: it is a build tool, not part of the
+# redistributed osquery payload whose checksum the pin file governs.
 NFPM_VERSION="v2.47.0"
 
-# Linux-relevant subset of the community packs the official deb carries
-# (the windows-*/osx-* packs are dropped). Must stay in sync with the
-# commented "packs" block in packaging/deb/osquery.conf.
-OSQUERY_PACKS=(
-  vuln-management
-  incident-response
-  it-compliance
-  osquery-monitoring
-  ossec-rootkit
-  hardware-monitoring
-)
-
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$REPO_ROOT/dist"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT

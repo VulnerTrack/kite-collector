@@ -23,7 +23,7 @@ func ConfigurePath(opts Options) error {
 	if opts.UserMode {
 		k, err = registry.OpenKey(registry.CURRENT_USER, "Environment", registry.QUERY_VALUE|registry.SET_VALUE)
 	} else {
-		k, err = registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`, registry.QUERY_VALUE|registry.SET_VALUE)
+		k, err = registry.OpenKey(registry.LOCAL_MACHINE, machineEnvRegPath, registry.QUERY_VALUE|registry.SET_VALUE)
 	}
 	if err != nil {
 		return err

@@ -380,6 +380,25 @@ jobs:
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # RFC-0156 Phase 1: one pin, three consumers. Exported into the job
+      # environment before goreleaser runs because the kite-collector-osquery
+      # build entry's ldflags template bakes OSQUERY_MSI_SHA256 into the binary
+      # as its link-time checksum pin (R4, defense in depth). Sourcing rather
+      # than cat-ing into $GITHUB_ENV keeps the pin file's ${VERSION}
+      # interpolation and quoted multi-value entries working.
+      - name: Load the shared osquery pin
+        run: |
+          set -euo pipefail
+          . ./scripts/osquery-pin.env
+          {
+            echo "OSQUERY_VERSION=${OSQUERY_VERSION}"
+            echo "OSQUERY_MSI_SHA256=${OSQUERY_MSI_SHA256}"
+            echo "OSQUERY_DEB_SHA256=${OSQUERY_DEB_SHA256}"
+            echo "OSQUERY_MSI_URL=${OSQUERY_MSI_URL}"
+            echo "OSQUERY_LICENSE_ID=${OSQUERY_LICENSE_ID}"
+            echo "OSQUERY_CPE23=${OSQUERY_CPE23}"
+          } >> "$GITHUB_ENV"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -480,6 +499,88 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" \
             "dist/kite-collector-osquery_${VERSION}_amd64.deb" \
             --clobber
+
+      # ──────────────────────────────────────────────
+      # RFC-0156: sign, checksum, SBOM and provenance for the Windows
+      # installer family (the new self-contained exe plus both MSI products).
+      # ──────────────────────────────────────────────
+
+      # Authenticode signing (R9), resolving RFC-0059's Open Question 1. With
+      # no SignPath credentials configured the script writes
+      # signing_state=unsigned_released and exits 0 — Section 8.1 requires that
+      # a signing-service outage (or a not-yet-provisioned certificate, which
+      # is the Phase 3 state) degrade the release rather than block it.
+      - name: Sign Windows installers
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          KITE_CODESIGN_FINGERPRINT_SHA256: ${{ vars.KITE_CODESIGN_FINGERPRINT_SHA256 }}
+          KITE_CODESIGN_SUBJECT_CN: ${{ vars.KITE_CODESIGN_SUBJECT_CN }}
+          KITE_CODESIGN_ISSUER_CN: ${{ vars.KITE_CODESIGN_ISSUER_CN }}
+          KITE_CODESIGN_NOT_BEFORE: ${{ vars.KITE_CODESIGN_NOT_BEFORE }}
+          KITE_CODESIGN_NOT_AFTER: ${{ vars.KITE_CODESIGN_NOT_AFTER }}
+          KITE_CODESIGN_KEY_CUSTODY: ${{ vars.KITE_CODESIGN_KEY_CUSTODY }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash scripts/sign-windows-artifact.sh \
+            dist/kite-collector-osquery_windows_amd64.exe \
+            "dist/kite-collector_${VERSION}_amd64.msi" \
+            "dist/kite-collector-osquery_${VERSION}_amd64.msi"
+
+      # Per-artifact SBOM (R12) needs syft on the runner; the repo-wide
+      # anchore/sbom-action step below stays as-is.
+      - name: Install syft for per-artifact SBOMs
+        uses: anchore/sbom-action/download-syft@v0
+
+      # Checksum sidecars for every Windows installer artifact (R8, closing the
+      # "only the plain MSI gets one" gap) plus the release-provenance manifest
+      # ingest_installer_release_workflow() reads back (Section 5.4).
+      - name: Checksum, SBOM and provenance manifest for Windows installers
+        run: |
+          bash scripts/installer-release-manifest.sh \
+            "$GITHUB_REF_NAME" \
+            "$GITHUB_SHA" \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      # Re-upload with --clobber. goreleaser already published the *unsigned*
+      # exe as part of `release --clean`, and the earlier MSI step published
+      # MSIs plus a checksum computed before signing — so every artifact the
+      # signing step touched, and every sidecar recomputed after it, has to be
+      # replaced here or the published checksums would describe bytes nobody
+      # can download any more.
+      - name: Attach the signed Windows installers and their sidecars
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Refresh the stable unversioned alias from the (possibly signed) MSI.
+          if [ -f "dist/kite-collector_${VERSION}_amd64.msi" ]; then
+            cp "dist/kite-collector_${VERSION}_amd64.msi" dist/kite-collector_amd64.msi
+          fi
+          assets=(
+            dist/kite-collector-osquery_windows_amd64.exe
+            dist/kite-collector-osquery_windows_amd64.exe.sha256
+            dist/installer-release-manifest.json
+            dist/installer-release-manifest.json.sha256
+          )
+          for optional in \
+            dist/kite-collector-osquery_windows_amd64.sbom.spdx.json \
+            dist/kite-collector-osquery_windows_amd64.sbom.spdx.json.sha256 \
+            "dist/kite-collector_${VERSION}_amd64.msi" \
+            "dist/kite-collector_${VERSION}_amd64.msi.sha256" \
+            dist/kite-collector_amd64.msi \
+            "dist/kite-collector-osquery_${VERSION}_amd64.msi" \
+            "dist/kite-collector-osquery_${VERSION}_amd64.msi.sha256"
+          do
+            if [ -f "$optional" ]; then
+              assets+=("$optional")
+            fi
+          done
+          gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
 
       - name: Publish to WinGet
         if: env.WINGET_TOKEN != ''

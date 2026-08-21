@@ -98,6 +98,10 @@ func registerAgentInstallRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	mux.HandleFunc("GET /api/v1/agent/state", func(w http.ResponseWriter, r *http.Request) {
 		handleAgentState(w, r, deps)
 	})
+	// RFC-0156 R14: both registered services' state in one call.
+	mux.HandleFunc("GET /api/v1/install/status", func(w http.ResponseWriter, _ *http.Request) {
+		handleInstallStatus(w, deps)
+	})
 	mux.HandleFunc("GET /fragments/install-status", func(w http.ResponseWriter, _ *http.Request) {
 		renderOnboardingFragment(w, deps.Logger, "install-status", func(buf io.Writer) error {
 			return renderInstallStatusFragment(buf, deps)

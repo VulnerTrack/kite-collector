@@ -180,6 +180,10 @@ One-shot usage (recommended):
 			if certsDir == "" {
 				certsDir = defaultCertsDir(userMode)
 			}
+			// Remember whether the operator named a directory before the
+			// default fills it in: R7's in-place-upgrade adoption must never
+			// override an explicit --binary-dir.
+			binaryDirExplicit := binaryDir != ""
 			if binaryDir == "" {
 				binaryDir = defaultBinaryDir(userMode)
 			}
@@ -202,10 +206,11 @@ One-shot usage (recommended):
 					RedirectURI: redirectURI,
 					Scope:       scope,
 				},
-				userMode: userMode,
-				dryRun:   dryRun,
-				verbose:  verbose,
-				noStart:  noStart,
+				userMode:          userMode,
+				dryRun:            dryRun,
+				verbose:           verbose,
+				noStart:           noStart,
+				binaryDirExplicit: binaryDirExplicit,
 			})
 		},
 	}
@@ -271,6 +276,22 @@ manually if desired.`,
 				return fmt.Errorf("uninstall service: %w", err)
 			}
 			_, _ = fmt.Fprintf(os.Stdout, "  ✓  %s service removed\n", svcName)
+
+			// The bundled sibling daemon goes with it. No-op on a plain build;
+			// on the bundle artifact, leaving kite-osqueryd registered would
+			// keep a LocalSystem service running with nothing reading its
+			// extensions socket.
+			if osqErr := uninstallBundledOsquery(installer.Options{
+				UserMode:  userMode,
+				BinaryDir: defaultBinaryDir(userMode),
+				CertsDir:  defaultCertsDir(userMode),
+			}); osqErr != nil {
+				return osqErr
+			}
+			if installer.BundleAvailable() {
+				_, _ = fmt.Fprintf(os.Stdout, "  ✓  %s service removed\n",
+					installer.OsquerySvcName)
+			}
 			return nil
 		},
 	}
@@ -423,6 +444,9 @@ type installArgs struct {
 	dryRun    bool
 	verbose   bool
 	noStart   bool
+	// binaryDirExplicit records that --binary-dir was passed, so the R7
+	// pre-flight upgrade adoption leaves the operator's choice alone.
+	binaryDirExplicit bool
 }
 
 func runInstall(cmd *cobra.Command, a installArgs) error {
@@ -437,6 +461,17 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 		return fmt.Errorf("locate current executable: %w", err)
 	}
 	src, _ = filepath.Abs(src)
+
+	// R7 pre-flight. Detection is reported on every build; adoption of the
+	// prior directory only happens on the self-contained bundle artifact and
+	// only when the operator did not name a directory themselves.
+	if !a.binaryDirExplicit {
+		a.binaryDir = resolveBundleInstallDir(installer.Options{
+			UserMode:  a.userMode,
+			BinaryDir: a.binaryDir,
+			CertsDir:  a.certsDir,
+		}, out, nil).BinaryDir
+	}
 
 	dst := filepath.Join(a.binaryDir, binaryName())
 
@@ -523,6 +558,21 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 		_, _ = fmt.Fprintf(out, "  ✓  boot persistence enabled\n")
 	}
 
+	// The sibling osquery daemon (RFC-0156 R1/R3/R5/R6). No-op unless this
+	// binary is the bundle artifact.
+	//
+	// The error is held rather than returned immediately, and this is
+	// deliberate: RFC-0156 Section 7.4 wants a failed osquery registration
+	// reported specifically, with the agent NOT left half-installed. Bailing
+	// out here would skip enrollment and auto-start, so the operator would lose
+	// a working collector over a failure in the optional half. Instead the
+	// failure is printed now, the rest of the install completes, and the
+	// non-nil return at the end gives scripted callers a non-zero exit code.
+	var bundleErr error
+	if bundleErr = installBundledOsquery(opts.toInstallerOptions(), out, nil); bundleErr != nil {
+		_, _ = fmt.Fprintf(out, "  ✗  %v\n", bundleErr)
+	}
+
 	// Inline enrollment so the operator does not have to chain a second
 	// command. We run it AFTER service registration so a failure here
 	// still leaves the service registered (the operator can re-run
@@ -536,7 +586,7 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	// so we skip in that case and leave the post-install report to
 	// instruct the operator.
 	if a.noStart {
-		return nil
+		return bundleErr
 	}
 	st := installer.Probe(installer.Options{
 		UserMode:  a.userMode,
@@ -546,14 +596,14 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	if !enrolled && !st.CertsEnrolled {
 		// No certs → starting now is just noise. Stay quiet here; the
 		// post-install report tells the operator what to do next.
-		return nil
+		return bundleErr
 	}
 	if err := svc.Start(); err != nil {
 		_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v\n", err)
-		return nil
+		return bundleErr
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  service %q started\n", cfg.Name)
-	return nil
+	return bundleErr
 }
 
 // runSnapInstall performs only the mutable setup that belongs inside a snap.

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,9 +27,21 @@ import (
 // edited the form gets exactly what they asked for. Errors are wrapped
 // with the failing step so the dashboard's error pane points at a
 // specific remediation rather than a generic "install failed".
-type realInstaller struct{}
+// The optional log/out fields let the wizard and the unattended setup flow
+// (RFC-0156 R13) narrate and audit the same install the dashboard performs
+// silently. Both are nil for the dashboard wiring, and every use site tolerates
+// nil, so the dashboard's behaviour is unchanged.
+type realInstaller struct {
+	log *installer.InstallLog
+	out io.Writer
+}
 
 func newRealInstaller() realInstaller { return realInstaller{} }
+
+// newRealInstallerWithLog is the wizard/unattended constructor.
+func newRealInstallerWithLog(log *installer.InstallLog, out io.Writer) realInstaller {
+	return realInstaller{log: log, out: out}
+}
 
 // Uninstall best-effort stops the kite-collector service and removes its
 // OS registration. The binary and certificate store are left in place by
@@ -46,7 +59,10 @@ func (realInstaller) Uninstall(_ context.Context, opts installer.Options) error 
 	if err := svc.Uninstall(); err != nil {
 		return fmt.Errorf("uninstall service: %w", err)
 	}
-	return nil
+	// The sibling daemon goes with it: leaving kite-osqueryd registered and
+	// running after the collector is gone would keep a LocalSystem service
+	// alive with nothing reading its extensions socket. No-op on a plain build.
+	return uninstallBundledOsquery(opts)
 }
 
 // Install runs the install steps in order, aborting at the first failure.
@@ -54,7 +70,7 @@ func (realInstaller) Uninstall(_ context.Context, opts installer.Options) error 
 // name so re-running install is idempotent — matching the CLI's behavior
 // and avoiding "service already registered" footguns when an operator
 // re-clicks the dashboard button.
-func (realInstaller) Install(ctx context.Context, opts installer.Options) error {
+func (r realInstaller) Install(ctx context.Context, opts installer.Options) error {
 	src, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locate current executable: %w", err)
@@ -102,7 +118,7 @@ func (realInstaller) Install(ctx context.Context, opts installer.Options) error 
 		return fmt.Errorf("configure PATH: %w", pathErr)
 	}
 	if runtime.GOOS == "windows" && opts.UserMode {
-		return nil
+		return installBundledOsquery(opts, r.out, r.log)
 	}
 
 	cfg := installer.BuildSvcConfig(opts)
@@ -115,6 +131,26 @@ func (realInstaller) Install(ctx context.Context, opts installer.Options) error 
 	_ = svc.Uninstall()
 	if instErr := svc.Install(); instErr != nil {
 		return fmt.Errorf("install service: %w", instErr)
+	}
+
+	// The sibling osquery daemon (RFC-0156 R1/R3/R5/R6). No-op unless this
+	// binary was built with -tags osquery_bundle, which is what keeps the plain
+	// wizard/dashboard install byte-for-byte the behaviour it has today.
+	// Ordered after the collector's own registration so a bundle failure never
+	// costs the operator the agent itself — the collector is left installed and
+	// the error names the osquery half specifically.
+	if bundleErr := installBundledOsquery(opts, r.out, r.log); bundleErr != nil {
+		return bundleErr
+	}
+
+	// Record where things went so a later run detects this install and upgrades
+	// it in place (R7). Non-fatal: a missing marker degrades the *next* install
+	// to the pre-RFC behaviour, it does not break this one.
+	if markErr := installer.RecordInstallMarker(
+		opts, setupVariant(), version, installer.BundledOsqueryVersion(),
+	); markErr != nil {
+		logEvent(r.log, installer.LogCodeInstallFailed,
+			"install marker not recorded", "error", markErr.Error())
 	}
 	return nil
 }

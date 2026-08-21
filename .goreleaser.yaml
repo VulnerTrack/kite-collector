@@ -39,6 +39,50 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
+  # RFC-0156: the self-contained Windows installer. Same program, compiled
+  # with -tags osquery_bundle so internal/installer carries a
+  # checksum-verified osqueryd payload via go:embed and registers it as the
+  # kite-osqueryd sibling service on install.
+  #
+  # A separate build entry rather than a variant of the default one is what
+  # makes R2 structural instead of aspirational: the plain
+  # flat-binary/wizard/MSI channels compile without the tag and therefore
+  # cannot accidentally inherit osqueryd's attack surface or its ~55 MB.
+  #
+  # Note this entry needs OSQUERY_MSI_SHA256 in the environment (the release
+  # job exports it from scripts/osquery-pin.env). That is deliberate: a build
+  # that cannot see the pin must fail rather than produce an installer with no
+  # link-time checksum binding.
+  - id: kite-collector-osquery
+    main: ./cmd/kite-collector
+    binary: kite-collector-osquery
+    env:
+      - CGO_ENABLED=0
+    tags:
+      - osquery_bundle
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -H=windowsgui
+      # R4, defense in depth: installer.VerifyBundle refuses to install unless
+      # this link-time digest matches the embedded manifest's vendored_sha256.
+      # A future refactor that drops the verified staging step then produces an
+      # installer that cannot install, not one that silently ships unverified
+      # bytes.
+      - -X github.com/vulnertrack/kite-collector/internal/installer.vendoredOsquerySHA256={{ .Env.OSQUERY_MSI_SHA256 }}
+    # windows/arm64 stays excluded, matching the default build entry, and
+    # osquery's own Windows-arm64 support maturity is unconfirmed (Section 12,
+    # Open Question 4).
+    goos: [windows]
+    goarch: [amd64]
+    hooks:
+      pre:
+        # Downloads the pinned osquery MSI once into dist/cache/ (shared with
+        # build-msi.sh), SHA256-verifies it fail-closed, and stages the
+        # harvested payload into the go:embed tree.
+        - bash scripts/stage-osquery-embed.sh
   # The snap needs a distinct app entry for snapd to supervise. It is the
   # same program with `service run` supplied by snap metadata; keeping it as
   # a second Linux-only binary lets the normal CLI remain interactive.
@@ -66,6 +110,14 @@ archives:
     ids: [kite-collector]
     formats: [binary]
     name_template: "kite-collector_{{ .Os }}_{{ .Arch }}_bin"
+  # RFC-0156 R1: the one self-contained artifact. Named to mirror the existing
+  # kite-collector-osquery deb/MSI so the three formats of the same payload are
+  # recognisably siblings, and named distinctly enough that the WinGet
+  # publisher's installers-regex (which pins the plain MSI) cannot sweep it up.
+  - id: osquery-bundle
+    ids: [kite-collector-osquery]
+    formats: [binary]
+    name_template: "kite-collector-osquery_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"

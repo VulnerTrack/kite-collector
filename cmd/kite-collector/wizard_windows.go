@@ -26,9 +26,47 @@ var logoBytes []byte
 // runWizard launches the simplified GUI installer for Windows.
 // It has a single window containing the Vulnertrack logo, a simple description,
 // and "Install" and "Cancel" buttons.
-func runWizard() error {
+//
+// On the kite-collector-osquery bundle artifact the same window also installs
+// the embedded osqueryd as the kite-osqueryd sibling service (RFC-0156 R1).
+// This is the gap the RFC opens with: the double-click wizard was the one
+// surface RFC-0059 built for non-technical users, and it was also the one
+// surface that could never deliver osquery-backed FIM/YARA discovery.
+func runWizard(args setupArgs) error {
 	defaults := installer.DetectDefaults()
 	opts := defaults.Options
+
+	if args.InstallDir != "" {
+		if err := installer.ValidateInstallDir(args.InstallDir); err != nil {
+			return fmt.Errorf("/DIR: %w", err)
+		}
+		opts.BinaryDir = filepath.Clean(args.InstallDir)
+	}
+
+	// One structured, Administrators-only install log per run (Section 6.4).
+	// The progress bar vanishes with the window, so this is the only durable
+	// record of what the wizard actually did.
+	log := installer.OpenInstallLog(opts, args.LogPath)
+	defer func() { _ = log.Close() }()
+	log.Info("wizard setup started",
+		"code", installer.LogCodeInstallStarted,
+		"variant", setupVariant(),
+		"version", version)
+
+	// R7 pre-flight, before a single byte is written.
+	opts = resolveBundleInstallDir(opts, nil, log)
+
+	bundled := installer.BundleAvailable()
+	osqueryVersion := installer.BundledOsqueryVersion()
+
+	introText := "This wizard will configure and run the Vulnertrack Kite " +
+		"Collector agent on your machine."
+	if bundled {
+		introText += fmt.Sprintf(
+			"\n\nIt also installs osquery %s as the %q service for "+
+				"file-integrity and YARA discovery — no extra download.",
+			osqueryVersion, installer.OsquerySvcName)
+	}
 
 	// Decode embedded logo image
 	img, _, err := image.Decode(bytes.NewReader(logoBytes))
@@ -138,7 +176,15 @@ func runWizard() error {
 		_ = statusLbl.SetText("Starting installation...")
 
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			// The bundle variant writes a ~55 MB payload through per-file
+			// on-disk checksum verification, on a host whose AV may scan every
+			// byte of it. 60s is comfortable for the plain install and far too
+			// tight for that.
+			timeout := 60 * time.Second
+			if bundled {
+				timeout = setupTimeout
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 
 			updateUI := func(progress int, msg string) {
@@ -161,8 +207,17 @@ func runWizard() error {
 			}
 			time.Sleep(300 * time.Millisecond)
 
-			err := newRealInstaller().Install(ctx, opts)
+			if bundled && !opts.UserMode {
+				updateUI(75, fmt.Sprintf(
+					"Installing osquery %s and registering %q...",
+					osqueryVersion, installer.OsquerySvcName))
+			}
+
+			err := newRealInstallerWithLog(log, nil).Install(ctx, opts)
 			if err != nil {
+				log.Error("wizard setup failed",
+					"code", installer.LogCodeInstallFailed,
+					"error", err.Error())
 				updateUI(100, "Installation failed.")
 				mw.Synchronize(func() {
 					walk.MsgBox(mw,
@@ -178,16 +233,31 @@ func runWizard() error {
 			}
 
 			updateUI(85, "Verifying installation...")
-			_ = installer.Probe(opts)
+			state := installer.Probe(opts)
+			osq := installer.ProbeOsquery(opts)
 			time.Sleep(300 * time.Millisecond)
 
+			log.Info("wizard setup completed",
+				"code", installer.LogCodeInstallCompleted,
+				"binary", state.BinaryPath,
+				"service_state", state.ServiceState,
+				"osquery_service_state", osq.ServiceState,
+				"osquery_version", osq.Version)
+
 			updateUI(100, "Installation complete!")
+
+			doneText := "Vulnertrack Kite Collector has been successfully installed."
+			if bundled && !opts.UserMode {
+				doneText += fmt.Sprintf(
+					"\nosquery %s is registered as %q (%s).",
+					osq.Version, installer.OsquerySvcName, osq.ServiceState)
+			}
 
 			mw.Synchronize(func() {
 				installed = true
 				progressBar.SetVisible(false)
 
-				_ = descLbl.SetText("Vulnertrack Kite Collector has been successfully installed.")
+				_ = descLbl.SetText(doneText)
 				_ = statusLbl.SetText("Portal URL: http://127.0.0.1:9090/kite-login")
 				statusLbl.SetTextColor(walk.RGB(33, 37, 41))
 
@@ -234,7 +304,7 @@ func runWizard() error {
 			// Centered Description
 			decl.Label{
 				AssignTo:  &descLbl,
-				Text:      "This wizard will configure and run the Vulnertrack Kite Collector agent on your machine.",
+				Text:      introText,
 				Font:      decl.Font{Family: "Segoe UI", PointSize: 10},
 				TextColor: walk.RGB(108, 117, 125),
 				Alignment: decl.AlignHCenterVCenter,

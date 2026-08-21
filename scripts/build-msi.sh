@@ -45,28 +45,21 @@ elif [[ -n "${3:-}" ]]; then
   exit 1
 fi
 
-# osquery payload pin for the --with-osquery bundle. 5.15.0 matches the
-# version the e2e sim tracks (tests/e2e/osquery/Dockerfile.osquery) and the
-# daily osquery-smoke workflow drift-checks against latest, so a needed bump
-# surfaces there first. Update BOTH lines together; the SHA256 is of the
-# official MSI asset on the osquery GitHub release.
-OSQUERY_VERSION="5.15.0"
-OSQUERY_MSI_SHA256="9c06dd0b8fbe76129cff5bebc79277044213d5cddccb9ddfe2179606908a817e"
-OSQUERY_MSI_URL="https://github.com/osquery/osquery/releases/download/${OSQUERY_VERSION}/osquery-${OSQUERY_VERSION}.msi"
-
-# Windows-relevant subset of the community packs the official MSI carries;
-# the darwin/linux-only packs (osx-attacks, ossec-rootkit, ...) are dropped.
-# Must stay in sync with the <File> list in cmd/kite-collector/wix.wxs.
-OSQUERY_PACKS=(
-  windows-hardening
-  windows-attacks
-  vuln-management
-  incident-response
-  it-compliance
-  osquery-monitoring
-)
-
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# osquery payload pin for the --with-osquery bundle. OSQUERY_VERSION,
+# OSQUERY_MSI_SHA256, OSQUERY_MSI_URL and OSQUERY_WINDOWS_PACKS live in the
+# shared scripts/osquery-pin.env, which build-deb-osquery.sh and
+# stage-osquery-embed.sh source too — one assertion of the pin instead of
+# three copies drifting independently (RFC-0156 Phase 1). Bump the pin file,
+# never a copy here.
+# shellcheck source=scripts/osquery-pin.env
+. "$REPO_ROOT/scripts/osquery-pin.env"
+
+# Space-separated in the pin file (it has to stay POSIX-sh sourceable and
+# $GITHUB_ENV-exportable); split back into the array the staging loop wants.
+read -r -a OSQUERY_PACKS <<< "$OSQUERY_WINDOWS_PACKS"
+
 WXS_SRC="$REPO_ROOT/cmd/kite-collector/wix.wxs"
 OUT_DIR="$REPO_ROOT/dist"
 WORK_DIR="$(mktemp -d)"

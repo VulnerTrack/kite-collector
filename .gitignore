@@ -75,3 +75,11 @@ ubuntu-package-matrix-*.log
 # Collector binaries are produced by CI and attached to releases. They must
 # never be embedded in or committed to the source tree.
 internal/dashboard/assets/kite-collector_windows_386_legacy.exe
+
+# RFC-0156: the checksum-verified osqueryd payload scripts/stage-osquery-embed.sh
+# stages into the go:embed tree for the self-contained Windows installer. ~55 MB
+# of third-party build output, reproducible from scripts/osquery-pin.env — the
+# pin is what is version-controlled, not the bytes. (osqueryd.exe is already
+# covered by the *.exe rule above; these cover the rest of the staged tree.)
+internal/installer/osquerypayload/payload/manifest.json
+internal/installer/osquerypayload/payload/osquery/

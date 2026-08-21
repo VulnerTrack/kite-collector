@@ -4059,10 +4059,24 @@ func main() {
 		// is build-tagged to Windows; on every other platform runWizard
 		// returns an error and we fall back to the text-mode menu so the
 		// double-click flow stays useful for dev work on macOS/Linux.
-		if err := runWizard(); err != nil { //nolint:staticcheck // SA4023: always true only on non-Windows builds; the Windows runWizard can return nil.
+		if err := runWizard(setupArgs{}); err != nil { //nolint:staticcheck // SA4023: always true only on non-Windows builds; the Windows runWizard can return nil.
 			osutil.ShowConsole()
 			fmt.Printf("Wizard initialization failed: %v\n", err)
 			runInteractiveMenu()
+		}
+		return
+	}
+
+	// Installer-style switches (/SILENT, /DIR=…) are intercepted before cobra
+	// sees them: they are not POSIX flags and cobra would reject them outright,
+	// which is exactly what makes SCCM/Intune/GPO deployments fall back to the
+	// MSI channel today (RFC-0156 R13). parseSetupArgs only claims a command
+	// line when every token is a recognized setup switch, so ordinary CLI usage
+	// is untouched.
+	if args, isSetup := parseSetupArgs(os.Args[1:]); isSetup {
+		if err := runSetup(args); err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, "Error: "+err.Error())
+			os.Exit(1)
 		}
 		return
 	}

@@ -199,7 +199,15 @@ func NextAction(s State) string {
 // probeServiceState queries the OS service manager for the kite-collector
 // service status. Returns one of the Service* constants.
 func probeServiceState(opts Options) string {
-	cfg := buildSvcConfig(opts)
+	return serviceStateForConfig(buildSvcConfig(opts))
+}
+
+// serviceStateForConfig maps any kardianos service config to one of the
+// Service* constants. Shared with the sibling kite-osqueryd probe
+// (osquery_service.go) so both services answer "is it running?" identically —
+// a divergence here would make the install-status surface report two services
+// with two different notions of "unknown".
+func serviceStateForConfig(cfg *service.Config) string {
 	svc, err := service.New(&noopProgram{}, cfg)
 	if err != nil {
 		return ServiceUnknown
