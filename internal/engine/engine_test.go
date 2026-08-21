@@ -942,3 +942,34 @@ func TestEngine_EmptyDiscovery(t *testing.T) {
 	assert.Equal(t, 0, result.UpdatedMachines)
 	assert.Equal(t, 0, result.EventsEmitted)
 }
+
+func TestFindAgentMachineID(t *testing.T) {
+	agentID := uuid.Must(uuid.NewV7())
+	machines := []model.Machine{
+		{ID: uuid.Must(uuid.NewV7()), DiscoverySource: "mdns"},
+		{ID: agentID, DiscoverySource: "agent"},
+		{ID: uuid.Must(uuid.NewV7()), DiscoverySource: "agent"},
+	}
+	assert.Equal(t, agentID, findAgentMachineID(machines),
+		"the FIRST agent-sourced machine wins")
+	assert.Equal(t, uuid.Nil, findAgentMachineID([]model.Machine{{DiscoverySource: "vpn.tailscale"}}),
+		"no agent machine yields uuid.Nil")
+	assert.Equal(t, uuid.Nil, findAgentMachineID(nil))
+}
+
+func TestStringSliceToAny(t *testing.T) {
+	assert.Nil(t, stringSliceToAny(nil))
+	assert.Nil(t, stringSliceToAny([]string{}))
+	got := stringSliceToAny([]string{"a", "b"})
+	assert.Equal(t, []any{"a", "b"}, got)
+}
+
+// SetIdentity is optional wiring; a nil-metrics engine must also take
+// recordFindingMetrics as a no-op instead of panicking.
+func TestSetIdentityAndFindingMetricsNilSafety(t *testing.T) {
+	e := newTestEngine(newMockStore(), discovery.NewRegistry(), nil)
+	e.SetIdentity(nil)
+	e.recordFindingMetrics([]model.ConfigFinding{{
+		Severity: model.SeverityHigh, Auditor: "ssh",
+	}})
+}
