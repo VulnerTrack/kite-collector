@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 513 codes across 60 packages.
+**Catalog size:** 517 codes across 60 packages.
 
 ---
 
@@ -94,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 28 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 32 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -124,6 +124,15 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.telemetry.otlp_configured` | `LogCodeTelemetryOTLPConfigured` | — |
 | `agent.telemetry.otlp_disabled` | `LogCodeTelemetryOTLPDisabled` | — |
 | `agent.telemetry.user_identity_resolved` | `LogCodeTelemetryUserIdentityResolved` | — |
+
+**host-metrics surface — RFC-0157 OTLP metrics signal**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent.host_metrics.configured` | `LogCodeHostMetricsConfigured` | — |
+| `agent.host_metrics.collect_failed` | `LogCodeHostMetricsCollectFailed` | — |
+| `agent.host_metrics.collect_degraded` | `LogCodeHostMetricsCollectDegraded` | — |
+| `agent.host_metrics.emit_failed` | `LogCodeHostMetricsEmitFailed` | — |
 
 **api surface — REST API server lifecycle**
 
