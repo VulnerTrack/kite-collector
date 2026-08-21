@@ -3,6 +3,8 @@ package dashboard
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -138,4 +140,38 @@ func TestRenderSoftwareAndRowReportFragments(t *testing.T) {
 
 	err = renderRowReportFragment(&bytes.Buffer{}, ctx, st, "no_such_table", map[string]string{"id": "x"})
 	require.Error(t, err, "unknown tables must fail loudly")
+}
+
+func TestParsePaging(t *testing.T) {
+	req := func(q string) *http.Request {
+		return httptest.NewRequestWithContext(context.Background(), "GET", "http://x/t?"+q, nil)
+	}
+
+	limit, offset := parsePaging(req(""))
+	assert.Equal(t, store.IntrospectionDefaultPageSize, limit, "defaults apply")
+	assert.Equal(t, 0, offset)
+
+	limit, offset = parsePaging(req("limit=25&offset=50"))
+	assert.Equal(t, 25, limit)
+	assert.Equal(t, 50, offset)
+
+	limit, _ = parsePaging(req("limit=999999"))
+	assert.Equal(t, store.IntrospectionRowLimit, limit, "limit clamps at the row cap")
+
+	limit, offset = parsePaging(req("limit=-1&offset=-2"))
+	assert.Equal(t, store.IntrospectionDefaultPageSize, limit, "non-positive limit falls back")
+	assert.Equal(t, 0, offset, "negative offset falls back")
+
+	limit, _ = parsePaging(req("limit=abc"))
+	assert.Equal(t, store.IntrospectionDefaultPageSize, limit, "garbage falls back")
+}
+
+func TestExtractPKQuery(t *testing.T) {
+	req := httptest.NewRequestWithContext(context.Background(), "GET",
+		"http://x/row?pk.id=abc&pk.version=2&other=ignored", nil)
+	pk := extractPKQuery(req)
+	assert.Equal(t, map[string]string{"id": "abc", "version": "2"}, pk)
+
+	req = httptest.NewRequestWithContext(context.Background(), "GET", "http://x/row", nil)
+	assert.Empty(t, extractPKQuery(req))
 }
