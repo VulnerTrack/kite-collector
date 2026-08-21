@@ -249,8 +249,22 @@ func ParseMCDOMConfig(body []byte) MCFields {
 }
 
 // ParseMCBacktestReport parses a backtest-report CSV body.
+// MultiCharts reports use a Symbol column (`Date,Symbol,...`)
+// rather than `symbol=` / `<Symbol>` markup, so CSV column
+// extraction runs first and labeled entries are the fallback.
 func ParseMCBacktestReport(body []byte) MCFields {
-	return ParseMCWorkspace(body)
+	var out MCFields
+	if len(body) == 0 {
+		return out
+	}
+	out.MATbaSymbolsCount, out.CMESymbolsCount, out.DistinctSymbols = classifyCSVSymbols(body)
+	if out.DistinctSymbols == 0 {
+		out.MATbaSymbolsCount, out.CMESymbolsCount, out.DistinctSymbols = classifySymbols(body)
+	}
+	if c := cuitFromBody(body); c != "" {
+		out.ClienteCuitRaw = c
+	}
+	return out
 }
 
 // ParseMCTradeLog parses a trade-log body.
@@ -353,6 +367,62 @@ func detectBrokerPluginFromName(name string) BrokerPlugin {
 	return PluginUnknown
 }
 
+// classifyCSVSymbols counts MATba / CME / distinct symbols from
+// a CSV whose header has a Symbol (or Simbolo) column.
+func classifyCSVSymbols(body []byte) (matba, cme, total int64) {
+	scanner := bufio.NewScanner(bytes.NewReader(body))
+	if !scanner.Scan() {
+		return
+	}
+	header := strings.Split(scanner.Text(), ",")
+	col := -1
+	for i, h := range header {
+		switch strings.ToLower(strings.TrimSpace(h)) {
+		case "symbol", "simbolo", "ticker", "instrument", "contract":
+			col = i
+		}
+		if col >= 0 {
+			break
+		}
+	}
+	if col < 0 {
+		return
+	}
+	seen := map[string]struct{}{}
+	mat := map[string]struct{}{}
+	cm := map[string]struct{}{}
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), ",")
+		if col >= len(fields) {
+			continue
+		}
+		classifySymbolValue(fields[col], seen, mat, cm)
+	}
+	return int64(len(mat)), int64(len(cm)), int64(len(seen))
+}
+
+// classifySymbolValue records one symbol (optionally with a
+// `/MONTHYY` contract-month suffix) into the seen / MATba / CME
+// sets.
+func classifySymbolValue(raw string, seen, mat, cm map[string]struct{}) {
+	s := strings.ToUpper(strings.TrimSpace(raw))
+	if s == "" {
+		return
+	}
+	seen[s] = struct{}{}
+	stem := s
+	if i := strings.Index(s, "/"); i > 0 {
+		stem = s[:i]
+	}
+	if IsMATbaRofexSymbol(stem) {
+		mat[stem] = struct{}{}
+		return
+	}
+	if IsCMEFuturesSymbol(stem) {
+		cm[stem] = struct{}{}
+	}
+}
+
 // classifySymbols returns counts of distinct MATba-Rofex, CME,
 // and total symbols. Splits only on `/` (contract-month
 // separator) — MATba symbols themselves contain `-`.
@@ -361,22 +431,7 @@ func classifySymbols(body []byte) (matba, cme, total int64) {
 	mat := map[string]struct{}{}
 	cm := map[string]struct{}{}
 	for _, m := range symbolEntryRE.FindAllSubmatch(body, -1) {
-		s := strings.ToUpper(strings.TrimSpace(string(m[1])))
-		if s == "" {
-			continue
-		}
-		seen[s] = struct{}{}
-		stem := s
-		if i := strings.Index(s, "/"); i > 0 {
-			stem = s[:i]
-		}
-		if IsMATbaRofexSymbol(stem) {
-			mat[stem] = struct{}{}
-			continue
-		}
-		if IsCMEFuturesSymbol(stem) {
-			cm[stem] = struct{}{}
-		}
+		classifySymbolValue(string(m[1]), seen, mat, cm)
 	}
 	return int64(len(mat)), int64(len(cm)), int64(len(seen))
 }

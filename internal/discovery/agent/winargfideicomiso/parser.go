@@ -117,9 +117,18 @@ var underlyingRE = regexp.MustCompile(
 	`(?i)"?(?:underlying|activo[_\- ]?subyacente|tipo[_\- ]?activo|asset[_\- ]?class)"?\s*[:=>]\s*"?([A-Za-z\-_ ]{4,40})`,
 )
 
-// clienteCuitKeyRE matches `cliente_cuit: NN-NNNNNNNN-N`.
+// clienteCuitKeyRE matches a labeled cliente CUIT
+// (`cliente_cuit`, `cuit_cliente`, `deudor_cuit`, `titular_cuit`).
+// Generic `cuit:` is matched separately so `originador_cuit` /
+// `fiduciario_cuit` are not captured as the cliente value.
 var clienteCuitKeyRE = regexp.MustCompile(
-	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|deudor[_\- ]?cuit|titular[_\- ]?cuit|cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+	`(?i)"?(?:cliente[_\- ]?cuit|cuit[_\- ]?cliente|deudor[_\- ]?cuit|titular[_\- ]?cuit)"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
+)
+
+// clienteCuitBareRE matches an unlabeled `cuit: NN-NNNNNNNN-N`
+// that is not a suffix of another key (`originador_cuit`, etc.).
+var clienteCuitBareRE = regexp.MustCompile(
+	`(?i)(?:^|[^A-Za-z0-9_\-])"?cuit"?\s*[:=>]\s*"?(\d{2}-?\d{8}-?\d)"?`,
 )
 
 // originadorCuitKeyRE matches `originador_cuit: NN-NNNNNNNN-N`.
@@ -318,9 +327,14 @@ func parseCommon(body []byte) FFFields {
 	return out
 }
 
-// cuitFromBody returns the first cliente CUIT match.
+// cuitFromBody returns the first cliente CUIT match. Labeled
+// keys win so a prospecto that also carries originador /
+// fiduciario CUITs does not leak those into ClienteCuitRaw.
 func cuitFromBody(body []byte) string {
 	if m := clienteCuitKeyRE.FindSubmatch(body); len(m) > 1 {
+		return string(m[1])
+	}
+	if m := clienteCuitBareRE.FindSubmatch(body); len(m) > 1 {
 		return string(m[1])
 	}
 	return ""
