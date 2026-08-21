@@ -863,3 +863,62 @@ func TestUpsertMachines_TransientRetryRoundtrip(t *testing.T) {
 	assert.Equal(t, 0, inserted2)
 	assert.Equal(t, 2, updated2)
 }
+
+// Machines carrying Interfaces must land them as network_interfaces
+// rows keyed by the PERSISTED machine id, replace-on-reupsert, and a
+// later interface-less upsert of the same machine must leave the rows
+// alone (a source that doesn't know addresses can't erase one that does).
+func TestUpsertMachines_PersistsAndReplacesInterfaces(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	countIfaces := func(machineHostname string) (n int, ips []string) {
+		t.Helper()
+		rows, err := s.db.QueryContext(ctx, `
+			SELECT ni.ip_address FROM network_interfaces ni
+			JOIN machines m ON m.id = ni.machine_id
+			WHERE m.hostname = ? ORDER BY ni.ip_address`, machineHostname)
+		require.NoError(t, err)
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var ip string
+			require.NoError(t, rows.Scan(&ip))
+			ips = append(ips, ip)
+		}
+		require.NoError(t, rows.Err())
+		return len(ips), ips
+	}
+
+	m := makeMachine("vpn-peer-01", model.MachineTypeWorkstation)
+	m.Interfaces = []model.NetworkInterface{
+		{InterfaceName: "tailscale", IPAddress: "100.85.220.71", IsPrimary: true},
+		{InterfaceName: "tailscale", IPAddress: "fd7a:115c:a1e0::f01:dcd0"},
+	}
+	_, _, err := s.UpsertMachines(ctx, []model.Machine{m})
+	require.NoError(t, err)
+
+	n, ips := countIfaces("vpn-peer-01")
+	require.Equal(t, 2, n)
+	assert.Equal(t, []string{"100.85.220.71", "fd7a:115c:a1e0::f01:dcd0"}, ips)
+
+	// Re-upsert (same natural key, NEW in-memory uuid — the store must
+	// key rows by the persisted id, not the discarded one) with one
+	// address: rows are replaced, not appended.
+	m2 := makeMachine("vpn-peer-01", model.MachineTypeWorkstation)
+	m2.Interfaces = []model.NetworkInterface{
+		{InterfaceName: "tailscale", IPAddress: "100.85.220.72", IsPrimary: true},
+	}
+	_, _, err = s.UpsertMachines(ctx, []model.Machine{m2})
+	require.NoError(t, err)
+
+	n, ips = countIfaces("vpn-peer-01")
+	require.Equal(t, 1, n)
+	assert.Equal(t, []string{"100.85.220.72"}, ips)
+
+	// Interface-less re-upsert leaves the rows untouched.
+	m3 := makeMachine("vpn-peer-01", model.MachineTypeWorkstation)
+	_, _, err = s.UpsertMachines(ctx, []model.Machine{m3})
+	require.NoError(t, err)
+	n, _ = countIfaces("vpn-peer-01")
+	assert.Equal(t, 1, n, "no-interface upsert must not clear existing rows")
+}

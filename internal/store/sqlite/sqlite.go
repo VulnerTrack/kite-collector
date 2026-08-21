@@ -361,6 +361,41 @@ func (s *SQLiteStore) UpsertMachine(ctx context.Context, machine model.Machine) 
 	return nil
 }
 
+// replaceInterfacesTx overwrites the network_interfaces rows for the
+// machine identified by the upsert conflict key (hostname,
+// machine_type). The persisted machine id can differ from the
+// in-memory one — ON CONFLICT keeps the existing row's id — so it is
+// re-resolved here rather than trusted from the model.
+func replaceInterfacesTx(ctx context.Context, tx *sql.Tx, m model.Machine) error {
+	var machineID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT id FROM machines WHERE hostname = ? AND machine_type = ?`,
+		m.Hostname, string(m.MachineType)).Scan(&machineID); err != nil {
+		return fmt.Errorf("resolve machine id for interfaces: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM network_interfaces WHERE machine_id = ?`, machineID); err != nil {
+		return fmt.Errorf("clear interfaces for %s: %w", machineID, err)
+	}
+	for _, ni := range m.Interfaces {
+		rowID := ni.ID
+		if rowID == uuid.Nil {
+			rowID = uuid.Must(uuid.NewV7())
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO network_interfaces
+				(id, machine_id, interface_name, ip_address, mac_address, subnet, is_primary, is_public)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			rowID.String(), machineID, nullStr(ni.InterfaceName), ni.IPAddress,
+			nullStr(ni.MACAddress), nullStr(ni.Subnet),
+			boolToInt(ni.IsPrimary), boolToInt(ni.IsPublic),
+		); err != nil {
+			return fmt.Errorf("insert interface %s for %s: %w", ni.IPAddress, machineID, err)
+		}
+	}
+	return nil
+}
+
 // PersistSourceHealth upserts a circuit-breaker health snapshot into the
 // source_health table (created by RFC-0062 but, until RFC-0135, never written).
 // It gives the breaker durable, queryable state across process restarts —
@@ -545,6 +580,16 @@ func (s *SQLiteStore) UpsertMachines(ctx context.Context, machines []model.Machi
 			)
 			if execErr != nil {
 				return fmt.Errorf("upsert machine %s: %w", machines[i].ID, execErr)
+			}
+
+			// Machines that carry interfaces replace their
+			// network_interfaces rows in the same transaction; machines
+			// without leave existing rows untouched, so sources that
+			// don't know addresses can't erase those that do.
+			if len(machines[i].Interfaces) > 0 {
+				if ifaceErr := replaceInterfacesTx(ctx, tx, machines[i]); ifaceErr != nil {
+					return ifaceErr
+				}
 			}
 
 			if existingKeys[machines[i].NaturalKey] {

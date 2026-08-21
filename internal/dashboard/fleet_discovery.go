@@ -315,6 +315,30 @@ func fleetMachineIP(machine model.Machine) string {
 			}
 		}
 	}
+	// VPN sources carry the full overlay address set (tailscale,
+	// wireguard, …). Surface the first IPv4 — the address an operator
+	// would ping — falling back to the first valid address of any
+	// family for v6-only fabrics.
+	if raw, ok := tags["overlay_addresses"].([]any); ok {
+		firstValid := ""
+		for _, entry := range raw {
+			s, ok := entry.(string)
+			if !ok {
+				continue
+			}
+			ip := net.ParseIP(strings.TrimSpace(s))
+			if ip == nil {
+				continue
+			}
+			if ip.To4() != nil {
+				return ip.String()
+			}
+			if firstValid == "" {
+				firstValid = ip.String()
+			}
+		}
+		return firstValid
+	}
 	return ""
 }
 

@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"encoding/json"
+	"net/netip"
 	"sort"
 	"strings"
 	"time"
@@ -179,6 +180,22 @@ func (p Peer) toMachine(id uuid.UUID, now time.Time) model.Machine {
 		machineType = p.MachineTypeHint
 	}
 
+	// Overlay addresses become first-class network_interfaces rows (the
+	// store fills machine_id/row ids at persist time). The IPv4 the
+	// fleet tooling would ping is flagged primary.
+	var ifaces []model.NetworkInterface
+	if len(p.Addresses) > 0 {
+		primary := primaryAddress(p.Addresses)
+		ifaces = make([]model.NetworkInterface, 0, len(p.Addresses))
+		for _, a := range p.Addresses {
+			ifaces = append(ifaces, model.NetworkInterface{
+				InterfaceName: p.VPNType,
+				IPAddress:     a,
+				IsPrimary:     a == primary,
+			})
+		}
+	}
+
 	return model.Machine{
 		ID:              id,
 		Hostname:        p.displayHostname(),
@@ -191,7 +208,31 @@ func (p Peer) toMachine(id uuid.UUID, now time.Time) model.Machine {
 		IsManaged:       model.ManagedUnknown,
 		Tags:            string(tagsJSON),
 		LastSeenAt:      lastSeen,
+		Interfaces:      ifaces,
 	}
+}
+
+// primaryAddress picks the overlay address promoted into the Machine's
+// first-class IPAddress field (the full set stays in the
+// overlay_addresses tag). IPv4 wins when present — it is the address an
+// operator pings and the one the rest of the fleet tooling expects —
+// falling back to the first address of any family. Addresses arrive
+// sorted (sortAddrs), so the choice is deterministic.
+func primaryAddress(addrs []string) string {
+	first := ""
+	for _, a := range addrs {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		if first == "" {
+			first = a
+		}
+		if ip, err := netip.ParseAddr(a); err == nil && ip.Is4() {
+			return a
+		}
+	}
+	return first
 }
 
 // sortAddrs returns a sorted copy of addrs with blanks dropped and

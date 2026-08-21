@@ -56,6 +56,17 @@ type Machine struct {
 	// guard against silently merging weak identities into strong ones.
 	// Populated by the deduper, not the discoverer.
 	IdentityConfidence uint8 `json:"identity_confidence,omitempty"`
+
+	// Interfaces carries the machine's known network addresses from
+	// discovery to persistence: a source that learns them (VPN overlay
+	// addresses, scan hits) attaches rows here and UpsertMachines
+	// replaces the machine's network_interfaces table rows in the same
+	// transaction — sources that leave it empty never touch existing
+	// rows. Transient carry only: deliberately excluded from
+	// MaterialFingerprint (addresses churn without being a material
+	// state change) and not hydrated back by machine list queries (the
+	// dashboard reads network_interfaces directly).
+	Interfaces []NetworkInterface `json:"interfaces,omitempty"`
 }
 
 // MaterialFingerprint returns a hex-encoded SHA-256 digest of the machine's

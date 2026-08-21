@@ -208,6 +208,7 @@ func (s *PostgresStore) UpsertMachines(ctx context.Context, machines []model.Mac
 		machines[i].ComputeNaturalKey()
 
 		var xmax uint32
+		var persistedID uuid.UUID
 		err = tx.QueryRow(
 			ctx, `
 			INSERT INTO machines (`+machineColumns+`)
@@ -226,7 +227,7 @@ func (s *PostgresStore) UpsertMachines(ctx context.Context, machines []model.Mac
 				last_seen_at     = EXCLUDED.last_seen_at,
 				tags             = EXCLUDED.tags,
 				natural_key      = EXCLUDED.natural_key
-			RETURNING xmax
+			RETURNING id, xmax
 		`,
 			machines[i].ID,
 			string(machines[i].MachineType),
@@ -245,9 +246,36 @@ func (s *PostgresStore) UpsertMachines(ctx context.Context, machines []model.Mac
 			machines[i].LastSeenAt,
 			nullStr(machines[i].Tags),
 			machines[i].NaturalKey,
-		).Scan(&xmax)
+		).Scan(&persistedID, &xmax)
 		if err != nil {
 			return 0, 0, fmt.Errorf("upsert machine %s: %w", machines[i].ID, err)
+		}
+
+		// Same replace-in-transaction contract as the SQLite store:
+		// machines carrying interfaces overwrite their
+		// network_interfaces rows (keyed by the PERSISTED id — on
+		// conflict the pre-existing row keeps its id); machines
+		// without interfaces leave existing rows untouched.
+		if len(machines[i].Interfaces) > 0 {
+			if _, derr := tx.Exec(ctx,
+				`DELETE FROM network_interfaces WHERE machine_id = $1`, persistedID); derr != nil {
+				return 0, 0, fmt.Errorf("clear interfaces for %s: %w", persistedID, derr)
+			}
+			for _, ni := range machines[i].Interfaces {
+				rowID := ni.ID
+				if rowID == uuid.Nil {
+					rowID = uuid.Must(uuid.NewV7())
+				}
+				if _, ierr := tx.Exec(ctx, `
+					INSERT INTO network_interfaces
+						(id, machine_id, interface_name, ip_address, mac_address, subnet, is_primary, is_public)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+					rowID, persistedID, nullStr(ni.InterfaceName), ni.IPAddress,
+					nullStr(ni.MACAddress), nullStr(ni.Subnet), ni.IsPrimary, ni.IsPublic,
+				); ierr != nil {
+					return 0, 0, fmt.Errorf("insert interface %s for %s: %w", ni.IPAddress, persistedID, ierr)
+				}
+			}
 		}
 
 		if xmax == 0 {

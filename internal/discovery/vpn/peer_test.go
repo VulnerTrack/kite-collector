@@ -49,6 +49,13 @@ func TestToMachine_HappyPath(t *testing.T) {
 	assert.Equal(t, "macos", m.OSFamily, "OS is normalised")
 	assert.Equal(t, "14.5", m.OSVersion)
 	assert.Equal(t, "alice@example.com", m.Owner)
+	require.Len(t, m.Interfaces, 2,
+		"overlay addresses become first-class network interface rows")
+	assert.Equal(t, "100.64.0.2", m.Interfaces[0].IPAddress)
+	assert.True(t, m.Interfaces[0].IsPrimary, "the IPv4 address is primary")
+	assert.Equal(t, "fd7a::2", m.Interfaces[1].IPAddress)
+	assert.False(t, m.Interfaces[1].IsPrimary)
+	assert.Equal(t, "tailscale", m.Interfaces[0].InterfaceName)
 	assert.Equal(t, "vpn.tailscale", m.DiscoverySource)
 	assert.Equal(t, model.AuthorizationUnknown, m.IsAuthorized)
 	assert.Equal(t, model.ManagedUnknown, m.IsManaged)
@@ -155,4 +162,19 @@ func TestToMachine_OwnerlessKeyFabric(t *testing.T) {
 	assert.Equal(t, "pk", tags["public_key"])
 	_, hasOwner := tags["owner"]
 	assert.False(t, hasOwner, "no owner tag when identity is absent")
+}
+
+// primaryAddress must prefer IPv4 regardless of sort position — a
+// tailnet peer's sorted addresses can lead with a 2001:-prefixed IPv6,
+// and the promoted Machine.IPAddress should still be the pingable v4.
+func TestPrimaryAddress(t *testing.T) {
+	assert.Equal(t, "100.85.220.71",
+		primaryAddress([]string{"100.85.220.71", "fd7a:115c:a1e0::f01:dcd0"}))
+	assert.Equal(t, "100.64.0.9",
+		primaryAddress([]string{"2001:db8::1", "100.64.0.9"}),
+		"IPv4 wins even when IPv6 sorts first")
+	assert.Equal(t, "fd7a::2", primaryAddress([]string{"fd7a::2"}),
+		"v6-only fabrics fall back to the first address")
+	assert.Equal(t, "", primaryAddress(nil))
+	assert.Equal(t, "", primaryAddress([]string{" ", ""}))
 }
