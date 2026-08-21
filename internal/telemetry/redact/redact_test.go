@@ -36,6 +36,24 @@ func TestIsForbidden_BlocksCredentialPatterns(t *testing.T) {
 	}
 }
 
+func TestIsForbidden_BlocksEmailAsPII(t *testing.T) {
+	// An address identifies a person on its own, so no key carrying one may
+	// egress. The digest key is blocked too: shipping even a hashed address
+	// as an attribute has to be a deliberate allowlist decision.
+	cases := []string{
+		"email",
+		"user_email",
+		"User.Email",
+		"contact_email_address",
+		"user_email_sha256",
+	}
+	for _, k := range cases {
+		t.Run(k, func(t *testing.T) {
+			assert.Truef(t, IsForbidden(k), "expected %q to be forbidden", k)
+		})
+	}
+}
+
 func TestIsForbidden_BlocksExactKeys(t *testing.T) {
 	cases := []string{"env", "ENV", "environ", "command", "cmdline", "argv", "token", "key"}
 	for _, k := range cases {

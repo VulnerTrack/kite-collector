@@ -1,12 +1,14 @@
 // Package redact enforces the RFC-0115 §4.3 forbidden-key policy at the
 // agent before any telemetry leaves the process. It is the last line of
 // defence against accidental egress of credentials, environment variables,
-// or process state through OTel attributes.
+// process state, or PII through OTel attributes.
 //
 // The denylist is intentionally aggressive:
 //   - any key containing password, secret, token, or key (with a small
 //     allowlist for the resource attributes that legitimately contain
 //     those substrings — service.instance.id, tenant.id);
+//   - any key containing email — an address is PII and must never egress,
+//     hashed instead per docs/observability.md;
 //   - keys named env, environ, command, cmdline, argv;
 //   - keys starting with internal. or debug.
 //
@@ -53,6 +55,12 @@ var forbiddenSubstrings = []string{
 	"session_id",
 	"sessionid",
 	"cookie",
+	// PII rather than a credential: an email address identifies a person on
+	// its own. Log or emit the SHA-256 digest (resource.HashEmail) instead —
+	// note that a "user_email_sha256" key is caught by this rule too, so
+	// egressing even the digest as an attribute is a deliberate allowlist
+	// decision, not an accident.
+	"email",
 }
 
 // forbiddenExact are full key names always blocked.

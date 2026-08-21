@@ -75,3 +75,29 @@ func TestUserFromCertPEM_GarbageInput(t *testing.T) {
 	assert.Empty(t, userID)
 	assert.Empty(t, email)
 }
+
+func TestHashEmail_NeverLeaksTheAddress(t *testing.T) {
+	digest := HashEmail(testEmail)
+	assert.NotContains(t, digest, testEmail)
+	assert.NotContains(t, digest, "@")
+	assert.Len(t, digest, 64, "sha256 hex digest")
+}
+
+func TestHashEmail_IsStableAndNormalized(t *testing.T) {
+	// The same mailbox must yield one digest regardless of case or padding,
+	// otherwise log lines for one user would not correlate.
+	want := HashEmail(testEmail)
+	assert.Equal(t, want, HashEmail("  "+testEmail+"  "))
+	assert.Equal(t, want, HashEmail("Operator@Example.COM"))
+}
+
+func TestHashEmail_DistinguishesUsers(t *testing.T) {
+	assert.NotEqual(t, HashEmail(testEmail), HashEmail("other@example.com"))
+}
+
+func TestHashEmail_EmptyForBlankInput(t *testing.T) {
+	// An unstamped certificate must not produce a digest of the empty string,
+	// which would otherwise look like a real (and shared) user.
+	assert.Empty(t, HashEmail(""))
+	assert.Empty(t, HashEmail("   "))
+}

@@ -51,9 +51,11 @@ Trace spans and OTLP metrics are deferred to RFC-0073 (the OTel SDK migration); 
 
 The redactor at [`internal/telemetry/redact/redact.go`](../internal/telemetry/redact/redact.go) drops any key matching:
 
-- **Substrings** (case-insensitive): `password`, `passwd`, `secret`, `apikey`/`api_key`/`api-key`, `private_key`/`privatekey`/`private-key`, `authorization`, `auth_token`/`authtoken`, `bearer`, `session_id`/`sessionid`, `cookie`
+- **Substrings** (case-insensitive): `password`, `passwd`, `secret`, `apikey`/`api_key`/`api-key`, `private_key`/`privatekey`/`private-key`, `authorization`, `auth_token`/`authtoken`, `bearer`, `session_id`/`sessionid`, `cookie`, `email`
 - **Exact** keys: `env`, `environ`, `command`, `cmdline`, `argv`, `token`, `key`
 - **Prefixes**: `internal.`, `debug.`, `env.`, `environ.`
+
+`email` is on the list as PII rather than as a credential. The enrolling user's address is bound into the agent certificate (rfc822 SAN) and must never egress; log or emit `resource.HashEmail(addr)` instead — see [Identity fields](../../../docs/observability.md#identity-fields-tenant_id-user_id-user_email). The rule also catches a `user_email_sha256` key, so shipping even the digest as an attribute is a deliberate allowlist decision rather than an accident.
 
 The substring check is intentionally aggressive. Resource attributes that legitimately contain `id`/`uid` (`service.instance.id`, `agent.id`, `host.id`, `tenant.id`, `security.scan.uid`, `security.asset.uid`, `security.finding.uid`) are explicitly allow-listed.
 
