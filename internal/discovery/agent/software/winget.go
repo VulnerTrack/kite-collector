@@ -32,10 +32,18 @@ func (w *Winget) Available() bool {
 func (w *Winget) Collect(ctx context.Context) (*Result, error) {
 	// Do not constrain `list` to the winget source. Installed applications can
 	// be correlated with winget, Microsoft Store, or no configured source at
-	// all; --source winget silently hid the latter two groups.
+	// all. Some Windows installations reject that query when the Microsoft
+	// Store source agreements have not been accepted (especially from an
+	// elevated collector process). In that case retry the legacy source-scoped
+	// query so a transient Store problem cannot erase the previously visible
+	// software inventory. The registry collector still contributes applications
+	// not known to winget, and both results are merged in the same scan.
 	out, err := runWithLimits(ctx, "winget", "list", "--disable-interactivity")
 	if err != nil {
-		return nil, fmt.Errorf("winget list: %w", err)
+		out, err = runWithLimits(ctx, "winget", "list", "--source", "winget", "--disable-interactivity")
+		if err != nil {
+			return nil, fmt.Errorf("winget list (all sources and winget fallback): %w", err)
+		}
 	}
 	return ParseWingetOutput(string(out)), nil
 }
