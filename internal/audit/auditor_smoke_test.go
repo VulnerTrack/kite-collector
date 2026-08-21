@@ -24,9 +24,9 @@ func TestAuditors_SmokeRunOnRealHost(t *testing.T) {
 	auditors := []Auditor{
 		NewFirewall(),
 		NewKernel(),
-		NewSSH(""),               // default sshd_config path; may not exist
-		NewService(nil),          // default critical port set
-		NewPermissions(nil),      // default path set; some will be unreadable
+		NewSSH(""),          // default sshd_config path; may not exist
+		NewService(nil),     // default critical port set
+		NewPermissions(nil), // default path set; some will be unreadable
 	}
 
 	for _, a := range auditors {

@@ -177,11 +177,11 @@ func TestContainerEnvSecrets_DenyPrefixes(t *testing.T) {
 	lister := &fakeEnvLister{envs: []dockerdisc.ContainerEnv{{
 		ID: testFullID,
 		Env: []string{
-			"PATH=" + secret,        // default deny
-			"path_extra=" + secret,  // default deny is case-insensitive + prefix
-			"MYAPP_FAKE=" + secret,  // denied via extraDeny
-			"myapp_low=" + secret,   // extraDeny case-insensitive
-			"REAL_KEY_A=" + secret,  // must be reported
+			"PATH=" + secret,       // default deny
+			"path_extra=" + secret, // default deny is case-insensitive + prefix
+			"MYAPP_FAKE=" + secret, // denied via extraDeny
+			"myapp_low=" + secret,  // extraDeny case-insensitive
+			"REAL_KEY_A=" + secret, // must be reported
 		},
 	}}}
 	aud := NewContainerEnvSecrets(lister, nil, []string{"MYAPP_", ""})

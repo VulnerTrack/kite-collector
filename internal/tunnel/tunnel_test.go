@@ -187,7 +187,7 @@ func TestManagerStart_HealthyWithListener(t *testing.T) {
 	// local listener satisfies the health probe on the tunnel port.
 	fakeBinDir(t, map[string]string{"bore": "sleep 60"})
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = ln.Close() }()
 	port := uint16(ln.Addr().(*net.TCPAddr).Port) //#nosec G115 -- TCP ports fit uint16
@@ -218,7 +218,7 @@ func TestManagerStart_UnhealthyPortReportsError(t *testing.T) {
 	fakeBinDir(t, map[string]string{"bore": "sleep 60"})
 
 	// Reserve a port then close it so nothing is listening.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	port := uint16(ln.Addr().(*net.TCPAddr).Port) //#nosec G115 -- TCP ports fit uint16
 	require.NoError(t, ln.Close())
