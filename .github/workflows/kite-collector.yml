@@ -510,6 +510,23 @@ jobs:
       # signing_state=unsigned_released and exits 0 — Section 8.1 requires that
       # a signing-service outage (or a not-yet-provisioned certificate, which
       # is the Phase 3 state) degrade the release rather than block it.
+      # goreleaser's binary-format archive names the RELEASED asset
+      # kite-collector-osquery_windows_amd64.exe but leaves the file on
+      # disk at dist/<build-dir>/kite-collector-osquery.exe — the flat
+      # path every signing/manifest/attach step below expects does not
+      # exist until this staging copy creates it (this exact gap failed
+      # the v0.53.0 release at `gh release upload`).
+      - name: Stage the osquery-bundle exe under its release name
+        run: |
+          set -euo pipefail
+          src=$(find dist -type f -name 'kite-collector-osquery.exe' | head -1)
+          if [ -z "$src" ]; then
+            echo "::error::kite-collector-osquery.exe not found anywhere in dist — did the osquery-bundle build run?"
+            exit 1
+          fi
+          cp "$src" dist/kite-collector-osquery_windows_amd64.exe
+          echo "staged $src → dist/kite-collector-osquery_windows_amd64.exe"
+
       - name: Sign Windows installers
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
