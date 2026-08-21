@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	gopscpu "github.com/shirou/gopsutil/v4/cpu"
@@ -107,6 +108,14 @@ func (gopsutilSource) Uptime(ctx context.Context) (time.Duration, error) {
 	seconds, err := gopshost.UptimeWithContext(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("gopsutil host uptime: %w", err)
+	}
+	// Duration counts nanoseconds in an int64, so scaling by time.Second
+	// overflows above ~292 years. gopsutil reports uint64 and a wrapped or
+	// garbage clock reading lands well past that; treat it as a failed
+	// reading rather than emitting a negative uptime.
+	const maxUptimeSeconds = uint64(math.MaxInt64 / int64(time.Second))
+	if seconds > maxUptimeSeconds {
+		return 0, fmt.Errorf("implausible host uptime: %d seconds", seconds)
 	}
 	return time.Duration(seconds) * time.Second, nil
 }
