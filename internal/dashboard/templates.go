@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -122,12 +123,28 @@ func renderMachinesFragment(w io.Writer, ctx context.Context, st store.Store, rc
 
 	tmpl := template.Must(template.New("machines").Funcs(templateFuncs).Parse(machinesTemplate))
 	if err := tmpl.Execute(w, map[string]any{
-		"Machines": rows,
-		"Context":  rc,
+		"Machines":         rows,
+		"Context":          rc,
+		"AgentInstallPath": agentInstallPath(),
 	}); err != nil {
 		return fmt.Errorf("render machines template: %w", err)
 	}
 	return nil
+}
+
+// agentInstallPath resolves where this agent's binary currently lives,
+// so the machines list can show the install location on the row the
+// agent source discovered (this host). Best-effort: empty when the
+// executable cannot be resolved, and the template omits the detail.
+func agentInstallPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil {
+		exe = resolved
+	}
+	return exe
 }
 
 type machineDisplayRow struct {
@@ -273,7 +290,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}})</h2>
       <td>{{.OSFamily}}{{if .OSVersion}} {{.OSVersion}}{{end}}</td>
       <td><span class="badge {{authClass .IsAuthorized}}">{{.IsAuthorized}}</span></td>
       <td>{{.IsManaged}}</td>
-      <td>{{.DiscoverySource}}</td>
+      <td>{{if and (eq .DiscoverySource "agent") $.AgentInstallPath}}<span class="badge badge-blue" title="kite-collector agent installed at {{$.AgentInstallPath}}">agent</span> <code class="small muted">{{$.AgentInstallPath}}</code>{{else}}{{.DiscoverySource}}{{end}}</td>
       <td>{{formatTime .LastSeenAt}}</td>
     </tr>
   {{end}}
