@@ -305,6 +305,8 @@ func TestCurrentStateSummary_ReportsAllRows(t *testing.T) {
 	out := currentStateSummary()
 
 	assert.True(t, strings.HasPrefix(out, "Current state:\n"))
+	assert.Contains(t, out, "version:         "+version)
+	assert.Contains(t, out, "build:           commit "+commit+", built "+date)
 	assert.Contains(t, out, "config file:     kite-collector.yaml (override with --config)")
 	assert.Contains(t, out, "data directory:")
 	assert.Contains(t, out, "database:")

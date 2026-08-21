@@ -93,9 +93,12 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     # The SQLite and dashboard packages apply the complete embedded migration
-    # catalog in isolated temp databases. GitHub's shared runners can take
-    # longer than 15 minutes even though the same suite completes locally.
-    timeout-minutes: 30
+    # catalog in isolated temp databases, and the coverage test wave grew the
+    # suite further. GitHub's shared runners run it 2-3x slower than local
+    # (~10 min): the v0.53.2 tag's test job was killed at exactly 30:19 by
+    # the old 30-minute ceiling. go test's own -timeout stays 30m — that
+    # bound is per test binary, not the whole run.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

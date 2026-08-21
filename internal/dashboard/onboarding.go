@@ -47,6 +47,9 @@ type onboardingDeps struct {
 	PKIOperatorToken func(context.Context) (string, error)
 	AppVersion       string
 	Commit           string
+	BuildDate        string
+	ConfigFile       string
+	DBPath           string
 	PlatformEndpoint string
 	PKIEndpoint      string
 	CertsDir         string

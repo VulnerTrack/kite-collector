@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
@@ -54,6 +55,51 @@ func TestObservability_RendersEnrolledUserIdentity(t *testing.T) {
 	require.NoError(t, observabilityTmpl.Execute(&rendered, view))
 	assert.Contains(t, rendered.String(), userID)
 	assert.Contains(t, rendered.String(), email)
+}
+
+// TestObservability_AgentStateCard asserts the observability view carries
+// the whole agent state (version, build, config file, data dir, database,
+// enrollment) and that the Agent card renders it — the dashboard-side
+// mirror of the CLI's "Current state" help footer.
+func TestObservability_AgentStateCard(t *testing.T) {
+	certsDir := t.TempDir()
+	deps := onboardingDeps{
+		AppVersion: "v9.9.9-test",
+		Commit:     "cafe123",
+		BuildDate:  "2026-08-21T00:00:00Z",
+		ConfigFile: "/etc/kite/kite-collector.yaml",
+		DBPath:     "/var/lib/kite-collector/kite.db",
+		CertsDir:   certsDir,
+	}
+
+	view := buildObservabilityView(context.Background(), deps)
+	assert.Equal(t, "v9.9.9-test", view.Agent.Version)
+	assert.Equal(t, "cafe123", view.Agent.Commit)
+	assert.Equal(t, "2026-08-21T00:00:00Z", view.Agent.BuiltAt)
+	assert.Equal(t, "/etc/kite/kite-collector.yaml", view.Agent.ConfigFile)
+	assert.Equal(t, certsDir, view.Agent.DataDir)
+	assert.Equal(t, "/var/lib/kite-collector/kite.db", view.Agent.DBPath)
+	assert.False(t, view.Agent.Enrolled, "empty certs dir must report not enrolled")
+
+	var rendered strings.Builder
+	require.NoError(t, observabilityTmpl.Execute(&rendered, view))
+	body := rendered.String()
+	assert.Contains(t, body, `id="section-agent"`)
+	assert.Contains(t, body, "v9.9.9-test")
+	assert.Contains(t, body, "cafe123")
+	assert.Contains(t, body, "/etc/kite/kite-collector.yaml")
+	assert.Contains(t, body, "/var/lib/kite-collector/kite.db")
+	assert.Contains(t, body, "not enrolled")
+
+	// All three enrollment PEMs present flips the card to enrolled —
+	// the same signal the CLI uses.
+	for _, name := range installer.EnrollmentFiles {
+		require.NoError(t, os.WriteFile(filepath.Join(certsDir, name), []byte("pem"), 0o600))
+	}
+	assert.True(t, collectAgentState(deps).Enrolled)
+
+	// Empty deps degrade to the CLI defaults rather than blank rows.
+	assert.Equal(t, "kite-collector.yaml", collectAgentState(onboardingDeps{}).ConfigFile)
 }
 
 // TestObservability_PageRendersAllSections asserts the /observability page

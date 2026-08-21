@@ -43,6 +43,13 @@ type Options struct {
 	Installer  Installer
 	AppVersion string
 	Commit     string
+	// Date is the build timestamp stamped at link time (same ldflags as
+	// AppVersion/Commit). Rendered in the observability page's agent-state
+	// card and its JSON snapshot.
+	Date string
+	// ConfigFile is the config path the collector was started with; empty
+	// means the default search name (kite-collector.yaml).
+	ConfigFile string
 	// PlatformEndpoint is the collector's OTLP destination (sourced from
 	// cfg.Streaming.OTLP.Endpoint). The onboarding Enroll form shows this as
 	// read-only text and the connection-check probes dial this host. The
@@ -643,6 +650,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				WrapKey:          wrapKey,
 				AppVersion:       opts.AppVersion,
 				Commit:           opts.Commit,
+				BuildDate:        opts.Date,
+				ConfigFile:       opts.ConfigFile,
+				DBPath:           rc.DBPath,
 				PlatformEndpoint: opts.PlatformEndpoint,
 				CertsDir:         opts.CertsDir,
 				ProbeDuration:    onboardingProbeDurationHistogram(),

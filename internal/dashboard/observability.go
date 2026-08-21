@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
@@ -124,6 +125,7 @@ type observabilityView struct {
 	RecentFailures             []recentFailure         `json:"recent_failures,omitempty"`
 	Certificates               []pkiCertificateSummary `json:"pki_certificates,omitempty"`
 	Runtime                    runtimeStats            `json:"runtime"`
+	Agent                      agentState              `json:"agent"`
 	Freshness                  observabilityFreshness  `json:"-"` // UI-only: chip state + pause/resume controls
 	HasProbeData               bool                    `json:"has_probe_data"`
 	HasScanData                bool                    `json:"has_scan_data"`
@@ -298,6 +300,50 @@ type runtimeStats struct {
 	HasDBSize         bool          `json:"-"`
 	HasStoreRowCounts bool          `json:"-"`
 	HasDataRowCounts  bool          `json:"-"`
+}
+
+// agentState is the binary-identity + file-locations + enrollment block
+// rendered in the observability page's Agent card and the JSON snapshot.
+// It mirrors the "Current state" footer of `kite-collector --help` so the
+// dashboard answers the same "what exactly am I running, from where?"
+// question without shell access — including the staleness check: a version
+// here that differs from a freshly built binary means the running service
+// predates the build.
+type agentState struct {
+	Version    string `json:"version"`
+	Commit     string `json:"commit"`
+	BuiltAt    string `json:"built_at,omitempty"`
+	ConfigFile string `json:"config_file"`
+	DataDir    string `json:"data_dir,omitempty"`
+	DBPath     string `json:"db_path,omitempty"`
+	Enrolled   bool   `json:"enrolled"`
+}
+
+// collectAgentState assembles the agent-state card data from the wired
+// deps. Enrollment uses the same signal as the CLI's currentStateSummary:
+// all three enrollment PEMs present in the data directory.
+func collectAgentState(deps onboardingDeps) agentState {
+	st := agentState{
+		Version:    deps.AppVersion,
+		Commit:     deps.Commit,
+		BuiltAt:    deps.BuildDate,
+		ConfigFile: deps.ConfigFile,
+		DataDir:    strings.TrimSpace(deps.CertsDir),
+		DBPath:     deps.DBPath,
+	}
+	if st.ConfigFile == "" {
+		st.ConfigFile = "kite-collector.yaml"
+	}
+	if st.DataDir != "" {
+		st.Enrolled = true
+		for _, name := range installer.EnrollmentFiles {
+			if _, err := os.Stat(filepath.Join(st.DataDir, name)); err != nil {
+				st.Enrolled = false
+				break
+			}
+		}
+	}
+	return st
 }
 
 // streamHealth is the OTLP stream telemetry view rendered in the
@@ -1330,6 +1376,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <div class="observability-jumpnav">
 <nav class="page-jumpnav" aria-label="Observability page sections">
   <span class="page-jumpnav-label muted small">Jump to:</span>
+  <a href="#section-agent">Agent</a>
   <a href="#section-health">Health</a>
   <a href="#section-certificates">Certificates</a>
   <a href="#section-failures">Failures</a>
@@ -1343,6 +1390,22 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 </div>
 
 <div class="observability-grid">
+<section class="card observability-card" id="section-agent">
+  <h2>Agent</h2>
+  <p class="muted">Binary identity, file locations, and enrollment &mdash; the same
+     block <code>kite-collector --help</code> prints as &ldquo;Current state&rdquo;.</p>
+  <div class="observability-table-wrap">
+  <table class="kv observability-kv">
+    <tr><td>Version</td><td><code>{{.Agent.Version}}</code></td></tr>
+    <tr><td>Build</td><td><code>{{.Agent.Commit}}</code>{{if .Agent.BuiltAt}} <span class="muted small">built {{.Agent.BuiltAt}}</span>{{end}}</td></tr>
+    <tr><td>Config file</td><td><code>{{.Agent.ConfigFile}}</code></td></tr>
+    <tr><td>Data directory</td><td>{{if .Agent.DataDir}}<code>{{.Agent.DataDir}}</code>{{else}}<span class="muted">not configured</span>{{end}}</td></tr>
+    <tr><td>Database</td><td>{{if .Agent.DBPath}}<code>{{.Agent.DBPath}}</code>{{else}}<span class="muted">not available</span>{{end}}</td></tr>
+    <tr><td>Enrollment</td><td>{{if .Agent.Enrolled}}<span class="badge badge-green">enrolled</span>{{else}}<span class="badge badge-gray">not enrolled</span> <a href="/onboarding">enroll &rarr;</a>{{end}}</td></tr>
+  </table>
+  </div>
+</section>
+
 <section class="card observability-card observability-card--health" id="section-health">
   <h2>Healthchecks</h2>
   <p class="muted">Per-subsystem status, recomputed on each page render.</p>
@@ -1791,6 +1854,7 @@ func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabil
 	view := observabilityView{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Endpoint:    deps.PlatformEndpoint,
+		Agent:       collectAgentState(deps),
 	}
 	if certsDir := strings.TrimSpace(deps.CertsDir); certsDir != "" {
 		agentCert := filepath.Join(certsDir, "agent.pem")

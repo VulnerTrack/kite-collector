@@ -190,9 +190,10 @@ type ChangedMachine struct {
 // Root command
 // ---------------------------------------------------------------------------
 
-// currentStateSummary renders the "where are my files + am I enrolled" block
-// shown at the foot of `kite-collector --help`. It reports the install-time
-// default locations (installer.DetectDefaults) and detects enrollment by the
+// currentStateSummary renders the "what am I running + where are my files +
+// am I enrolled" block shown at the foot of `kite-collector --help`. It
+// reports the running binary's version/build identity, the install-time
+// default locations (installer.DetectDefaults), and detects enrollment by the
 // presence of the three enrollment PEMs in the certs dir — os.Stat succeeds
 // even when the PEMs themselves are root-only, since only directory traversal
 // is needed. It never errors: unknown facts degrade to a shown default.
@@ -214,6 +215,8 @@ func currentStateSummary() string {
 
 	var b strings.Builder
 	b.WriteString("Current state:\n")
+	fmt.Fprintf(&b, "  version:         %s\n", version)
+	fmt.Fprintf(&b, "  build:           commit %s, built %s\n", commit, date)
 	fmt.Fprintf(&b, "  config file:     %s (override with --config)\n", "kite-collector.yaml")
 	fmt.Fprintf(&b, "  data directory:  %s (enrollment certs + kite.db)\n", certsDir)
 	fmt.Fprintf(&b, "  database:        %s\n", opts.DbPath)
@@ -1480,6 +1483,8 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			StreamController: dashboardStreamAdapter{streamCtrl},
 			AppVersion:       version,
 			Commit:           commit,
+			Date:             date,
+			ConfigFile:       cfgFile,
 			PlatformEndpoint: cfg.Streaming.OTLP.Endpoint,
 			OAuth:            dashboardOAuthOptions(cfg),
 			CertsDir:         certsDir,
@@ -2769,6 +2774,8 @@ installed service uses, so this command Just Works after install.`,
 			opts := dashboard.Options{
 				AppVersion:       version,
 				Commit:           commit,
+				Date:             date,
+				ConfigFile:       cfgFile,
 				PlatformEndpoint: platformEndpoint,
 				OAuth:            oauth,
 				CertsDir:         certsDir,
@@ -3221,6 +3228,8 @@ func runPlatformLoginEnrollWithDeps(
 	srv := dashboard.Serve(addr, st, rc, logger, dashboard.Options{
 		AppVersion:       version,
 		Commit:           commit,
+		Date:             date,
+		ConfigFile:       cfgFile,
 		PlatformEndpoint: platformEndpoint,
 		OAuth:            oauth,
 		CertsDir:         filepath.Dir(dbPath),
