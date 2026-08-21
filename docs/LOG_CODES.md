@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 512 codes across 60 packages.
+**Catalog size:** 513 codes across 60 packages.
 
 ---
 
@@ -94,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 27 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 28 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -123,6 +123,7 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.telemetry.identity_unavailable` | `LogCodeTelemetryIdentityUnavailable` | — |
 | `agent.telemetry.otlp_configured` | `LogCodeTelemetryOTLPConfigured` | — |
 | `agent.telemetry.otlp_disabled` | `LogCodeTelemetryOTLPDisabled` | — |
+| `agent.telemetry.user_identity_resolved` | `LogCodeTelemetryUserIdentityResolved` | — |
 
 **api surface — REST API server lifecycle**
 

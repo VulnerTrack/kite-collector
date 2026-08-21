@@ -34,9 +34,10 @@ const (
 	LogCodeStoreSQLiteSelected   LogCode = "agent.store.backend_selected_sqlite"
 
 	// telemetry surface — OTLP wiring decisions
-	LogCodeTelemetryIdentityUnavailable LogCode = "agent.telemetry.identity_unavailable"
-	LogCodeTelemetryOTLPConfigured      LogCode = "agent.telemetry.otlp_configured"
-	LogCodeTelemetryOTLPDisabled        LogCode = "agent.telemetry.otlp_disabled"
+	LogCodeTelemetryIdentityUnavailable  LogCode = "agent.telemetry.identity_unavailable"
+	LogCodeTelemetryOTLPConfigured       LogCode = "agent.telemetry.otlp_configured"
+	LogCodeTelemetryOTLPDisabled         LogCode = "agent.telemetry.otlp_disabled"
+	LogCodeTelemetryUserIdentityResolved LogCode = "agent.telemetry.user_identity_resolved"
 
 	// api surface — REST API server lifecycle
 	LogCodeAPIStarting     LogCode = "agent.api.starting"

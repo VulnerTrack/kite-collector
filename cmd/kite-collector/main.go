@@ -1298,6 +1298,18 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				"code", string(LogCodeTelemetryIdentityUnavailable),
 				"cert_file", cfg.Streaming.OTLP.TLS.CertFile)
 		}
+		// Log the user who enrolled this agent, read from the same client
+		// certificate (Subject OU user UUID + rfc822 SAN email, stamped by
+		// PKI at enrollment). Certificates issued before user stamping
+		// simply don't produce this line.
+		if userID, userEmail := telresource.UserFromCertFile(
+			cfg.Streaming.OTLP.TLS.CertFile,
+		); userID != "" {
+			slog.Info("agent enrolled-by user resolved from client certificate",
+				"code", string(LogCodeTelemetryUserIdentityResolved),
+				"user_id", userID,
+				"user_email", userEmail)
+		}
 		resourceAttrs := telresource.Build(telresource.Config{
 			AgentID:        agentID,
 			ServiceVersion: version,
@@ -3418,12 +3430,18 @@ func runEnroll(agentCode, token, certsDir string) error {
 		return fmt.Errorf("store certificates: %w", err)
 	}
 
+	// PKI binds the enrolling operator into the issued certificate (Subject
+	// OU user UUID + rfc822 SAN email); surface it so the enrollment record
+	// says who enrolled this agent.
+	userID, userEmail := telresource.UserFromCertPEM(result.ClientCertificate)
 	logger.Info(
 		"enrollment complete; certificate issued",
 		"code", string(LogCodeEnrollComplete),
 		"agent_code", agentCode,
 		"status", result.Status,
 		"certificate_id", result.CertificateID,
+		"user_id", userID,
+		"user_email", userEmail,
 		"expires", result.CertificateExpires,
 	)
 	return nil
