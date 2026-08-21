@@ -391,8 +391,10 @@ jobs:
           # fine-grained token) with contents:write on that repo. Stored as
           # repo secret HOMEBREW_TAP_GITHUB_TOKEN.
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-          # Token para publicar automáticamente en la Snap Store:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          # No SNAPCRAFT_STORE_CREDENTIALS here: goreleaser only BUILDS the
+          # .snap files (snapcrafts.publish is off). The Snap Store upload —
+          # the one publisher that intermittently drops connections and has
+          # no retry — happens in the snap-publish job below.
 
       # Publish the legacy enrollment agent immediately after the base release.
       # Optional packaging integrations below must never prevent Windows 7
@@ -414,6 +416,19 @@ jobs:
             dist/kite-collector_windows_386_legacy.exe \
             dist/kite-collector_windows_386_legacy.exe.sha256 \
             --clobber
+
+      # Hand the .snap files goreleaser built to the snap-publish job. The
+      # Snap Store upload lives in its own job so a store hiccup can never
+      # fail this release again (v0.50.2 died on RemoteDisconnected after
+      # every other channel had published) and so a failed upload can be
+      # retried alone via "Re-run failed jobs" — no 15-minute rebuild.
+      - name: Stash snaps for snap-publish
+        uses: actions/upload-artifact@v7
+        with:
+          name: snaps
+          path: dist/*.snap
+          retention-days: 7
+          if-no-files-found: error
 
       # Build the Windows MSIs from the .exe goreleaser just produced and
       # attach them to the GitHub Release as additional assets. Runs after
@@ -553,3 +568,62 @@ jobs:
         with:
           branch: gh-pages
           folder: public
+
+  # ──────────────────────────────────────────────
+  # Phase 4: Snap Store publish (v* tags only)
+  # ──────────────────────────────────────────────
+  # Separate from `release` on purpose. The store's upload endpoint
+  # occasionally closes the connection mid-upload without an HTTP response
+  # (python-requests reports RemoteDisconnected), snapcraft does not retry,
+  # and goreleaser treats the exit code as a publish failure — that combo
+  # failed the v0.50.2 release as its final act, after the GitHub release,
+  # Docker, Homebrew and Scoop had all published. Here the upload retries
+  # with backoff, and if the store is down long enough to exhaust the
+  # retries, "Re-run failed jobs" re-runs only this job.
+  snap-publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    needs: [release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    # Same environment binding as `release`: SNAPCRAFT_STORE_CREDENTIALS may
+    # be scoped to "Deployment", and environment-scoped secrets are invisible
+    # to jobs that do not opt in.
+    environment: Deployment
+    steps:
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: snaps
+          path: dist
+
+      - name: Upload snaps to the Snap Store (with retries)
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          set -u
+          # Fail fast, and distinguishably, when the exported credentials
+          # have expired (Ubuntu One macaroons last ~1 year). Retries cannot
+          # fix that failure mode, only re-exporting the secret can:
+          #   snapcraft export-login --snaps=kite-collector \
+          #     --acls=package_access,package_push,package_update,package_release -
+          if ! snapcraft whoami; then
+            echo "::error::SNAPCRAFT_STORE_CREDENTIALS is invalid or expired — re-export and update the secret."
+            exit 1
+          fi
+          status=0
+          for snap in dist/*.snap; do
+            for attempt in 1 2 3 4 5; do
+              echo "Uploading $snap (attempt $attempt/5)"
+              if snapcraft upload --release=edge,beta,candidate,stable "$snap"; then
+                continue 2
+              fi
+              # Backoff before the next try. Transient store failures
+              # (dropped connections, 5xx) usually clear within minutes.
+              sleep $((attempt * 30))
+            done
+            echo "::error::Giving up on $snap after 5 attempts."
+            status=1
+          done
+          exit $status

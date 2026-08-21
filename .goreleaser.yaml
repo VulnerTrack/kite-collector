@@ -124,9 +124,15 @@ snapcrafts:
     name: kite-collector
     summary: Cybersecurity machine discovery and posture analysis agent.
     description: |
-      Kite Collector is a cybersecurity machine discovery, configuration audit, 
+      Kite Collector is a cybersecurity machine discovery, configuration audit,
       and posture analysis agent developed by VulnerTrack.
-    publish: true
+    # publish stays off: the Snap Store upload endpoint intermittently drops
+    # connections mid-upload (RemoteDisconnected — it killed the v0.50.2
+    # release after everything else had published) and neither goreleaser
+    # nor snapcraft retries. The .snap files built here are uploaded by the
+    # snap-publish workflow job, which retries with backoff and can be
+    # re-run on its own without rebuilding the release.
+    publish: false
     grade: stable
     confinement: strict
     base: core22
