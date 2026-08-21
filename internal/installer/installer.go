@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/kardianos/service"
 )
@@ -385,8 +386,17 @@ func InstallBinary(src, dst string) error {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("close temp binary: %w", err)
 	}
-	if err := os.Rename(tmp, dst); err != nil {
-		return fmt.Errorf("rename binary: %w", err)
+	// Rename is atomic on unix; on Windows it fails while the previous
+	// binary is still executing (the loader keeps the file locked). The
+	// install flow stops the service before swapping, but SCM stops are
+	// asynchronous — retry briefly instead of failing the upgrade.
+	var renameErr error
+	for attempt := 0; attempt < 10; attempt++ {
+		if renameErr = os.Rename(tmp, dst); renameErr == nil {
+			return nil
+		}
+		time.Sleep(300 * time.Millisecond)
 	}
-	return nil
+	_ = os.Remove(tmp)
+	return fmt.Errorf("rename binary: %w", renameErr)
 }

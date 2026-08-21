@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/kardianos/service"
@@ -325,12 +326,21 @@ func newServiceControlCmd(action, short string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   action,
 		Short: short,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			svc, _, err := newProgramService(svcOpts{userService: userMode})
 			if err != nil {
 				return fmt.Errorf("create service handle: %w", err)
 			}
-			return service.Control(svc, action)
+			// Not service.Control: ensureServiceState preflights the
+			// current status so start/stop are idempotent (already
+			// running / already stopped exit 0) and launchd's cryptic
+			// error 5 gets translated instead of passed through.
+			outcome, err := controlInstalledService(svc, action, userMode)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  ✓  service %q %s\n", svcName, outcome)
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&userMode, "user", false, "target the per-user service")
@@ -516,6 +526,35 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	// right --certs-dir, not the user's typed defaults.
 	defer printPostInstall(out, dst, a.certsDir, a.userMode)
 
+	svc, svcErr := service.New(&program{}, cfg)
+	if svcErr != nil {
+		return fmt.Errorf("create service handle: %w", svcErr)
+	}
+
+	// Idempotent upgrade: a re-run of `install` over an existing
+	// installation must never fail because kite-collector is already
+	// there — it replaces the binary and the service registration in
+	// place, the same contract the deb/MSI upgrade paths honour.
+	prev := installer.Probe(opts.toInstallerOptions())
+	prevInstalled := prev.ServiceState == installer.ServiceRunning ||
+		prev.ServiceState == installer.ServiceStopped
+	wasRunning := prev.ServiceState == installer.ServiceRunning
+	if prevInstalled || prev.BinaryPresent {
+		_, _ = fmt.Fprintf(out, "  ▸  existing installation detected (service %s) — upgrading in place\n",
+			prev.ServiceState)
+	}
+	if wasRunning {
+		// Stop before the binary swap: Windows keeps a running
+		// executable locked (the rename below would fail), and on unix
+		// the old inode would keep serving until a restart anyway. The
+		// service is started again at the end of the install.
+		if stopErr := svc.Stop(); stopErr != nil {
+			_, _ = fmt.Fprintf(out, "  ✗  stop running service: %v (continuing)\n", stopErr)
+		} else {
+			_, _ = fmt.Fprintf(out, "  ✓  running service stopped for upgrade\n")
+		}
+	}
+
 	if binErr := installer.InstallBinary(src, dst); binErr != nil {
 		return fmt.Errorf("install binary: %w", binErr)
 	}
@@ -531,16 +570,23 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  PATH configured\n")
 
-	svc, svcErr := service.New(&program{}, cfg)
-	if svcErr != nil {
-		return fmt.Errorf("create service handle: %w", svcErr)
+	// Replace any previous registration in place. Uninstall failing is
+	// the common fresh-install case ("not installed") and stays quiet; a
+	// stale registration that survives it surfaces as "already exists"
+	// from Install and gets one clear-and-retry below.
+	if uninstErr := svc.Uninstall(); uninstErr == nil && prevInstalled {
+		_, _ = fmt.Fprintf(out, "  ✓  previous service registration removed\n")
 	}
 
-	// If a previous registration exists, replace it. Ignore errors —
-	// uninstall fails when nothing is installed, which is the common case.
-	_ = svc.Uninstall()
-
-	if instErr := svc.Install(); instErr != nil {
+	instErr := svc.Install()
+	if instErr != nil && strings.Contains(instErr.Error(), "already exists") {
+		// A leftover unit/plist Uninstall could not see (e.g. written by
+		// an older packaging under the same name). Clear it and retry
+		// once rather than failing the upgrade.
+		_ = svc.Uninstall()
+		instErr = svc.Install()
+	}
+	if instErr != nil {
 		return fmt.Errorf("install service: %w", instErr)
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  service %q registered (%s)\n", cfg.Name, service.Platform())
@@ -593,16 +639,20 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 		BinaryDir: filepath.Dir(dst),
 		CertsDir:  a.certsDir,
 	})
-	if !enrolled && !st.CertsEnrolled {
+	// wasRunning joins the start conditions: an upgrade over a running
+	// service must hand back a running service, even when the enrollment
+	// heuristics would otherwise stay quiet.
+	if !enrolled && !st.CertsEnrolled && !wasRunning {
 		// No certs → starting now is just noise. Stay quiet here; the
 		// post-install report tells the operator what to do next.
 		return bundleErr
 	}
-	if err := svc.Start(); err != nil {
-		_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v\n", err)
+	outcome, startErr := controlInstalledService(svc, "start", a.userMode)
+	if startErr != nil {
+		_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v\n", startErr)
 		return bundleErr
 	}
-	_, _ = fmt.Fprintf(out, "  ✓  service %q started\n", cfg.Name)
+	_, _ = fmt.Fprintf(out, "  ✓  service %q %s\n", cfg.Name, outcome)
 	return bundleErr
 }
 
