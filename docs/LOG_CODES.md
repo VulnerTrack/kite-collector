@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 519 codes across 60 packages.
+**Catalog size:** 520 codes across 60 packages.
 
 ---
 
@@ -527,13 +527,19 @@ Source: [`internal/discovery/agent/scheduled/logcodes.go`](../internal/discovery
 
 ## `software` (internal/discovery/agent/software)
 
-Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/agent/software/logcodes.go) · 5 codes
+Source: [`internal/discovery/agent/software/logcodes.go`](../internal/discovery/agent/software/logcodes.go) · 6 codes
 
 **registry surface — per-collector lifecycle and aggregation errors when the multi-package-manager registry runs the fan-out**
 
 | Code | Constant | Description |
 |---|---|---|
 | `agent_software.registry.collector_failed` | `LogCodeRegistryCollectorFailed` | — |
+
+**exec surface — privilege reduction applied to a collector child process: the agent runs as root but the tool refuses root, so the child runs as the tool's owning user with a minimal environment**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent_software.exec.demoted_to_user` | `LogCodeExecDemotedToUser` | — |
 
 **pipx surface — diagnostics scraped from pipx CLI stderr on non-zero exit codes**
 

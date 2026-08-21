@@ -39,7 +39,21 @@ func (b *Brew) Available() bool {
 // as an actionable Warn and the inventory is returned empty. Any other
 // non-zero exit surfaces as an error carrying brew's stderr.
 func (b *Brew) Collect(ctx context.Context) (*Result, error) {
-	out, stderr, exitCode, err := runWithLimitsTolerateExit(ctx, "brew", "list", "--versions")
+	// Privilege reduction instead of privilege skip: when the agent is
+	// root, run brew as the user who owns the brew binary (Homebrew
+	// itself requires a non-root owner) with a minimal environment.
+	// The inventory then works from a system daemon without ever
+	// granting brew root. Falls through to the root-refusal skip below
+	// when no demotion target exists (root-owned brew, non-unix).
+	demote := demotionFor("brew")
+	if demote != nil {
+		slog.Info("software: running brew as its owning user (brew refuses root)",
+			"code", string(LogCodeExecDemotedToUser),
+			"collector", "brew",
+			"uid", demote.uid,
+			"user", demote.username)
+	}
+	out, stderr, exitCode, err := runWithLimitsTolerateExitAs(ctx, demote, "brew", "list", "--versions")
 	if err != nil {
 		return nil, fmt.Errorf("brew list --versions: %w", err)
 	}

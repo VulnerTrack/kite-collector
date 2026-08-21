@@ -16,6 +16,11 @@ const (
 	// errors when the multi-package-manager registry runs the fan-out
 	LogCodeRegistryCollectorFailed LogCode = "agent_software.registry.collector_failed"
 
+	// exec surface — privilege reduction applied to a collector child
+	// process: the agent runs as root but the tool refuses root, so the
+	// child runs as the tool's owning user with a minimal environment
+	LogCodeExecDemotedToUser LogCode = "agent_software.exec.demoted_to_user"
+
 	// pipx surface — diagnostics scraped from pipx CLI stderr on
 	// non-zero exit codes
 	LogCodePipxNonZeroExitDiagnostic LogCode = "agent_software.pipx.non_zero_exit_diagnostic"

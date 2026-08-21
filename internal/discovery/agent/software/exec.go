@@ -108,11 +108,21 @@ func stderrTail(stderr []byte) string {
 // usable JSON payload) and stderr (which often carries actionable
 // diagnostics like "run pipx reinstall-all") to decide the policy.
 func runWithLimitsTolerateExit(ctx context.Context, name string, args ...string) (stdout, stderr []byte, exitCode int, err error) {
+	return runWithLimitsTolerateExitAs(ctx, nil, name, args...)
+}
+
+// runWithLimitsTolerateExitAs is runWithLimitsTolerateExit with an
+// optional privilege demotion applied to the child: a nil demotion is
+// the normal inherit-our-identity exec, a non-nil one runs the child
+// under the demoted uid/gid with a minimal environment (see
+// applyDemotion). Used by collectors whose tools refuse to run as root.
+func runWithLimitsTolerateExitAs(ctx context.Context, demote *demotion, name string, args ...string) (stdout, stderr []byte, exitCode int, err error) {
 	ctx, cancel := context.WithTimeout(ctx, execTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...) //#nosec G204 -- callers pass hardcoded binary names, not user input
 	osutil.HideWindow(cmd)
+	applyDemotion(cmd, demote)
 
 	stderrBuf := &cappedBuffer{max: maxStderrBytes}
 	cmd.Stderr = stderrBuf

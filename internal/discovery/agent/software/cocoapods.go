@@ -34,7 +34,19 @@ func (c *CocoaPods) Available() bool {
 // actionable Warn and the inventory is returned empty. Any other
 // non-zero exit surfaces as an error carrying pod's stderr.
 func (c *CocoaPods) Collect(ctx context.Context) (*Result, error) {
-	out, stderr, exitCode, err := runWithLimitsTolerateExit(ctx, "pod", "list", "--no-pager")
+	// Same privilege reduction as brew: a root agent runs pod as the
+	// user owning the pod executable, with a minimal environment,
+	// instead of tripping CocoaPods' root refusal. The refusal skip
+	// below remains the fallback when no demotion target exists.
+	demote := demotionFor("pod")
+	if demote != nil {
+		slog.Info("software: running pod as its owning user (CocoaPods refuses root)",
+			"code", string(LogCodeExecDemotedToUser),
+			"collector", "cocoapods",
+			"uid", demote.uid,
+			"user", demote.username)
+	}
+	out, stderr, exitCode, err := runWithLimitsTolerateExitAs(ctx, demote, "pod", "list", "--no-pager")
 	if err != nil {
 		return nil, fmt.Errorf("pod list: %w", err)
 	}
