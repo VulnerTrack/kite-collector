@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
 )
 
 // dashboardStartTime captures the timestamp of the first call into the
@@ -108,6 +110,8 @@ type observabilityView struct {
 	Stream                     *streamHealth           `json:"stream,omitempty"`
 	GeneratedAt                string                  `json:"generated_at"`
 	Endpoint                   string                  `json:"endpoint,omitempty"`
+	EnrolledUserID             string                  `json:"enrolled_user_id,omitempty"`
+	EnrolledUserEmail          string                  `json:"enrolled_user_email,omitempty"`
 	HealthSummary              string                  `json:"health_summary"`
 	HealthDetail               string                  `json:"health_detail,omitempty"` // iter-33: names of fail/warn subsystems beside the rollup badge
 	HealthClass                string                  `json:"-"`                       // CSS class, UI-only
@@ -1504,6 +1508,9 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
      heap and goroutine counts for leak symptoms; watch DB size for unbounded growth.</p>
   <div class="observability-table-wrap">
   <table class="kv observability-kv">
+    <tr><td>Enrolled user ID</td><td>{{if .EnrolledUserID}}<code>{{.EnrolledUserID}}</code>{{else}}<span class="muted">not available</span>{{end}}</td></tr>
+    <tr><td>Enrolled user email</td><td>{{if .EnrolledUserEmail}}{{.EnrolledUserEmail}}{{else}}<span class="muted">not available</span>{{end}}</td></tr>
+    <tr><td colspan="2" class="kv-section-header"><span class="muted small">Process</span></td></tr>
     <tr><td>Go version</td><td><code>{{.Runtime.GoVersion}}</code></td></tr>
     <tr><td>Heap allocated</td><td>{{.Runtime.HeapAlloc}} <span class="spark-cell">{{.Runtime.HeapTrendSVG}}</span></td></tr>
     <tr><td>Heap system</td><td>{{.Runtime.HeapSys}}</td></tr>
@@ -1737,6 +1744,12 @@ func renderObservabilityMarkdown(view observabilityView) string {
 
 	// Runtime.
 	b.WriteString("## Runtime\n\n")
+	if view.EnrolledUserID != "" {
+		fmt.Fprintf(&b, "- Enrolled user ID: `%s`\n", view.EnrolledUserID)
+	}
+	if view.EnrolledUserEmail != "" {
+		fmt.Fprintf(&b, "- Enrolled user email: %s\n", view.EnrolledUserEmail)
+	}
 	fmt.Fprintf(&b, "- Go: `%s`\n", view.Runtime.GoVersion)
 	fmt.Fprintf(&b, "- Heap allocated: %s\n", view.Runtime.HeapAlloc)
 	fmt.Fprintf(&b, "- Goroutines: %d\n", view.Runtime.Goroutines)
@@ -1769,6 +1782,11 @@ func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabil
 	view := observabilityView{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Endpoint:    deps.PlatformEndpoint,
+	}
+	if certsDir := strings.TrimSpace(deps.CertsDir); certsDir != "" {
+		view.EnrolledUserID, view.EnrolledUserEmail = telresource.UserFromCertFile(
+			filepath.Join(certsDir, "agent.pem"),
+		)
 	}
 	view.Health = computeHealthChecks(ctx, deps)
 	view.HealthSummary, view.HealthClass, view.HealthDetail = rollupHealth(view.Health)

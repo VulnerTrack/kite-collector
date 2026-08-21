@@ -34,6 +34,7 @@ package windowsinfo
 import (
 	"context"
 	"sort"
+	"strings"
 )
 
 // Source identifies which probe produced the row. Pinned to the
@@ -71,6 +72,23 @@ type Info struct {
 	OSUBR                    int    `json:"os_ubr,omitempty"`
 	TotalPhysicalMemoryBytes int64  `json:"total_physical_memory_bytes"`
 	IsDomainJoined           bool   `json:"is_domain_joined"`
+}
+
+// DisplayName returns the most useful human-readable Windows identification
+// available from CIM and the CurrentVersion registry key.
+func DisplayName(info Info) string {
+	name := strings.TrimSpace(info.OSProductName)
+	if name == "" {
+		name = strings.TrimSpace(info.OSCaption)
+	}
+	parts := []string{name}
+	if display := strings.TrimSpace(info.OSDisplayVersion); display != "" && !strings.Contains(strings.ToLower(name), strings.ToLower(display)) {
+		parts = append(parts, display)
+	}
+	if version := strings.TrimSpace(info.OSVersion); version != "" {
+		parts = append(parts, "("+version+")")
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
 // Collector is the read-only contract every per-OS implementation

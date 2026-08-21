@@ -15,6 +15,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/driver"
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
+	"github.com/vulnertrack/kite-collector/internal/discovery/agent/windowsinfo"
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -45,6 +46,16 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Machi
 
 	osFamily := runtime.GOOS
 	osVersion := readOSVersion()
+	if runtime.GOOS == "windows" {
+		// Windows does not expose an /etc/os-release equivalent. Use the
+		// native CIM/registry probe so enrollment never falls back to the
+		// unhelpful "windows/amd64" placeholder.
+		if info, infoErr := windowsinfo.NewCollector().Collect(ctx); infoErr != nil {
+			slog.Warn("agent probe: failed to collect Windows OS details", "error", infoErr)
+		} else if version := windowsinfo.DisplayName(info); version != "" {
+			osVersion = version
+		}
+	}
 
 	now := time.Now().UTC()
 

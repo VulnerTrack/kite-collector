@@ -68,7 +68,7 @@ func exportSoftwareCSV(w io.Writer, ctx context.Context, st store.Store, rc Repo
 
 	_ = cw.Write([]string{
 		"hostname", "software_name", "version", "vendor",
-		"cpe23", "package_manager",
+		"cpe23", "package_manager", "license",
 	})
 
 	machines, err := st.ListMachines(ctx, store.MachineFilter{})
@@ -89,6 +89,7 @@ func exportSoftwareCSV(w io.Writer, ctx context.Context, st store.Store, rc Repo
 				s.Vendor,
 				s.CPE23,
 				s.PackageManager,
+				s.License,
 			})
 		}
 	}
