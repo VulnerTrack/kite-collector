@@ -197,6 +197,17 @@ stale_threshold: 168h       # 7 days
 #       enabled: true
 #       cert_file: /etc/kite/tls/client.crt
 #       key_file: /etc/kite/tls/client.key
+#     # Host resource metrics (RFC-0157): CPU, memory, disk, network,
+#     # uptime, and load average as an OTLP metrics signal on /v1/metrics.
+#     # Same endpoint, same client certificate, same identity as the log
+#     # signal above — only the path differs.
+#     #
+#     # Off by default. `interval` is independent of `streaming.interval`
+#     # because a 6h scan cadence cannot catch a transient CPU or disk
+#     # spike; 15s is a hard floor and the agent refuses to start below it.
+#     host_metrics:
+#       enabled: false
+#       interval: 60s        # default 60s, floor 15s
 #
 # postgres:
 #   dsn: postgres://kite:password@localhost:5432/vulnertrack?sslmode=require

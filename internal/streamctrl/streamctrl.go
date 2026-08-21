@@ -100,6 +100,15 @@ func (c *Controller) EmitBatch(ctx context.Context, events []model.MachineEvent)
 	return nil
 }
 
+// Enabled reports whether emission is currently forwarding. Callers that
+// produce a signal this controller does not wrap — the host-metrics
+// emitter, which sends OTLP metrics rather than MachineEvents — gate
+// themselves on it so the dashboard's Stop button pauses every outbound
+// signal, not just the log one.
+func (c *Controller) Enabled() bool {
+	return c.runningActive.Load()
+}
+
 // Shutdown forwards to the inner emitter. It does NOT flip state —
 // the process is exiting anyway.
 func (c *Controller) Shutdown(ctx context.Context) error {

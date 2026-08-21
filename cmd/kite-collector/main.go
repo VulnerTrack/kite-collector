@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -82,6 +83,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/store/postgres"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 	"github.com/vulnertrack/kite-collector/internal/streamctrl"
+	"github.com/vulnertrack/kite-collector/internal/telemetry/hostmetrics"
 	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
 	"github.com/vulnertrack/kite-collector/internal/tunnel"
 )
@@ -1261,6 +1263,11 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	// The emitter is then wrapped by a streamctrl.Controller so the
 	// RFC-0112 onboarding dashboard can Start/Stop streaming at runtime.
 	var em emitter.Emitter
+	// Host-metrics emitter (RFC-0157). Stays nil unless the OTLP endpoint is
+	// configured AND the feature flag is on, which is what makes the feature
+	// fully inert by default: no ticker, no gopsutil call, no bytes on the
+	// wire.
+	var metricsEmitter *emitter.OTLPMetricsEmitter
 	if cfg.Streaming.OTLP.Endpoint != "" {
 		// Build the RFC-0115 resource attribute set. Identity load is
 		// best-effort: a missing identity file means we are running before
@@ -1354,6 +1361,28 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			"tls_enabled", cfg.Streaming.OTLP.TLS.Enabled,
 			"cert_file", cfg.Streaming.OTLP.TLS.CertFile,
 		)
+
+		// RFC-0157: a second OTLP signal on the same endpoint, certificate,
+		// and resource identity — only the path differs (/v1/metrics vs
+		// /v1/logs). Off unless the operator opted in; a construction
+		// failure degrades to "no host metrics", never to a failed start-up,
+		// because resource telemetry must not be able to take the agent down
+		// (R3).
+		if cfg.HostMetricsEnabled() {
+			me, meErr := emitter.NewOTLPMetrics(otlpCfg)
+			if meErr != nil {
+				slog.Warn("host metrics emitter unavailable; host metrics will not be streamed",
+					"code", string(LogCodeHostMetricsEmitFailed),
+					"error", meErr)
+			} else {
+				metricsEmitter = me
+				defer func() { _ = me.Shutdown(context.Background()) }()
+				slog.Info("host metrics emitter configured",
+					"code", string(LogCodeHostMetricsConfigured),
+					"interval", cfg.HostMetricsInterval().String(),
+					"endpoint", cfg.Streaming.OTLP.Endpoint)
+			}
+		}
 	} else {
 		em = emitter.NewNoop()
 		slog.Info("OTLP not configured; events will not be streamed (noop emitter)",
@@ -1519,6 +1548,21 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	ticker := time.NewTicker(scanInterval)
 	defer ticker.Stop()
 
+	// Host metrics ride their own ticker (RFC-0157 §9, Alternative 4): a
+	// 6-hour scan cadence cannot catch a transient CPU or disk spike, and
+	// coupling the two would make a slow, heavy discovery scan able to delay
+	// a fast, cheap resource sample. When the feature is off the channel
+	// stays nil, and a receive on a nil channel blocks forever — so the
+	// select arm is simply never selected and no ticker goroutine runs.
+	var hostMetricsTicks <-chan time.Time
+	var hostMetricsBusy atomic.Bool
+	if metricsEmitter != nil {
+		hostMetricsInterval := cfg.HostMetricsInterval()
+		hostMetricsTicker := time.NewTicker(hostMetricsInterval)
+		defer hostMetricsTicker.Stop()
+		hostMetricsTicks = hostMetricsTicker.C
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1569,7 +1613,62 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 					}
 				}
 			}
+		case <-hostMetricsTicks:
+			// Off the loop goroutine: a hung mount inside gopsutil or a
+			// retrying transport can cost tens of seconds, and R3 says
+			// neither may interrupt a discovery scan. The busy flag drops
+			// the tick rather than overlapping cycles — for a 60s-cadence
+			// resource signal, one skipped sample beats a pile-up. An
+			// in-flight cycle observes ctx and unwinds on shutdown.
+			if hostMetricsBusy.CompareAndSwap(false, true) {
+				go func() {
+					defer hostMetricsBusy.Store(false)
+					emitHostMetrics(ctx, metricsEmitter, streamCtrl.Enabled())
+				}()
+			}
 		}
+	}
+}
+
+// emitHostMetrics runs one host-metrics collect-and-emit cycle (RFC-0157
+// §5.3). Every failure path here is a warning and a return: neither a
+// gopsutil failure nor a transport failure may interrupt discovery scans,
+// log emission, or the process (R3).
+func emitHostMetrics(
+	ctx context.Context,
+	metricsEmitter *emitter.OTLPMetricsEmitter,
+	streamEnabled bool,
+) {
+	if metricsEmitter == nil || !streamEnabled {
+		// Paused from the dashboard's Stop button, same as logs.
+		return
+	}
+
+	snap, err := hostmetrics.Collect(ctx)
+	if err != nil {
+		slog.Warn("host metrics collection produced no samples",
+			"code", string(LogCodeHostMetricsCollectFailed),
+			"error", err,
+			"failures", strings.Join(snap.Failures, "; "))
+		return
+	}
+	if len(snap.Failures) > 0 {
+		// A partial snapshot is still worth emitting; say so once per tick
+		// so an operator can tell "this host has no load average" from
+		// "this host stopped reporting".
+		slog.Warn("host metrics collection degraded; emitting partial snapshot",
+			"code", string(LogCodeHostMetricsCollectDegraded),
+			"sample_count", len(snap.Samples),
+			"failures", strings.Join(snap.Failures, "; "))
+	}
+
+	if emitErr := metricsEmitter.EmitSnapshot(ctx, snap); emitErr != nil {
+		// sendWithRetry already backed off internally; this is the
+		// give-up log. The next tick's data is unaffected.
+		slog.Warn("host metrics emit failed",
+			"code", string(LogCodeHostMetricsEmitFailed),
+			"error", emitErr,
+			"sample_count", len(snap.Samples))
 	}
 }
 

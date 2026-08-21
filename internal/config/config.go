@@ -331,9 +331,24 @@ type StreamingConfig struct {
 
 // OTLPConfig configures the OTLP event emitter.
 type OTLPConfig struct {
-	Endpoint string    `mapstructure:"endpoint"`
-	Protocol string    `mapstructure:"protocol"` // "grpc" or "http"
-	TLS      TLSConfig `mapstructure:"tls"`
+	Endpoint    string            `mapstructure:"endpoint"`
+	Protocol    string            `mapstructure:"protocol"` // "grpc" or "http"
+	TLS         TLSConfig         `mapstructure:"tls"`
+	HostMetrics HostMetricsConfig `mapstructure:"host_metrics"`
+}
+
+// HostMetricsConfig configures the OTLP host-metrics signal (RFC-0157).
+//
+// Off by default: the whole feature is opt-in per fleet (R9), and an agent
+// that never flips Enabled collects nothing and emits nothing.
+//
+// Interval is independent of streaming.interval on purpose. The scan ticker
+// defaults to 6h, which cannot catch a transient CPU or disk spike; host
+// metrics need a fast, cheap cadence of their own (RFC-0157 §9,
+// Alternative 4).
+type HostMetricsConfig struct {
+	Interval string `mapstructure:"interval"` // duration string like "60s"
+	Enabled  bool   `mapstructure:"enabled"`
 }
 
 // TLSConfig holds TLS certificate paths.
@@ -573,6 +588,25 @@ func (c *Config) validate() error {
 		}
 	}
 
+	// Host-metrics interval must be parseable and at or above the floor
+	// (RFC-0157 R8). Rejecting at load rather than silently clamping is the
+	// point: an operator who typed 1s wanted per-second metrics and needs to
+	// know they are not getting them.
+	if raw := c.Streaming.OTLP.HostMetrics.Interval; raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			return fmt.Errorf(
+				"invalid streaming.otlp.host_metrics.interval %q: %w", raw, err)
+		}
+		if d < MinHostMetricsInterval {
+			return fmt.Errorf(
+				"streaming.otlp.host_metrics.interval %q is below the %s floor: "+
+					"a faster cadence multiplies per-tenant ingest volume and "+
+					"otel_metrics_* cardinality without adding signal",
+				raw, MinHostMetricsInterval)
+		}
+	}
+
 	// Allowlist file must exist if configured.
 	if p := c.Classification.Authorization.AllowlistFile; p != "" {
 		if _, err := os.Stat(p); err != nil {
@@ -677,6 +711,43 @@ func (c *Config) StreamingInterval() time.Duration {
 		return 6 * time.Hour
 	}
 	return d
+}
+
+// Host-metrics emission cadence bounds (RFC-0157 R8).
+const (
+	// DefaultHostMetricsInterval is the cadence used when none is configured.
+	DefaultHostMetricsInterval = 60 * time.Second
+	// MinHostMetricsInterval is a hard floor, not a suggestion: per-tenant
+	// ingest volume and otel_metrics_* cardinality both scale linearly with
+	// 1/interval, and the collector's memory_limiter is shared with the
+	// logs and traces pipelines. Validate rejects anything below it, and
+	// HostMetricsInterval clamps up to it for callers that skipped Validate.
+	MinHostMetricsInterval = 15 * time.Second
+)
+
+// HostMetricsInterval returns the effective host-metrics emission cadence:
+// the configured value, clamped to the floor, or the default when unset or
+// unparseable.
+func (c *Config) HostMetricsInterval() time.Duration {
+	raw := c.Streaming.OTLP.HostMetrics.Interval
+	if raw == "" {
+		return DefaultHostMetricsInterval
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return DefaultHostMetricsInterval
+	}
+	if d < MinHostMetricsInterval {
+		return MinHostMetricsInterval
+	}
+	return d
+}
+
+// HostMetricsEnabled reports whether the agent should run the host-metrics
+// collector and emitter at all. An enabled flag with no OTLP endpoint is
+// inert by construction: there is nowhere to send the samples.
+func (c *Config) HostMetricsEnabled() bool {
+	return c.Streaming.OTLP.HostMetrics.Enabled && c.Streaming.OTLP.Endpoint != ""
 }
 
 // IsSourceEnabled reports whether the named discovery source exists in the

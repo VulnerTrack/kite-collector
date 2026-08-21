@@ -39,6 +39,12 @@ const (
 	LogCodeTelemetryOTLPDisabled         LogCode = "agent.telemetry.otlp_disabled"
 	LogCodeTelemetryUserIdentityResolved LogCode = "agent.telemetry.user_identity_resolved"
 
+	// host-metrics surface — RFC-0157 OTLP metrics signal
+	LogCodeHostMetricsConfigured      LogCode = "agent.host_metrics.configured"
+	LogCodeHostMetricsCollectFailed   LogCode = "agent.host_metrics.collect_failed"
+	LogCodeHostMetricsCollectDegraded LogCode = "agent.host_metrics.collect_degraded"
+	LogCodeHostMetricsEmitFailed      LogCode = "agent.host_metrics.emit_failed"
+
 	// api surface — REST API server lifecycle
 	LogCodeAPIStarting     LogCode = "agent.api.starting"
 	LogCodeAPIServerFailed LogCode = "agent.api.server_failed"

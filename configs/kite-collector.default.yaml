@@ -48,6 +48,12 @@ streaming:
       ca_file:   /var/lib/kite-collector/<agent-code>/ca.pem
       cert_file: /var/lib/kite-collector/<agent-code>/agent.pem
       key_file:  /var/lib/kite-collector/<agent-code>/agent-key.pem
+    # Host resource metrics (RFC-0157) over the same mTLS endpoint, on
+    # /v1/metrics. Opt-in per fleet: flip `enabled` once the platform side
+    # has KITE_HOST_METRICS_INGEST_ENABLED on. Interval floor is 15s.
+    host_metrics:
+      enabled: false
+      interval: 60s
 
 # ---------------------------------------------------------------------------
 # Discovery sources
