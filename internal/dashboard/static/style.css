@@ -1319,7 +1319,12 @@ table.kv td { word-break: break-all; }
  * ------------------------------------------------------------------------- */
 .data-grid {
   width: 100%;
-  overflow: hidden;
+  /* Horizontal scroll INSIDE the card instead of pushing the page wide
+     (or clipping columns, which `overflow: hidden` silently did) when a
+     table outgrows the viewport. Vertical overflow stays hidden so the
+     border-radius keeps clipping the table corners. */
+  overflow-x: auto;
+  overflow-y: hidden;
   border-radius: 16px;
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.04),
