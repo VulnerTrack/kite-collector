@@ -143,14 +143,14 @@ func TestIsCredentialKindUnknownEnum(t *testing.T) {
 
 func TestArtifactKindFromNameExtra(t *testing.T) {
 	cases := map[string]ArtifactKind{
-		"generic_setup.exe":            KindOther, // exe without FF token
-		"session_token.json":           KindCredentials,
-		"precancelacion_202606.csv":     KindPrecancelacionCSV,
-		"escritura_naranja.pdf":         KindEscrituraFiduciaria,
-		"contrato_fiduciario_x.pdf":     KindContratoFiduciario,
-		"filing_receipt_202606.xml":     KindFilingReceipt,
-		"auditoria_202606.pdf":          KindAuditReport,
-		"colocador_notes.txt":           KindOther, // candidate name, no kind token
+		"generic_setup.exe":         KindOther, // exe without FF token
+		"session_token.json":        KindCredentials,
+		"precancelacion_202606.csv": KindPrecancelacionCSV,
+		"escritura_naranja.pdf":     KindEscrituraFiduciaria,
+		"contrato_fiduciario_x.pdf": KindContratoFiduciario,
+		"filing_receipt_202606.xml": KindFilingReceipt,
+		"auditoria_202606.pdf":      KindAuditReport,
+		"colocador_notes.txt":       KindOther, // candidate name, no kind token
 	}
 	for in, want := range cases {
 		if got := ArtifactKindFromName(in); got != want {

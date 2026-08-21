@@ -246,9 +246,9 @@ func TestPeriodFromFilenameValues(t *testing.T) {
 	cases := map[string]string{
 		"report_202606.pdf":   "202606", // YYYYMM
 		"snapshot_202613.pdf": "2026",   // invalid month -> YYYY only
-		"deal_2026_final.pdf":  "2026",   // bare year
-		"pitch_deck.pptx":      "",       // no year
-		"old_1999_file.pdf":    "",       // pre-2000 not matched
+		"deal_2026_final.pdf": "2026",   // bare year
+		"pitch_deck.pptx":     "",       // no year
+		"old_1999_file.pdf":   "",       // pre-2000 not matched
 	}
 	for in, want := range cases {
 		if got := PeriodFromFilename(in); got != want {
@@ -373,7 +373,13 @@ func TestMergeFieldsAllKinds(t *testing.T) {
 			if row.DealID != "" {
 				t.Fatalf("kind %q must early-return, got deal=%q", k, row.DealID)
 			}
-		default:
+		case KindPitchDeck, KindNDA, KindInformationMemorandum,
+			KindDataroomManifest, KindBidderRoster, KindProcessLetter,
+			KindBidEvaluation, KindDCFModel, KindLBOModel, KindMergerModel,
+			KindQofEReport, KindSPADraft, KindDisclosureSchedules,
+			KindClosingMemo, KindFairnessOpinion, KindSynergyAnalysis,
+			KindAntitrustMemo, KindHechoRelevanteDraft, KindConfig,
+			KindCredentials:
 			if row.DealID != "DEAL-2026-0777" {
 				t.Fatalf("kind %q deal id=%q", k, row.DealID)
 			}

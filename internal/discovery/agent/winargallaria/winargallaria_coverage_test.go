@@ -36,9 +36,11 @@ func TestDefaultPathSets(t *testing.T) {
 // -- classifiers / small helpers ----------------------------------
 
 func TestIsCandidateExtBranches(t *testing.T) {
-	yes := []string{"x.xml", "x.json", "x.ini", "x.cfg", "x.conf",
+	yes := []string{
+		"x.xml", "x.json", "x.ini", "x.cfg", "x.conf",
 		"x.yaml", "x.yml", "x.csv", "x.tsv", "x.xlsx", "x.xls",
-		"x.log", "x.txt", "x.msi", "x.exe", "x.pkg", "x.dmg", "X.JSON"}
+		"x.log", "x.txt", "x.msi", "x.exe", "x.pkg", "x.dmg", "X.JSON",
+	}
 	no := []string{"x.pdf", "x.docx", "noext", "", "x.zip"}
 	for _, v := range yes {
 		if !IsCandidateExt(v) {
@@ -90,19 +92,19 @@ func TestMax64BothArms(t *testing.T) {
 
 func TestDecimalToCents(t *testing.T) {
 	cases := map[string]int64{
-		"":               0,
-		"   ":            0,
-		"0":              0,
-		"1234":           123400,
-		"1234.56":        123456,
-		"1234,56":        123456,
-		"1.234,56":       123456,
-		"1.234.567,89":   123456789,
-		"1.500":          150, // single dot treated as decimal
-		"-5.00":          0,
-		"abc":            0,
-		"  2500.00  ":    250000,
-		"1000000.00":     100000000,
+		"":             0,
+		"   ":          0,
+		"0":            0,
+		"1234":         123400,
+		"1234.56":      123456,
+		"1234,56":      123456,
+		"1.234,56":     123456,
+		"1.234.567,89": 123456789,
+		"1.500":        150, // single dot treated as decimal
+		"-5.00":        0,
+		"abc":          0,
+		"  2500.00  ":  250000,
+		"1000000.00":   100000000,
 	}
 	for in, want := range cases {
 		if got := decimalToCents(in); got != want {
