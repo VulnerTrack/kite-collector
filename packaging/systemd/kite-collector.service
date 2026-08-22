@@ -1,0 +1,35 @@
+# systemd unit shipped inside the deb/rpm packages, so the package alone is
+# a complete service install — `kite-collector install` on a packaged system
+# detects dpkg/rpm ownership, skips both the copy and this unit, and only
+# handles enrollment + enabling.
+#
+# The ExecStart arguments mirror what `kite-collector install` embeds via
+# kardianos (internal/installer/installer.go, buildSvcConfig) so both
+# registration paths behave identically. The same unit text is maintained in
+# the AUR package (apps/kite-collector-aur/kite-collector.service); keep the
+# two in sync.
+[Unit]
+Description=Kite Collector - continuous machine discovery and OTLP streaming agent
+Documentation=https://github.com/VulnerTrack/kite-collector
+After=network.target
+
+[Service]
+Type=simple
+# Creates /var/lib/kite-collector (certs store + kite.db) with root-owned
+# 0755 perms; the agent tightens the enrollment PEMs itself.
+StateDirectory=kite-collector
+ExecStart=/usr/bin/kite-collector service run \
+  --certs-dir /var/lib/kite-collector \
+  --db /var/lib/kite-collector/kite.db \
+  --dashboard-addr 127.0.0.1:9090
+# Restart=always also serves the zero-step upgrade path: the agent exits
+# cleanly when it notices its binary changed on disk, and systemd relaunches
+# the new version.
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+# program.Stop waits up to 15s for the agent loop to drain; give it headroom.
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

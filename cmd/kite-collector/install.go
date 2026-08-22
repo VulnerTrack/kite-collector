@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,6 +58,23 @@ func (p *program) Start(_ service.Service) error {
 		// errors will already have been logged by runAgent itself.
 		_ = runAgent(ctx, p.cfgFile, p.dbPath, "", p.certsDir, p.endpoint, p.dashboardAddr, p.verbose, true, false)
 	}()
+	// Zero-step upgrades: when a package manager swaps the binary on disk
+	// (brew upgrade, apt/pacman upgrade), drain the agent and exit cleanly
+	// so KeepAlive / Restart=always relaunches the new version. Service
+	// context only — interactive runs never self-exit.
+	go watchExecutableIdentity(ctx, 30*time.Second, func() {
+		// A restart must not truncate a running scan; wait for idle with
+		// a hard deadline so a stuck scan can't block upgrades forever.
+		waitForScanIdle(ctx, 10*time.Minute)
+		slog.Info("exiting for service-manager relaunch onto the new binary",
+			"code", string(LogCodeBinarySwapRelaunch))
+		cancel()
+		select {
+		case <-p.done:
+		case <-time.After(15 * time.Second):
+		}
+		os.Exit(0)
+	})
 	return nil
 }
 
@@ -147,6 +165,8 @@ func newInstallCmd() *cobra.Command {
 		dryRun      bool
 		verbose     bool
 		noStart     bool
+		forceCopy   bool
+		repair      bool
 	)
 
 	cmd := &cobra.Command{
@@ -162,8 +182,14 @@ By default, the service is installed system-wide and runs as root / LocalSystem
 (requires sudo on Unix, Administrator PowerShell on Windows). Pass --user to
 install a per-user service that runs without elevated privileges.
 
+One owner per artifact: when a package manager (Homebrew, dpkg, rpm, pacman)
+owns the running binary, install registers the service against the manager's
+stable path and copies nothing — package upgrades then restart the service on
+the new version automatically. Pass --copy to force the copy behavior anyway.
+
 What it does:
-  1. Copies this binary to {binary-dir}/kite-collector
+  1. Copies this binary to {binary-dir}/kite-collector — or, when a package
+     manager owns it, adopts the managed path instead of copying
   2. Creates {certs-dir}/   (certificate store)
   3. Registers the "kite-collector" service with the OS service manager
   4. Configures it to run "kite-collector service run --certs-dir {certs-dir}"
@@ -212,6 +238,8 @@ One-shot usage (recommended):
 				verbose:           verbose,
 				noStart:           noStart,
 				binaryDirExplicit: binaryDirExplicit,
+				forceCopy:         forceCopy,
+				repair:            repair,
 			})
 		},
 	}
@@ -246,12 +274,20 @@ One-shot usage (recommended):
 		"print what would be done without making any changes")
 	cmd.Flags().BoolVar(&noStart, "no-start", false,
 		"register the service but do not start it (useful for CI / Ansible)")
+	cmd.Flags().BoolVar(&forceCopy, "copy", false,
+		"copy the binary to --binary-dir even when a package manager owns it")
+	cmd.Flags().BoolVar(&repair, "repair", false,
+		"after re-registering, delete the orphaned binary copy a drifted install left behind")
 
 	return cmd
 }
 
 func newUninstallCmd() *cobra.Command {
-	var userMode bool
+	var (
+		userMode bool
+		certsDir string
+		purge    bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "uninstall",
@@ -260,9 +296,14 @@ func newUninstallCmd() *cobra.Command {
 
 Pass --user to target a per-user service registration.
 
-The installed binary and certificate store are left in place; remove them
-manually if desired.`,
+Removal is symmetric with what install created: a binary that install copied
+is deleted; a binary owned by a package manager (Homebrew, dpkg, rpm, pacman)
+is left to that manager, with a hint printing its removal command. The
+certificate store and database are kept unless --purge is passed.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if certsDir == "" {
+				certsDir = defaultCertsDir(userMode)
+			}
 			svc, _, err := newProgramService(svcOpts{
 				userService: userMode,
 				// Executable & certsDir are not consulted by Stop/Uninstall,
@@ -271,12 +312,27 @@ manually if desired.`,
 			if err != nil {
 				return fmt.Errorf("create service handle: %w", err)
 			}
+			manifestOpts := installer.Options{CertsDir: certsDir}
+			m, hasManifest := installer.ReadInstallManifest(manifestOpts)
+
 			// Best-effort stop; ignore "not running".
 			_ = svc.Stop()
-			if err := svc.Uninstall(); err != nil {
-				return fmt.Errorf("uninstall service: %w", err)
+			if hasManifest && m.PackagedUnit != "" {
+				// The unit belongs to the package (install adopted it):
+				// disable it, but its file is the package manager's to
+				// remove. svc.Uninstall would fail looking for a unit
+				// kardianos never wrote.
+				if disErr := disableSystemdUnit(userMode); disErr != nil {
+					_, _ = fmt.Fprintf(os.Stdout, "  ✗  disable service: %v\n", disErr)
+				}
+				_, _ = fmt.Fprintf(os.Stdout, "  ▸  service unit %s is owned by the package — stopped and disabled, not removed\n",
+					m.PackagedUnit)
+			} else {
+				if err := svc.Uninstall(); err != nil {
+					return fmt.Errorf("uninstall service: %w", err)
+				}
+				_, _ = fmt.Fprintf(os.Stdout, "  ✓  %s service removed\n", svcName)
 			}
-			_, _ = fmt.Fprintf(os.Stdout, "  ✓  %s service removed\n", svcName)
 
 			// The bundled sibling daemon goes with it. No-op on a plain build;
 			// on the bundle artifact, leaving kite-osqueryd registered would
@@ -293,12 +349,47 @@ manually if desired.`,
 				_, _ = fmt.Fprintf(os.Stdout, "  ✓  %s service removed\n",
 					installer.OsquerySvcName)
 			}
+
+			// Symmetric binary removal, driven by the install manifest.
+			// No manifest (installs predating it) keeps the historical
+			// leave-in-place behavior.
+			if hasManifest {
+				switch {
+				case m.BinaryCopied:
+					if fi, sErr := os.Lstat(m.BinaryPath); sErr == nil && fi.Mode().IsRegular() {
+						if rmErr := os.Remove(m.BinaryPath); rmErr != nil {
+							_, _ = fmt.Fprintf(os.Stdout, "  ✗  binary %s not removed: %v\n", m.BinaryPath, rmErr)
+						} else {
+							_, _ = fmt.Fprintf(os.Stdout, "  ✓  binary %s removed\n", m.BinaryPath)
+						}
+					}
+				case m.Owner != "":
+					_, _ = fmt.Fprintf(os.Stdout, "  ▸  binary %s is managed by %s — remove it with your package manager\n",
+						m.BinaryPath, m.Owner)
+				}
+				_ = os.Remove(installer.InstallManifestPath(manifestOpts))
+			} else {
+				_, _ = fmt.Fprintln(os.Stdout, "  ▸  no install manifest — any installed binary left in place")
+			}
+
+			if purge {
+				if rmErr := os.RemoveAll(certsDir); rmErr != nil {
+					return fmt.Errorf("purge %s: %w", certsDir, rmErr)
+				}
+				_, _ = fmt.Fprintf(os.Stdout, "  ✓  %s purged (certs, database, logs)\n", certsDir)
+			} else {
+				_, _ = fmt.Fprintf(os.Stdout, "  ▸  data kept at %s (pass --purge to remove)\n", certsDir)
+			}
 			return nil
 		},
 	}
 
 	cmd.Flags().BoolVar(&userMode, "user", false,
 		"uninstall the per-user service registration")
+	cmd.Flags().StringVar(&certsDir, "certs-dir", "",
+		"certificate store path (default: OS-appropriate, varies with --user)")
+	cmd.Flags().BoolVar(&purge, "purge", false,
+		"also delete the certificate store, database, and logs")
 	return cmd
 }
 
@@ -457,7 +548,18 @@ type installArgs struct {
 	// binaryDirExplicit records that --binary-dir was passed, so the R7
 	// pre-flight upgrade adoption leaves the operator's choice alone.
 	binaryDirExplicit bool
+	// forceCopy (--copy) restores the historical copy-to-binary-dir
+	// behavior even when a package manager owns the running binary.
+	forceCopy bool
+	// repair (--repair) additionally deletes the orphaned binary copy a
+	// previously drifted install left behind, after re-registering.
+	repair bool
 }
+
+// installExecutablePath is a seam over os.Executable so tests can run the
+// install flow as if launched from a package-manager path (e.g. a fake
+// Caskroom symlink) — os.Executable itself always reports the test binary.
+var installExecutablePath = os.Executable
 
 func runInstall(cmd *cobra.Command, a installArgs) error {
 	if installer.RunningInSnap() {
@@ -466,7 +568,7 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 
 	out := cmd.OutOrStdout()
 
-	src, err := os.Executable()
+	src, err := installExecutablePath()
 	if err != nil {
 		return fmt.Errorf("locate current executable: %w", err)
 	}
@@ -481,6 +583,32 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 			BinaryDir: a.binaryDir,
 			CertsDir:  a.certsDir,
 		}, out, nil).BinaryDir
+	}
+
+	// One owner per artifact: when a package manager owns the running
+	// binary, register the service against the manager's stable path and
+	// copy nothing. The manager keeps that path current across upgrades,
+	// and the identity watcher in `service run` restarts onto the new
+	// binary — package upgrades become zero-step. --binary-dir and --copy
+	// both opt out and keep the historical copy semantics.
+	var owner installer.BinaryOwner
+	if !a.binaryDirExplicit && !a.forceCopy {
+		if o := installer.ClassifyBinary(src); o.Managed() {
+			owner = o
+			a.binaryDir = filepath.Dir(o.StablePath)
+			_, _ = fmt.Fprintf(out, "  ▸  binary owned by %s (%s) — adopting %s, no copy\n",
+				o.Manager, o.Detail, o.StablePath)
+		}
+	}
+
+	// One owner for the unit as well: when the owning package also ships
+	// a systemd unit (deb/rpm/AUR), registration belongs to the package.
+	// Writing a kardianos unit into /etc/systemd/system would shadow the
+	// package's — and the shadow survives package removal. Install then
+	// only enables, enrolls, and starts.
+	packagedUnit := ""
+	if owner.Managed() && owner.Manager != "homebrew" && !a.userMode {
+		packagedUnit = installer.PackagedUnitPath()
 	}
 
 	dst := filepath.Join(a.binaryDir, binaryName())
@@ -498,12 +626,20 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 
 	if a.dryRun {
 		_, _ = fmt.Fprintln(out, "-- dry-run: no files will be written --")
-		_, _ = fmt.Fprintf(out, "  copy   %s → %s\n", src, dst)
+		if owner.Managed() {
+			_, _ = fmt.Fprintf(out, "  adopt  %s (managed by %s — no copy)\n", dst, owner.Manager)
+		} else {
+			_, _ = fmt.Fprintf(out, "  copy   %s → %s\n", src, dst)
+		}
 		_, _ = fmt.Fprintf(out, "  mkdir  %s\n", a.certsDir)
-		_, _ = fmt.Fprintf(out, "  register service %q (user=%t)\n", cfg.Name, a.userMode)
-		_, _ = fmt.Fprintf(out, "    executable: %s\n", cfg.Executable)
-		_, _ = fmt.Fprintf(out, "    arguments:  %v\n", cfg.Arguments)
-		_, _ = fmt.Fprintf(out, "    platform:   %s\n", service.Platform())
+		if packagedUnit != "" {
+			_, _ = fmt.Fprintf(out, "  use packaged unit %s (no registration)\n", packagedUnit)
+		} else {
+			_, _ = fmt.Fprintf(out, "  register service %q (user=%t)\n", cfg.Name, a.userMode)
+			_, _ = fmt.Fprintf(out, "    executable: %s\n", cfg.Executable)
+			_, _ = fmt.Fprintf(out, "    arguments:  %v\n", cfg.Arguments)
+			_, _ = fmt.Fprintf(out, "    platform:   %s\n", service.Platform())
+		}
 		if a.agentCode != "" {
 			method := "sign-in (browser + pasted code)"
 			if a.token != "" {
@@ -555,10 +691,15 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 		}
 	}
 
-	if binErr := installer.InstallBinary(src, dst); binErr != nil {
-		return fmt.Errorf("install binary: %w", binErr)
+	if owner.Managed() {
+		_, _ = fmt.Fprintf(out, "  ✓  %s (managed by %s — upgrades via your package manager)\n",
+			dst, owner.Manager)
+	} else {
+		if binErr := installer.InstallBinary(src, dst); binErr != nil {
+			return fmt.Errorf("install binary: %w", binErr)
+		}
+		_, _ = fmt.Fprintf(out, "  ✓  %s\n", dst)
 	}
-	_, _ = fmt.Fprintf(out, "  ✓  %s\n", dst)
 
 	if mkErr := os.MkdirAll(a.certsDir, 0o750); mkErr != nil {
 		return fmt.Errorf("create certs dir %s: %w", a.certsDir, mkErr)
@@ -570,26 +711,76 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  PATH configured\n")
 
-	// Replace any previous registration in place. Uninstall failing is
-	// the common fresh-install case ("not installed") and stays quiet; a
-	// stale registration that survives it surfaces as "already exists"
-	// from Install and gets one clear-and-retry below.
-	if uninstErr := svc.Uninstall(); uninstErr == nil && prevInstalled {
-		_, _ = fmt.Fprintf(out, "  ✓  previous service registration removed\n")
+	if packagedUnit != "" {
+		// A kardianos /etc unit from an earlier install would shadow the
+		// packaged one — remove it so the package's unit takes effect.
+		if uninstErr := svc.Uninstall(); uninstErr == nil && prevInstalled {
+			_, _ = fmt.Fprintf(out, "  ✓  previous self-registered unit removed (shadowed the package's)\n")
+		}
+		_, _ = fmt.Fprintf(out, "  ✓  service unit shipped by the package (%s) — registration skipped\n", packagedUnit)
+	} else {
+		// Replace any previous registration in place. Uninstall failing is
+		// the common fresh-install case ("not installed") and stays quiet; a
+		// stale registration that survives it surfaces as "already exists"
+		// from Install and gets one clear-and-retry below.
+		if uninstErr := svc.Uninstall(); uninstErr == nil && prevInstalled {
+			_, _ = fmt.Fprintf(out, "  ✓  previous service registration removed\n")
+		}
+
+		instErr := svc.Install()
+		if instErr != nil && strings.Contains(instErr.Error(), "already exists") {
+			// A leftover unit/plist Uninstall could not see (e.g. written by
+			// an older packaging under the same name). Clear it and retry
+			// once rather than failing the upgrade.
+			_ = svc.Uninstall()
+			instErr = svc.Install()
+		}
+		if instErr != nil {
+			return fmt.Errorf("install service: %w", instErr)
+		}
+		_, _ = fmt.Fprintf(out, "  ✓  service %q registered (%s)\n", cfg.Name, service.Platform())
 	}
 
-	instErr := svc.Install()
-	if instErr != nil && strings.Contains(instErr.Error(), "already exists") {
-		// A leftover unit/plist Uninstall could not see (e.g. written by
-		// an older packaging under the same name). Clear it and retry
-		// once rather than failing the upgrade.
-		_ = svc.Uninstall()
-		instErr = svc.Install()
+	// Symmetric-uninstall bookkeeping: record what this run created (or
+	// adopted) so uninstall removes exactly that set — a copied binary is
+	// ours to delete, an adopted one belongs to its package manager.
+	prevManifest, hadManifest := installer.ReadInstallManifest(installer.Options{CertsDir: a.certsDir})
+	if mErr := installer.WriteInstallManifest(installer.Options{CertsDir: a.certsDir}, installer.InstallManifest{
+		BinaryPath:   dst,
+		BinaryCopied: !owner.Managed(),
+		Owner:        owner.Manager,
+		PackagedUnit: packagedUnit,
+		UserMode:     a.userMode,
+	}); mErr != nil {
+		_, _ = fmt.Fprintf(out, "  ✗  install manifest not written: %v (uninstall will leave the binary in place)\n", mErr)
 	}
-	if instErr != nil {
-		return fmt.Errorf("install service: %w", instErr)
+
+	// --repair: with the service now registered against the correct path,
+	// delete the orphaned copy a previously drifted install left behind.
+	// Manifest-recorded copies are trusted; without a manifest (installs
+	// that predate it) only a plain file at the historical default is
+	// removed — never a symlink, which is a package manager's artifact.
+	if a.repair {
+		orphan := ""
+		switch {
+		case hadManifest && prevManifest.BinaryCopied && prevManifest.BinaryPath != dst:
+			orphan = prevManifest.BinaryPath
+		case !hadManifest && owner.Managed():
+			legacy := filepath.Join(defaultBinaryDir(a.userMode), binaryName())
+			if legacy != dst {
+				if fi, sErr := os.Lstat(legacy); sErr == nil && fi.Mode().IsRegular() {
+					orphan = legacy
+				}
+			}
+		}
+		if orphan != "" {
+			if rmErr := os.Remove(orphan); rmErr != nil && !os.IsNotExist(rmErr) {
+				_, _ = fmt.Fprintf(out, "  ✗  orphaned copy %s not removed: %v\n", orphan, rmErr)
+			} else {
+				_, _ = fmt.Fprintf(out, "  ✓  orphaned copy %s removed\n", orphan)
+			}
+		}
 	}
-	_, _ = fmt.Fprintf(out, "  ✓  service %q registered (%s)\n", cfg.Name, service.Platform())
 
 	// Boot persistence is implicit on launchd (Install writes the plist
 	// into the system/user LaunchDaemons dir) but on systemd and Windows
@@ -910,6 +1101,21 @@ func enableBootPersistence(userMode bool) error {
 	default:
 		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
 	}
+}
+
+// disableSystemdUnit disables the collector's systemd unit without
+// removing its file — the uninstall path for a package-owned unit, where
+// the unit file is the package manager's to delete.
+func disableSystemdUnit(userMode bool) error {
+	args := []string{"disable", svcName + ".service"}
+	if userMode {
+		args = append([]string{"--user"}, args...)
+	}
+	out, err := exec.CommandContext(context.Background(), "systemctl", args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("systemctl %v: %w (%s)", args, err, trimOutput(out))
+	}
+	return nil
 }
 
 // trimOutput condenses subprocess output for inclusion in error

@@ -206,6 +206,34 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+  # Plain collector deb battery: package installs sans systemd, unit ships
+  # at /usr/lib, binary at /usr/bin (dpkg-owned, so `install` adopts), and
+  # the /usr/local/bin→/usr/bin upgrade bridge creates/preserves/cleans its
+  # compat symlink. Includes the config drift guard between .goreleaser.yaml
+  # and the battery's mirrored nfpm-collector.yaml.
+  qa-deb-collector:
+    name: qa-deb-collector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: "!startsWith(github.ref, 'refs/tags/v')"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: ./.github/actions/kite-qa-suite
+        with:
+          suite-slug: deb-collector
+          make-target: test-deb-collector
+          log-file: qa-deb-collector.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: qa-deb-collector-log
+          path: qa-deb-collector.log
+          retention-days: 30
+          if-no-files-found: warn
+
   qa-smoke-containers:
     name: qa-smoke-containers
     runs-on: ubuntu-24.04
@@ -272,6 +300,7 @@ jobs:
       - test
       - legacy-windows7
       - qa-e2e
+      - qa-deb-collector
       - qa-smoke-containers
       - qa-kite-containers
     if: "!startsWith(github.ref, 'refs/tags/v')"

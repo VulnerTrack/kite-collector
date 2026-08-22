@@ -77,4 +77,9 @@ const (
 
 	// login surface — OAuth sign-in enrollment (copy/paste code flow)
 	LogCodeLoginTokenAcquired LogCode = "agent.login.token_acquired" //#nosec G101 -- log code literal, not a credential
+
+	// upgrade surface — zero-step package-manager upgrade adoption
+	LogCodeBinarySwapDetected LogCode = "agent.upgrade.binary_swap_detected"
+	LogCodeBinarySwapRelaunch LogCode = "agent.upgrade.relaunch_for_new_binary"
+	LogCodeBinaryMissing      LogCode = "agent.upgrade.binary_missing_on_disk"
 )

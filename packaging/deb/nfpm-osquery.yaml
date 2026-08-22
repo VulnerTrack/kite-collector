@@ -46,8 +46,11 @@ depends:
 
 contents:
   # ── collector (same layout as the plain goreleaser deb) ──────────────
+  # /usr/bin, in lockstep with the plain deb's bindir: package-owned paths
+  # belong in the package-manager prefix, and the shipped unit's ExecStart
+  # points here.
   - src: {{ .Staging }}/kite-collector
-    dst: /usr/local/bin/kite-collector
+    dst: /usr/bin/kite-collector
     file_info:
       mode: 0755
   - src: configs/kite-collector.example.yaml
@@ -90,6 +93,13 @@ contents:
     type: config|noreplace
 
   # ── systemd ──────────────────────────────────────────────────────────
+  # The collector unit ships here too (same file as the plain deb), so the
+  # bundle alone is a complete service install and the drop-in below has a
+  # unit to apply to.
+  - src: packaging/systemd/kite-collector.service
+    dst: /usr/lib/systemd/system/kite-collector.service
+    file_info:
+      mode: 0644
   - src: packaging/deb/kite-osqueryd.service
     dst: /usr/lib/systemd/system/kite-osqueryd.service
     file_info:

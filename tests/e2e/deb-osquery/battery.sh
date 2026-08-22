@@ -60,7 +60,7 @@ for f in /etc/kite-collector/osquery/osquery.conf /etc/kite-collector/osquery/os
 done
 
 # ── 3. layout ────────────────────────────────────────────────────────────
-[ -x /usr/local/bin/kite-collector ] && pass "collector binary installed" || fail "collector binary installed"
+[ -x /usr/bin/kite-collector ] && pass "collector binary installed" || fail "collector binary installed"
 [ -x "$OSQ" ] && pass "osqueryd installed" || fail "osqueryd installed"
 [ "$(readlink -f "$OSQI")" = "$OSQ" ] && pass "osqueryi symlink -> osqueryd" || fail "osqueryi symlink -> osqueryd"
 [ -f /usr/lib/systemd/system/kite-osqueryd.service ] && pass "systemd unit installed" || fail "systemd unit installed"
@@ -71,7 +71,7 @@ else
 fi
 [ -d /var/lib/kite-collector/osquery ] && pass "state dir created" || fail "state dir created"
 [ -d /var/log/kite-collector/osquery ] && pass "log dir created" || fail "log dir created"
-if OUT=$(/usr/local/bin/kite-collector version 2>&1); then
+if OUT=$(/usr/bin/kite-collector version 2>&1); then
   pass "kite-collector version runs" "$(printf '%s' "$OUT" | head -1)"
 else
   fail "kite-collector version runs" "$OUT"

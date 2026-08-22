@@ -143,11 +143,29 @@ nfpms:
     formats:
       - deb
       - rpm
-    bindir: /usr/local/bin
+    # /usr/bin (not /usr/local/bin): package-owned paths belong in the
+    # package-manager prefix. `kite-collector install` classifies this
+    # binary as dpkg/rpm-owned and registers the service against it
+    # instead of copying — one owner per artifact.
+    bindir: /usr/bin
+    scripts:
+      postinstall: packaging/deb/collector-postinstall.sh
+      postremove: packaging/deb/collector-postremove.sh
+    rpm:
+      scripts:
+        # rpm removes the old package's files AFTER %post, so the
+        # /usr/local/bin→/usr/bin upgrade bridge must re-run in
+        # %posttrans; see the script header for the ordering details.
+        posttrans: packaging/deb/collector-posttrans.sh
     contents:
       - src: configs/kite-collector.example.yaml
         dst: /etc/kite-collector/kite-collector.example.yaml
         type: config
+      # The unit ships in the package so deb/rpm alone is a complete
+      # service install; postinstall daemon-reloads, enabling is left to
+      # the operator or `kite-collector install`.
+      - src: packaging/systemd/kite-collector.service
+        dst: /usr/lib/systemd/system/kite-collector.service
 
 # Homebrew Cask — GoReleaser auto-generates the cask and pushes it to
 # the tap repo on every v* release.
@@ -162,6 +180,18 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/VulnerTrack/kite-collector
     description: "Cybersecurity machine discovery, configuration audit, and posture analysis agent"
+    # brew uninstall unloads the launchd job before removing the binary, so
+    # a service registered by `kite-collector install` (which adopts the
+    # brew-owned binary) never relaunch-loops against a deleted path.
+    uninstall:
+      launchctl: [kite-collector]
+    caveats: |
+      To run kite-collector as a background service (registers a launchd
+      daemon pointing at the brew-managed binary — brew upgrades restart
+      the service automatically):
+        sudo kite-collector install
+      Before `brew uninstall`, remove the service registration:
+        sudo kite-collector uninstall
     hooks:
       post:
         install: |

@@ -1,0 +1,48 @@
+# nfpm config for the PLAIN kite-collector Debian package, used only by
+# scripts/build-deb-collector.sh for local builds and the container e2e
+# battery (tests/e2e/deb-collector). The RELEASE deb stays goreleaser-owned
+# (.goreleaser.yaml nfpms block) — this file mirrors it so the battery
+# proves the same layout, unit, and maintainer scripts that ship.
+#
+# Drift guard: tests/e2e/deb-collector/run.sh asserts the load-bearing
+# lines (bindir, unit path, script names) appear in BOTH this file and
+# .goreleaser.yaml before building. If you change one, change the other.
+#
+# Tokens sed-rendered by the build script (same mechanism as
+# nfpm-osquery.yaml):
+#   {{ .Version }}  package version (e.g. 1.2.3)
+#   {{ .Arch }}     amd64
+#   {{ .Staging }}  dir holding the built kite-collector binary
+name: kite-collector
+arch: {{ .Arch }}
+platform: linux
+version: {{ .Version }}
+section: admin
+priority: optional
+maintainer: VulnerTrack <hello@vulnertrack.dev>
+vendor: VulnerTrack
+homepage: https://github.com/VulnerTrack/kite-collector
+license: MIT
+description: |
+  Cybersecurity machine discovery, configuration audit, and posture
+  analysis agent.
+
+conflicts:
+  - kite-collector-osquery
+
+contents:
+  - src: {{ .Staging }}/kite-collector
+    dst: /usr/bin/kite-collector
+    file_info:
+      mode: 0755
+  - src: configs/kite-collector.example.yaml
+    dst: /etc/kite-collector/kite-collector.example.yaml
+    type: config
+  - src: packaging/systemd/kite-collector.service
+    dst: /usr/lib/systemd/system/kite-collector.service
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: packaging/deb/collector-postinstall.sh
+  postremove: packaging/deb/collector-postremove.sh

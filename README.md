@@ -8,6 +8,18 @@ Results are stored in a local SQLite database. No servers, no dependencies, full
 
 ## Install
 
+> **One owner per artifact.** When a package manager (Homebrew, apt, dnf,
+> pacman) put the binary on your system, `kite-collector install` detects
+> that and registers the service **against the package-managed path instead
+> of copying** — so package upgrades restart the service onto the new
+> version automatically (the agent notices its binary changed on disk and
+> relaunches itself, waiting for any running scan to finish first). Pass
+> `--copy` to force the old copy behavior, `--repair` to clean up an
+> installation where the service drifted onto a stale copy (`kite-collector
+> doctor` tells you when that's the case), and `uninstall --purge` to also
+> remove the data directory. The deb/rpm packages ship their own systemd
+> unit, so on those systems `install` only enrolls and enables it.
+
 ### Ubuntu / Debian (APT Repository)
 
 You can install `kite-collector` on Debian-based distributions (such as Ubuntu, Linux Mint, or Pop!_OS) using the official APT repository:
@@ -69,8 +81,13 @@ Install `kite-collector` on macOS from our Homebrew tap. The cask clears the Gat
 
 ```bash
 brew install --cask vulnertrack/tap/kite-collector
-kite-collector install
+sudo kite-collector install   # registers launchd against the brew-managed binary — no second copy
 ```
+
+`brew upgrade --cask kite-collector` is then all it takes: the running
+service notices the new binary and restarts onto it. Before
+`brew uninstall`, run `sudo kite-collector uninstall` to remove the service
+registration (the cask also unloads the launchd job as a safety net).
 
 ### Mass deployment from the dashboard
 

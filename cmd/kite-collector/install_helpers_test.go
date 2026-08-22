@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -272,7 +273,7 @@ func TestNewInstallCmd_FlagSurface(t *testing.T) {
 	for _, name := range []string{
 		"user", "certs-dir", "binary-dir", "config", "db", "endpoint",
 		"agent-code", "token", "issuer", "client-id", "redirect-uri",
-		"scope", "verbose", "dry-run", "no-start",
+		"scope", "verbose", "dry-run", "no-start", "copy", "repair",
 	} {
 		assert.NotNil(t, cmd.Flags().Lookup(name), "missing flag --%s", name)
 	}
@@ -284,6 +285,9 @@ func TestNewUninstallCmd_Shape(t *testing.T) {
 	cmd := newUninstallCmd()
 	assert.Equal(t, "uninstall", cmd.Use)
 	assert.NotNil(t, cmd.Flags().Lookup("user"))
+	assert.NotNil(t, cmd.Flags().Lookup("certs-dir"))
+	assert.NotNil(t, cmd.Flags().Lookup("purge"))
+	assert.Equal(t, "false", cmd.Flags().Lookup("purge").DefValue)
 }
 
 func TestNewServiceCmd_RegistersControlSubcommands(t *testing.T) {
@@ -324,4 +328,58 @@ func TestControlInstalledService_UsesStatusPreflight(t *testing.T) {
 	_, err = controlInstalledService(&fakeSvc{}, "reload", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unknown service action "reload"`)
+}
+
+func TestRunInstall_DryRunAdoptsBrewOwnedBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("adoption classification is unix-only")
+	}
+	// Fake brew layout: <prefix>/Caskroom payload + <prefix>/bin symlink,
+	// and pretend the install command was launched via that symlink.
+	prefix := t.TempDir()
+	payloadDir := filepath.Join(prefix, "Caskroom", "kite-collector", "1.0")
+	require.NoError(t, os.MkdirAll(payloadDir, 0o755))
+	payload := filepath.Join(payloadDir, "kite-collector")
+	require.NoError(t, os.WriteFile(payload, []byte("bin"), 0o755)) //#nosec G306 -- test binary
+	binDir := filepath.Join(prefix, "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	link := filepath.Join(binDir, "kite-collector")
+	require.NoError(t, os.Symlink(payload, link))
+
+	orig := installExecutablePath
+	t.Cleanup(func() { installExecutablePath = orig })
+	installExecutablePath = func() (string, error) { return link, nil }
+
+	certsDir := filepath.Join(t.TempDir(), "certs")
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	err := runInstall(cmd, installArgs{
+		certsDir: certsDir,
+		dryRun:   true,
+		noStart:  true,
+	})
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "binary owned by homebrew")
+	assert.Contains(t, out, "adopting "+link)
+	assert.Contains(t, out, "adopt  "+link+" (managed by homebrew — no copy)")
+	assert.NotContains(t, out, "copy   ", "adoption must replace the copy step")
+	assert.Contains(t, out, "executable: "+link,
+		"the service registration must exec brew's stable symlink")
+
+	// --copy forces the historical behavior even for a managed binary.
+	buf.Reset()
+	err = runInstall(cmd, installArgs{
+		certsDir:  certsDir,
+		binaryDir: t.TempDir(),
+		dryRun:    true,
+		noStart:   true,
+		forceCopy: true,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "copy   ", "--copy must restore copy semantics")
+	assert.NotContains(t, buf.String(), "adopting")
 }

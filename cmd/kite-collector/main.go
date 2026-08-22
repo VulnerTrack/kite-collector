@@ -1431,6 +1431,9 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	// wired in here so future phases (RFC-0104) can attach HTTP handlers
 	// and so SIGTERM fans out to any in-flight API-triggered scan.
 	coord := scan.New(eng, st, ctx, logger)
+	// Registered for the upgrade watcher, so a binary-swap self-restart
+	// defers until no scan is in flight.
+	activeScanCoordinator.Store(coord)
 
 	// Start REST API in background.
 	apiHandler := rest.New(st, logger)

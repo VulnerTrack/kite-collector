@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -136,6 +137,7 @@ func runDoctorChecks(ctx context.Context, o doctorOptions) []doctorCheck {
 	checks := make([]doctorCheck, 0, 7)
 
 	checks = append(checks, doctorServiceCheck(state))
+	checks = append(checks, doctorBinaryDriftCheck(opts))
 	cfg, cfgCheck := doctorConfigCheck(o.CfgFile)
 	checks = append(checks, cfgCheck)
 	checks = append(checks, doctorDatabaseCheck(ctx, opts.DbPath))
@@ -173,6 +175,60 @@ func doctorServiceCheck(state installer.State) doctorCheck {
 		c.Status = doctorWarn
 		c.Detail = "service manager state unknown"
 	}
+	return c
+}
+
+// doctorBinaryDriftCheck detects the split-owner drift signature: the
+// binary the service registration executes is not the binary `kite-collector`
+// resolves to on the operator's PATH. That state means a package-manager
+// upgrade updated one copy while the service kept running the other — every
+// debugging session starts on the wrong binary until it's repaired.
+//
+// The service executable comes from the install manifest when present (it
+// records adoption), falling back to the conventional install path. Both
+// sides are symlink-resolved before comparing so brew's prefix-bin link and
+// its Caskroom payload count as the same binary.
+func doctorBinaryDriftCheck(opts installer.Options) doctorCheck {
+	c := doctorCheck{Name: "binary drift"}
+
+	registered := opts.BinaryPath()
+	if m, ok := installer.ReadInstallManifest(opts); ok && m.BinaryPath != "" {
+		registered = m.BinaryPath
+	}
+	if _, err := os.Stat(registered); err != nil {
+		c.Status = doctorSkip
+		c.Detail = "no installed binary at " + registered
+		return c
+	}
+
+	onPath, err := exec.LookPath("kite-collector")
+	if err != nil {
+		c.Status = doctorSkip
+		c.Detail = "kite-collector not on PATH"
+		return c
+	}
+
+	regResolved, rErr := filepath.EvalSymlinks(registered)
+	pathResolved, pErr := filepath.EvalSymlinks(onPath)
+	if rErr != nil || pErr != nil {
+		c.Status = doctorSkip
+		c.Detail = "could not resolve binary paths"
+		return c
+	}
+	if regResolved == pathResolved {
+		c.Status = doctorPass
+		c.Detail = "CLI and service run the same binary (" + regResolved + ")"
+		return c
+	}
+
+	c.Status = doctorWarn
+	c.Detail = fmt.Sprintf("service runs %s but PATH resolves to %s", regResolved, pathResolved)
+	if regFi, e1 := os.Stat(regResolved); e1 == nil {
+		if pathFi, e2 := os.Stat(pathResolved); e2 == nil && regFi.ModTime().Before(pathFi.ModTime()) {
+			c.Detail += " (service binary is older)"
+		}
+	}
+	c.Hint = "run: kite-collector install --repair (re-registers against the managed binary and removes the orphaned copy)"
 	return c
 }
 

@@ -1,4 +1,4 @@
-.PHONY: build build-host build-windows7 test test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite install-aur-osquery install-aur install-aur-bin install-aur-release test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: build build-host build-windows7 test test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-deb-collector test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite install-aur-osquery install-aur install-aur-bin install-aur-release test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -189,6 +189,12 @@ test-kite-containers:
 # the plain<->bundle cross-grade + remove/purge semantics. Requires docker.
 test-deb-osquery:
 	./tests/e2e/deb-osquery/run.sh
+
+# Plain collector deb battery: unit ships in the package, binary at
+# /usr/bin, and the /usr/local/bin→/usr/bin upgrade bridge behaves.
+# Requires docker.
+test-deb-collector:
+	./tests/e2e/deb-collector/run.sh
 
 # Ubuntu multi-version package-discovery matrix (RFC-0149). Runs the compiled
 # binary's software.Dpkg collector inside real, unmodified ubuntu:20.04/22.04/

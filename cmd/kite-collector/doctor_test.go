@@ -138,3 +138,41 @@ func TestCountDoctorFailures(t *testing.T) {
 	assert.Equal(t, 2, countDoctorFailures(checks))
 	assert.Equal(t, 0, countDoctorFailures(checks[:3]), "warn and skip never fail the run")
 }
+
+func TestDoctorBinaryDriftCheck(t *testing.T) {
+	binDir := t.TempDir()
+	certsDir := t.TempDir()
+	registered := filepath.Join(binDir, "kite-collector")
+	require.NoError(t, os.WriteFile(registered, []byte("service"), 0o755)) //#nosec G306 -- test binary
+	opts := installer.Options{BinaryDir: binDir, CertsDir: certsDir}
+
+	// PATH resolves to the same file → pass.
+	t.Setenv("PATH", binDir)
+	c := doctorBinaryDriftCheck(opts)
+	assert.Equal(t, doctorPass, c.Status, "detail: %s", c.Detail)
+
+	// PATH resolves to a different, newer binary → warn with repair hint.
+	otherDir := t.TempDir()
+	other := filepath.Join(otherDir, "kite-collector")
+	require.NoError(t, os.WriteFile(other, []byte("cli, different"), 0o755)) //#nosec G306 -- test binary
+	future := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(other, future, future))
+	t.Setenv("PATH", otherDir)
+	c = doctorBinaryDriftCheck(opts)
+	assert.Equal(t, doctorWarn, c.Status)
+	assert.Contains(t, c.Detail, "service binary is older")
+	assert.Contains(t, c.Hint, "install --repair")
+
+	// The manifest's recorded path is authoritative over the conventional
+	// default: point it at the PATH binary and drift disappears.
+	require.NoError(t, installer.WriteInstallManifest(opts, installer.InstallManifest{
+		BinaryPath: other, Owner: "homebrew",
+	}))
+	c = doctorBinaryDriftCheck(opts)
+	assert.Equal(t, doctorPass, c.Status, "detail: %s", c.Detail)
+
+	// No binary on PATH → skip, never a failure.
+	t.Setenv("PATH", t.TempDir())
+	c = doctorBinaryDriftCheck(opts)
+	assert.Equal(t, doctorSkip, c.Status)
+}

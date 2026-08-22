@@ -7,6 +7,19 @@
 # the container e2e test (tests/e2e/deb-osquery/run.sh) relies on this.
 set -e
 
+# Upgrade bridge for the /usr/local/bin → /usr/bin move — same logic as the
+# plain deb's collector-postinstall.sh (keep in sync): a self-registered
+# /etc unit pointing at the old collector path keeps working via a compat
+# symlink. Never clobbers an existing file.
+unit=/etc/systemd/system/kite-collector.service
+legacy=/usr/local/bin/kite-collector
+newbin=/usr/bin/kite-collector
+if [ -f "$unit" ] && [ -x "$newbin" ] && grep -q "$legacy" "$unit" \
+    && [ ! -e "$legacy" ] && [ ! -L "$legacy" ]; then
+    mkdir -p /usr/local/bin
+    ln -s "$newbin" "$legacy" || true
+fi
+
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
     systemctl enable kite-osqueryd.service || true

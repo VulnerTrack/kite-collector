@@ -363,6 +363,18 @@ func InstallBinary(src, dst string) error {
 	if src == dst {
 		return nil
 	}
+	// Never rename over a foreign symlink: a symlink at dst belongs to a
+	// package manager (Homebrew's prefix-bin link), and replacing it with a
+	// regular file corrupts that manager's bookkeeping — its next upgrade
+	// or uninstall then misbehaves against the service's binary. Adoption
+	// (registering the service against the managed path, no copy) is the
+	// supported flow for managed binaries.
+	if fi, lerr := os.Lstat(dst); lerr == nil && fi.Mode()&os.ModeSymlink != 0 {
+		target, _ := os.Readlink(dst)
+		return fmt.Errorf(
+			"refusing to overwrite symlink %s → %s: it belongs to a package manager; re-run install without --copy to adopt the managed binary, or remove the symlink first",
+			dst, target)
+	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 		return fmt.Errorf("create binary dir: %w", err)
 	}
