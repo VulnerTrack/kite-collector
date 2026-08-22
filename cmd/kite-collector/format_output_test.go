@@ -259,10 +259,31 @@ func TestPrintFakePrompt_EndsWithCwdPrompt(t *testing.T) {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 
-	out := captureStdout(t, func() { printFakePrompt() })
+	// The prompt shape follows osutil.IsPowerShell, which keys off
+	// PSModulePath. That is not a proxy for the OS: GitHub Actions Ubuntu
+	// runners ship pwsh and export it, so pin the variable per branch rather
+	// than assuming a Linux test env means "not PowerShell".
+	t.Run("posix shell", func(t *testing.T) {
+		prev, had := os.LookupEnv("PSModulePath")
+		require.NoError(t, os.Unsetenv("PSModulePath"))
+		t.Cleanup(func() {
+			if had {
+				_ = os.Setenv("PSModulePath", prev)
+			}
+		})
 
-	// Non-PowerShell (linux test env) shape: "\n<cwd>> ".
-	assert.Equal(t, "\n"+cwd+"> ", out)
+		out := captureStdout(t, func() { printFakePrompt() })
+
+		assert.Equal(t, "\n"+cwd+"> ", out)
+	})
+
+	t.Run("powershell", func(t *testing.T) {
+		t.Setenv("PSModulePath", "/opt/microsoft/powershell/Modules")
+
+		out := captureStdout(t, func() { printFakePrompt() })
+
+		assert.Equal(t, "\nPS "+cwd+"> ", out)
+	})
 }
 
 func TestLoadEnvFile_ParsesQuotesCommentsAndPrecedence(t *testing.T) {

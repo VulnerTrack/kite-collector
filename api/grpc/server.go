@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,11 +45,22 @@ type Server struct {
 	kitev1.UnimplementedCollectorServiceServer
 	store           store.Store
 	logger          *slog.Logger
-	grpc            *grpc.Server
 	panicsRecovered *prometheus.CounterVec
 	tlsConfig       *tls.Config
 	addr            string
 	privacyMode     PrivacyMode
+
+	// mu guards the fields below, which Serve writes and Stop/Addr read from
+	// other goroutines.
+	mu sync.Mutex
+	// grpc is nil until Serve has bound its listener and built the server.
+	grpc *grpc.Server
+	// boundAddr is the address Serve actually bound, which differs from addr
+	// when addr requests an ephemeral port (host:0).
+	boundAddr string
+	// stopped records a Stop that arrived before Serve finished binding, so
+	// Serve tears the listener down instead of serving on it forever.
+	stopped bool
 	// enforceTenant, when set, rejects a peer that presents a client
 	// certificate without a valid tenant Organization (PermissionDenied / 403)
 	// instead of the default permissive behaviour (accept as untenanted). Opt
@@ -130,6 +142,9 @@ func (s *Server) ConfigureMTLS(tlsCfg config.TLSConfig) error {
 
 // Serve starts the gRPC listener on the configured address. It blocks until
 // the server is stopped or an error occurs.
+//
+// The configured address may request an ephemeral port (for example
+// "127.0.0.1:0"); Addr reports the concrete address once Serve has bound it.
 func (s *Server) Serve() error {
 	var lc net.ListenConfig
 	lis, err := lc.Listen(context.Background(), "tcp", s.addr)
@@ -142,26 +157,56 @@ func (s *Server) Serve() error {
 		grpc.ChainStreamInterceptor(StreamRecoveryInterceptor(s.panicsRecovered)),
 	}
 
+	addr := lis.Addr().String()
 	if s.tlsConfig != nil {
 		opts = append(opts, grpc.Creds(credentials.NewTLS(s.tlsConfig)))
-		s.logger.Info("gRPC server using mTLS", "addr", s.addr)
+		s.logger.Info("gRPC server using mTLS", "addr", addr)
 	} else {
-		s.logger.Warn("gRPC server running WITHOUT TLS — not recommended for production", "code", string(LogCodeServerInsecureListener), "addr", s.addr)
+		s.logger.Warn("gRPC server running WITHOUT TLS — not recommended for production", "code", string(LogCodeServerInsecureListener), "addr", addr)
 	}
 
-	s.grpc = grpc.NewServer(opts...)
-	kitev1.RegisterCollectorServiceServer(s.grpc, s)
-	s.logger.Info("gRPC server listening", "addr", s.addr)
-	if err := s.grpc.Serve(lis); err != nil {
+	srv := grpc.NewServer(opts...)
+	kitev1.RegisterCollectorServiceServer(srv, s)
+
+	// Publish the server before serving so a concurrent Stop can reach it. A
+	// Stop that already arrived wins: drop the listener rather than serving on
+	// a socket nobody will ever shut down.
+	s.mu.Lock()
+	if s.stopped {
+		s.mu.Unlock()
+		_ = lis.Close()
+		return nil
+	}
+	s.grpc = srv
+	s.boundAddr = addr
+	s.mu.Unlock()
+
+	s.logger.Info("gRPC server listening", "addr", addr)
+	if err := srv.Serve(lis); err != nil {
 		return fmt.Errorf("grpc serve: %w", err)
 	}
 	return nil
 }
 
-// Stop gracefully shuts down the gRPC server, draining in-flight RPCs.
+// Addr returns the address Serve is bound to, or "" before the bind completes.
+// It resolves the concrete port when the server was configured with ":0".
+func (s *Server) Addr() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.boundAddr
+}
+
+// Stop gracefully shuts down the gRPC server, draining in-flight RPCs. It is
+// safe to call before Serve has bound, in which case Serve returns without
+// serving instead of blocking forever on a listener no one can stop.
 func (s *Server) Stop() {
-	if s.grpc != nil {
-		s.grpc.GracefulStop()
+	s.mu.Lock()
+	s.stopped = true
+	srv := s.grpc
+	s.mu.Unlock()
+
+	if srv != nil {
+		srv.GracefulStop()
 	}
 }
 

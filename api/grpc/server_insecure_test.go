@@ -19,20 +19,15 @@ import (
 	kitev1 "github.com/vulnertrack/kite-collector/api/grpc/proto/kite/v1"
 )
 
-// startInsecureServer boots the plaintext loopback listener path (the
-// "not recommended for production" warning branch) and returns a
-// connected client.
-func startInsecureServer(t *testing.T) kitev1.CollectorServiceClient {
+// serveOnEphemeralPort starts srv on a loopback ephemeral port and returns the
+// address it actually bound.
+//
+// Serve owns the bind, so the port is never released between being chosen and
+// being served: picking a port with a probe listener and closing it first
+// leaves a window where a dial races the rebind (connection refused) or another
+// process claims the port outright.
+func serveOnEphemeralPort(t *testing.T, srv *Server) string {
 	t.Helper()
-
-	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	addr := ln.Addr().String()
-	require.NoError(t, ln.Close(), "release the probe port for Serve to rebind")
-
-	srv := New(addr, nil, nil)
-	srv.SetPanicsRecovered(prometheus.NewCounterVec(
-		prometheus.CounterOpts{Name: "test_grpc_panics_total"}, []string{"component"}))
 
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve() }()
@@ -40,15 +35,52 @@ func startInsecureServer(t *testing.T) kitev1.CollectorServiceClient {
 		srv.Stop()
 		select {
 		case <-done:
-		case <-time.After(5 * time.Second):
+		case <-time.After(10 * time.Second):
 			t.Error("Serve did not return after Stop")
 		}
 	})
+
+	// Serve publishes the bound address before it starts accepting; once it is
+	// set the socket is listening, so a dial lands in the accept queue rather
+	// than being refused.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if addr := srv.Addr(); addr != "" {
+			return addr
+		}
+		select {
+		case err := <-done:
+			require.FailNowf(t, "Serve returned before binding", "err: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			require.FailNow(t, "Serve did not bind a port within 10s")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// dialInsecure returns a client speaking plaintext to addr.
+func dialInsecure(t *testing.T, addr string) kitev1.CollectorServiceClient {
+	t.Helper()
 
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 	return kitev1.NewCollectorServiceClient(conn)
+}
+
+// startInsecureServer boots the plaintext loopback listener path (the
+// "not recommended for production" warning branch) and returns a
+// connected client.
+func startInsecureServer(t *testing.T) kitev1.CollectorServiceClient {
+	t.Helper()
+
+	srv := New("127.0.0.1:0", nil, nil)
+	srv.SetPanicsRecovered(prometheus.NewCounterVec(
+		prometheus.CounterOpts{Name: "test_grpc_panics_total"}, []string{"component"}))
+
+	return dialInsecure(t, serveOnEphemeralPort(t, srv))
 }
 
 func TestServeInsecure_HeartbeatRoundTrip(t *testing.T) {
@@ -98,24 +130,9 @@ func TestServeInsecure_ReportFindingsStream(t *testing.T) {
 // Private privacy mode disables machine ingestion outright: the stream
 // errors with PermissionDenied before any snapshot is consumed.
 func TestServeInsecure_PrivateModeRefusesMachines(t *testing.T) {
-	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	addr := ln.Addr().String()
-	require.NoError(t, ln.Close())
-
-	srv := New(addr, nil, nil)
+	srv := New("127.0.0.1:0", nil, nil)
 	srv.SetPrivacyMode(PrivacyModePrivate)
-	done := make(chan error, 1)
-	go func() { done <- srv.Serve() }()
-	t.Cleanup(func() {
-		srv.Stop()
-		<-done
-	})
-
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = conn.Close() })
-	client := kitev1.NewCollectorServiceClient(conn)
+	client := dialInsecure(t, serveOnEphemeralPort(t, srv))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -128,6 +145,40 @@ func TestServeInsecure_PrivateModeRefusesMachines(t *testing.T) {
 	_, err = stream.CloseAndRecv()
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// A Stop that beats Serve to the bind must not strand Serve: before the server
+// was published under the mutex, Stop saw a nil *grpc.Server, returned without
+// stopping anything, and Serve blocked on the listener forever.
+func TestStop_BeforeServeDoesNotStrandServe(t *testing.T) {
+	srv := New("127.0.0.1:0", nil, nil)
+	srv.Stop()
+
+	done := make(chan error, 1)
+	go func() { done <- srv.Serve() }()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err, "Serve should stand down cleanly, not error")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Serve blocked after a Stop that preceded it")
+	}
+
+	assert.Empty(t, srv.Addr(), "a server that stood down never publishes an address")
+}
+
+// Addr resolves the concrete port when the server is configured with :0.
+func TestAddr_ResolvesEphemeralPort(t *testing.T) {
+	srv := New("127.0.0.1:0", nil, nil)
+	addr := serveOnEphemeralPort(t, srv)
+
+	assert.Equal(t, addr, srv.Addr())
+	assert.NotEqual(t, "127.0.0.1:0", addr, "the ephemeral port must be resolved")
+
+	host, port, err := net.SplitHostPort(addr)
+	require.NoError(t, err)
+	assert.Equal(t, "127.0.0.1", host)
+	assert.NotEqual(t, "0", port)
 }
 
 func TestServe_ListenFailure(t *testing.T) {
