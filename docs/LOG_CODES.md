@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 523 codes across 60 packages.
+**Catalog size:** 524 codes across 60 packages.
 
 ---
 
@@ -281,7 +281,7 @@ Source: [`internal/copilot/fsm/logcodes.go`](../internal/copilot/fsm/logcodes.go
 
 ## `dashboard` (internal/dashboard)
 
-Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 36 codes
+Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 37 codes
 
 **observability surface — /observability page + /api/v1/observability/***
 
@@ -355,6 +355,7 @@ Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) ·
 | `dashboard.serve.fragment_render_failed` | `LogCodeServeFragmentRender` | — |
 | `dashboard.serve.tab_page_render_failed` | `LogCodeServeTabPageRender` | — |
 | `dashboard.serve.table_page_render_failed` | `LogCodeServeTablePageRender` | — |
+| `dashboard.serve.cross_site_request_blocked` | `LogCodeServeCrossSiteBlocked` | — |
 
 **csv export surface — /api/v1/{machines,software,findings,tables}/export.csv**
 

@@ -67,6 +67,13 @@ type Options struct {
 	// injectable for non-browser embedding and tests; normal dashboards derive
 	// it from the encrypted enrolled identity.
 	FleetOperatorToken func(context.Context) (string, error)
+	// AllowedHosts extends the Host-header allowlist used by the cross-site
+	// guard. Loopback literals, any IP literal, localhost, and the host the
+	// dashboard binds are always accepted; list a name here only when the
+	// dashboard is reached through a reverse proxy or tunnel under that name.
+	// Names outside the allowlist are refused on state-changing requests
+	// because they are how DNS rebinding reaches a loopback service.
+	AllowedHosts []string
 	// TableSources are additional read-only table backends (e.g. a live
 	// osqueryd) merged into the table catalog behind the durable store. The
 	// dashboard's generic table machinery renders them identically to store
@@ -673,8 +680,11 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	}
 
 	return &http.Server{
-		Addr:              addr,
-		Handler:           mux,
+		Addr: addr,
+		// Every mutating route sits behind the cross-site guard — the
+		// dashboard has no authentication, so "a browser somewhere else told
+		// it to" must not be a way to install services or mint credentials.
+		Handler:           guardCrossSite(mux, newHostGuard(addr, opts.AllowedHosts), logger),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 }

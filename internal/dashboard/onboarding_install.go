@@ -165,6 +165,10 @@ func handleAgentInstallState(w http.ResponseWriter, deps onboardingDeps) {
 //     updates the instant install finishes (no waiting for the next poll).
 //   - else → JSON for scripted clients / curl debugging.
 func handleAgentInstall(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
+	if crossSiteFormPost(r) {
+		rejectInstallFormPost(w, r, deps, "install")
+		return
+	}
 	// The ?user_mode=true query param is the "Retry in --user mode" recovery
 	// path surfaced by the permission-error remediation UI. It explicitly
 	// recomputes BinaryDir/CertsDir for user-mode (rather than reusing the
@@ -263,6 +267,24 @@ func isHXRequest(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }
 
+// rejectInstallFormPost refuses a request shaped like a cross-site form
+// submission to the service-lifecycle endpoints. Reaching here means the
+// mux-level guard let something through that has no business installing
+// software, so it is logged at Warn with the same code the guard uses.
+func rejectInstallFormPost(w http.ResponseWriter, r *http.Request, deps onboardingDeps, action string) {
+	deps.Logger.Warn("dashboard: blocked form-encoded "+action+" request",
+		"code", string(LogCodeServeCrossSiteBlocked),
+		"reason", "form-encoded post to a service-lifecycle endpoint",
+		"request_path", r.URL.Path,
+		"request_host", r.Host,
+		"origin", r.Header.Get("Origin"),
+		"content_type", r.Header.Get("Content-Type"))
+	writeJSON(w, deps.Logger, http.StatusForbidden, agentInstallView{
+		Error: "form-encoded " + action + " requests are not accepted — " +
+			"post JSON, or run the CLI command from a terminal",
+	})
+}
+
 // writeInstallStatusHTML renders the install-status fragment with the
 // post-action state baked in so the operator sees the result of their
 // click without a second round-trip. Errors propagate through the
@@ -314,6 +336,10 @@ func deref(s *installer.State) installer.State {
 // registration is stopped + deregistered; binary and certs are kept in
 // place so the operator can re-install without re-enrolling.
 func handleAgentUninstall(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
+	if crossSiteFormPost(r) {
+		rejectInstallFormPost(w, r, deps, "uninstall")
+		return
+	}
 	hx := isHXRequest(r)
 
 	opts := installer.DetectDefaults().Options

@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"net/url"
 	"os"
 	"runtime"
 	"sort"
@@ -609,16 +608,12 @@ func writeFleetDiscoveryJSON(w http.ResponseWriter, response fleetDiscoveryAPIRe
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+// fleetDiscoverySameOrigin keeps the route-local check that predates the
+// mux-wide guard: discovery scans the operator's LAN, so it answers with its
+// own JSON-shaped 403 rather than the guard's plain text. The decision itself
+// is the shared one — one definition of "same origin" for the whole package.
 func fleetDiscoverySameOrigin(r *http.Request) bool {
-	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")), "cross-site") {
-		return false
-	}
-	origin := strings.TrimSpace(r.Header.Get("Origin"))
-	if origin == "" {
-		return true
-	}
-	parsed, err := url.Parse(origin)
-	return err == nil && strings.EqualFold(parsed.Host, r.Host)
+	return sameOriginRequest(r)
 }
 
 func detectFleetLocalNetwork() (fleetLocalNetwork, error) {

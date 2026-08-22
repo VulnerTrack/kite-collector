@@ -61,10 +61,11 @@ const (
 	LogCodeInstallJSONEncode      LogCode = "dashboard.install.json_encode_failed"
 
 	// server bootstrap surface — Serve()
-	LogCodeServeStaticSubFS     LogCode = "dashboard.serve.static_sub_fs_failed"
-	LogCodeServeFragmentRender  LogCode = "dashboard.serve.fragment_render_failed"
-	LogCodeServeTabPageRender   LogCode = "dashboard.serve.tab_page_render_failed"
-	LogCodeServeTablePageRender LogCode = "dashboard.serve.table_page_render_failed"
+	LogCodeServeStaticSubFS      LogCode = "dashboard.serve.static_sub_fs_failed"
+	LogCodeServeFragmentRender   LogCode = "dashboard.serve.fragment_render_failed"
+	LogCodeServeTabPageRender    LogCode = "dashboard.serve.tab_page_render_failed"
+	LogCodeServeTablePageRender  LogCode = "dashboard.serve.table_page_render_failed"
+	LogCodeServeCrossSiteBlocked LogCode = "dashboard.serve.cross_site_request_blocked"
 
 	// csv export surface — /api/v1/{machines,software,findings,tables}/export.csv
 	LogCodeExportMachinesCSV LogCode = "dashboard.export.machines_csv_failed"
