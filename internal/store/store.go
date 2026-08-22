@@ -239,6 +239,33 @@ type TableSource interface {
 	FacetTable(ctx context.Context, table string, maxDistinct, topValues int) ([]ColumnFacet, error)
 }
 
+// MachineGraphStore materializes relationships inferred from collected
+// inventory. It is deliberately optional: SQLite provides the local graph
+// projection while backends that do not host the collector's extended schema
+// can continue to implement Store unchanged.
+type MachineGraphStore interface {
+	// RebuildADMachineGraph replaces the AD-derived graph projection with the
+	// relationships supported by the latest machine inventory.
+	RebuildADMachineGraph(ctx context.Context) error
+}
+
+// DirectorySoftware is a software service inferred from directory discovery.
+// It is separate from package-manager inventory because LDAP describes a
+// role running on a machine, not a locally enumerated package.
+type DirectorySoftware struct {
+	MachineID     uuid.UUID
+	DomainDNSName string
+	Version       string
+	Dependencies  string
+	Dependents    string
+}
+
+// DirectorySoftwareStore supplies directory services for the Software view.
+// It is optional so stores without LDAP graph support remain compatible.
+type DirectorySoftwareStore interface {
+	ListDirectorySoftware(ctx context.Context) ([]DirectorySoftware, error)
+}
+
 // Store defines the persistence interface for the kite-collector.
 // Implementations must be safe for concurrent use.
 type Store interface {

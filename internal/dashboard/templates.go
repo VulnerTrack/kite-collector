@@ -192,6 +192,8 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 		PackageManager string
 		CPE23          string
 		License        string
+		Dependencies   string
+		Dependents     string
 	}
 
 	var rows []softwareRow
@@ -215,6 +217,30 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 		}
 		if len(rows) >= 500 {
 			break
+		}
+	}
+	if directoryStore, ok := st.(store.DirectorySoftwareStore); ok {
+		directorySoftware, listErr := directoryStore.ListDirectorySoftware(ctx)
+		if listErr == nil {
+			byMachineID := make(map[string]string, len(machines))
+			for _, machine := range machines {
+				byMachineID[machine.ID.String()] = machine.Hostname
+			}
+			for _, service := range directorySoftware {
+				hostname, exists := byMachineID[service.MachineID.String()]
+				if !exists {
+					continue
+				}
+				rows = append(rows, softwareRow{
+					Hostname:       hostname,
+					SoftwareName:   "Active Directory Domain Services",
+					Version:        service.Version,
+					PackageManager: "ldap",
+					License:        service.DomainDNSName,
+					Dependencies:   service.Dependencies,
+					Dependents:     service.Dependents,
+				})
+			}
 		}
 	}
 
@@ -301,6 +327,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}})</h2>
 const softwareTemplate = `<h2>Software ({{len .Software}})</h2>
 <div class="table-actions">
   <a href="/api/v1/software/export.csv" class="btn">Export CSV</a>
+  <a href="/tables/directory_software_relationships" class="btn btn-outline">Directory service relationships</a>
 </div>
 <div class="data-grid">
 <table>
