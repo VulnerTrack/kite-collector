@@ -167,8 +167,19 @@ test:
 test-race:
 	go test -race -count=1 -timeout 60m ./...
 
+# The Ubuntu package matrix is excluded on purpose. It boots a real container
+# per Ubuntu release, so it runs from test-ubuntu-matrix (and its own workflow,
+# split four ways) under a 1500s budget. Sweeping it in here ran that work a
+# second time under a timeout sized for the rest of the suite, which could only
+# ever end in a timeout panic.
+#
+# 300s, up from 120s: what remains still pulls postgres:16-alpine and the
+# otel-collector-contrib image, and a CI runner pulls them cold. As with
+# test-ubuntu-matrix the budget stays under the job's 10-minute cap, so a hang
+# ends in a go-test goroutine dump rather than a silent runner kill.
 test-e2e:
-	go test -tags e2e -count=1 -timeout 120s ./tests/e2e/...
+	go test -tags e2e -count=1 -timeout 300s \
+	  $$(go list -tags e2e ./tests/e2e/... | grep -v '/tests/e2e/ubuntu-matrix$$')
 
 # Container-discovery smoke test: stands up fixture containers via
 # docker-compose and asserts the collector's connection + data quality
