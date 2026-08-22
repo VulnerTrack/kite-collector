@@ -3,7 +3,7 @@
 //
 // Usage:
 //
-//	go run ./tools/loginventory > docs/LOG_CODES.md
+//	go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 //
 // The repo root is auto-detected as the directory containing go.mod
 // at or above the current working directory.

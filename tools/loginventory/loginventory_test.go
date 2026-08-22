@@ -26,12 +26,12 @@ func TestCatalogIsUpToDate(t *testing.T) {
 	require.NoError(t, err)
 
 	committed, err := os.ReadFile(filepath.Join(root, "docs", "LOG_CODES.md"))
-	require.NoError(t, err, "docs/LOG_CODES.md must exist — regenerate with: go run ./tools/loginventory > docs/LOG_CODES.md")
+	require.NoError(t, err, "docs/LOG_CODES.md must exist — regenerate with: go run ./tools/loginventory/cmd > docs/LOG_CODES.md")
 
 	if !bytes.Equal(want, committed) {
 		t.Fatalf(
 			"docs/LOG_CODES.md is out of date relative to the live logcodes.go files.\n"+
-				"Regenerate with:\n\n  go run ./tools/loginventory > docs/LOG_CODES.md\n\n"+
+				"Regenerate with:\n\n  go run ./tools/loginventory/cmd > docs/LOG_CODES.md\n\n"+
 				"Diff summary: committed=%d bytes, generated=%d bytes",
 			len(committed), len(want))
 	}
