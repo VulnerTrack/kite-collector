@@ -61,6 +61,27 @@ type Manager struct {
 	cfg      ManagerConfig
 	mu       sync.Mutex
 	stopped  bool
+
+	// reapOnce and reaped make exec.Cmd.Wait run exactly once per subprocess.
+	// Both Stop and monitor need the exit to have been collected, but Wait is
+	// single-call: two concurrent callers race on the process state and on the
+	// stdout/stderr copy goroutines, and the loser blocks forever. They are
+	// replaced on every start, alongside cmd.
+	reapOnce *sync.Once
+	reaped   chan struct{}
+}
+
+// reap collects the subprocess exit status exactly once and returns after it
+// has been collected, whichever caller actually performs the Wait.
+func (m *Manager) reap(cmd *exec.Cmd, once *sync.Once, done chan struct{}) {
+	if cmd == nil || once == nil || done == nil {
+		return
+	}
+	once.Do(func() {
+		_ = cmd.Wait()
+		close(done)
+	})
+	<-done
 }
 
 // NewManager creates a tunnel manager. The tunnel is not started until
@@ -145,7 +166,7 @@ func (m *Manager) Stop() {
 	}
 	if m.cmd != nil && m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
-		_ = m.cmd.Wait()
+		m.reap(m.cmd, m.reapOnce, m.reaped)
 	}
 	if m.instance != nil {
 		m.instance.Status = StatusDisconnected
@@ -190,6 +211,9 @@ func (m *Manager) startProcess(ctx context.Context) error {
 
 	m.cmd = exec.CommandContext(ctx, path, args[1:]...) //#nosec G204 -- path from LookPath, args from BuildCommand
 	m.cmd.Env = m.cmd.Environ()
+	// Fresh reap state: this subprocess's exit has not been collected yet.
+	m.reapOnce = &sync.Once{}
+	m.reaped = make(chan struct{})
 
 	// Capture stdout/stderr to structured log.
 	stdout, _ := m.cmd.StdoutPipe()
@@ -276,9 +300,13 @@ func (m *Manager) waitHealthy(ctx context.Context, addr string) error {
 // exponential backoff. Runs as a goroutine.
 func (m *Manager) monitor(ctx context.Context) {
 	for {
-		if m.cmd != nil {
-			_ = m.cmd.Wait()
-		}
+		// Snapshot under the lock: Start replaces these on every restart, and
+		// reading them bare raced with it.
+		m.mu.Lock()
+		cmd, once, reaped := m.cmd, m.reapOnce, m.reaped
+		m.mu.Unlock()
+
+		m.reap(cmd, once, reaped)
 
 		m.mu.Lock()
 		if m.stopped {
