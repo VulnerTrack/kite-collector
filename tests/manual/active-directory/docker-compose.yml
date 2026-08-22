@@ -77,6 +77,9 @@ services:
       - "127.0.0.1:19090:19090"
     volumes:
       - collector_data:/data
+      # Read-only access lets the local Containers page inspect this Docker
+      # host (including dc01) without granting the dashboard write access.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - ad_lab
 
