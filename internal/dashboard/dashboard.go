@@ -212,12 +212,39 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		}
 	}
 
+	// serveFacetTabRoute is serveTabRoute for tabs that filter in place from
+	// the facet rail: it threads the request through so the renderer can read
+	// the ?fcol/?fval selection, which serveTabRoute (context-only) cannot.
+	serveFacetTabRoute := func(activeTab string, render func(io.Writer, context.Context, *http.Request) error) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("HX-Request") == "true" {
+				renderFragment(w, activeTab, func(buf io.Writer) error {
+					return render(buf, r.Context(), r)
+				})
+				return
+			}
+			var buf bytes.Buffer
+			if renderErr := renderIndexPage(&buf, activeTab, func(fragBuf io.Writer) error {
+				return render(fragBuf, r.Context(), r)
+			}); renderErr != nil {
+				logger.Error("dashboard: render page "+activeTab,
+					"code", string(LogCodeServeTabPageRender),
+					"error", renderErr)
+				http.Error(w, renderErr.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(buf.Bytes())
+		}
+	}
+
 	// Top-level pretty-URL routes. Each is the canonical URL for the
 	// matching tab and is what nav links push into history. The existing
 	// /fragments/* routes are kept (used by polling status divs and CSV
 	// exports' Back-button paths).
-	mux.HandleFunc("GET /machines", serveTabRoute("machines", func(w io.Writer, ctx context.Context) error {
-		return renderMachinesFragment(w, ctx, st, rc)
+	mux.HandleFunc("GET /machines", serveFacetTabRoute("machines", func(w io.Writer, ctx context.Context, r *http.Request) error {
+		fcol, fval, filtered := parseFacetFilter(r)
+		return renderMachinesFragment(w, ctx, st, rc, fcol, fval, filtered)
 	}))
 
 	// Machine resource page — a machine is a page, not a drawer. ?tab picks
@@ -266,8 +293,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(buf.Bytes())
 	})
-	mux.HandleFunc("GET /software", serveTabRoute("software", func(w io.Writer, ctx context.Context) error {
-		return renderSoftwareFragment(w, ctx, st, rc)
+	mux.HandleFunc("GET /software", serveFacetTabRoute("software", func(w io.Writer, ctx context.Context, r *http.Request) error {
+		fcol, fval, filtered := parseFacetFilter(r)
+		return renderSoftwareFragment(w, ctx, st, rc, fcol, fval, filtered)
 	}))
 	mux.HandleFunc("GET /findings", serveTabRoute("findings", func(w io.Writer, ctx context.Context) error {
 		return renderFindingsFragment(w, ctx, st, rc)
@@ -461,14 +489,16 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 
 	// HTMX fragment endpoints — return HTML snippets for dynamic loading.
 	mux.HandleFunc("GET /fragments/machines", func(w http.ResponseWriter, r *http.Request) {
+		fcol, fval, filtered := parseFacetFilter(r)
 		renderFragment(w, "machines", func(buf io.Writer) error {
-			return renderMachinesFragment(buf, r.Context(), st, rc)
+			return renderMachinesFragment(buf, r.Context(), st, rc, fcol, fval, filtered)
 		})
 	})
 
 	mux.HandleFunc("GET /fragments/software", func(w http.ResponseWriter, r *http.Request) {
+		fcol, fval, filtered := parseFacetFilter(r)
 		renderFragment(w, "software", func(buf io.Writer) error {
-			return renderSoftwareFragment(buf, r.Context(), st, rc)
+			return renderSoftwareFragment(buf, r.Context(), st, rc, fcol, fval, filtered)
 		})
 	})
 

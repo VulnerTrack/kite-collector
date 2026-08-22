@@ -129,7 +129,7 @@ func TestRenderSoftwareAndRowReportFragments(t *testing.T) {
 	}}))
 
 	var buf bytes.Buffer
-	require.NoError(t, renderSoftwareFragment(&buf, ctx, st, testContext()))
+	require.NoError(t, renderSoftwareFragment(&buf, ctx, st, testContext(), "", "", false))
 	assert.Contains(t, buf.String(), "nginx")
 	assert.Contains(t, buf.String(), "1.25.4")
 

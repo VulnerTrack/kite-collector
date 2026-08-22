@@ -108,7 +108,7 @@ func findFK(fks []store.ForeignKey, col string) *store.ForeignKey {
 }
 
 // renderMachinesFragment renders the machines table as an HTML fragment.
-func renderMachinesFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
+func renderMachinesFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext, filterCol, filterVal string, filtered bool) error {
 	machines, err := st.ListMachines(ctx, store.MachineFilter{Limit: 500})
 	if err != nil {
 		return fmt.Errorf("list machines: %w", err)
@@ -121,15 +121,59 @@ func renderMachinesFragment(w io.Writer, ctx context.Context, st store.Store, rc
 	}
 	rows := machineDisplayRows(machines, localHostname, localIP)
 
+	// Facets are computed over every loaded row (so all values stay visible),
+	// then the grid narrows to the selected value. is_authorized / is_managed
+	// are the asset-status columns, so faceting on them is also how an
+	// operator slices the fleet by "unauthorized" or "unmanaged".
+	cols := machineFacetColumns(rows)
+	facets := buildPageFacets(cols, tableFacetMaxDistinct, tableFacetTopValues, filterCol, filterVal, filtered)
+	shown := pickByIndex(rows, pageFacetKeep(cols, filterCol, filterVal, filtered))
+	rail, railErr := renderFacetRail(facetRailView{
+		BasePath: "/machines", Facets: facets, Filtered: filtered,
+		FilterCol: filterCol, FilterVal: filterVal, Shown: len(shown), Total: len(rows),
+	})
+	if railErr != nil {
+		return fmt.Errorf("render machines facets: %w", railErr)
+	}
+
 	tmpl := template.Must(template.New("machines").Funcs(templateFuncs).Parse(machinesTemplate))
 	if err := tmpl.Execute(w, map[string]any{
-		"Machines":         rows,
+		"Machines":         shown,
+		"Total":            len(rows),
+		"FacetRail":        rail,
 		"Context":          rc,
 		"AgentInstallPath": agentInstallPath(),
 	}); err != nil {
 		return fmt.Errorf("render machines template: %w", err)
 	}
 	return nil
+}
+
+// machineFacetColumns projects the low-cardinality machine attributes an
+// operator filters by — classification plus the two asset-status columns —
+// into index-aligned facet columns. High-cardinality fields (hostname, IP)
+// are deliberately omitted: buildPageFacets would drop them anyway, and
+// listing them wastes a probe.
+func machineFacetColumns(rows []machineDisplayRow) []pageFacetColumn {
+	machineType := make([]string, len(rows))
+	osFamily := make([]string, len(rows))
+	authorized := make([]string, len(rows))
+	managed := make([]string, len(rows))
+	source := make([]string, len(rows))
+	for i, r := range rows {
+		machineType[i] = string(r.MachineType)
+		osFamily[i] = r.OSFamily
+		authorized[i] = string(r.IsAuthorized)
+		managed[i] = string(r.IsManaged)
+		source[i] = r.DiscoverySource
+	}
+	return []pageFacetColumn{
+		{Name: "machine_type", Values: machineType},
+		{Name: "os_family", Values: osFamily},
+		{Name: "is_authorized", Values: authorized},
+		{Name: "is_managed", Values: managed},
+		{Name: "discovery_source", Values: source},
+	}
 }
 
 // agentInstallPath resolves where this agent's binary currently lives,
@@ -177,21 +221,28 @@ func machineDisplayRows(machines []model.Machine, localHostname, localIP string)
 	return rows
 }
 
+// softwareRow is one installed-package row joined to its owning asset. The
+// Authorized/Managed fields carry the asset status through so an operator can
+// see (and facet on) whether a package sits on an authorized, managed host —
+// a package inventory is only actionable next to that context.
+type softwareRow struct {
+	Hostname       string
+	SoftwareName   string
+	Version        string
+	PackageManager string
+	CPE23          string
+	License        string
+	Authorized     model.AuthorizationState
+	Managed        model.ManagedState
+}
+
 // renderSoftwareFragment renders the software table as an HTML fragment.
-func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext) error {
-	// Collect software across all machines.
+func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc ReportContext, filterCol, filterVal string, filtered bool) error {
+	// Collect software across all machines. Iterating machines gives us the
+	// owning asset (and its status) for free — no second lookup per package.
 	machines, err := st.ListMachines(ctx, store.MachineFilter{Limit: 100})
 	if err != nil {
 		return fmt.Errorf("list machines: %w", err)
-	}
-
-	type softwareRow struct {
-		Hostname       string
-		SoftwareName   string
-		Version        string
-		PackageManager string
-		CPE23          string
-		License        string
 	}
 
 	var rows []softwareRow
@@ -208,6 +259,8 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 				PackageManager: s.PackageManager,
 				CPE23:          s.CPE23,
 				License:        s.License,
+				Authorized:     a.IsAuthorized,
+				Managed:        a.IsManaged,
 			})
 			if len(rows) >= 500 {
 				break
@@ -218,14 +271,50 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 		}
 	}
 
+	cols := softwareFacetColumns(rows)
+	facets := buildPageFacets(cols, tableFacetMaxDistinct, tableFacetTopValues, filterCol, filterVal, filtered)
+	shown := pickByIndex(rows, pageFacetKeep(cols, filterCol, filterVal, filtered))
+	rail, railErr := renderFacetRail(facetRailView{
+		BasePath: "/software", Facets: facets, Filtered: filtered,
+		FilterCol: filterCol, FilterVal: filterVal, Shown: len(shown), Total: len(rows),
+	})
+	if railErr != nil {
+		return fmt.Errorf("render software facets: %w", railErr)
+	}
+
 	tmpl := template.Must(template.New("software").Funcs(templateFuncs).Parse(softwareTemplate))
 	if err := tmpl.Execute(w, map[string]any{
-		"Software": rows,
-		"Context":  rc,
+		"Software":  shown,
+		"Total":     len(rows),
+		"FacetRail": rail,
+		"Context":   rc,
 	}); err != nil {
 		return fmt.Errorf("render software template: %w", err)
 	}
 	return nil
+}
+
+// softwareFacetColumns exposes the low-cardinality slices of the software
+// inventory: the package manager and license, plus the owning asset's
+// authorization and managed status. Package name / version / CPE are
+// high-cardinality and left out.
+func softwareFacetColumns(rows []softwareRow) []pageFacetColumn {
+	pkgMgr := make([]string, len(rows))
+	license := make([]string, len(rows))
+	authorized := make([]string, len(rows))
+	managed := make([]string, len(rows))
+	for i, r := range rows {
+		pkgMgr[i] = r.PackageManager
+		license[i] = r.License
+		authorized[i] = string(r.Authorized)
+		managed[i] = string(r.Managed)
+	}
+	return []pageFacetColumn{
+		{Name: "package_manager", Values: pkgMgr},
+		{Name: "license", Values: license},
+		{Name: "is_authorized", Values: authorized},
+		{Name: "is_managed", Values: managed},
+	}
 }
 
 // renderFindingsFragment renders the findings table as an HTML fragment.
@@ -263,10 +352,11 @@ func renderScansFragment(w io.Writer, ctx context.Context, st store.Store, rc Re
 
 // HTML fragment templates — returned by HTMX endpoints.
 
-const machinesTemplate = `<h2>Machines ({{len .Machines}})</h2>
+const machinesTemplate = `<h2>Machines ({{len .Machines}}{{if lt (len .Machines) .Total}} of {{.Total}}{{end}})</h2>
 <div class="table-actions">
   <a href="/api/v1/machines/export.csv" class="btn">Export CSV</a>
 </div>
+{{.FacetRail}}
 <div class="data-grid">
 <table>
   <thead>
@@ -298,15 +388,18 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}})</h2>
 </table>
 </div>`
 
-const softwareTemplate = `<h2>Software ({{len .Software}})</h2>
+const softwareTemplate = `<h2>Software ({{len .Software}}{{if lt (len .Software) .Total}} of {{.Total}}{{end}})</h2>
 <div class="table-actions">
   <a href="/api/v1/software/export.csv" class="btn">Export CSV</a>
 </div>
+{{.FacetRail}}
 <div class="data-grid">
 <table>
   <thead>
     <tr>
       <th>Host</th>
+      <th>Authorized</th>
+      <th>Managed</th>
       <th>Package</th>
       <th>Version</th>
       <th>License</th>
@@ -318,6 +411,8 @@ const softwareTemplate = `<h2>Software ({{len .Software}})</h2>
   {{range .Software}}
     <tr>
       <td>{{.Hostname}}</td>
+      <td><span class="badge {{authClass .Authorized}}">{{.Authorized}}</span></td>
+      <td>{{.Managed}}</td>
       <td>{{.SoftwareName}}</td>
       <td>{{.Version}}</td>
       <td>{{if .License}}{{.License}}{{else}}unknown{{end}}</td>
