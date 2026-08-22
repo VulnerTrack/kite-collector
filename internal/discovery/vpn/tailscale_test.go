@@ -166,13 +166,14 @@ const tsDevicesFixture = `{"devices":[
 ]}`
 
 func TestPeersFromDevices(t *testing.T) {
-	peers, err := peersFromDevices([]byte(tsDevicesFixture))
+	peers, err := peersFromDevices([]byte(tsDevicesFixture), "example.org")
 	require.NoError(t, err)
 	require.Len(t, peers, 2)
 
 	api, ok := findPeer(peers, byHostname("api-1"))
 	require.True(t, ok)
 	assert.Equal(t, "carol@example.org", api.Owner)
+	assert.Equal(t, "example.org", api.Tags["tailnet"], "API-discovered IP records its tailnet account")
 	assert.Equal(t, "1.98.0", api.OSVersion)
 	assert.Equal(t, "tailscale_api", api.Tags["source"])
 	assert.Equal(t, []any{"tag:prod"}, toAnySlice(api.Tags["acl_tags"]))
@@ -181,7 +182,7 @@ func TestPeersFromDevices(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, true, desk.Tags["blocked"])
 
-	_, err = peersFromDevices([]byte("nope"))
+	_, err = peersFromDevices([]byte("nope"), "example.org")
 	require.Error(t, err)
 }
 

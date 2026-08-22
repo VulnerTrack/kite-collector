@@ -233,7 +233,7 @@ func (e *tailscaleEnumerator) enumerateAPI(ctx context.Context, apiKey, tailnet 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("tailscale: HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
 	}
-	return peersFromDevices(body)
+	return peersFromDevices(body, tailnet)
 }
 
 type tsDevicesResponse struct {
@@ -255,7 +255,13 @@ type tsDevice struct {
 
 // peersFromDevices projects the v2 API device list onto Peer. Pure; tested
 // via an httptest fixture.
-func peersFromDevices(raw []byte) ([]Peer, error) {
+//
+// tailnet is the account the device list was pulled from. The API reports a
+// device's owning user (d.User → Peer.Owner) but never echoes back which
+// tailnet it belongs to, so we thread it through from the request path — a
+// discovered IP records both the user account that owns it and the tailnet
+// account it lives in, matching what the CLI path already tags.
+func peersFromDevices(raw []byte, tailnet string) ([]Peer, error) {
 	var resp tsDevicesResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
 		return nil, fmt.Errorf("tailscale: decode devices json: %w", err)
@@ -275,6 +281,9 @@ func peersFromDevices(raw []byte) ([]Peer, error) {
 			// recent contact as the best available liveness proxy downstream
 			// via LastSeenAt rather than asserting Online here.
 			Tags: map[string]any{"source": "tailscale_api"},
+		}
+		if tailnet != "" {
+			p.Tags["tailnet"] = tailnet
 		}
 		if len(d.Tags) > 0 {
 			p.Tags["acl_tags"] = d.Tags
