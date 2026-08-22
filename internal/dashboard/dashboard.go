@@ -297,6 +297,19 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		fcol, fval, filtered := parseFacetFilter(r)
 		return renderSoftwareFragment(w, ctx, st, rc, fcol, fval, filtered)
 	}))
+
+	// Listeners and Volumes are curated host-scoped tabs: each host row joined
+	// to its owning asset's status, with the in-place facet rail. They read
+	// through the composite table source (durable store first, then any live
+	// backends) exactly as the generic /tables view does.
+	mux.HandleFunc("GET /listeners", serveFacetTabRoute("listeners", func(w io.Writer, ctx context.Context, r *http.Request) error {
+		fcol, fval, filtered := parseFacetFilter(r)
+		return renderHostScopedFragment(w, ctx, st, tableSources, rc, listenersPageSpec, fcol, fval, filtered)
+	}))
+	mux.HandleFunc("GET /volumes", serveFacetTabRoute("volumes", func(w io.Writer, ctx context.Context, r *http.Request) error {
+		fcol, fval, filtered := parseFacetFilter(r)
+		return renderHostScopedFragment(w, ctx, st, tableSources, rc, volumesPageSpec, fcol, fval, filtered)
+	}))
 	mux.HandleFunc("GET /findings", serveTabRoute("findings", func(w io.Writer, ctx context.Context) error {
 		return renderFindingsFragment(w, ctx, st, rc)
 	}))

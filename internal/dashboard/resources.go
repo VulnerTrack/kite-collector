@@ -53,9 +53,9 @@ func sidebarGroups() []sidebarGroup {
 			{Label: "Machines", Href: "/machines", Tab: "machines", Table: "machines", Count: -1},
 			{Label: "Software", Href: "/software", Tab: "software", Table: "installed_software", Count: -1},
 			{Label: "Processes", Href: "/tables/host_processes", Table: "host_processes", Count: -1},
-			{Label: "Listeners", Href: "/tables/host_listeners", Table: "host_listeners", Count: -1},
+			{Label: "Listeners", Href: "/listeners", Tab: "listeners", Table: "host_listeners", Count: -1},
 			{Label: "Containers", Href: "/containers", Tab: "containers", Table: "host_containers", Count: -1},
-			{Label: "Volumes", Href: "/tables/host_volumes", Table: "host_volumes", Count: -1},
+			{Label: "Volumes", Href: "/volumes", Tab: "volumes", Table: "host_volumes", Count: -1},
 		}},
 		{Title: "Security", Entries: []sidebarEntry{
 			{Label: "Findings", Href: "/findings", Tab: "findings", Table: "config_findings", Count: -1, Warn: true},
