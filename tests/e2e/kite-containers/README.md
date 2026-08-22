@@ -31,7 +31,7 @@ asserts on the JSON asset array:
 |-------|----------|
 | valid `settings.yaml` accepted | settings load + `config.Validate()` pass |
 | `--output json` is a JSON array | the scan JSON contract |
-| containers discovered (`asset_type=container`, `discovery_source=docker`) | the wired docker source runs end-to-end |
+| containers discovered (`machine_type=container`, `discovery_source=docker`) | the wired docker source runs end-to-end |
 | web fixture image `nginx` | image extraction |
 | published port `18081` in tags | port mapping extraction |
 | `tags.privileged=true` | privileged detection (CWE-732 signal) |

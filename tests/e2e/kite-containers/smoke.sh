@@ -35,7 +35,7 @@ scan_json() {
 
 # containers counts container assets discovered by the docker source in a file.
 containers() {
-  jq '[.[] | select(.asset_type=="container" and .discovery_source=="docker")] | length' "$1" 2>/dev/null || echo 0
+  jq '[.[] | select(.machine_type=="container" and .discovery_source=="docker")] | length' "$1" 2>/dev/null || echo 0
 }
 
 echo "== kite container + settings smoke =="
@@ -61,26 +61,26 @@ else
   fail "containers discovered via kite (docker source)" "0 container assets"
 fi
 
-if jq -e 'any(.[]; .asset_type=="container" and ((.tags|fromjson).image | test("nginx")))' "$OUT" >/dev/null 2>&1; then
+if jq -e 'any(.[]; .machine_type=="container" and ((.tags|fromjson).image | test("nginx")))' "$OUT" >/dev/null 2>&1; then
   pass "web fixture present" "nginx image extracted"
 else
   fail "web fixture present" "no container with an nginx image"
 fi
 
-if jq -e 'any(.[]; .asset_type=="container" and ((.tags|fromjson).ports | test("18081")))' "$OUT" >/dev/null 2>&1; then
+if jq -e 'any(.[]; .machine_type=="container" and ((.tags|fromjson).ports | test("18081")))' "$OUT" >/dev/null 2>&1; then
   pass "published port captured in tags" "80->18081"
 else
   fail "published port captured in tags" "18081 not found in any container's ports"
 fi
 
-if jq -e 'any(.[]; .asset_type=="container" and ((.tags|fromjson).privileged == true))' "$OUT" >/dev/null 2>&1; then
+if jq -e 'any(.[]; .machine_type=="container" and ((.tags|fromjson).privileged == true))' "$OUT" >/dev/null 2>&1; then
   pass "privileged container flagged" "tags.privileged=true"
 else
   fail "privileged container flagged" "no container with privileged=true"
 fi
 
 if jq -e --arg p "$COMPOSE_PROJECT" \
-     'any(.[]; .asset_type=="container" and ((.tags|fromjson).compose_project == $p))' "$OUT" >/dev/null 2>&1; then
+     'any(.[]; .machine_type=="container" and ((.tags|fromjson).compose_project == $p))' "$OUT" >/dev/null 2>&1; then
   pass "compose-project label captured" "$COMPOSE_PROJECT"
 else
   fail "compose-project label captured" "compose_project tag not set to $COMPOSE_PROJECT"
