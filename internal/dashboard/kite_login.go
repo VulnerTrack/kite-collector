@@ -99,9 +99,8 @@ const kiteLoginTemplate = `<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
 <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<!-- No web fonts: typography falls back to the --font-ui system stack so the
+     page never fetches a font from the internet. -->
 <link rel="stylesheet" href="/static/style.css?v=1.0.6">
 <style>
   body.kite-auth-page {
@@ -330,9 +329,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Welcome to Kite Collector</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<!-- No web fonts: system --font-ui stack only, no external font fetch. -->
 <link rel="stylesheet" href="/static/style.css?v=1.0.6">
 <style>
   body.kite-success-page {

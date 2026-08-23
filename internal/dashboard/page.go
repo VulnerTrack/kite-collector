@@ -46,20 +46,16 @@ const indexPageTemplate = `<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
 <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Inter loads non-render-blocking: the media="print" swap paints the page
-     immediately with the --font-ui system fallback and swaps Inter in when it
-     arrives. A loopback security dashboard must never block first paint on an
-     external font fetch — on a slow or air-gapped host the old blocking <link>
-     stalled rendering for the whole round-trip to fonts.googleapis.com. -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
+<!-- No web fonts, no CDNs: a loopback security dashboard must never reach the
+     internet to render. Typography uses the --font-ui system stack (Inter if
+     the host happens to have it installed, else the native UI font). The only
+     external script — Cloudflare Turnstile — is lazy-loaded on demand, and
+     only on the enroll/sign-in flow that already talks to the backend (see
+     renderTurnstileWidgets); every other page stays fully offline. -->
 <link rel="stylesheet" href="/static/tabulator.min.css">
 <link rel="stylesheet" href="/static/style.css?v=1.0.6">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 <a class="skip-link" href="#content">Skip to main content</a>
@@ -355,7 +351,27 @@ function attachCopyBar(host, instance) {
   instance.on('rowSelectionChanged', render);
 }
 function renderTurnstileWidgets(root) {
+  var scope = root || document;
+  var widgets = scope.querySelectorAll('.cf-turnstile');
+  if (!widgets.length) {
+    // No captcha on this page — never touch the internet. Only the enroll /
+    // sign-in flow renders a .cf-turnstile widget, so machines, software,
+    // observability, etc. load zero external scripts.
+    return;
+  }
   if (!window.turnstile) {
+    // Lazy-load Cloudflare Turnstile the first time a widget actually appears.
+    // Turnstile is a remote challenge that inherently needs the network, and
+    // it only ever shows up on the sign-in flow, which is already online.
+    if (!document.getElementById('cf-turnstile-script')) {
+      var s = document.createElement('script');
+      s.id = 'cf-turnstile-script';
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      s.async = true;
+      s.defer = true;
+      s.onload = function() { renderTurnstileWidgets(root); };
+      document.head.appendChild(s);
+    }
     return;
   }
   if (typeof turnstile.implicitRender === 'function') {
@@ -365,8 +381,7 @@ function renderTurnstileWidgets(root) {
   if (typeof turnstile.render !== 'function') {
     return;
   }
-  var scope = root || document;
-  scope.querySelectorAll('.cf-turnstile').forEach(function(el) {
+  widgets.forEach(function(el) {
     if (el.dataset.turnstileRendered === '1' || el.querySelector('iframe')) {
       return;
     }
