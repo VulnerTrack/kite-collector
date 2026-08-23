@@ -73,9 +73,26 @@ discovery:
       enabled: false
       # scope:
       #   - 192.168.1.0/24
-      tcp_ports: [22, 80, 443, 3389, 8080, 8443]
+      # Data-service ports (3306 MySQL, 5432 Postgres, 6379 Redis, 27017
+      # Mongo) are included so an exposed database is fingerprinted to its
+      # exact version (e.g. MySQL 8.4.3) and recorded as installed software.
+      # Non-exposed internal services still require the on-host agent source.
+      tcp_ports: [22, 80, 443, 3306, 5432, 6379, 27017, 3389, 8080, 8443]
       timeout: 5s
       max_concurrent: 256
+      # In-scan web stack fingerprint records the web server, framework, and
+      # JS libraries behind open HTTP(S) ports as installed software. On by
+      # default, using only the cheap header/JS/TLS surfaces (one request
+      # each). The two fan-out surfaces below are opt-in:
+      # web_fingerprint_include_api: false    # ~330 endpoint probes/port (/openapi.json, /docs, /actuator, /graphql)
+      # web_fingerprint_include_file: false   # also probe /swagger-ui, /.env, version files (slow)
+      # Version disclosure: on a reachable endpoint, parse an exposed
+      # dependency manifest (composer.lock, package-lock.json, …) into exact
+      # versions — turning "Laravel" into "laravel/framework 11.9.2". A few
+      # harmless GETs; on by default. Uncomment to disable:
+      # web_fingerprint_disable_version_disclosure: true
+      # web_vhosts:                            # retry name-gated HTTPS ports under these SNIs (pinned to the in-scope IP)
+      #   - app.example.com
 
     # Container runtime
     docker:

@@ -106,6 +106,27 @@ type ScannerConfig struct {
 	// each open port to name the service (ssh, redis, postgresql, …) and, when
 	// revealed, its version. Defaults ON.
 	ServiceFingerprint bool
+	// WebFingerprint runs the composite HTTP fingerprinter (TLS + headers +
+	// JS + API) against open web ports and records the named stack
+	// (web server, framework, data layer, …) as installed software.
+	// Defaults ON.
+	WebFingerprint bool
+	// WebFingerprintAPI enables the API surface of the web fingerprinter
+	// (~330 well-known endpoint probes per web port: /openapi.json, /docs,
+	// /actuator/*, /graphql, …). High signal but the heaviest surface, so
+	// it is opt-in; the default sweep uses only header/JS/TLS. Defaults OFF.
+	WebFingerprintAPI bool
+	// WebFingerprintFile also enables the file surface of the web
+	// fingerprinter (60+ well-known path probes, e.g. /swagger-ui/, /.env),
+	// where exact framework versions often leak. Slow; defaults OFF.
+	WebFingerprintFile bool
+	// VHosts are operator-supplied virtual-host names the web fingerprinter
+	// retries a name-gated HTTPS port with, pinned to the in-scope IP.
+	VHosts []string
+	// WebVersionDisclosure probes exposed dependency manifests
+	// (composer.lock, package-lock.json, …) on reachable web endpoints and
+	// records the exact versions as software. Defaults ON.
+	WebVersionDisclosure bool
 }
 
 // parseScannerConfig translates the loose YAML map into a ScannerConfig.
@@ -150,6 +171,21 @@ func parseScannerConfig(cfg map[string]any) ScannerConfig {
 	if sfp, ok := cfg["service_fingerprint"].(bool); ok {
 		out.ServiceFingerprint = sfp
 	}
+	out.WebFingerprint = true
+	if wfp, ok := cfg["web_fingerprint"].(bool); ok {
+		out.WebFingerprint = wfp
+	}
+	if wfa, ok := cfg["web_fingerprint_include_api"].(bool); ok {
+		out.WebFingerprintAPI = wfa
+	}
+	if wff, ok := cfg["web_fingerprint_include_file"].(bool); ok {
+		out.WebFingerprintFile = wff
+	}
+	out.WebVersionDisclosure = true
+	if wvd, ok := cfg["web_fingerprint_version_disclosure"].(bool); ok {
+		out.WebVersionDisclosure = wvd
+	}
+	out.VHosts = toStringSlice(cfg["web_vhosts"])
 	if !out.AllowLinkLocal && safenet.AllowLinkLocalFromEnv() {
 		out.AllowLinkLocal = true
 	}
@@ -310,41 +346,73 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 		go func(ip netip.Addr) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			open, banners := s.probeIP(ctx, ip, parsed.TCPPorts, parsed.Timeout, parsed.InferOS)
+			readBanners := parsed.InferOS || parsed.ServiceFingerprint || parsed.WebFingerprint
+			open, banners := s.probeIP(ctx, ip, parsed.TCPPorts, parsed.Timeout, readBanners)
+			if len(open) == 0 {
+				mu.Lock()
+				probed++
+				mu.Unlock()
+				return
+			}
+
+			// Recognition (service handshakes + web stack fingerprint)
+			// runs OUTSIDE the shared mutex: these are network round-trips
+			// per host, and holding the lock across them would serialise
+			// the whole sweep. Only the append below is guarded.
+			now := time.Now().UTC()
+			ipStr := ip.String()
+			osFamily, architecture, tags := "", "", ""
+			if parsed.InferOS {
+				osFamily, architecture, tags = inferDeploymentMetadata(open, banners)
+			}
+
+			var software []model.InstalledSoftware
+			if svcFP != nil {
+				results := fingerprintServiceResults(ctx, svcFP, ip, open)
+				if labels := servicesTagLabels(results); len(labels) > 0 {
+					tags = withServicesTag(tags, labels)
+				}
+				software = append(software, serviceSoftware(results)...)
+			}
+			if parsed.WebFingerprint {
+				webSW, webSignals := recognizeWebSoftware(ctx, ip, open, webFPConfig{
+					VHosts:            parsed.VHosts,
+					IncludeAPI:        parsed.WebFingerprintAPI,
+					IncludeFile:       parsed.WebFingerprintFile,
+					VersionDisclosure: parsed.WebVersionDisclosure,
+					Timeout:           parsed.Timeout,
+				})
+				software = append(software, webSW...)
+				if len(webSignals) > 0 {
+					tags = withSignalTag(tags, "web_fingerprint", webSignals)
+				}
+			}
+			software = dedupeSoftware(software)
+
+			machine := model.Machine{
+				MachineType:     model.MachineTypeServer,
+				Hostname:        ipStr,
+				DiscoverySource: "network_scan",
+				FirstSeenAt:     now,
+				LastSeenAt:      now,
+				IsAuthorized:    model.AuthorizationUnknown,
+				IsManaged:       model.ManagedUnknown,
+				OSFamily:        osFamily,
+				Architecture:    architecture,
+				Tags:            tags,
+				Software:        software,
+			}
+
 			mu.Lock()
 			probed++
-			if len(open) > 0 {
-				now := time.Now().UTC()
-				ipStr := ip.String()
-				osFamily, architecture, tags := "", "", ""
-				if parsed.InferOS {
-					osFamily, architecture, tags = inferDeploymentMetadata(open, banners)
-				}
-				if svcFP != nil {
-					if services := fingerprintServices(ctx, svcFP, ip, open); len(services) > 0 {
-						tags = withServicesTag(tags, services)
-					}
-				}
-				machines = append(machines, model.Machine{
-					MachineType:     model.MachineTypeServer,
-					Hostname:        ipStr,
-					DiscoverySource: "network_scan",
-					FirstSeenAt:     now,
-					LastSeenAt:      now,
-					IsAuthorized:    model.AuthorizationUnknown,
-					IsManaged:       model.ManagedUnknown,
-					OSFamily:        osFamily,
-					Architecture:    architecture,
-					Tags:            tags,
+			machines = append(machines, machine)
+			for _, p := range open {
+				openPorts = append(openPorts, OpenPort{
+					IPAddress: ipStr,
+					Port:      p,
+					Protocol:  "tcp",
+					ProbeAt:   now,
 				})
-				for _, p := range open {
-					openPorts = append(openPorts, OpenPort{
-						IPAddress: ipStr,
-						Port:      p,
-						Protocol:  "tcp",
-						ProbeAt:   now,
-					})
-				}
 			}
 			mu.Unlock()
 		}(ip)
@@ -552,10 +620,17 @@ func (s *Scanner) probeIP(ctx context.Context, ip netip.Addr, ports []int, timeo
 		if err != nil {
 			continue
 		}
-		if readBanners && port == 22 {
+		if readBanners {
+			// Read the unauthenticated greeting on every open port, not
+			// just SSH: banner-speaking services (SSH, MySQL, FTP, SMTP,
+			// Redis on some builds) reveal a product/version before any
+			// request. HTTP and other request-first services simply send
+			// nothing, so the bounded read returns empty and closes.
 			_ = conn.SetReadDeadline(time.Now().Add(timeout))
 			if raw, readErr := io.ReadAll(io.LimitReader(conn, 512)); readErr == nil || len(raw) > 0 {
-				banners[port] = string(raw)
+				if trimmed := strings.TrimRight(string(raw), "\x00"); trimmed != "" {
+					banners[port] = string(raw)
+				}
 			}
 		}
 		_ = conn.Close()
@@ -623,17 +698,18 @@ func toIntSlice(v any) []int {
 	return out
 }
 
-// fingerprintServices runs the fingerprintx `-sV` recogniser over each open
-// port and returns a stable, human-readable list like
-// ["22/ssh OpenSSH_8.9", "5432/postgresql", "443/http (tls)"]. Unrecognised
-// ports are skipped, and the context is honoured between probes.
-func fingerprintServices(ctx context.Context, fp *servicefp.Fingerprinter, ip netip.Addr, open []int) []string {
+// fingerprintServiceResults runs the fingerprintx `-sV` recogniser over each
+// open port and returns the raw per-port result. Unrecognised ports are
+// omitted, and the context is honoured between probes. Callers derive both
+// the human-readable service tag (servicesTagLabels) and installed-software
+// rows (serviceSoftware) from one probe pass.
+func fingerprintServiceResults(ctx context.Context, fp *servicefp.Fingerprinter, ip netip.Addr, open []int) map[int]servicefp.Result {
 	if fp == nil || len(open) == 0 {
 		return nil
 	}
 	ports := append([]int(nil), open...)
 	sort.Ints(ports)
-	out := make([]string, 0, len(ports))
+	out := make(map[int]servicefp.Result, len(ports))
 	for _, p := range ports {
 		if ctx.Err() != nil {
 			break
@@ -645,6 +721,25 @@ func fingerprintServices(ctx context.Context, fp *servicefp.Fingerprinter, ip ne
 		if !ok || res.Protocol == "" {
 			continue
 		}
+		out[p] = res
+	}
+	return out
+}
+
+// servicesTagLabels renders recognised services as a stable, human-readable
+// list like ["22/ssh OpenSSH_8.9", "5432/postgresql", "443/http (tls)"].
+func servicesTagLabels(results map[int]servicefp.Result) []string {
+	if len(results) == 0 {
+		return nil
+	}
+	ports := make([]int, 0, len(results))
+	for p := range results {
+		ports = append(ports, p)
+	}
+	sort.Ints(ports)
+	out := make([]string, 0, len(ports))
+	for _, p := range ports {
+		res := results[p]
 		label := fmt.Sprintf("%d/%s", p, res.Protocol)
 		if res.Version != "" {
 			label += " " + res.Version
@@ -668,6 +763,24 @@ func withServicesTag(tags string, services []string) string {
 		}
 	}
 	payload["network_scan_services"] = services
+	if b, err := json.Marshal(payload); err == nil {
+		return string(b)
+	}
+	return tags
+}
+
+// withSignalTag merges an arbitrary key/value into the machine's tags JSON,
+// creating a fresh object when tags is empty and leaving the input
+// untouched on a marshal error. Used for web-fingerprint signals such as a
+// TLS-open but name-gated port.
+func withSignalTag(tags, key string, value any) string {
+	payload := map[string]any{}
+	if strings.TrimSpace(tags) != "" {
+		if err := json.Unmarshal([]byte(tags), &payload); err != nil {
+			payload = map[string]any{}
+		}
+	}
+	payload[key] = value
 	if b, err := json.Marshal(payload); err == nil {
 		return string(b)
 	}

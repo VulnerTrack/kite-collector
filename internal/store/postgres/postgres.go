@@ -278,6 +278,31 @@ func (s *PostgresStore) UpsertMachines(ctx context.Context, machines []model.Mac
 			}
 		}
 
+		// machines carrying software overwrite their installed_software
+		// rows (keyed by the PERSISTED id); machines without leave existing
+		// rows untouched, preserving last-known inventory for hosts seen
+		// offline this cycle.
+		if len(machines[i].Software) > 0 {
+			if _, derr := tx.Exec(ctx,
+				`DELETE FROM installed_software WHERE machine_id = $1`, persistedID); derr != nil {
+				return 0, 0, fmt.Errorf("clear software for %s: %w", persistedID, derr)
+			}
+			for _, sw := range machines[i].Software {
+				rowID := sw.ID
+				if rowID == uuid.Nil {
+					rowID = uuid.Must(uuid.NewV7())
+				}
+				if _, serr := tx.Exec(ctx,
+					`INSERT INTO installed_software (`+softwareColumns+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+					rowID, persistedID, sw.SoftwareName, sw.Vendor, sw.Version,
+					nullStr(sw.CPE23), nullStr(sw.PackageManager), nullStr(sw.Architecture),
+					sw.Description, sw.License, sw.Homepage, sw.InstallPath, sw.Depth,
+				); serr != nil {
+					return 0, 0, fmt.Errorf("insert software %s for %s: %w", sw.SoftwareName, persistedID, serr)
+				}
+			}
+		}
+
 		if xmax == 0 {
 			inserted++
 		} else {

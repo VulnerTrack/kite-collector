@@ -265,19 +265,24 @@ type SourceConfig struct {
 	// var (R3). These fields hold env var NAMES — safe to log and persist —
 	// and Validate rejects anything that is not a POSIX env name so a secret
 	// pasted here by mistake can never persist via scan_runs.ScopeConfig (R4).
-	PasswordEnv        string   `mapstructure:"password_env"`
-	TokenEnv           string   `mapstructure:"token_env"`
-	APIKeyEnv          string   `mapstructure:"api_key_env"`
-	ClientSecretEnv    string   `mapstructure:"client_secret_env"`
-	TenantID           string   `mapstructure:"tenant_id"`
-	ClientID           string   `mapstructure:"client_id"`
-	ClientSecret       string   `mapstructure:"client_secret" json:"-"`
-	Table              string   `mapstructure:"table"`
-	SiteID             string   `mapstructure:"site_id"`
-	Regions            []string `mapstructure:"regions"`
-	Paths              []string `mapstructure:"paths"`
-	Scope              []string `mapstructure:"scope"`
-	DomainControllers  []string `mapstructure:"domain_controllers"`
+	PasswordEnv       string   `mapstructure:"password_env"`
+	TokenEnv          string   `mapstructure:"token_env"`
+	APIKeyEnv         string   `mapstructure:"api_key_env"`
+	ClientSecretEnv   string   `mapstructure:"client_secret_env"`
+	TenantID          string   `mapstructure:"tenant_id"`
+	ClientID          string   `mapstructure:"client_id"`
+	ClientSecret      string   `mapstructure:"client_secret" json:"-"`
+	Table             string   `mapstructure:"table"`
+	SiteID            string   `mapstructure:"site_id"`
+	Regions           []string `mapstructure:"regions"`
+	Paths             []string `mapstructure:"paths"`
+	Scope             []string `mapstructure:"scope"`
+	DomainControllers []string `mapstructure:"domain_controllers"`
+	// WebVHosts are virtual-host names the network source retries a
+	// name-gated HTTPS port with (pinned to the in-scope IP), so a stack
+	// behind a reverse proxy that only serves under a domain SNI is still
+	// fingerprinted when reached by raw IP (e.g. a tailnet host).
+	WebVHosts          []string `mapstructure:"web_vhosts"`
 	TCPPorts           []int    `mapstructure:"tcp_ports"`
 	MaxObjects         int      `mapstructure:"max_objects"`
 	MaxConcurrent      int      `mapstructure:"max_concurrent"`
@@ -293,11 +298,24 @@ type SourceConfig struct {
 	Enabled              bool `mapstructure:"enabled"`
 	CollectSoftware      bool `mapstructure:"collect_software"`
 	CollectInterfaces    bool `mapstructure:"collect_interfaces"`
-	TLSSkipVerify        bool `mapstructure:"tls_skip_verify"`
-	CollectUsers         bool `mapstructure:"collect_users"`
-	CollectGroups        bool `mapstructure:"collect_groups"`
-	CollectOUs           bool `mapstructure:"collect_ous"`
-	CollectGPOs          bool `mapstructure:"collect_gpos"`
+	// WebFingerprintIncludeAPI enables the network source's API surface
+	// (~330 well-known endpoint probes per web port: /openapi.json, /docs,
+	// /actuator/*, /graphql, …). High signal but the heaviest surface; the
+	// default sweep uses only header/JS/TLS. Off by default.
+	WebFingerprintIncludeAPI bool `mapstructure:"web_fingerprint_include_api"`
+	// WebFingerprintIncludeFile enables the network source's file surface
+	// (well-known path probes: /swagger-ui/, /.env, version files) where
+	// exact framework versions often leak. Slow; off by default.
+	WebFingerprintIncludeFile bool `mapstructure:"web_fingerprint_include_file"`
+	// WebFingerprintDisableVersionDisclosure turns OFF the version-disclosure
+	// probe (composer.lock, package-lock.json, …). The probe is a handful of
+	// harmless GETs and is ON by default; set this to suppress it.
+	WebFingerprintDisableVersionDisclosure bool `mapstructure:"web_fingerprint_disable_version_disclosure"`
+	TLSSkipVerify                          bool `mapstructure:"tls_skip_verify"`
+	CollectUsers                           bool `mapstructure:"collect_users"`
+	CollectGroups                          bool `mapstructure:"collect_groups"`
+	CollectOUs                             bool `mapstructure:"collect_ous"`
+	CollectGPOs                            bool `mapstructure:"collect_gpos"`
 }
 
 // ClassificationConfig holds authorization and managed-status classification settings.

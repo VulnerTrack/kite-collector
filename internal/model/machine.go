@@ -67,6 +67,18 @@ type Machine struct {
 	// state change) and not hydrated back by machine list queries (the
 	// dashboard reads network_interfaces directly).
 	Interfaces []NetworkInterface `json:"interfaces,omitempty"`
+
+	// Software carries installed-software rows a source learned during
+	// discovery (network service/stack fingerprints, agent package
+	// inventory) from discovery to persistence. Like Interfaces, it is a
+	// transient carry: UpsertMachines replaces the machine's
+	// installed_software rows in the same transaction when this is
+	// non-empty, and leaves them untouched when empty — so a source that
+	// saw a host offline this cycle cannot erase the last-known inventory.
+	// Deliberately excluded from MaterialFingerprint (software churns
+	// without being a material identity change) and not hydrated back by
+	// machine list queries (the dashboard reads installed_software directly).
+	Software []InstalledSoftware `json:"software,omitempty"`
 }
 
 // MaterialFingerprint returns a hex-encoded SHA-256 digest of the machine's

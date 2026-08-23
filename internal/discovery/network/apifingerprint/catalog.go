@@ -396,6 +396,29 @@ func DefaultCatalog() []Signature {
 					ExpectedStatus: []int{200},
 					BodyRegex:      regexp.MustCompile(`"openapi"\s*:\s*"3\.`),
 				},
+				// Swagger-UI / ReDoc documentation pages. FastAPI serves
+				// the interactive docs at /docs (Swagger UI) and /redoc
+				// (ReDoc) by default; many other frameworks mount Swagger
+				// UI at /swagger-ui/. These are HTML, not JSON, so they
+				// match the UI bundle marker rather than an openapi key —
+				// and they live on the (always-on) API surface so a
+				// documented API is not missed when the file surface is
+				// disabled.
+				{
+					Path:           "/docs",
+					ExpectedStatus: []int{200},
+					BodyRegex:      regexp.MustCompile(`(?i)swagger-ui`),
+				},
+				{
+					Path:           "/redoc",
+					ExpectedStatus: []int{200},
+					BodyRegex:      regexp.MustCompile(`(?i)redoc`),
+				},
+				{
+					Path:           "/swagger-ui/",
+					ExpectedStatus: []int{200},
+					BodyRegex:      regexp.MustCompile(`(?i)swagger-ui`),
+				},
 			},
 		},
 

@@ -20,7 +20,7 @@ func TestNewRootCmd_RegistersExpectedCommands(t *testing.T) {
 	}
 	for _, want := range []string{
 		"scan", "agent", "status", "doctor", "stream", "diff", "report",
-		"discover-services", "storage-fingerprint", "web-fingerprint",
+		"discover-services", "storage-fingerprint",
 		"query", "db", "migrate", "dashboard", "version", "error",
 		"enroll", "unenroll", "endpoints", "trust", "check-otlp", "fleet",
 		"install", "uninstall", "service",

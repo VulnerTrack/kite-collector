@@ -396,6 +396,46 @@ func replaceInterfacesTx(ctx context.Context, tx *sql.Tx, m model.Machine) error
 	return nil
 }
 
+// replaceSoftwareTx overwrites the installed_software rows for the machine
+// identified by the upsert conflict key (hostname, machine_type), mirroring
+// replaceInterfacesTx. The persisted machine id can differ from the
+// in-memory one — ON CONFLICT keeps the existing row's id — so it is
+// re-resolved here rather than trusted from the model. Called only when the
+// machine carries software, so an empty inventory never clears prior rows.
+func replaceSoftwareTx(ctx context.Context, tx *sql.Tx, m model.Machine) error {
+	var machineID string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT id FROM machines WHERE hostname = ? AND machine_type = ?`,
+		m.Hostname, string(m.MachineType)).Scan(&machineID); err != nil {
+		return fmt.Errorf("resolve machine id for software: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM installed_software WHERE machine_id = ?`, machineID); err != nil {
+		return fmt.Errorf("clear software for %s: %w", machineID, err)
+	}
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return fmt.Errorf("prepare insert software: %w", err)
+	}
+	defer func() { _ = stmt.Close() }()
+	for i := range m.Software {
+		sw := m.Software[i]
+		rowID := sw.ID
+		if rowID == uuid.Nil {
+			rowID = uuid.Must(uuid.NewV7())
+		}
+		if _, err := stmt.ExecContext(ctx,
+			rowID.String(), machineID, sw.SoftwareName, sw.Vendor, sw.Version,
+			nullStr(sw.CPE23), nullStr(sw.PackageManager), nullStr(sw.Architecture),
+			sw.Description, sw.License, sw.Homepage, sw.InstallPath, sw.Depth,
+		); err != nil {
+			return fmt.Errorf("insert software %s for %s: %w", sw.SoftwareName, machineID, err)
+		}
+	}
+	return nil
+}
+
 // PersistSourceHealth upserts a circuit-breaker health snapshot into the
 // source_health table (created by RFC-0062 but, until RFC-0135, never written).
 // It gives the breaker durable, queryable state across process restarts —
@@ -589,6 +629,17 @@ func (s *SQLiteStore) UpsertMachines(ctx context.Context, machines []model.Machi
 			if len(machines[i].Interfaces) > 0 {
 				if ifaceErr := replaceInterfacesTx(ctx, tx, machines[i]); ifaceErr != nil {
 					return ifaceErr
+				}
+			}
+
+			// Machines that carry software (network stack/service
+			// fingerprints, agent inventory) replace their
+			// installed_software rows in the same transaction; machines
+			// without leave existing rows untouched, so a host seen
+			// offline this cycle keeps its last-known inventory.
+			if len(machines[i].Software) > 0 {
+				if swErr := replaceSoftwareTx(ctx, tx, machines[i]); swErr != nil {
+					return swErr
 				}
 			}
 

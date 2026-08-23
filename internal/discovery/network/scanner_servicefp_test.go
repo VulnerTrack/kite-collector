@@ -26,14 +26,17 @@ func TestFingerprintServices_RecognisesHTTP(t *testing.T) {
 	require.NoError(t, err)
 	ap := netip.MustParseAddrPort(net.JoinHostPort(host, portStr))
 
-	out := fingerprintServices(context.Background(), servicefp.New(2*time.Second), ap.Addr(), []int{int(ap.Port())})
-	require.Len(t, out, 1, "the live HTTP port is recognised")
-	assert.Contains(t, out[0], "/http", "label is <port>/<service>")
+	results := fingerprintServiceResults(context.Background(), servicefp.New(2*time.Second), ap.Addr(), []int{int(ap.Port())})
+	require.Len(t, results, 1, "the live HTTP port is recognised")
+	labels := servicesTagLabels(results)
+	require.Len(t, labels, 1, "one label per recognised service")
+	assert.Contains(t, labels[0], "/http", "label is <port>/<service>")
 }
 
 func TestFingerprintServices_NilOrEmptyIsNil(t *testing.T) {
-	assert.Nil(t, fingerprintServices(context.Background(), nil, netip.MustParseAddr("127.0.0.1"), []int{22}))
-	assert.Nil(t, fingerprintServices(context.Background(), servicefp.New(time.Second), netip.MustParseAddr("127.0.0.1"), nil))
+	assert.Nil(t, fingerprintServiceResults(context.Background(), nil, netip.MustParseAddr("127.0.0.1"), []int{22}))
+	assert.Nil(t, fingerprintServiceResults(context.Background(), servicefp.New(time.Second), netip.MustParseAddr("127.0.0.1"), nil))
+	assert.Nil(t, servicesTagLabels(nil))
 }
 
 func TestWithServicesTag(t *testing.T) {
