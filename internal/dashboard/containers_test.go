@@ -258,7 +258,7 @@ func TestContainersFragment_AtAGlanceStateAndSummary(t *testing.T) {
 	cc.tick(context.Background())
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	body := buf.String()
 
 	assert.Contains(t, body, "<h2>Containers</h2>")
@@ -286,7 +286,7 @@ func TestContainersFragment_DefaultMetricsPopulateAfterTicks(t *testing.T) {
 	cc.tick(context.Background()) // CPU% needs two consecutive samples
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	body := buf.String()
 
 	assert.Contains(t, body, "20.0%", "CPU%% derived from consecutive samples")
@@ -301,7 +301,7 @@ func TestContainersFragment_CustomGraphColumn(t *testing.T) {
 	cc.tick(context.Background())
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), custom, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), custom, nil, false, containerFilter{}))
 	body := buf.String()
 
 	assert.Contains(t, body, "pids_stats.current", "custom column header present")
@@ -316,7 +316,7 @@ func TestContainersFragment_InvalidGraphPathIsExplained(t *testing.T) {
 	cc.markViewed(nil)
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, []string{"bad path"}, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, []string{"bad path"}, false, containerFilter{}))
 	assert.Contains(t, buf.String(), "Ignored invalid stat path")
 }
 
@@ -325,7 +325,7 @@ func TestContainersFragment_UnavailableEngineRendersHint(t *testing.T) {
 	cc.disableMonitor = true
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	body := buf.String()
 	assert.Contains(t, body, "Docker unavailable")
 	assert.Contains(t, body, "KITE_DOCKER_HOST")

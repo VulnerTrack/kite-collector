@@ -458,7 +458,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			dockerHost = src.Host
 		}
 	}
-	registerContainerRoutes(mux, newContainersController(dockerHost, logger), logger)
+	containersCtl := newContainersController(dockerHost, logger)
+	containersCtl.store = st // enables the host asset-status banner
+	registerContainerRoutes(mux, containersCtl, logger)
 	mux.HandleFunc("POST /api/v1/fleet/discover", func(w http.ResponseWriter, r *http.Request) {
 		handleFleetDiscovery(w, r, st, logger, fleetDiscovery)
 	})

@@ -6,7 +6,7 @@ import "html/template"
 // add-metric form, one table per compose project with icon status + metric
 // sparkline columns, and the image inventory. Auto-refreshes like the
 // observability page, with the same pause/resume chip.
-var containersTmpl = template.Must(template.New("containers").Parse(`
+var containersTmpl = template.Must(template.New("containers").Funcs(templateFuncs).Parse(`
 <div id="containers-root"
      class="containers-page"
      hx-get="{{.Freshness.WrapperGetURL}}"
@@ -28,6 +28,7 @@ var containersTmpl = template.Must(template.New("containers").Parse(`
       </div>
     </div>
     <div class="onboarding-mode containers-summary" aria-label="Container environment summary">
+      {{if .HostKnown}}<span class="badge {{authClass .HostAuthorized}}" title="Asset status of the host these containers run on">{{.HostName}} &middot; {{.HostAuthorized}} / {{.HostManaged}}</span>{{end}}
       <span class="badge badge-gray">{{.Total}} total</span>
       <span class="badge badge-green">{{.RunningCount}} running</span>
       {{if .UnhealthyN}}<span class="badge badge-red">{{.UnhealthyN}} unhealthy</span>{{end}}
@@ -69,6 +70,8 @@ var containersTmpl = template.Must(template.New("containers").Parse(`
   {{range .InvalidGraphs}}<code>{{.}}</code> {{end}}
   &mdash; use dotted lowercase segments, e.g. <code>memory_stats.stats.pgmajfault</code>.</p>
 {{end}}
+
+{{.FacetRail}}
 
 <form class="containers-graph-form"
       hx-get="/containers" hx-target="#content" hx-push-url="true"

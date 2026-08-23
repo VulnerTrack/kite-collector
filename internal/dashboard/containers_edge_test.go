@@ -164,7 +164,7 @@ func TestContainersFragment_EscapesHostileEngineData(t *testing.T) {
 	cc.disableMonitor = true
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	body := buf.String()
 
 	assert.NotContains(t, body, "<script>alert(1)</script>")
@@ -179,7 +179,7 @@ func TestContainersFragment_InvalidGraphEchoIsEscaped(t *testing.T) {
 
 	var buf strings.Builder
 	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil,
-		[]string{`<script>alert(4)</script>`}, false))
+		[]string{`<script>alert(4)</script>`}, false, containerFilter{}))
 	body := buf.String()
 	assert.NotContains(t, body, "<script>alert(4)</script>")
 	assert.Contains(t, body, "&lt;script&gt;alert(4)&lt;/script&gt;")
@@ -200,7 +200,7 @@ func TestContainersFragment_EmptyEngineRendersZeroState(t *testing.T) {
 	cc.disableMonitor = true
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	body := buf.String()
 	assert.Contains(t, body, "0 total")
 	assert.NotContains(t, body, "Docker unavailable", "an empty engine is available, just idle")
@@ -221,7 +221,7 @@ func TestContainersFragment_LiteralNoneTagsRenderUntagged(t *testing.T) {
 	cc.disableMonitor = true
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	assert.Contains(t, buf.String(), "&lt;untagged&gt;")
 	assert.NotContains(t, buf.String(), "<none>")
 }
@@ -233,7 +233,7 @@ func TestContainersFragment_UnresolvableCustomPathShowsCollecting(t *testing.T) 
 	cc.tick(context.Background())
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), custom, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), custom, nil, false, containerFilter{}))
 	body := buf.String()
 	assert.Contains(t, body, "no_such.metric_anywhere", "column still renders")
 	assert.Contains(t, body, "collecting samples", "cells stay pending, no error")
@@ -255,7 +255,7 @@ func TestContainersFragment_EngineHTTP500SurfacesError(t *testing.T) {
 	cc.disableMonitor = true
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	body := buf.String()
 	assert.Contains(t, body, "Docker unavailable")
 	assert.Contains(t, body, "HTTP 500")
@@ -273,7 +273,7 @@ func TestContainersFragment_MalformedListJSONSurfacesParseError(t *testing.T) {
 	cc.disableMonitor = true
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	assert.Contains(t, buf.String(), "parse containers")
 }
 
@@ -292,7 +292,7 @@ func TestContainersFragment_ImagesFailureDoesNotSinkThePage(t *testing.T) {
 	cc.disableMonitor = true
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	body := buf.String()
 	assert.Contains(t, body, "web", "container table renders")
 	assert.Contains(t, body, "Could not list images")
@@ -415,7 +415,7 @@ func TestContainersFragment_PausedStopsRefreshAndKeepsGraphs(t *testing.T) {
 	custom := []string{"pids_stats.current"}
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), custom, nil, true))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), custom, nil, true, containerFilter{}))
 	body := buf.String()
 
 	assert.NotContains(t, body, "hx-trigger=\"every", "paused fragment must not auto-refresh")
@@ -432,7 +432,7 @@ func TestContainersFragment_LiveWrapperURLCarriesGraphs(t *testing.T) {
 	custom := []string{"pids_stats.current"}
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), custom, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), custom, nil, false, containerFilter{}))
 	body := buf.String()
 
 	assert.Contains(t, body, `hx-trigger="every 10s"`)
@@ -464,7 +464,7 @@ func TestSnapshotJSON_IncludesCustomMetricValues(t *testing.T) {
 	cc.markViewed(custom)
 	cc.tick(context.Background())
 
-	view := cc.buildContainersView(context.Background(), custom, false)
+	view := cc.buildContainersView(context.Background(), custom, false, containerFilter{})
 	body, err := json.Marshal(view)
 	require.NoError(t, err)
 
@@ -521,7 +521,7 @@ func TestContainersFragment_NamelessContainerStillRenders(t *testing.T) {
 	cc.disableMonitor = true
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	assert.Contains(t, buf.String(), "1 total")
 	assert.Contains(t, buf.String(), "created")
 }
@@ -677,7 +677,7 @@ func TestComposeGroups_SortedProjectsStandaloneLast(t *testing.T) {
 
 	cc := newContainersController(srv.URL, nil)
 	cc.disableMonitor = true
-	view := cc.buildContainersView(context.Background(), nil, false)
+	view := cc.buildContainersView(context.Background(), nil, false, containerFilter{})
 
 	require.Len(t, view.Groups, 3)
 	assert.Equal(t, "alpha", view.Groups[0].Project)
@@ -733,7 +733,7 @@ func TestTick_CancelledContextSetsMonitorNote(t *testing.T) {
 	cc.tick(ctx)
 
 	var buf strings.Builder
-	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false))
+	require.NoError(t, cc.renderContainersFragment(&buf, context.Background(), nil, nil, false, containerFilter{}))
 	assert.Contains(t, buf.String(), "Stats monitor:",
 		"the failed poll must be visible on the page")
 }

@@ -36,6 +36,8 @@ import (
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/docker"
+	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
 const (
@@ -105,6 +107,10 @@ type containerSeries struct {
 // containers surface. One instance per dashboard server.
 type containersController struct {
 	logger *slog.Logger
+	// store backs the asset-status banner: it resolves the local host's
+	// authorization/managed state. Optional — nil omits the banner, which is
+	// the case in the container-only unit tests.
+	store store.Store
 	// configuredHost is the docker source host from config ("" = autodetect).
 	configuredHost string
 	// newClient is swappable for tests; production uses docker.NewLiveClient.
@@ -662,6 +668,19 @@ type containersView struct {
 	DetailQuery   string                 `json:"-"` // "?graph=a&graph=b" carried into drawer links
 	SnapshotURL   string                 `json:"-"`
 	InvalidGraphs []string               `json:"-"` // rejected stat paths, echoed as a warning
+
+	// Shown is how many containers survive the active facet filter (== Total
+	// when unfiltered). FacetRail is the pre-rendered in-place facet rail.
+	Shown     int           `json:"shown"`
+	FacetRail template.HTML `json:"-"`
+
+	// Asset status for the host these containers run on. HostKnown is false
+	// when the local asset can't be resolved (no store / no match), and the
+	// banner is omitted.
+	HostKnown      bool                     `json:"-"`
+	HostName       string                   `json:"host_name,omitempty"`
+	HostAuthorized model.AuthorizationState `json:"host_authorized,omitempty"`
+	HostManaged    model.ManagedState       `json:"host_managed,omitempty"`
 }
 
 // containerDetailView is the row-drawer model for one container: full-size
@@ -822,13 +841,22 @@ func parseContainerGraphParams(r *http.Request) (valid []string, invalid []strin
 // buildContainersView assembles the page model: fresh container list from
 // the engine (state is always render-accurate), metric cells from the
 // monitor's ring buffers.
-func (cc *containersController) buildContainersView(ctx context.Context, customPaths []string, paused bool) containersView {
+func (cc *containersController) buildContainersView(ctx context.Context, customPaths []string, paused bool, filter containerFilter) containersView {
 	now := cc.now()
 	view := containersView{
 		GeneratedAt: now.UTC().Format(time.RFC3339),
 		Columns:     activeGraphColumns(customPaths, paused),
 		DetailQuery: graphQueryOnly(customPaths),
 		SnapshotURL: "/api/v1/containers/snapshot.json" + graphQueryOnly(customPaths),
+	}
+
+	// The host these containers run on: its asset status is page-level context
+	// (all live containers share one host), rendered as a banner.
+	if asset, known := resolveLocalAsset(ctx, cc.store); known {
+		view.HostKnown = true
+		view.HostName = asset.Hostname
+		view.HostAuthorized = asset.IsAuthorized
+		view.HostManaged = asset.IsManaged
 	}
 
 	client, host := cc.client()
@@ -850,7 +878,13 @@ func (cc *containersController) buildContainersView(ctx context.Context, customP
 	}
 	cc.mu.Unlock()
 
-	groups := map[string][]containerRowView{}
+	// flatRow keeps each container next to its compose project so facets and
+	// the filter operate on a flat list before it is grouped for display.
+	type flatRow struct {
+		row     containerRowView
+		project string
+	}
+	var all []flatRow
 	projects := map[string]bool{}
 	for _, c := range live {
 		icon, badge, label := containerStateIcon(c.State, c.Health)
@@ -888,10 +922,45 @@ func (cc *containersController) buildContainersView(ctx context.Context, customP
 		if c.ComposeProject != "" {
 			projects[c.ComposeProject] = true
 		}
-		groups[c.ComposeProject] = append(groups[c.ComposeProject], row)
+		all = append(all, flatRow{row: row, project: c.ComposeProject})
 	}
 	view.ProjectCount = len(projects)
 
+	// Facets are computed over every container so all values stay visible;
+	// the grid then narrows to the selected value in place.
+	cols := make([]pageFacetColumn, 5)
+	state := make([]string, len(all))
+	health := make([]string, len(all))
+	project := make([]string, len(all))
+	service := make([]string, len(all))
+	image := make([]string, len(all))
+	for i, f := range all {
+		state[i] = f.row.State
+		health[i] = f.row.Health
+		project[i] = f.project
+		service[i] = f.row.ComposeService
+		image[i] = f.row.Image
+	}
+	cols[0] = pageFacetColumn{Name: "state", Values: state}
+	cols[1] = pageFacetColumn{Name: "health", Values: health}
+	cols[2] = pageFacetColumn{Name: "compose_project", Values: project}
+	cols[3] = pageFacetColumn{Name: "compose_service", Values: service}
+	cols[4] = pageFacetColumn{Name: "image", Values: image}
+
+	facets := buildPageFacets(cols, tableFacetMaxDistinct, tableFacetTopValues, filter.Col, filter.Val, filter.On)
+	kept := pickByIndex(all, pageFacetKeep(cols, filter.Col, filter.Val, filter.On))
+	view.Shown = len(kept)
+	if rail, railErr := renderFacetRail(facetRailView{
+		BasePath: "/containers", Facets: facets, Filtered: filter.On,
+		FilterCol: filter.Col, FilterVal: filter.Val, Shown: len(kept), Total: len(all),
+	}); railErr == nil {
+		view.FacetRail = rail
+	}
+
+	groups := map[string][]containerRowView{}
+	for _, f := range kept {
+		groups[f.project] = append(groups[f.project], f.row)
+	}
 	names := make([]string, 0, len(groups))
 	for name := range groups {
 		names = append(names, name)
@@ -1085,19 +1154,22 @@ func trimLayerInstruction(cmd string) string {
 
 // newContainersFreshness mirrors the observability page's live/paused chip
 // for the containers fragment, preserving the custom graph set in every URL.
-func newContainersFreshness(customPaths []string, paused bool) observabilityFreshness {
+func newContainersFreshness(customPaths []string, paused bool, filter containerFilter) observabilityFreshness {
+	// The active facet filter rides the poll and toggle URLs, so an
+	// auto-refresh or a pause keeps the filtered view instead of snapping
+	// back to every container.
 	fr := observabilityFreshness{
 		Paused:          paused,
 		UpdatedAtUTC:    time.Now().UTC().Format(time.RFC3339),
 		AutoRefreshSecs: containersRefreshSecs,
-		WrapperGetURL:   containersFragmentURL(customPaths, paused),
+		WrapperGetURL:   filter.apply(containersFragmentURL(customPaths, paused)),
 	}
 	if paused {
-		fr.ToggleURL = containersFragmentURL(customPaths, false)
+		fr.ToggleURL = filter.apply(containersFragmentURL(customPaths, false))
 		fr.ToggleLabel = "Resume"
 		fr.ToggleAriaLabel = "Resume container auto-refresh"
 	} else {
-		fr.ToggleURL = containersFragmentURL(customPaths, true)
+		fr.ToggleURL = filter.apply(containersFragmentURL(customPaths, true))
 		fr.ToggleLabel = "Pause"
 		fr.ToggleAriaLabel = "Pause container auto-refresh"
 	}
@@ -1108,10 +1180,10 @@ func newContainersFreshness(customPaths []string, paused bool) observabilityFres
 // Rendering + routes
 // -------------------------------------------------------------------------
 
-func (cc *containersController) renderContainersFragment(w io.Writer, ctx context.Context, customPaths []string, invalid []string, paused bool) error {
+func (cc *containersController) renderContainersFragment(w io.Writer, ctx context.Context, customPaths []string, invalid []string, paused bool, filter containerFilter) error {
 	cc.markViewed(customPaths)
-	view := cc.buildContainersView(ctx, customPaths, paused)
-	view.Freshness = newContainersFreshness(customPaths, paused)
+	view := cc.buildContainersView(ctx, customPaths, paused, filter)
+	view.Freshness = newContainersFreshness(customPaths, paused, filter)
 	view.InvalidGraphs = invalid
 	if err := containersTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("render containers fragment: %w", err)
@@ -1148,8 +1220,10 @@ func registerContainerRoutes(mux *http.ServeMux, cc *containersController, logge
 	mux.HandleFunc("GET /containers", func(w http.ResponseWriter, r *http.Request) {
 		customPaths, invalid := parseContainerGraphParams(r)
 		paused := r.URL.Query().Get("paused") == "1"
+		fcol, fval, filtered := parseFacetFilter(r)
+		filter := newContainerFilter(fcol, fval, filtered)
 		render := func(buf io.Writer, ctx context.Context) error {
-			return cc.renderContainersFragment(buf, ctx, customPaths, invalid, paused)
+			return cc.renderContainersFragment(buf, ctx, customPaths, invalid, paused, filter)
 		}
 		if r.Header.Get("HX-Request") == "true" {
 			renderBufferedFragment(w, logger, "containers", func(buf io.Writer) error {
@@ -1173,8 +1247,10 @@ func registerContainerRoutes(mux *http.ServeMux, cc *containersController, logge
 	mux.HandleFunc("GET /fragments/containers", func(w http.ResponseWriter, r *http.Request) {
 		customPaths, invalid := parseContainerGraphParams(r)
 		paused := r.URL.Query().Get("paused") == "1"
+		fcol, fval, filtered := parseFacetFilter(r)
+		filter := newContainerFilter(fcol, fval, filtered)
 		renderBufferedFragment(w, logger, "containers", func(buf io.Writer) error {
-			return cc.renderContainersFragment(buf, r.Context(), customPaths, invalid, paused)
+			return cc.renderContainersFragment(buf, r.Context(), customPaths, invalid, paused, filter)
 		})
 	})
 
@@ -1195,7 +1271,9 @@ func registerContainerRoutes(mux *http.ServeMux, cc *containersController, logge
 	mux.HandleFunc("GET /api/v1/containers/snapshot.json", func(w http.ResponseWriter, r *http.Request) {
 		customPaths, _ := parseContainerGraphParams(r)
 		cc.markViewed(customPaths)
-		view := cc.buildContainersView(r.Context(), customPaths, false)
+		// The JSON snapshot always returns the full set — filtering is a
+		// display concern for the HTML view, not the machine-readable export.
+		view := cc.buildContainersView(r.Context(), customPaths, false, containerFilter{})
 		body, err := json.MarshalIndent(view, "", "  ")
 		if err != nil {
 			logger.Error("dashboard: containers snapshot marshal failed",
