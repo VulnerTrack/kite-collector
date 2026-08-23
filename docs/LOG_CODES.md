@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 526 codes across 60 packages.
+**Catalog size:** 527 codes across 60 packages.
 
 ---
 
@@ -1017,7 +1017,7 @@ Source: [`internal/discovery/network/logcodes.go`](../internal/discovery/network
 
 ## `osquery` (internal/discovery/osquery)
 
-Source: [`internal/discovery/osquery/logcodes.go`](../internal/discovery/osquery/logcodes.go) · 12 codes
+Source: [`internal/discovery/osquery/logcodes.go`](../internal/discovery/osquery/logcodes.go) · 13 codes
 
 **discover surface — host identity and FIM summary over the extensions socket**
 
@@ -1027,6 +1027,7 @@ Source: [`internal/discovery/osquery/logcodes.go`](../internal/discovery/osquery
 | `osquery.discover.os_version_failed` | `LogCodeDiscoverOSVersionFailed` | os_version query failed; machine emitted with empty OS family/version |
 | `osquery.discover.kernel_info_failed` | `LogCodeDiscoverKernelInfoFailed` | kernel_info query failed; machine emitted without kernel version |
 | `osquery.discover.file_events_failed` | `LogCodeDiscoverFileEventsFailed` | per-scan FIM summary failed — without this, "0 events" and "events subsystem broken" are indistinguishable |
+| `osquery.discover.listening_ports_failed` | `LogCodeDiscoverListeningPortsFailed` | listening_ports query failed; machine emitted without the saved current-ports inventory |
 
 **yara surface — on-demand rule scans and their skip guards**
 

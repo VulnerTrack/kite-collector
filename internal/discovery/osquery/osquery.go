@@ -138,6 +138,16 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 			tags["physical_memory_bytes"] = bytes
 		}
 	}
+
+	// Current listening ports via osquery listening_ports (joined to processes
+	// for the owning program), saved on the machine record. This captures
+	// "what is exposed right now" from osquery — the netstat-based agent
+	// collector is not wired into persistence, so this is how current ports get
+	// saved.
+	if ports := collectListeningPorts(ctx, client); len(ports) > 0 {
+		tags["listening_ports"] = ports
+		tags["listening_port_count"] = len(ports)
+	}
 	// system_info.hostname is the FQDN (getFqdn: gethostname + a DNS
 	// AI_CANONNAME lookup). The Machine.Hostname used for dedup comes from
 	// computer_name (= gethostname) to match the agent probe's os.Hostname,
@@ -578,6 +588,65 @@ func resolveSocket(cfg map[string]any) string {
 // from the operator's own config, so this guards syntax, not trust.
 func sqlEscape(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
+}
+
+// maxListeningPorts bounds how many listening ports are saved on a host so a
+// box with thousands of ephemeral listeners can't bloat the machine record.
+const maxListeningPorts = 512
+
+// collectListeningPorts queries osquery for the host's current TCP/UDP
+// listening ports, joined to the owning process name. Returns nil (not an
+// error) on failure — a missing or wedged listening_ports table must not fail
+// discovery.
+func collectListeningPorts(ctx context.Context, client querier) []map[string]any {
+	rows, err := client.Query(ctx,
+		"SELECT lp.port AS port, lp.protocol AS protocol, lp.address AS address, "+
+			"lp.pid AS pid, p.name AS process "+
+			"FROM listening_ports lp LEFT JOIN processes p ON lp.pid = p.pid "+
+			"WHERE lp.port != '0' ORDER BY CAST(lp.port AS INTEGER);")
+	if err != nil {
+		slog.Warn("osquery: listening_ports failed",
+			"code", string(LogCodeDiscoverListeningPortsFailed), "error", err)
+		return nil
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, r := range rows {
+		if len(out) >= maxListeningPorts {
+			break
+		}
+		// Skip unix-domain / non-network sockets (port 0). The SQL WHERE
+		// filters these too; the Go guard keeps it true regardless of driver.
+		port := atoi(r["port"])
+		if port <= 0 {
+			continue
+		}
+		entry := map[string]any{
+			"port":     port,
+			"protocol": protocolName(r["protocol"]),
+			"address":  r["address"],
+		}
+		if proc := r["process"]; proc != "" {
+			entry["process"] = proc
+		}
+		if pid := atoi(r["pid"]); pid > 0 {
+			entry["pid"] = pid
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+// protocolName maps osquery's numeric IP protocol to a name (6=tcp, 17=udp),
+// passing anything else through unchanged.
+func protocolName(proto string) string {
+	switch proto {
+	case "6":
+		return "tcp"
+	case "17":
+		return "udp"
+	default:
+		return proto
+	}
 }
 
 func first(rows []map[string]string) map[string]string {

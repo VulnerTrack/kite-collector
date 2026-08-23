@@ -12,10 +12,11 @@ type LogCode string
 
 const (
 	// discover surface — host identity and FIM summary over the extensions socket
-	LogCodeDiscoverSystemInfoFailed LogCode = "osquery.discover.system_info_failed" // system_info query failed; machine emitted with empty hostname/hardware identity
-	LogCodeDiscoverOSVersionFailed  LogCode = "osquery.discover.os_version_failed"  // os_version query failed; machine emitted with empty OS family/version
-	LogCodeDiscoverKernelInfoFailed LogCode = "osquery.discover.kernel_info_failed" // kernel_info query failed; machine emitted without kernel version
-	LogCodeDiscoverFileEventsFailed LogCode = "osquery.discover.file_events_failed" // per-scan FIM summary failed — without this, "0 events" and "events subsystem broken" are indistinguishable
+	LogCodeDiscoverSystemInfoFailed     LogCode = "osquery.discover.system_info_failed"     // system_info query failed; machine emitted with empty hostname/hardware identity
+	LogCodeDiscoverOSVersionFailed      LogCode = "osquery.discover.os_version_failed"      // os_version query failed; machine emitted with empty OS family/version
+	LogCodeDiscoverKernelInfoFailed     LogCode = "osquery.discover.kernel_info_failed"     // kernel_info query failed; machine emitted without kernel version
+	LogCodeDiscoverFileEventsFailed     LogCode = "osquery.discover.file_events_failed"     // per-scan FIM summary failed — without this, "0 events" and "events subsystem broken" are indistinguishable
+	LogCodeDiscoverListeningPortsFailed LogCode = "osquery.discover.listening_ports_failed" // listening_ports query failed; machine emitted without the saved current-ports inventory
 
 	// yara surface — on-demand rule scans and their skip guards
 	LogCodeYaraSigfileInvisible   LogCode = "osquery.yara.sigfile_invisible"    // daemon answered the visibility probe but cannot see the rules file (bad path/mount); scan SKIPPED, never reported clean
