@@ -2,15 +2,26 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
 	"io"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
+)
+
+const (
+	// machineMemoryWindow is how far back the machine page charts memory.
+	machineMemoryWindow = 24 * time.Hour
+	// machineMemorySampleCap bounds how many points the sparkline plots.
+	machineMemorySampleCap = 1000
 )
 
 // The machine resource page: a machine is a page, not a drawer. Breadcrumb,
@@ -38,6 +49,16 @@ type machinePageView struct {
 	FindingsCount   int
 	InterfacesCount int64
 	EventsCount     int
+
+	// Memory summary. HasMemory is set when total RAM is known (from the
+	// osquery physical_memory_bytes tag, available before the first sample) or
+	// when the durable time series has points. MemorySpark is the used-percent
+	// sparkline over the last day; empty when there are no samples yet.
+	HasMemory         bool
+	MemoryTotalHuman  string
+	MemoryUsedHuman   string
+	MemoryUsedPercent float64
+	MemorySpark       template.HTML
 
 	// Overview previews (capped at machinePagePreviewLimit).
 	FindingsPreview []model.ConfigFinding
@@ -126,10 +147,68 @@ func renderMachinePageFragment(w io.Writer, ctx context.Context, st store.Store,
 		view.SoftwarePreview = software
 	}
 
+	loadMachineMemory(ctx, st, id, machine, &view)
+
 	if err := machinePageTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("render machine page template: %w", err)
 	}
 	return nil
+}
+
+// loadMachineMemory fills the view's memory summary: total RAM (human-readable)
+// and, when the durable time series has points, the current usage plus a
+// used-percent sparkline over the last day. Best-effort — a store without the
+// memory table, or a machine with no samples yet, simply shows less.
+func loadMachineMemory(ctx context.Context, st store.Store, id uuid.UUID, machine *model.Machine, view *machinePageView) {
+	// Total RAM from the osquery inventory tag is known before the first
+	// sample, so seed it first.
+	if total, ok := physicalMemoryBytesFromTags(machine.Tags); ok && total > 0 {
+		view.HasMemory = true
+		view.MemoryTotalHuman = humanizeBytes(total)
+	}
+
+	ms, ok := st.(store.MemorySampleStore)
+	if !ok {
+		return
+	}
+	samples, err := ms.ListMemorySamples(ctx, id, time.Now().Add(-machineMemoryWindow), machineMemorySampleCap)
+	if err != nil || len(samples) == 0 {
+		return
+	}
+
+	latest := samples[len(samples)-1]
+	view.HasMemory = true
+	view.MemoryTotalHuman = humanizeBytes(int64(latest.TotalBytes)) // #nosec G115 -- RAM sizes fit int64
+	view.MemoryUsedHuman = humanizeBytes(int64(latest.UsedBytes))   // #nosec G115
+	view.MemoryUsedPercent = latest.UsedPercent
+
+	pcts := make([]float64, len(samples))
+	for i, s := range samples {
+		pcts[i] = s.UsedPercent
+	}
+	view.MemorySpark = metricSparkSVG(pcts, "memory %", 200, 40)
+}
+
+// physicalMemoryBytesFromTags reads the osquery-collected total RAM out of a
+// machine's tags JSON. The value may be a JSON number or a stringified integer
+// depending on how the tag was written.
+func physicalMemoryBytesFromTags(tagsJSON string) (int64, bool) {
+	if strings.TrimSpace(tagsJSON) == "" {
+		return 0, false
+	}
+	var tags map[string]any
+	if err := json.Unmarshal([]byte(tagsJSON), &tags); err != nil {
+		return 0, false
+	}
+	switch v := tags["physical_memory_bytes"].(type) {
+	case float64:
+		return int64(v), true
+	case string:
+		if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil {
+			return n, true
+		}
+	}
+	return 0, false
 }
 
 const machinePageTemplate = `<div class="machine-breadcrumb">
@@ -175,6 +254,21 @@ const machinePageTemplate = `<div class="machine-breadcrumb">
       </tbody>
     </table>
   </section>
+
+  {{if .HasMemory}}
+  <section class="card machine-card">
+    <h3>Memory</h3>
+    <div class="machine-mem">
+      <div class="machine-mem-figures">
+        {{if .MemoryUsedHuman}}<div class="machine-mem-primary">{{.MemoryUsedHuman}} <span class="muted">/ {{.MemoryTotalHuman}}</span></div>
+        <div class="muted small">{{printf "%.0f%%" .MemoryUsedPercent}} used &middot; last 24h</div>
+        {{else}}<div class="machine-mem-primary">{{.MemoryTotalHuman}}</div>
+        <div class="muted small">total RAM &middot; collecting usage&hellip;</div>{{end}}
+      </div>
+      {{if .MemorySpark}}<div class="machine-mem-spark" title="memory usage, last 24h">{{.MemorySpark}}</div>{{end}}
+    </div>
+  </section>
+  {{end}}
 
   <section class="card machine-card">
     <div class="machine-card-head">

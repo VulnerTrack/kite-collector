@@ -3925,3 +3925,9 @@ details.sidenav-alltables .sidenav-tables {
   margin-left: 36px;
 }
 .onb-ready #onb-scan-status { margin: 10px 0 0 36px; }
+
+/* Machine page — memory card: figures on the left, usage sparkline on the right. */
+.machine-mem { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.machine-mem-primary { font-size: 1.35rem; font-weight: 600; line-height: 1.2; }
+.machine-mem-spark { color: #3b82f6; }
+.machine-mem-spark .metric-spark { width: 200px; height: 40px; }
