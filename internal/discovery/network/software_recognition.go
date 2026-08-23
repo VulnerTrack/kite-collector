@@ -265,7 +265,7 @@ func pinnedDialClient(ip netip.Addr, port int, sni string, timeout time.Duration
 		},
 		TLSClientConfig: &tls.Config{
 			ServerName:         sni,
-			InsecureSkipVerify: true, //nolint:gosec // read-only stack fingerprint; cert trust is not the goal
+			InsecureSkipVerify: true, // #nosec G402 -- read-only stack fingerprint of an arbitrary host; cert trust is not the goal
 			MinVersion:         tls.VersionTLS12,
 		},
 		TLSHandshakeTimeout:   timeout,
