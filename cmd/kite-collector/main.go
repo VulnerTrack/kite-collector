@@ -72,6 +72,7 @@ import (
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
+	memoryseries "github.com/vulnertrack/kite-collector/internal/memoryseries"
 	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/osutil"
@@ -1575,6 +1576,26 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		hostMetricsTicks = hostMetricsTicker.C
 	}
 
+	// Local RAM time series (RFC-0157's durable counterpart): sample memory on
+	// its own ticker and persist it to the store, independent of OTLP. On by
+	// default; the store must support MemorySampleStore (SQLite does, Postgres
+	// may not) or the ticker stays nil and the arm is never selected.
+	var memSampleTicks <-chan time.Time
+	var memSampleBusy atomic.Bool
+	var memSampler *memoryseries.Sampler
+	if cfg.MemoryHistoryEnabled() {
+		if sampler, ok := memoryseries.New(st, nil, cfg.MemoryRetention(), nil); ok {
+			memSampler = sampler
+			memSampleTicker := time.NewTicker(cfg.MemorySampleInterval())
+			defer memSampleTicker.Stop()
+			memSampleTicks = memSampleTicker.C
+			slog.Info("memory time series enabled",
+				"code", string(LogCodeMemorySeriesConfigured),
+				"interval", cfg.MemorySampleInterval().String(),
+				"retention", cfg.MemoryRetention().String())
+		}
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1636,6 +1657,20 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				go func() {
 					defer hostMetricsBusy.Store(false)
 					emitHostMetrics(ctx, metricsEmitter, streamCtrl.Enabled())
+				}()
+			}
+		case <-memSampleTicks:
+			// Same off-loop, drop-on-busy discipline as host metrics: a slow
+			// gopsutil read must never delay a discovery scan, and one skipped
+			// memory sample is harmless.
+			if memSampler != nil && memSampleBusy.CompareAndSwap(false, true) {
+				go func() {
+					defer memSampleBusy.Store(false)
+					if err := memSampler.SampleOnce(ctx); err != nil {
+						slog.Warn("memory sample failed",
+							"code", string(LogCodeMemorySeriesSampleFailed),
+							"error", err)
+					}
 				}()
 			}
 		}

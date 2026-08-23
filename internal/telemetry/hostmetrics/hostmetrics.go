@@ -204,6 +204,14 @@ func Collect(ctx context.Context) (Snapshot, error) {
 	return New().Collect(ctx)
 }
 
+// Memory returns the current memory statistics from the default gopsutil
+// source, without building a full Snapshot. It is the raw MemStat the durable
+// memory time series records (Total/Used/UsedPercent), which Snapshot itself
+// projects away into gauge samples.
+func Memory(ctx context.Context) (MemStat, error) {
+	return gopsutilSource{}.Memory(ctx)
+}
+
 // Collect probes every source once. Per-source failures are collected into
 // Snapshot.Failures rather than aborting; only a total failure (no sample
 // from any source) returns ErrNoSamples.

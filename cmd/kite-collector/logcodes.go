@@ -44,6 +44,8 @@ const (
 	LogCodeHostMetricsCollectFailed   LogCode = "agent.host_metrics.collect_failed"
 	LogCodeHostMetricsCollectDegraded LogCode = "agent.host_metrics.collect_degraded"
 	LogCodeHostMetricsEmitFailed      LogCode = "agent.host_metrics.emit_failed"
+	LogCodeMemorySeriesConfigured     LogCode = "agent.memory_series.configured"
+	LogCodeMemorySeriesSampleFailed   LogCode = "agent.memory_series.sample_failed"
 
 	// api surface — REST API server lifecycle
 	LogCodeAPIStarting     LogCode = "agent.api.starting"
