@@ -79,9 +79,11 @@ func TestSampler_SampleOnce_PrunesRetentionWindow(t *testing.T) {
 	// An old sample (100 days ago) must be pruned; a recent one (10 days ago)
 	// must survive alongside the freshly-sampled point.
 	require.NoError(t, st.InsertMemorySample(ctx, model.MemorySample{
-		MachineID: id, SampledAt: fixedNow.AddDate(0, 0, -100), TotalBytes: 1, UsedBytes: 1, UsedPercent: 1}))
+		MachineID: id, SampledAt: fixedNow.AddDate(0, 0, -100), TotalBytes: 1, UsedBytes: 1, UsedPercent: 1,
+	}))
 	require.NoError(t, st.InsertMemorySample(ctx, model.MemorySample{
-		MachineID: id, SampledAt: fixedNow.AddDate(0, 0, -10), TotalBytes: 1, UsedBytes: 1, UsedPercent: 1}))
+		MachineID: id, SampledAt: fixedNow.AddDate(0, 0, -10), TotalBytes: 1, UsedBytes: 1, UsedPercent: 1,
+	}))
 
 	require.NoError(t, s.SampleOnce(ctx))
 

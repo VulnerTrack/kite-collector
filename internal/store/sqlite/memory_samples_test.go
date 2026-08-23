@@ -42,7 +42,7 @@ func TestMemorySamples_RoundTripAndOrder(t *testing.T) {
 			MachineID:   machineID,
 			SampledAt:   base.Add(time.Duration(off) * time.Minute),
 			TotalBytes:  128 * 1024 * 1024 * 1024,
-			UsedBytes:   uint64(off+1) * 1024 * 1024 * 1024,
+			UsedBytes:   uint64(off+1) * 1024 * 1024 * 1024, // #nosec G115 -- small loop index
 			UsedPercent: float64(off + 1),
 		}))
 	}

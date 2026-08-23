@@ -28,7 +28,11 @@ type MemReader func(context.Context) (hostmetrics.MemStat, error)
 
 // DefaultMemReader reads memory via the standard gopsutil-backed source.
 func DefaultMemReader(ctx context.Context) (hostmetrics.MemStat, error) {
-	return hostmetrics.Memory(ctx)
+	m, err := hostmetrics.Memory(ctx)
+	if err != nil {
+		return m, fmt.Errorf("hostmetrics memory: %w", err)
+	}
+	return m, nil
 }
 
 // Sampler collects and stores one memory sample per tick for the local machine.
