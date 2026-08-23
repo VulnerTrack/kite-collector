@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vulnertrack/kite-collector/internal/discovery"
+	"github.com/vulnertrack/kite-collector/internal/discovery/network/servicefp"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
@@ -101,6 +102,10 @@ type ScannerConfig struct {
 	ScanTimeout    time.Duration
 	AllowLinkLocal bool
 	InferOS        bool
+	// ServiceFingerprint runs the fingerprintx `-sV`-style recogniser against
+	// each open port to name the service (ssh, redis, postgresql, …) and, when
+	// revealed, its version. Defaults ON.
+	ServiceFingerprint bool
 }
 
 // parseScannerConfig translates the loose YAML map into a ScannerConfig.
@@ -140,6 +145,10 @@ func parseScannerConfig(cfg map[string]any) ScannerConfig {
 	}
 	if infer, ok := cfg["infer_os"].(bool); ok {
 		out.InferOS = infer
+	}
+	out.ServiceFingerprint = true
+	if sfp, ok := cfg["service_fingerprint"].(bool); ok {
+		out.ServiceFingerprint = sfp
 	}
 	if !out.AllowLinkLocal && safenet.AllowLinkLocalFromEnv() {
 		out.AllowLinkLocal = true
@@ -278,6 +287,11 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 		"max_concurrent", parsed.MaxConcurrent,
 	)
 
+	var svcFP *servicefp.Fingerprinter
+	if parsed.ServiceFingerprint {
+		svcFP = servicefp.New(parsed.Timeout)
+	}
+
 	sem := make(chan struct{}, parsed.MaxConcurrent)
 	var (
 		mu        sync.Mutex
@@ -305,6 +319,11 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 				osFamily, architecture, tags := "", "", ""
 				if parsed.InferOS {
 					osFamily, architecture, tags = inferDeploymentMetadata(open, banners)
+				}
+				if svcFP != nil {
+					if services := fingerprintServices(ctx, svcFP, ip, open); len(services) > 0 {
+						tags = withServicesTag(tags, services)
+					}
 				}
 				machines = append(machines, model.Machine{
 					MachineType:     model.MachineTypeServer,
@@ -602,6 +621,57 @@ func toIntSlice(v any) []int {
 		}
 	}
 	return out
+}
+
+// fingerprintServices runs the fingerprintx `-sV` recogniser over each open
+// port and returns a stable, human-readable list like
+// ["22/ssh OpenSSH_8.9", "5432/postgresql", "443/http (tls)"]. Unrecognised
+// ports are skipped, and the context is honoured between probes.
+func fingerprintServices(ctx context.Context, fp *servicefp.Fingerprinter, ip netip.Addr, open []int) []string {
+	if fp == nil || len(open) == 0 {
+		return nil
+	}
+	ports := append([]int(nil), open...)
+	sort.Ints(ports)
+	out := make([]string, 0, len(ports))
+	for _, p := range ports {
+		if ctx.Err() != nil {
+			break
+		}
+		if p < 0 || p > 65535 {
+			continue
+		}
+		res, ok := fp.Identify(ctx, ip, uint16(p)) // #nosec G115 -- range-checked above
+		if !ok || res.Protocol == "" {
+			continue
+		}
+		label := fmt.Sprintf("%d/%s", p, res.Protocol)
+		if res.Version != "" {
+			label += " " + res.Version
+		}
+		if res.TLS {
+			label += " (tls)"
+		}
+		out = append(out, label)
+	}
+	return out
+}
+
+// withServicesTag merges the recognised services into the machine's tags JSON
+// under "network_scan_services", creating a fresh object when tags is empty and
+// leaving the input untouched on a marshal error.
+func withServicesTag(tags string, services []string) string {
+	payload := map[string]any{}
+	if strings.TrimSpace(tags) != "" {
+		if err := json.Unmarshal([]byte(tags), &payload); err != nil {
+			payload = map[string]any{}
+		}
+	}
+	payload["network_scan_services"] = services
+	if b, err := json.Marshal(payload); err == nil {
+		return string(b)
+	}
+	return tags
 }
 
 // scopeHash returns the SHA-256 hex of the canonical-JSON-encoded config.
