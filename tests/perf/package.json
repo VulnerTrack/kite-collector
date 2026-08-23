@@ -1,0 +1,12 @@
+{
+  "name": "kite-dashboard-perf",
+  "private": true,
+  "type": "module",
+  "description": "Offline browser render/behavior check for the kite-collector dashboard",
+  "scripts": {
+    "test": "node machines-render.test.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}
