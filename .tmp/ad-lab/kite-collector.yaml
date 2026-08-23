@@ -1,0 +1,26 @@
+log_level: debug
+data_dir: ./.tmp/ad-lab
+
+identity:
+  data_dir: ./.tmp/ad-lab/identity
+  key_backend: file
+
+discovery:
+  sources:
+    agent:
+      enabled: false
+    vpn:
+      enabled: false
+    ldap:
+      enabled: true
+      tls_mode: none
+      base_dn: DC=kite,DC=lab
+      bind_dn: Administrator@KITE.LAB
+      bind_password_env: KITE_LDAP_BIND_PASSWORD
+      domain_controllers:
+        - 127.0.0.1:1389
+
+audit:
+  enabled: true
+  ldap:
+    enabled: true

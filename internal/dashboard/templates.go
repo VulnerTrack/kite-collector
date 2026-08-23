@@ -225,6 +225,8 @@ func machineDisplayRows(machines []model.Machine, localHostname, localIP string)
 // Authorized/Managed fields carry the asset status through so an operator can
 // see (and facet on) whether a package sits on an authorized, managed host —
 // a package inventory is only actionable next to that context.
+// Dependencies/Dependents are only populated for directory services, whose
+// relationships are listed on the directory_software_relationships view.
 type softwareRow struct {
 	Hostname       string
 	SoftwareName   string
@@ -234,6 +236,8 @@ type softwareRow struct {
 	License        string
 	Authorized     model.AuthorizationState
 	Managed        model.ManagedState
+	Dependencies   string
+	Dependents     string
 }
 
 // renderSoftwareFragment renders the software table as an HTML fragment.
@@ -268,6 +272,32 @@ func renderSoftwareFragment(w io.Writer, ctx context.Context, st store.Store, rc
 		}
 		if len(rows) >= 500 {
 			break
+		}
+	}
+	if directoryStore, ok := st.(store.DirectorySoftwareStore); ok {
+		directorySoftware, listErr := directoryStore.ListDirectorySoftware(ctx)
+		if listErr == nil {
+			byMachineID := make(map[string]model.Machine, len(machines))
+			for _, machine := range machines {
+				byMachineID[machine.ID.String()] = machine
+			}
+			for _, service := range directorySoftware {
+				machine, exists := byMachineID[service.MachineID.String()]
+				if !exists {
+					continue
+				}
+				rows = append(rows, softwareRow{
+					Hostname:       machine.Hostname,
+					SoftwareName:   "Active Directory Domain Services",
+					Version:        service.Version,
+					PackageManager: "ldap",
+					License:        service.DomainDNSName,
+					Authorized:     machine.IsAuthorized,
+					Managed:        machine.IsManaged,
+					Dependencies:   service.Dependencies,
+					Dependents:     service.Dependents,
+				})
+			}
 		}
 	}
 
@@ -391,6 +421,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}}{{if lt (len .Machines)
 const softwareTemplate = `<h2>Software ({{len .Software}}{{if lt (len .Software) .Total}} of {{.Total}}{{end}})</h2>
 <div class="table-actions">
   <a href="/api/v1/software/export.csv" class="btn">Export CSV</a>
+  <a href="/tables/directory_software_relationships" class="btn btn-outline">Directory service relationships</a>
 </div>
 {{.FacetRail}}
 <div class="data-grid">

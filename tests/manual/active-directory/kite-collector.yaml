@@ -1,0 +1,28 @@
+log_level: debug
+data_dir: /data
+
+identity:
+  data_dir: /data
+  key_backend: file
+
+discovery:
+  sources:
+    agent:
+      enabled: false
+    vpn:
+      enabled: false
+    ldap:
+      enabled: true
+      tls_mode: none
+      base_dn: DC=kite,DC=lab
+      bind_dn: Administrator@KITE.LAB
+      bind_password_env: KITE_LDAP_BIND_PASSWORD
+      page_size: 1000
+      max_objects: 10000
+      domain_controllers:
+        - dc01:389
+
+audit:
+  enabled: true
+  ldap:
+    enabled: true

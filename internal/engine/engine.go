@@ -440,6 +440,15 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		"updated", updated,
 		"total_machines", len(machines))
 
+	// SQLite exposes an optional graph projection for LDAP/Active Directory.
+	// Keep it after the machine upsert so every edge references a durable node;
+	// stores without the extended local schema simply do not implement it.
+	if graphStore, ok := e.store.(store.MachineGraphStore); ok {
+		if graphErr := graphStore.RebuildADMachineGraph(scanCtx); graphErr != nil {
+			slog.Warn("AD machine graph rebuild failed", "error", graphErr, "scan_id", scanID)
+		}
+	}
+
 	// Collect and persist installed software for the agent machine.
 	// Skip if scan deadline already exceeded.
 	var softwareCount, softwareErrors int

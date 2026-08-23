@@ -1,0 +1,94 @@
+name: kite-ad-lab
+
+services:
+  dc01:
+    image: diegogslomp/samba-ad-dc:latest
+    hostname: dc01
+    privileged: true
+    restart: unless-stopped
+    environment:
+      REALM: ${AD_REALM:-KITE.LAB}
+      DOMAIN: ${AD_DOMAIN:-KITE}
+      ADMIN_PASS: ${AD_ADMIN_PASSWORD:?set AD_ADMIN_PASSWORD in .env}
+      DNS_FORWARDER: ${AD_DNS_FORWARDER:-1.1.1.1}
+      BIND_NETWORK_INTERFACES: "false"
+    ports:
+      - "127.0.0.1:1389:389"       # LDAP for kite-collector
+      - "127.0.0.1:1636:636"       # LDAPS (when a lab certificate is configured)
+      - "127.0.0.1:1053:53/tcp"    # AD DNS, optional host-side diagnostics
+      - "127.0.0.1:1053:53/udp"
+      - "127.0.0.1:1088:88/tcp"    # Kerberos, optional host-side diagnostics
+      - "127.0.0.1:1088:88/udp"
+    volumes:
+      - samba_etc:/usr/local/samba/etc
+      - samba_private:/usr/local/samba/private
+      - samba_var:/usr/local/samba/var
+    networks:
+      ad_lab:
+        aliases:
+          - dc01.kite.lab
+
+  collector:
+    profiles: ["collector"]
+    # The named lab volume is created as root; run the disposable test job as
+    # root so it can create the encrypted SQLite database and its identity.
+    user: "0:0"
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+    command:
+      - scan
+      - --config
+      - /lab/kite-collector.yaml
+      - --db
+      - /data/kite-ad-lab.db
+      - --source
+      - ldap
+      - --verbose
+    environment:
+      KITE_LDAP_BIND_PASSWORD: ${AD_ADMIN_PASSWORD:?set AD_ADMIN_PASSWORD in .env}
+    volumes:
+      - ./kite-collector.yaml:/lab/kite-collector.yaml:ro
+      - collector_data:/data
+    depends_on:
+      dc01:
+        condition: service_healthy
+    networks:
+      - ad_lab
+
+  dashboard:
+    profiles: ["dashboard"]
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+    user: "0:0"
+    command:
+      - dashboard
+      - --db
+      - /data/kite-ad-lab.db
+      - --certs-dir
+      - /data
+      - --with-agent=false
+      - --enable-install=false
+      - --addr
+      - 0.0.0.0:19090
+      - --no-browser
+    ports:
+      - "127.0.0.1:19090:19090"
+    volumes:
+      - collector_data:/data
+      # Read-only access lets the local Containers page inspect this Docker
+      # host (including dc01) without granting the dashboard write access.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ad_lab
+
+volumes:
+  samba_etc:
+  samba_private:
+  samba_var:
+  collector_data:
+
+networks:
+  ad_lab:
+    name: kite_ad_lab
