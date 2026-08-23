@@ -54,10 +54,10 @@ func TestHostScopedFragment_JoinsAssetStatus(t *testing.T) {
 		(id, machine_id, protocol, bind_address, port, exposure, process_name, username, last_seen_at, collected_at)
 		VALUES (?,?,?,?,?,?,?,?,?,?)`
 	ts := now.Format(time.RFC3339)
-	_, err = db.Exec(insert, uuid.Must(uuid.NewV7()).String(), authorized.ID.String(),
+	_, err = db.ExecContext(ctx, insert, uuid.Must(uuid.NewV7()).String(), authorized.ID.String(),
 		"tcp", "127.0.0.1", 22, "loopback", "sshd", "root", ts, ts)
 	require.NoError(t, err)
-	_, err = db.Exec(insert, uuid.Must(uuid.NewV7()).String(), rogue.ID.String(),
+	_, err = db.ExecContext(ctx, insert, uuid.Must(uuid.NewV7()).String(), rogue.ID.String(),
 		"tcp", "0.0.0.0", 8000, "internet", "python", "app", ts, ts)
 	require.NoError(t, err)
 

@@ -41,8 +41,12 @@ var (
 	listenersPageSpec = hostTableSpec{
 		Table: "host_listeners", Title: "Listeners", BasePath: "/listeners",
 		Display: []hostTableColumn{
-			{"protocol", "Protocol"}, {"bind_address", "Bind address"}, {"port", "Port"},
-			{"exposure", "Exposure"}, {"process_name", "Process"}, {"username", "User"},
+			{"protocol", "Protocol"},
+			{"bind_address", "Bind address"},
+			{"port", "Port"},
+			{"exposure", "Exposure"},
+			{"process_name", "Process"},
+			{"username", "User"},
 			{"last_seen_at", "Last Seen"},
 		},
 		FacetCols: []string{"protocol", "exposure", "process_name", "username"},
@@ -50,9 +54,14 @@ var (
 	volumesPageSpec = hostTableSpec{
 		Table: "host_volumes", Title: "Volumes", BasePath: "/volumes",
 		Display: []hostTableColumn{
-			{"mount_point", "Mount"}, {"device", "Device"}, {"filesystem", "FS"},
-			{"size_bytes", "Size"}, {"read_only", "Read-only"}, {"removable", "Removable"},
-			{"encryption_state", "Encryption"}, {"last_seen_at", "Last Seen"},
+			{"mount_point", "Mount"},
+			{"device", "Device"},
+			{"filesystem", "FS"},
+			{"size_bytes", "Size"},
+			{"read_only", "Read-only"},
+			{"removable", "Removable"},
+			{"encryption_state", "Encryption"},
+			{"last_seen_at", "Last Seen"},
 		},
 		FacetCols: []string{"filesystem", "read_only", "removable", "bootable", "encryption_state"},
 	}

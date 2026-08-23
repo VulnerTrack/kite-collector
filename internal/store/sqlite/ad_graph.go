@@ -17,8 +17,10 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
 )
 
-var _ store.MachineGraphStore = (*SQLiteStore)(nil)
-var _ store.DirectorySoftwareStore = (*SQLiteStore)(nil)
+var (
+	_ store.MachineGraphStore      = (*SQLiteStore)(nil)
+	_ store.DirectorySoftwareStore = (*SQLiteStore)(nil)
+)
 
 // RebuildADMachineGraph materializes an auditable graph from AD machine
 // discovery. The graph deliberately uses the collector's normalized machine

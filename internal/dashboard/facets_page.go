@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"net/url"
 	"sort"
@@ -158,7 +159,7 @@ func renderFacetRail(v facetRailView) (template.HTML, error) {
 	}
 	var buf bytes.Buffer
 	if err := facetRailTmpl.Execute(&buf, v); err != nil {
-		return "", err
+		return "", fmt.Errorf("render facet rail: %w", err)
 	}
 	// #nosec G203 -- every dynamic value below is emitted through html/template
 	// auto-escaping or url.QueryEscape; the assembled fragment is trusted.
