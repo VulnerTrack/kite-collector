@@ -18,8 +18,12 @@ func TestDiscover_SavesListeningPortsFromOsquery(t *testing.T) {
 		{"port": "0", "protocol": "6", "address": "", "pid": "0", "process": ""}, // unix socket → dropped
 	}
 
-	src := &Source{newClient: func(string) querier { return stub }}
-	machines, err := src.Discover(context.Background(), map[string]any{})
+	// sourceWith supplies an explicit socket in the cfg so socket
+	// auto-detection never runs — the stub client answers every query
+	// regardless of whether a real osqueryd socket exists on the host
+	// (it does not in CI).
+	src, cfg := sourceWith(stub)
+	machines, err := src.Discover(context.Background(), cfg)
 	require.NoError(t, err)
 	require.NotEmpty(t, machines)
 
