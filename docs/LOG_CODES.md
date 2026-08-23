@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 527 codes across 60 packages.
+**Catalog size:** 529 codes across 60 packages.
 
 ---
 
@@ -94,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 37 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 39 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -135,6 +135,8 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.host_metrics.emit_failed` | `LogCodeHostMetricsEmitFailed` | — |
 | `agent.memory_series.configured` | `LogCodeMemorySeriesConfigured` | — |
 | `agent.memory_series.sample_failed` | `LogCodeMemorySeriesSampleFailed` | — |
+| `agent.host_listeners.configured` | `LogCodeHostListenersConfigured` | — |
+| `agent.host_listeners.collect_failed` | `LogCodeHostListenersFailed` | — |
 
 **api surface — REST API server lifecycle**
 

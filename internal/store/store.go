@@ -280,6 +280,17 @@ type MemorySampleStore interface {
 	PruneMemorySamplesBefore(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
+// HostListenerStore persists the local host's LISTEN sockets. It is optional so
+// stores without the host_listeners table stay compatible.
+//
+// ReplaceHostListeners is delete-then-insert per machine: a re-scan replaces
+// the machine's listeners atomically so a socket that stopped listening does
+// not linger as a stale row.
+type HostListenerStore interface {
+	ReplaceHostListeners(ctx context.Context, machineID uuid.UUID, listeners []model.HostListener) error
+	ListHostListeners(ctx context.Context, machineID uuid.UUID) ([]model.HostListener, error)
+}
+
 // Store defines the persistence interface for the kite-collector.
 // Implementations must be safe for concurrent use.
 type Store interface {

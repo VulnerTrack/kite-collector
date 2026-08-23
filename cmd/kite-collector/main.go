@@ -57,6 +57,7 @@ import (
 	ldapdisc "github.com/vulnertrack/kite-collector/internal/discovery/ldap"
 	"github.com/vulnertrack/kite-collector/internal/discovery/mdm"
 	"github.com/vulnertrack/kite-collector/internal/discovery/network"
+	"github.com/vulnertrack/kite-collector/internal/discovery/network/servicefp"
 	osquerydisc "github.com/vulnertrack/kite-collector/internal/discovery/osquery"
 	"github.com/vulnertrack/kite-collector/internal/discovery/paas"
 	"github.com/vulnertrack/kite-collector/internal/discovery/proxmox"
@@ -70,6 +71,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/engine"
 	"github.com/vulnertrack/kite-collector/internal/enrollment"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+	hostlisteners "github.com/vulnertrack/kite-collector/internal/hostlisteners"
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	memoryseries "github.com/vulnertrack/kite-collector/internal/memoryseries"
@@ -1541,6 +1543,26 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		"interval", scanInterval.String(),
 		"app_version", version)
 
+	// Local host listeners with default service fingerprinting: enumerate this
+	// host's LISTEN sockets, name each open TCP port's service via fingerprintx,
+	// and save them to host_listeners — refreshed with each scan. Zero-config
+	// (no scan scope needed); only skipped when the store can't persist them.
+	var listenerCollector *hostlisteners.Collector
+	if lc, ok := hostlisteners.New(st, nil, servicefp.New(servicefp.DefaultTimeout), nil); ok {
+		listenerCollector = lc
+		slog.Info("host listeners collection enabled",
+			"code", string(LogCodeHostListenersConfigured))
+	}
+	collectHostListeners := func() {
+		if listenerCollector == nil {
+			return
+		}
+		if err := listenerCollector.CollectAndStore(ctx); err != nil {
+			slog.Warn("host listeners collection failed",
+				"code", string(LogCodeHostListenersFailed), "error", err)
+		}
+	}
+
 	// Run initial scan immediately.
 	if result, scanErr := eng.Run(ctx, cfg); scanErr != nil {
 		slog.Error("initial scan failed at startup",
@@ -1556,6 +1578,9 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			"events_emitted", result.EventsEmitted,
 		)
 	}
+	// Populate host_listeners right after the first scan wrote the local
+	// machine (a no-op if the scan produced no local machine).
+	collectHostListeners()
 
 	ticker := time.NewTicker(scanInterval)
 	defer ticker.Stop()
@@ -1644,6 +1669,9 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 							"error", snapErr)
 					}
 				}
+				// Refresh the host's listeners + service fingerprints alongside
+				// the scan.
+				collectHostListeners()
 			}
 		case <-hostMetricsTicks:
 			// Off the loop goroutine: a hung mount inside gopsutil or a
