@@ -48,7 +48,13 @@ const indexPageTemplate = `<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<!-- Inter loads non-render-blocking: the media="print" swap paints the page
+     immediately with the --font-ui system fallback and swaps Inter in when it
+     arrives. A loopback security dashboard must never block first paint on an
+     external font fetch — on a slow or air-gapped host the old blocking <link>
+     stalled rendering for the whole round-trip to fonts.googleapis.com. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="/static/tabulator.min.css">
 <link rel="stylesheet" href="/static/style.css?v=1.0.6">
 <script src="/static/htmx.min.js"></script>
@@ -189,7 +195,12 @@ function initDataGrids(root) {
     if (!tbl) return;
     host.setAttribute('data-grid-ready', '1');
     var instance = new Tabulator(tbl, {
-      layout: 'fitDataStretch',
+      // fitColumns distributes the container width across columns without
+      // measuring every cell's rendered content. fitDataStretch did a full
+      // content-measurement layout pass — O(rows x cols) reflow — which was
+      // the dominant client-side cost when upgrading a large machines/table
+      // grid on load.
+      layout: 'fitColumns',
       pagination: true,
       paginationSize: 25,
       paginationSizeSelector: [10, 25, 50, 100, 250, true],
