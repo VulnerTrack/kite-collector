@@ -34,6 +34,7 @@ type Config struct {
 	Audit          AuditConfig          `mapstructure:"audit"`
 	Connectivity   ConnectivityConfig   `mapstructure:"connectivity"`
 	Safety         SafetyConfig         `mapstructure:"safety"`
+	MemoryHistory  MemoryHistoryConfig  `mapstructure:"memory_history"`
 }
 
 // ObservabilityConfig groups settings for synthetic-finding observability:
@@ -715,6 +716,16 @@ func (c *Config) StreamingInterval() time.Duration {
 
 // Host-metrics emission cadence bounds (RFC-0157 R8).
 const (
+	// DefaultMemorySampleInterval is the cadence for the local memory
+	// time-series sampler when none is configured.
+	DefaultMemorySampleInterval = 60 * time.Second
+	// MinMemorySampleInterval floors the sampler cadence — sampling RAM faster
+	// than this only grows the table without adding signal.
+	MinMemorySampleInterval = 15 * time.Second
+	// DefaultMemoryRetentionDays is the default retention window for the local
+	// memory time series: samples older than this are pruned by deletion.
+	DefaultMemoryRetentionDays = 90
+
 	// DefaultHostMetricsInterval is the cadence used when none is configured.
 	DefaultHostMetricsInterval = 60 * time.Second
 	// MinHostMetricsInterval is a hard floor, not a suggestion: per-tenant
@@ -748,6 +759,50 @@ func (c *Config) HostMetricsInterval() time.Duration {
 // inert by construction: there is nowhere to send the samples.
 func (c *Config) HostMetricsEnabled() bool {
 	return c.Streaming.OTLP.HostMetrics.Enabled && c.Streaming.OTLP.Endpoint != ""
+}
+
+// MemoryHistoryConfig configures the local, always-on RAM time-series sampler
+// (the durable counterpart to the OTLP host-metrics stream). Enabled is a
+// pointer so an unset config defaults to ON — the feature is meant to work out
+// of the box — while an explicit `enabled: false` still turns it off.
+type MemoryHistoryConfig struct {
+	Enabled       *bool  `mapstructure:"enabled"`
+	Interval      string `mapstructure:"interval"`       // sample cadence, e.g. "60s"
+	RetentionDays int    `mapstructure:"retention_days"` // delete samples older than this many days
+}
+
+// MemoryHistoryEnabled reports whether the local memory sampler runs. It
+// defaults to true (nil pointer) so the time series is collected without any
+// configuration; set memory_history.enabled: false to disable it.
+func (c *Config) MemoryHistoryEnabled() bool {
+	return c.MemoryHistory.Enabled == nil || *c.MemoryHistory.Enabled
+}
+
+// MemorySampleInterval returns the effective sampler cadence, defaulted and
+// floored the same way host metrics are.
+func (c *Config) MemorySampleInterval() time.Duration {
+	raw := c.MemoryHistory.Interval
+	if raw == "" {
+		return DefaultMemorySampleInterval
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return DefaultMemorySampleInterval
+	}
+	if d < MinMemorySampleInterval {
+		return MinMemorySampleInterval
+	}
+	return d
+}
+
+// MemoryRetention returns how long a memory sample is kept before the sampler
+// prunes it. A non-positive configured value falls back to the 90-day default.
+func (c *Config) MemoryRetention() time.Duration {
+	days := c.MemoryHistory.RetentionDays
+	if days <= 0 {
+		days = DefaultMemoryRetentionDays
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 // IsSourceEnabled reports whether the named discovery source exists in the

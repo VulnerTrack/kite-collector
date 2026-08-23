@@ -266,6 +266,20 @@ type DirectorySoftwareStore interface {
 	ListDirectorySoftware(ctx context.Context) ([]DirectorySoftware, error)
 }
 
+// MemorySampleStore persists a per-machine RAM time series in the durable
+// store — the local, always-on counterpart to the optional OTLP host-metrics
+// stream. It is optional so stores without the machine_memory_samples table
+// stay compatible.
+//
+// Retention is by deletion: PruneMemorySamplesBefore drops rows older than a
+// caller-supplied cutoff (the sampler passes now minus the configured window,
+// 90 days by default), which the (machine_id, sampled_at) index makes cheap.
+type MemorySampleStore interface {
+	InsertMemorySample(ctx context.Context, sample model.MemorySample) error
+	ListMemorySamples(ctx context.Context, machineID uuid.UUID, since time.Time, limit int) ([]model.MemorySample, error)
+	PruneMemorySamplesBefore(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
 // Store defines the persistence interface for the kite-collector.
 // Implementations must be safe for concurrent use.
 type Store interface {
