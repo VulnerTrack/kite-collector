@@ -407,7 +407,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}}{{if lt (len .Machines)
       <td><a class="fk-link" href="/machines/{{.ID}}" hx-get="/machines/{{.ID}}" hx-target="#content" hx-push-url="true" onclick="event.stopPropagation();">{{.Hostname}}</a></td>
       <td>{{if .IPAddress}}<span class="machine-address"><strong>{{.IPLabel}}:</strong> <code>{{.IPAddress}}</code></span>{{else}}—{{end}}</td>
       <td>{{.MachineType}}</td>
-      <td>{{.OSFamily}}{{if .OSVersion}} {{.OSVersion}}{{end}}</td>
+      <td>{{.OSFamily}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{if .KernelVersion}} <span class="muted small">&middot; kernel {{.KernelVersion}}</span>{{end}}</td>
       <td><span class="badge {{authClass .IsAuthorized}}">{{.IsAuthorized}}</span></td>
       <td>{{.IsManaged}}</td>
       <td>{{if and (eq .DiscoverySource "agent") $.AgentInstallPath}}<span class="badge badge-blue" title="kite-collector agent installed at {{$.AgentInstallPath}}">agent</span> <code class="small muted">{{$.AgentInstallPath}}</code>{{else}}{{.DiscoverySource}}{{end}}</td>
