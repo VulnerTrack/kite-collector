@@ -743,7 +743,7 @@ jobs:
       - name: Install snapcraft
         run: sudo snap install snapcraft --classic
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: snaps
           path: dist
