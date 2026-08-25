@@ -297,6 +297,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		fcol, fval, filtered := parseFacetFilter(r)
 		return renderSoftwareFragment(w, ctx, st, rc, fcol, fval, filtered)
 	}))
+	mux.HandleFunc("GET /active-directory", serveTabRoute("active-directory", func(w io.Writer, ctx context.Context) error {
+		return renderActiveDirectoryFragment(w, ctx, tableSources)
+	}))
 
 	// Listeners and Volumes are curated host-scoped tabs: each host row joined
 	// to its owning asset's status, with the in-place facet rail. They read

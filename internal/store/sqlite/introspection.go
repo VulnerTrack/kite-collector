@@ -405,12 +405,13 @@ func (s *SQLiteStore) ListRows(ctx context.Context, filter store.RowsFilter) ([]
 		return nil, 0, err
 	}
 
-	total := schema.RowCount
-	if where != "" {
-		countQuery := `SELECT COUNT(*) FROM ` + identQuote(schema.Name) + where // #nosec G202 -- identifiers validated
-		if err := s.db.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
-			return nil, 0, fmt.Errorf("count filtered rows %s: %w", schema.Name, err)
-		}
+	// RowCount is part of the introspection snapshot and can be stale when a
+	// running collector refreshes a table. Count the live table so the pager,
+	// sidebar and directory summary always agree with the rows on screen.
+	var total int64
+	countQuery := `SELECT COUNT(*) FROM ` + identQuote(schema.Name) + where // #nosec G202 -- identifiers validated
+	if err := s.db.QueryRowContext(ctx, countQuery, whereArgs...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count rows %s: %w", schema.Name, err)
 	}
 	return result, total, nil
 }

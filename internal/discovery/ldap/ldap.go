@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	ldapv3 "github.com/go-ldap/ldap/v3"
@@ -70,6 +71,8 @@ type dialFunc func(ctx context.Context, conf *ldapConfig, dc dcEndpoint) (direct
 type LDAP struct {
 	dial dialFunc
 	now  func() time.Time
+	mu   sync.RWMutex
+	inventory model.ADInventory
 }
 
 // New returns a new LDAP discovery source with the production dialer.
@@ -148,9 +151,24 @@ func (l *LDAP) Discover(ctx context.Context, cfg map[string]any) ([]model.Machin
 			break
 		}
 	}
+	inventory, inventoryErr := collectDirectoryInventory(timeoutCtx, conn, conf)
+	if inventoryErr != nil {
+		return nil, fmt.Errorf("ldap: directory inventory: %w", inventoryErr)
+	}
+	l.mu.Lock()
+	l.inventory = inventory
+	l.mu.Unlock()
 
-	slog.Info("ldap: discovery complete", "machines", len(machines), "dc", dc.host)
+	slog.Info("ldap: discovery complete", "machines", len(machines), "users", len(inventory.Users), "groups", len(inventory.Groups), "ous", len(inventory.OUs), "gpos", len(inventory.GPOs), "dc", dc.host)
 	return machines, nil
+}
+
+// Snapshot returns the directory entities collected by the latest successful
+// LDAP scan. The engine persists it only after machine inventory is durable.
+func (l *LDAP) Snapshot() model.ADInventory {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.inventory
 }
 
 // dialAny tries every configured domain controller in order and returns

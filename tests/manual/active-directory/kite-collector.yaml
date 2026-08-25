@@ -13,6 +13,10 @@ discovery:
       enabled: false
     ldap:
       enabled: true
+      collect_users: true
+      collect_groups: true
+      collect_ous: true
+      collect_gpos: true
       tls_mode: none
       base_dn: DC=kite,DC=lab
       bind_dn: Administrator@KITE.LAB
