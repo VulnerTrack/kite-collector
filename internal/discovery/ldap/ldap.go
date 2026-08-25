@@ -69,9 +69,9 @@ type dialFunc func(ctx context.Context, conf *ldapConfig, dc dcEndpoint) (direct
 
 // LDAP implements discovery.Source for Active Directory / LDAP.
 type LDAP struct {
-	dial dialFunc
-	now  func() time.Time
-	mu   sync.RWMutex
+	dial      dialFunc
+	now       func() time.Time
+	mu        sync.RWMutex
 	inventory model.ADInventory
 }
 
