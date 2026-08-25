@@ -51,6 +51,7 @@ func sidebarGroups() []sidebarGroup {
 	return []sidebarGroup{
 		{Title: "Inventory", Entries: []sidebarEntry{
 			{Label: "Machines", Href: "/machines", Tab: "machines", Table: "machines", Count: -1},
+			{Label: "Active Directory", Href: "/active-directory", Tab: "active-directory", Table: "ad_directory_users", Count: -1},
 			{Label: "Software", Href: "/software", Tab: "software", Table: "installed_software", Count: -1},
 			{Label: "Processes", Href: "/tables/host_processes", Table: "host_processes", Count: -1},
 			{Label: "Listeners", Href: "/listeners", Tab: "listeners", Table: "host_listeners", Count: -1},
@@ -199,6 +200,13 @@ func renderSidebarTreeFragment(w io.Writer, ctx context.Context, st store.Store,
 		for ei := range groups[gi].Entries {
 			e := &groups[gi].Entries[ei]
 			if e.Table == "" {
+				continue
+			}
+			// Catalog row counts are a useful cheap default, but they are a
+			// snapshot. Query the live source for the sidebar so a completed
+			// scan is reflected without restarting the dashboard.
+			if _, total, countErr := ts.ListRows(ctx, store.RowsFilter{Table: e.Table, Limit: 1}); countErr == nil {
+				e.Count = total
 				continue
 			}
 			if n, ok := counts[e.Table]; ok {

@@ -28,6 +28,20 @@ services:
         aliases:
           - dc01.kite.lab
 
+  directory_seed:
+    image: diegogslomp/samba-ad-dc:latest
+    restart: "no"
+    environment:
+      ADMIN_PASS: ${AD_ADMIN_PASSWORD:?set AD_ADMIN_PASSWORD in .env}
+    command: ["/bin/bash", "/lab/seed-directory.sh"]
+    volumes:
+      - ./seed-directory.sh:/lab/seed-directory.sh:ro
+    depends_on:
+      dc01:
+        condition: service_healthy
+    networks:
+      - ad_lab
+
   collector:
     profiles: ["collector"]
     # The named lab volume is created as root; run the disposable test job as
@@ -51,8 +65,8 @@ services:
       - ./kite-collector.yaml:/lab/kite-collector.yaml:ro
       - collector_data:/data
     depends_on:
-      dc01:
-        condition: service_healthy
+      directory_seed:
+        condition: service_completed_successfully
     networks:
       - ad_lab
 

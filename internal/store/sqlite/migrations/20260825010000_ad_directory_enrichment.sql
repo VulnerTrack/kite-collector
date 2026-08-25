@@ -1,0 +1,12 @@
+ALTER TABLE ad_directory_users ADD COLUMN department TEXT;
+ALTER TABLE ad_directory_users ADD COLUMN title TEXT;
+ALTER TABLE ad_directory_users ADD COLUMN manager TEXT;
+ALTER TABLE ad_directory_users ADD COLUMN telephone TEXT;
+ALTER TABLE ad_directory_users ADD COLUMN last_logon TEXT;
+ALTER TABLE ad_directory_users ADD COLUMN when_created TEXT;
+ALTER TABLE ad_directory_users ADD COLUMN account_expires TEXT;
+ALTER TABLE ad_directory_users ADD COLUMN password_never_expires INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE ad_directory_users ADD COLUMN password_not_required INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE ad_directory_groups ADD COLUMN description TEXT;
+ALTER TABLE ad_directory_groups ADD COLUMN group_type TEXT;
+ALTER TABLE ad_directory_ous ADD COLUMN description TEXT;

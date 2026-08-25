@@ -266,6 +266,12 @@ type DirectorySoftwareStore interface {
 	ListDirectorySoftware(ctx context.Context) ([]DirectorySoftware, error)
 }
 
+// ADInventoryStore persists the non-machine objects exposed by LDAP/AD.
+// Optional so non-SQLite stores keep the base Store contract unchanged.
+type ADInventoryStore interface {
+	ReplaceADInventory(ctx context.Context, inventory model.ADInventory) error
+}
+
 // MemorySampleStore persists a per-machine RAM time series in the durable
 // store — the local, always-on counterpart to the optional OTLP host-metrics
 // stream. It is optional so stores without the machine_memory_samples table

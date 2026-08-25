@@ -388,6 +388,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}}{{if lt (len .Machines)
 </div>
 {{.FacetRail}}
 <div class="data-grid">
+<div class="table-scroll">
 <table>
   <thead>
     <tr>
@@ -577,6 +578,9 @@ func renderTableFragment(w io.Writer, ctx context.Context, ts store.TableSource,
 		Limit:  limit,
 		Offset: offset,
 	}
+	if primary := directoryDisplayColumn(name); primary != "" {
+		rf.OrderBy = primary
+	}
 	if filtered {
 		rf.WhereColumn = filterCol
 		rf.WhereValue = filterVal
@@ -591,6 +595,7 @@ func renderTableFragment(w io.Writer, ctx context.Context, ts store.TableSource,
 	if facetErr != nil {
 		facets = nil
 	}
+	prioritizeTableColumns(schema, rows, directoryDisplayColumns(name))
 
 	nextOffset := offset + limit
 	if int64(nextOffset) >= total {
@@ -629,6 +634,81 @@ func renderTableFragment(w io.Writer, ctx context.Context, ts store.TableSource,
 		return fmt.Errorf("render table template: %w", err)
 	}
 	return nil
+}
+
+// directoryDisplayColumn chooses the human identifier first in Active
+// Directory grids. Distinguished names remain available, but are implementation
+// identifiers and should not be the first thing an operator has to read.
+func directoryDisplayColumn(table string) string {
+	switch table {
+	case "ad_directory_users", "ad_directory_groups":
+		return "sam_account_name"
+	case "ad_directory_ous":
+		return "name"
+	case "ad_directory_gpos":
+		return "display_name"
+	case "ad_directory_relationships":
+		return "relationship_type"
+	default:
+		return ""
+	}
+}
+
+func directoryDisplayColumns(table string) []string {
+	switch table {
+	case "ad_directory_users":
+		return []string{"display_name", "mail", "sam_account_name", "user_principal_name", "domain_dns_name", "distinguished_name", "object_sid", "enabled", "last_seen_at"}
+	case "ad_directory_groups":
+		return []string{"sam_account_name", "domain_dns_name", "object_sid", "distinguished_name", "last_seen_at"}
+	case "ad_directory_ous":
+		return []string{"name", "domain_dns_name", "gpo_links", "distinguished_name", "last_seen_at"}
+	case "ad_directory_gpos":
+		return []string{"display_name", "guid", "version", "flags", "domain_dns_name", "distinguished_name", "last_seen_at"}
+	case "ad_directory_relationships":
+		return []string{"relationship_type", "source_dn", "target_dn", "domain_dns_name", "last_seen_at"}
+	default:
+		return nil
+	}
+}
+
+func prioritizeTableColumns(schema *store.TableSchema, rows []store.Row, columns []string) {
+	if schema == nil || len(columns) == 0 {
+		return
+	}
+	// Build a complete presentation order rather than repeatedly swapping
+	// positions. This keeps the requested columns in their exact order.
+	ordered := make([]store.ColumnSchema, 0, len(schema.Columns))
+	seen := make(map[string]bool, len(schema.Columns))
+	byName := make(map[string]store.ColumnSchema, len(schema.Columns))
+	for _, col := range schema.Columns {
+		byName[col.Name] = col
+	}
+	for _, name := range columns {
+		if col, ok := byName[name]; ok {
+			ordered = append(ordered, col)
+			seen[name] = true
+		}
+	}
+	for _, col := range schema.Columns {
+		if !seen[col.Name] {
+			ordered = append(ordered, col)
+		}
+	}
+	schema.Columns = ordered
+
+	for ri := range rows {
+		cells := make(map[string]store.ColumnValue, len(rows[ri].Columns))
+		for _, cell := range rows[ri].Columns {
+			cells[cell.Name] = cell
+		}
+		orderedCells := make([]store.ColumnValue, 0, len(rows[ri].Columns))
+		for _, col := range schema.Columns {
+			if cell, ok := cells[col.Name]; ok {
+				orderedCells = append(orderedCells, cell)
+			}
+		}
+		rows[ri].Columns = orderedCells
+	}
 }
 
 // tableSQLText reconstructs the query behind the grid — the same statement
@@ -714,8 +794,11 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
 </div>
 {{end}}
 <div class="table-actions">
-  <a href="/api/v1/tables/{{.Schema.Name}}/export.csv" class="btn">Export CSV</a>
-  <a href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="btn btn-outline">Back to tables</a>
+  <button type="button" class="btn btn-outline" onclick="if (window.history.length &gt; 1) { window.history.back(); } else { window.location.href='/tables'; }">Back</button>
+  <span class="table-actions-right">
+    <a href="/api/v1/tables/{{.Schema.Name}}/export.csv" class="btn">Export CSV</a>
+    <a href="/tables" hx-get="/tables" hx-target="#content" hx-push-url="true" class="btn btn-outline">Back to tables</a>
+  </span>
 </div>
 {{if .Facets}}
 <div class="facet-rail">
@@ -747,6 +830,7 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
   <code class="sql-strip-text" id="table-sql-text">{{.SQLText}}</code>
   <button type="button" class="sql-strip-copy" data-copy-target="table-sql-text" onclick="copyText(this)">Copy</button>
 </div>
+<div class="table-scroll">
 <table>
   <thead>
     <tr>
@@ -774,6 +858,7 @@ const tableTemplate = `<h2>{{.Schema.Name}} <span class="muted">({{.Total}} rows
   {{end}}
   </tbody>
 </table>
+</div>
 <div class="pager">
   {{if ge .PrevOffset 0}}
     <a class="btn btn-outline" href="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}{{.FilterQS}}" hx-get="/tables/{{.Schema.Name}}?limit={{.Limit}}&offset={{.PrevOffset}}{{.FilterQS}}" hx-target="#content" hx-push-url="true">Previous</a>

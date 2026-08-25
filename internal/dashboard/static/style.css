@@ -404,7 +404,7 @@ header.topbar {
   flex-flow: row wrap;
   align-items: center;
   gap: 8px;
-  justify-content: flex-end;
+  justify-content: space-between;
 }
 .topbar-actions #scan-status {
   display: contents;
@@ -456,7 +456,7 @@ header.topbar {
 .kite-auth-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   height: 104px;
   padding: 32px 40px 0;
   margin: 0;
@@ -924,9 +924,20 @@ tr:hover { border-left: 3px solid var(--palette-primary-main); }
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
 }
+.table-actions-right { display: flex; gap: 10px; align-items: center; }
+
+/* Wide inventory schemas must scroll inside their panel, never widen the
+   dashboard document or push the sidebar off-screen. */
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.table-scroll > table { min-width: max-content; }
 
 /* Scan trigger */
 #scan-status { margin-top: 8px; }
@@ -3931,3 +3942,29 @@ details.sidenav-alltables .sidenav-tables {
 .machine-mem-primary { font-size: 1.35rem; font-weight: 600; line-height: 1.2; }
 .machine-mem-spark { color: #3b82f6; }
 .machine-mem-spark .metric-spark { width: 200px; height: 40px; }
+
+/* Active Directory inventory landing page. */
+.ad-directory-overview { max-width: 1180px; }
+.ad-directory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin: 22px 0;
+}
+.ad-directory-card {
+  display: flex;
+  min-height: 154px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  color: inherit;
+  text-decoration: none;
+  border: 1px solid var(--border, #dfe4ea);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  box-shadow: 0 3px 12px rgba(16, 24, 40, .05);
+}
+.ad-directory-card:hover { border-color: var(--palette-primary-main, #ed1c3d); }
+.ad-directory-count { color: var(--palette-primary-main, #ed1c3d); font-size: 1.8rem; font-weight: 800; }
+.ad-directory-card > span:not(.ad-directory-count) { color: var(--text-muted, #667085); font-size: .85rem; }
+.ad-directory-card small { margin-top: auto; color: var(--palette-primary-main, #ed1c3d); font-weight: 700; }

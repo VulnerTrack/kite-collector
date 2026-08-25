@@ -453,6 +453,18 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			slog.Warn("AD machine graph rebuild failed", "error", graphErr, "scan_id", scanID)
 		}
 	}
+	// Persist directory objects separately from endpoints. LDAP owns this
+	// snapshot, while endpoint collectors own hardware and local settings.
+	if ldapSource, ok := e.registry.Get(ldapdisc.SourceName).(interface{ Snapshot() model.ADInventory }); ok {
+		if inventoryStore, supported := e.store.(store.ADInventoryStore); supported {
+			inventory := ldapSource.Snapshot()
+			if inventory.DomainDNSName != "" {
+				if inventoryErr := inventoryStore.ReplaceADInventory(scanCtx, inventory); inventoryErr != nil {
+					slog.Warn("AD directory inventory persistence failed", "error", inventoryErr, "scan_id", scanID)
+				}
+			}
+		}
+	}
 
 	// Collect and persist installed software for the agent machine.
 	// Skip if scan deadline already exceeded.
