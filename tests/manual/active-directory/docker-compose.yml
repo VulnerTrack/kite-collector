@@ -78,19 +78,29 @@ services:
     user: "0:0"
     command:
       - dashboard
+      - --config
+      - /lab/kite-collector.yaml
       - --db
       - /data/kite-ad-lab.db
       - --certs-dir
       - /data
-      - --with-agent=false
+      - --with-agent=true
       - --enable-install=false
       - --addr
       - 0.0.0.0:19090
       - --no-browser
     ports:
-      - "127.0.0.1:19090:19090"
+      # The first-party OAuth client registers this exact loopback callback:
+      # http://127.0.0.1:9090/oauth/callback. Keep the container's internal
+      # lab port while publishing it on the registered host port.
+      - "127.0.0.1:9090:19090"
+    environment:
+      KITE_LDAP_BIND_PASSWORD: ${AD_ADMIN_PASSWORD:?set AD_ADMIN_PASSWORD in .env}
+      KITE_ONBOARDING_BINARY_DIR: /
+      KITE_ONBOARDING_CERTS_DIR: /data
     volumes:
       - collector_data:/data
+      - ./kite-collector.yaml:/lab/kite-collector.yaml:ro
       # Read-only access lets the local Containers page inspect this Docker
       # host (including dc01) without granting the dashboard write access.
       - /var/run/docker.sock:/var/run/docker.sock:ro

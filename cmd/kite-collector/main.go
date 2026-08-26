@@ -1563,20 +1563,33 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		}
 	}
 
-	// Run initial scan immediately.
-	if result, scanErr := eng.Run(ctx, cfg); scanErr != nil {
-		slog.Error("initial scan failed at startup",
-			"code", string(LogCodeScanInitialFailed),
-			"error", scanErr)
+	// A fresh SQLite collector stays empty until onboarding supplies its
+	// directory connection. The onboarding AD step starts the first scan
+	// automatically; already-enrolled installations retain startup scanning.
+	runInitialScan := true
+	if identities, ok := st.(interface {
+		GetEnrolledIdentity(context.Context) (*sqlite.EnrolledIdentity, error)
+	}); ok {
+		_, identityErr := identities.GetEnrolledIdentity(ctx)
+		runInitialScan = identityErr == nil
+	}
+	if runInitialScan {
+		if result, scanErr := eng.Run(ctx, cfg); scanErr != nil {
+			slog.Error("initial scan failed at startup",
+				"code", string(LogCodeScanInitialFailed),
+				"error", scanErr)
+		} else {
+			slog.Info(
+				"initial scan complete",
+				"code", string(LogCodeScanInitialComplete),
+				"total", result.TotalMachines,
+				"new", result.NewMachines,
+				"updated", result.UpdatedMachines,
+				"events_emitted", result.EventsEmitted,
+			)
+		}
 	} else {
-		slog.Info(
-			"initial scan complete",
-			"code", string(LogCodeScanInitialComplete),
-			"total", result.TotalMachines,
-			"new", result.NewMachines,
-			"updated", result.UpdatedMachines,
-			"events_emitted", result.EventsEmitted,
-		)
+		slog.Info("initial scan deferred until collector onboarding completes")
 	}
 	// Populate host_listeners right after the first scan wrote the local
 	// machine (a no-op if the scan produced no local machine).

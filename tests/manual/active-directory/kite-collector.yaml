@@ -8,7 +8,7 @@ identity:
 discovery:
   sources:
     agent:
-      enabled: false
+      enabled: true
     vpn:
       enabled: false
     ldap:

@@ -9,6 +9,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -79,6 +81,21 @@ type streamStateView struct {
 	BacklogDepth int    `json:"backlog_depth"`
 }
 
+// onboardingInstallDefaults lets packaged/container deployments describe
+// where the already-running collector binary and certificate store live.
+// Bare-metal installs keep the OS-aware defaults unchanged.
+func onboardingInstallDefaults() installer.Defaults {
+	d := installer.DetectDefaults()
+	if binaryDir := strings.TrimSpace(os.Getenv("KITE_ONBOARDING_BINARY_DIR")); binaryDir != "" {
+		d.Options.BinaryDir = binaryDir
+	}
+	if certsDir := strings.TrimSpace(os.Getenv("KITE_ONBOARDING_CERTS_DIR")); certsDir != "" {
+		d.Options.CertsDir = certsDir
+		d.Options.DbPath = filepath.Join(certsDir, "kite.db")
+	}
+	return d
+}
+
 // registerAgentInstallRoutes wires the install / state / defaults endpoints
 // onto mux. Called from registerOnboardingRoutes so the install API ships
 // behind the same RFC-0112 feature flag as the rest of onboarding.
@@ -123,7 +140,7 @@ func registerAgentInstallRoutes(mux *http.ServeMux, deps onboardingDeps) {
 // should pre-fill into the install form. The Detected struct is included so
 // the UI can render "we suggested user-mode because you're not root" copy.
 func handleAgentInstallDefaults(w http.ResponseWriter, deps onboardingDeps) {
-	d := installer.DetectDefaults()
+	d := onboardingInstallDefaults()
 	if deps.PlatformEndpoint != "" {
 		d.Options.Endpoint = deps.PlatformEndpoint
 	}
@@ -139,7 +156,7 @@ func handleAgentInstallDefaults(w http.ResponseWriter, deps onboardingDeps) {
 // options. Optional query string overrides (?certs_dir=&binary_dir=&user=)
 // let the UI re-probe after the operator edits the form.
 func handleAgentInstallState(w http.ResponseWriter, deps onboardingDeps) {
-	opts := installer.DetectDefaults().Options
+	opts := onboardingInstallDefaults().Options
 	if deps.PlatformEndpoint != "" {
 		opts.Endpoint = deps.PlatformEndpoint
 	}
@@ -183,7 +200,7 @@ func handleAgentInstall(w http.ResponseWriter, r *http.Request, deps onboardingD
 			CertsDir:  installer.DefaultCertsDir(true),
 		}
 	} else {
-		opts = installer.DetectDefaults().Options
+		opts = onboardingInstallDefaults().Options
 	}
 	if deps.PlatformEndpoint != "" {
 		opts.Endpoint = deps.PlatformEndpoint
@@ -342,7 +359,7 @@ func handleAgentUninstall(w http.ResponseWriter, r *http.Request, deps onboardin
 	}
 	hx := isHXRequest(r)
 
-	opts := installer.DetectDefaults().Options
+	opts := onboardingInstallDefaults().Options
 	if deps.PlatformEndpoint != "" {
 		opts.Endpoint = deps.PlatformEndpoint
 	}
@@ -460,7 +477,7 @@ var uninstallConfirmTmpl = template.Must(template.New("uninstall-confirm").Parse
 // to answer "are we up?" — composing install, identity, check stamps, and
 // streaming health into one round-trip.
 func handleAgentState(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
-	opts := installer.DetectDefaults().Options
+	opts := onboardingInstallDefaults().Options
 	if deps.PlatformEndpoint != "" {
 		opts.Endpoint = deps.PlatformEndpoint
 	}
@@ -732,7 +749,7 @@ var installStatusFragmentTmpl = template.Must(template.New("install-status").Fun
 // the buffered fragment writer rolls back the partial response per the
 // existing onboarding pattern.
 func renderInstallStatusFragment(w io.Writer, deps onboardingDeps) error {
-	d := installer.DetectDefaults()
+	d := onboardingInstallDefaults()
 	if deps.PlatformEndpoint != "" {
 		d.Options.Endpoint = deps.PlatformEndpoint
 	}
@@ -927,7 +944,7 @@ var onboardingHeaderTmpl = template.Must(template.New("onboarding-header").Funcs
 // single source every onboarding surface (header, steps flow, topbar badge)
 // derives its view from, so they can never disagree.
 func computeAgentStateView(ctx context.Context, deps onboardingDeps) (agentStateView, installer.Detected) {
-	d := installer.DetectDefaults()
+	d := onboardingInstallDefaults()
 	if deps.PlatformEndpoint != "" {
 		d.Options.Endpoint = deps.PlatformEndpoint
 	}
@@ -1140,7 +1157,7 @@ var onboardingStatusBadgeTmpl = template.Must(template.New("status-badge").Parse
 // /onboarding header uses, so the topbar badge and /onboarding visible state
 // always agree on which step the operator is at.
 func renderOnboardingStatusBadgeFragment(w io.Writer, ctx context.Context, deps onboardingDeps) error {
-	d := installer.DetectDefaults()
+	d := onboardingInstallDefaults()
 	if deps.PlatformEndpoint != "" {
 		d.Options.Endpoint = deps.PlatformEndpoint
 	}

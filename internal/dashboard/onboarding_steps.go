@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"strings"
+	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/installer"
 )
@@ -22,7 +24,7 @@ import (
 
 // onboardingStepView is one row of the three-step flow.
 type onboardingStepView struct {
-	Key    string // install | connect | stream
+	Key    string // install | connect | directory | stream
 	CardID string // stable element id (#install-card, #enroll-card, #stream-card)
 	Title  string
 	Status string // done | current | pending
@@ -42,12 +44,25 @@ type onboardingStepsView struct {
 	AllDone     bool
 	ShowScanCTA bool
 	LastScan    *lastScanSummary
+	RecentScans []onboardingScanSummary
+}
+
+type onboardingScanSummary struct {
+	StartedAt      string
+	RelativeTime   string
+	Status         string
+	BadgeClass     string
+	TriggerSource  string
+	TotalMachines  int
+	NewMachines    int
+	UpdatedMachines int
+	ErrorCount     int
 }
 
 // buildOnboardingSteps folds the canonical four-step state (buildStepperSteps
 // stays the single source of truth) into the three-step presentation: the
 // check step's progress is absorbed into the stream step.
-func buildOnboardingSteps(s agentStateView, det installer.Detected) []onboardingStepView {
+func buildOnboardingSteps(s agentStateView, det installer.Detected, directoryComplete ...bool) []onboardingStepView {
 	four := buildStepperSteps(s, det)
 	install, enroll, stream := four[0], four[1], four[3]
 
@@ -81,23 +96,48 @@ func buildOnboardingSteps(s agentStateView, det installer.Detected) []onboarding
 		connectView.Status = "pending"
 	}
 
+	directoryReady := ldapOnboardingConfigured(nil)
+	if len(directoryComplete) > 0 {
+		directoryReady = directoryComplete[0]
+	}
+	servicesDetected := true
+	if len(directoryComplete) > 1 {
+		servicesDetected = directoryComplete[1]
+	}
 	streamView := onboardingStepView{
 		Key: "stream", CardID: "stream-card", Title: "Start streaming",
 		Pending: "the connection check runs automatically before streaming starts",
 	}
 	switch {
+	case connectView.Status != "done":
+		streamView.Status = "pending"
 	case stream.Status == "done":
 		streamView.Status = "done"
 		streamView.Receipt = "Streaming · " + stream.Detail
-	case connectView.Status == "done":
+	default:
 		// Enrolled: streaming is the one thing left, whether or not a check
 		// has passed yet — the check renders inside this step as its gate.
 		streamView.Status = "current"
-	default:
-		streamView.Status = "pending"
 	}
 
-	return []onboardingStepView{installView, connectView, streamView}
+	servicesView := onboardingStepView{
+		Key: "services", CardID: "services-card", Title: "Add services (optional)",
+		FragmentURL: "/fragments/services-setup",
+		Pending:     "available after streaming starts",
+	}
+	if streamView.Status != "done" {
+		servicesView.Status = "pending"
+	} else if directoryReady {
+		servicesView.Status = "done"
+		servicesView.Receipt = "Discovered services configured"
+	} else {
+		servicesView.Status = "optional"
+	}
+
+	if !servicesDetected {
+		return []onboardingStepView{installView, connectView, streamView}
+	}
+	return []onboardingStepView{installView, connectView, streamView, servicesView}
 }
 
 var onboardingStepsTmpl = template.Must(
@@ -109,11 +149,16 @@ var onboardingStepsTmpl = template.Must(
 // without any client-side step bookkeeping.
 func renderOnboardingStepsFragment(w io.Writer, ctx context.Context, deps onboardingDeps) error {
 	stateView, detected := computeAgentStateView(ctx, deps)
-	steps := buildOnboardingSteps(stateView, detected)
+	steps := buildOnboardingSteps(
+		stateView,
+		detected,
+		servicesOnboardingComplete(ctx, deps),
+		hasDiscoveredOnboardingServices(deps),
+	)
 
 	allDone := true
 	for _, s := range steps {
-		if s.Status != "done" {
+		if s.Status != "done" && s.Status != "optional" {
 			allDone = false
 			break
 		}
@@ -123,11 +168,71 @@ func renderOnboardingStepsFragment(w io.Writer, ctx context.Context, deps onboar
 		AllDone:     allDone,
 		ShowScanCTA: allDone && deps.ScanEnabled,
 		LastScan:    loadLastScanSummary(ctx, deps),
+		RecentScans: loadOnboardingScanSummaries(ctx, deps, 6),
 	}
 	if err := onboardingStepsTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("render onboarding-steps: %w", err)
 	}
 	return nil
+}
+
+// directoryOnboardingComplete distinguishes a configured LDAP source from a
+// directory connection the operator actually validated. Lab/managed configs
+// may pre-fill LDAP defaults, but that must not skip the credential step on a
+// freshly reset collector. A completed AD onboarding scan is the durable
+// receipt across dashboard restarts.
+func directoryOnboardingComplete(ctx context.Context, deps onboardingDeps) bool {
+	if ldapOnboardingConfigured(nil) {
+		return true
+	}
+	if deps.Store == nil {
+		return false
+	}
+	runs, err := deps.Store.ListScanRuns(ctx, 25)
+	if err != nil {
+		return false
+	}
+	for _, run := range runs {
+		if run.TriggerSource == "onboarding" && run.TriggeredBy == "active-directory-setup" &&
+			strings.EqualFold(string(run.Status), "completed") {
+			return true
+		}
+	}
+	return false
+}
+
+func loadOnboardingScanSummaries(ctx context.Context, deps onboardingDeps, limit int) []onboardingScanSummary {
+	if deps.Store == nil {
+		return nil
+	}
+	runs, err := deps.Store.ListScanRuns(ctx, limit)
+	if err != nil {
+		return nil
+	}
+	out := make([]onboardingScanSummary, 0, len(runs))
+	for _, run := range runs {
+		status := string(run.Status)
+		badgeClass := "badge-gray"
+		switch status {
+		case "completed":
+			badgeClass = "badge-green"
+		case "running", "queued":
+			badgeClass = "badge-blue"
+		case "failed", "cancelled":
+			badgeClass = "badge-red"
+		}
+		trigger := run.TriggerSource
+		if trigger == "" {
+			trigger = "automatic"
+		}
+		out = append(out, onboardingScanSummary{
+			StartedAt: run.StartedAt.UTC().Format(time.RFC3339), RelativeTime: humanizeRelativeTime(time.Since(run.StartedAt)),
+			Status: status, BadgeClass: badgeClass, TriggerSource: trigger,
+			TotalMachines: run.TotalMachines, NewMachines: run.NewMachines,
+			UpdatedMachines: run.UpdatedMachines, ErrorCount: run.ErrorCount,
+		})
+	}
+	return out
 }
 
 const onboardingStepsTemplate = `<div class="onb-steps">
@@ -148,8 +253,8 @@ const onboardingStepsTemplate = `<div class="onb-steps">
   </details>
   {{end}}
 </div>
-{{- else if eq .Status "current" }}
-<section class="card onb-step onb-step-current" id="{{.CardID}}" aria-current="step">
+{{- else if or (eq .Status "current") (eq .Status "optional") }}
+<section class="card onb-step onb-step-{{.Status}}" id="{{.CardID}}"{{if eq .Status "current"}} aria-current="step"{{end}}>
   <div class="onb-step-head">
     <svg class="onb-glyph" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="11" cy="11" r="10" fill="rgba(225,29,72,0.1)" stroke="#e11d48" stroke-width="1.5"></circle><circle cx="11" cy="11" r="4" fill="#e11d48"></circle></svg>
     <h2>{{.Title}}</h2>
@@ -175,6 +280,12 @@ const onboardingStepsTemplate = `<div class="onb-steps">
       <li><strong>Secret never logged.</strong> Only the first 8 hex chars of the SHA-256 fingerprint appear in logs, the dashboard UI, or the support bundle.</li>
     </ul>
   </details>
+  {{end}}
+  {{if eq .Key "services"}}
+  <p class="muted onb-step-copy">Kite detected the services enabled for this collector. Configure only the integrations you want to scan.</p>
+  <div id="services-fragment" hx-get="{{.FragmentURL}}" hx-trigger="load" hx-swap="innerHTML">
+    <div class="htmx-indicator">Detecting services&hellip;</div>
+  </div>
   {{end}}
   {{if eq .Key "stream"}}
   <p class="muted onb-step-copy">The connection check runs first &mdash; five synthetic probes (DNS, TLS, endpoint reach, clock skew, OTLP handshake), never machine data. Then start streaming; stop any time from this page, no restart needed.</p>
@@ -202,6 +313,23 @@ const onboardingStepsTemplate = `<div class="onb-steps">
     {{if .LastScan}}<span class="badge {{.LastScan.BadgeClass}}">last scan {{.LastScan.RelativeTime}}</span>{{end}}
   </div>
   <p class="muted onb-step-copy">Install, enrollment, and streaming are all in place.</p>
+  {{if .RecentScans}}
+  <div class="onb-recent-scans">
+    <div class="onb-recent-scans-head"><strong>Recent scans</strong><a href="/scans" hx-get="/scans" hx-target="#content" hx-push-url="true">View all &rarr;</a></div>
+    <div class="onb-scan-list">
+      {{range .RecentScans}}
+      <a class="onb-scan-row" href="/scans" hx-get="/scans" hx-target="#content" hx-push-url="true" title="{{.StartedAt}}">
+        <span class="badge {{.BadgeClass}}">{{.Status}}</span>
+        <span><strong>{{.RelativeTime}}</strong><small>{{.TriggerSource}}</small></span>
+        <span><strong>{{.TotalMachines}}</strong><small>machines</small></span>
+        <span><strong>{{.NewMachines}}</strong><small>new</small></span>
+        <span><strong>{{.UpdatedMachines}}</strong><small>updated</small></span>
+        <span><strong>{{.ErrorCount}}</strong><small>errors</small></span>
+      </a>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
   <div class="onb-ready-actions">
     {{if .ShowScanCTA}}
     <form hx-post="/api/v1/scan" hx-target="#onb-scan-status" hx-swap="innerHTML">

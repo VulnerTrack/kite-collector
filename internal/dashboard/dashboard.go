@@ -136,6 +136,8 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		Logger:           logger,
 		PlatformEndpoint: opts.PlatformEndpoint,
 		CertsDir:         opts.CertsDir,
+		Coordinator:      opts.Coordinator,
+		BaseConfig:       opts.BaseConfig,
 	}
 	mux.HandleFunc("GET /oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment, opts.AppVersion)
@@ -716,6 +718,8 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				Installer:        opts.Installer,
 				ScanEnabled:      opts.Coordinator != nil && opts.BaseConfig != nil,
 				TLSConfig:        tlsCfg,
+				Coordinator:      opts.Coordinator,
+				BaseConfig:       opts.BaseConfig,
 				OAuth:            opts.OAuth,
 				PKIEndpoint:      resolveFleetPKIEndpoint(),
 			})

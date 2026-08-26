@@ -18,9 +18,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vulnertrack/kite-collector/internal/config"
 	enrollmentpkg "github.com/vulnertrack/kite-collector/internal/enrollment"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/identity"
+	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -59,6 +61,8 @@ type kiteOAuthEnrollmentOptions struct {
 	PlatformEndpoint string
 	CertsDir         string
 	WrapKey          []byte
+	Coordinator      *scan.Coordinator
+	BaseConfig       *config.Config
 }
 
 type kitePKIEnroller interface {
@@ -901,6 +905,7 @@ func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions
 			"fingerprint", shortFingerprint(fingerprint),
 			"remote_addr", r.RemoteAddr)
 	}
+	startBaseOnboardingScan(r.Context(), enrollment.Coordinator, enrollment.BaseConfig, enrollment.Logger)
 	return nil
 }
 

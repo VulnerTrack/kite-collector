@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -56,6 +57,8 @@ type onboardingDeps struct {
 	WrapKey          []byte
 	OAuth            OAuthOptions
 	TLSConfig        config.TLSConfig
+	Coordinator      *scan.Coordinator
+	BaseConfig       *config.Config
 	// ScanEnabled tells the post-completion launcher panel whether to surface
 	// the "Run your first scan" CTA. True when the dashboard was wired with
 	// both a scan.Coordinator and a config.Config (the same condition the
@@ -77,6 +80,19 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 		renderOnboardingFragment(w, deps.Logger, "enroll-form", func(buf io.Writer) error {
 			return renderEnrollFragment(buf, r.Context(), deps)
 		})
+	})
+	mux.HandleFunc("GET /fragments/active-directory-setup", func(w http.ResponseWriter, r *http.Request) {
+		renderOnboardingFragment(w, deps.Logger, "active-directory-setup", func(buf io.Writer) error {
+			return renderActiveDirectorySetup(buf, deps, "", "")
+		})
+	})
+	mux.HandleFunc("GET /fragments/services-setup", func(w http.ResponseWriter, r *http.Request) {
+		renderOnboardingFragment(w, deps.Logger, "services-setup", func(buf io.Writer) error {
+			return renderDiscoveredServicesSetup(buf, r.Context(), deps)
+		})
+	})
+	mux.HandleFunc("POST /api/v1/onboarding/active-directory", func(w http.ResponseWriter, r *http.Request) {
+		handleActiveDirectorySetup(w, r, deps)
 	})
 	mux.HandleFunc("POST /api/v1/identity/enroll", func(w http.ResponseWriter, r *http.Request) {
 		handleEnroll(w, r, deps)
@@ -137,7 +153,7 @@ const onboardingBody = `<div id="onboarding-toasts" class="toasts" aria-live="po
 
 <div class="onboarding-layout">
   <h2>Collector onboarding</h2>
-  <p class="muted onb-intro">Three steps. Kite detects what&rsquo;s already done, so you only ever see one action &mdash; and no agent data leaves this host until you start streaming.</p>
+  <p class="muted onb-intro">Guided setup. Kite detects what&rsquo;s already done and only shows service configuration when an integration is available.</p>
 
   <div id="onboarding-steps"
        hx-get="/fragments/onboarding-steps"
@@ -474,6 +490,7 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 		"fingerprint", shortFingerprint(fingerprint),
 		"remote_addr", r.RemoteAddr,
 	)
+	startBaseOnboardingScan(ctx, deps.Coordinator, deps.BaseConfig, deps.Logger)
 
 	id, err := deps.Store.GetEnrolledIdentity(ctx)
 	if err != nil {

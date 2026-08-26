@@ -97,7 +97,7 @@ const indexPageTemplate = `<!DOCTYPE html>
   </div>
   <nav id="sidenav-tree"
        hx-get="/fragments/sidebar-tree?active={{.ActiveTab}}"
-       hx-trigger="load, every 10s"
+      hx-trigger="load, every 10s, refresh-agent-state from:body, refresh-sidebar from:body"
        hx-swap="innerHTML">
 {{ .SidebarTree }}
   </nav>
