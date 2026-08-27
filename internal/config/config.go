@@ -245,6 +245,14 @@ type SourceConfig struct {
 	Endpoint        string `mapstructure:"endpoint"`
 	Site            string `mapstructure:"site"`
 	Community       string `mapstructure:"community"`
+	// osquery source (RFC-0151). Socket overrides the cfg -> env -> platform-
+	// default probe; YaraSigfile/YaraRules are the two credential forms for an
+	// on-demand YARA sweep (inline rules win, since they need no daemon-side
+	// file). Paths for that sweep are YaraPaths below — deliberately not the
+	// shared `paths` field, which other sources use for something else.
+	Socket      string `mapstructure:"socket"`
+	YaraSigfile string `mapstructure:"yara_sigfile"`
+	YaraRules   string `mapstructure:"yara_rules"`
 	// MDM/CMDB connector fields (RFC-0135 R4). These make the YAML config the
 	// real, documented configuration surface for the nine MDM/CMDB connectors
 	// instead of undocumented env vars. Secret-bearing values (Password, Token,
@@ -276,6 +284,7 @@ type SourceConfig struct {
 	SiteID            string   `mapstructure:"site_id"`
 	Regions           []string `mapstructure:"regions"`
 	Paths             []string `mapstructure:"paths"`
+	YaraPaths         []string `mapstructure:"yara_paths"`
 	Scope             []string `mapstructure:"scope"`
 	DomainControllers []string `mapstructure:"domain_controllers"`
 	// WebVHosts are virtual-host names the network source retries a

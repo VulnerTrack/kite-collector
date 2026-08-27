@@ -30,6 +30,34 @@ discovery:
       collect_software: true
       collect_interfaces: true
 
+    # Local osqueryd, read over its Thrift extensions socket. Inert with no
+    # daemon on the host, so leaving this out costs nothing.
+    #
+    # socket resolves as: this key -> KITE_OSQUERY_SOCKET -> platform defaults
+    # (/run/kite-osquery/kite-osquery.em then /var/osquery/osquery.em on Linux;
+    # /var/kite-osquery/kite-osquery.em then /var/osquery/osquery.em on macOS;
+    # the kite-osquery named pipe on Windows). Set it only for a daemon in a
+    # non-standard location.
+    osquery:
+      enabled: true
+      # socket: /var/osquery/osquery.em
+      #
+      # On-demand YARA sweeps. yara_paths are scanned by the DAEMON, so the
+      # paths — and yara_sigfile, if used — must be visible in ITS filesystem
+      # view, not the collector's. Prefer yara_rules (inline rule text): it
+      # needs no daemon-side file at all.
+      #
+      # Zero matches is only reported as "scanned" once the credential is
+      # proven usable: a missing sigfile, an uncompilable rule, and a missing
+      # scan target all return zero rows, indistinguishable from clean.
+      # yara_paths:
+      #   - /usr/local/bin/*
+      # yara_rules: |
+      #   rule kite_canary { strings: $a = "canary" condition: $a }
+      #
+      # macOS: without Full Disk Access granted to osquery.app, TCC-protected
+      # paths read as EMPTY rather than failing. See docs/macos-osquery.md.
+
     # Vendor API connectors
     docker:
       enabled: true

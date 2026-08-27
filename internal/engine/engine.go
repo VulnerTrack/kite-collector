@@ -245,6 +245,14 @@ func buildSourceConfigMap(name string, src config.SourceConfig) map[string]any {
 		"token_env":         src.TokenEnv,
 		"api_key_env":       src.APIKeyEnv,
 		"client_secret_env": src.ClientSecretEnv,
+		// osquery source (RFC-0151). Without these four the source's
+		// documented config keys are unreachable from the YAML file: the
+		// socket would resolve by env var or platform probe only, and an
+		// operator could not arm a YARA sweep at all.
+		"socket":       src.Socket,
+		"yara_sigfile": src.YaraSigfile,
+		"yara_rules":   src.YaraRules,
+		"yara_paths":   stringSliceToAny(src.YaraPaths),
 	}
 	// Overlay MDM/CMDB credential environment variables onto the config
 	// map so connectors receive them via the standard cfg parameter.
