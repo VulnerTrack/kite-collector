@@ -87,7 +87,9 @@ sudo kite-collector install   # registers launchd against the brew-managed binar
 `brew upgrade --cask kite-collector` is then all it takes: the running
 service notices the new binary and restarts onto it. Before
 `brew uninstall`, run `sudo kite-collector uninstall` to remove the service
-registration (the cask also unloads the launchd job as a safety net).
+registration — the cask tears the launchd job down only on
+`brew uninstall --zap`, so this step is the supported path, not a
+convenience.
 
 ### Mass deployment from the dashboard
 
