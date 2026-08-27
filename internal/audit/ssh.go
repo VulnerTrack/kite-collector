@@ -3,7 +3,9 @@ package audit
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"strconv"
@@ -127,11 +129,11 @@ func (s *SSH) Name() string { return "ssh" }
 func (s *SSH) Audit(_ context.Context, machine model.Machine) ([]model.ConfigFinding, error) {
 	settings, err := ParseSSHDConfig(s.configPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			slog.Debug("ssh auditor: config not found, skipping", "path", s.configPath)
 			return nil, nil
 		}
-		if os.IsPermission(err) {
+		if errors.Is(err, fs.ErrPermission) {
 			slog.Warn("ssh auditor: permission denied, skipping",
 				"code", string(LogCodeSSHPermissionDenied),
 				"path", s.configPath)

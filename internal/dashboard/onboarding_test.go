@@ -113,12 +113,12 @@ func TestOnboardingPage_Renders(t *testing.T) {
 	rec := h.do(t, "GET", "/onboarding", nil, nil)
 	assert.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
-	// The page is an intro plus the server-rendered three-step flow; the
+	// The page is an intro plus the server-rendered onboarding flow; the
 	// step panels live in the steps fragment, not the page shell.
 	assert.Contains(t, body, `id="onboarding-steps"`)
 	assert.Contains(t, body, "/fragments/onboarding-steps")
-	assert.Contains(t, body, "Three steps.")
-	assert.Contains(t, body, "no agent data leaves this host")
+	assert.Contains(t, body, "Guided setup.")
+	assert.Contains(t, body, "No agent data leaves this host")
 }
 
 func TestOnboardingStepsFragment_RendersThreeSteps(t *testing.T) {

@@ -31,7 +31,9 @@ func TLSConfig(insecureEnv, caCertEnv string) (*tls.Config, error) {
 
 	caPath := os.Getenv(caCertEnv)
 	if caPath != "" {
-		caCert, err := os.ReadFile(filepath.Clean(caPath))
+		// caPath is an explicit operator-controlled configuration value. Custom
+		// CA files may legitimately live anywhere readable by the service.
+		caCert, err := os.ReadFile(filepath.Clean(caPath)) // #nosec G703 -- trusted configuration path
 		if err != nil {
 			return nil, fmt.Errorf("read CA cert %s: %w", caPath, err)
 		}

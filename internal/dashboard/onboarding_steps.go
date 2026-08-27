@@ -11,8 +11,8 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/installer"
 )
 
-// The simplified onboarding flow: three steps shown one at a time instead of
-// four always-visible panels. Done steps collapse to one-line receipts (with
+// The simplified onboarding flow shows the three core steps followed by an
+// optional detected-services step. Done steps collapse to one-line receipts (with
 // a Details toggle that lazy-loads the full panel), exactly one step renders
 // expanded with one primary action, and the connection check stops being a
 // step of its own — it is an automatic gate inside "Start streaming", since
@@ -22,7 +22,7 @@ import (
 // topbar badge use, replacing the client-side wizard JS that used to scrape
 // stepper DOM classes to decide which card to show.
 
-// onboardingStepView is one row of the three-step flow.
+// onboardingStepView is one row of the onboarding flow.
 type onboardingStepView struct {
 	Key    string // install | connect | directory | stream
 	CardID string // stable element id (#install-card, #enroll-card, #stream-card)
@@ -59,9 +59,9 @@ type onboardingScanSummary struct {
 	ErrorCount      int
 }
 
-// buildOnboardingSteps folds the canonical four-step state (buildStepperSteps
-// stays the single source of truth) into the three-step presentation: the
-// check step's progress is absorbed into the stream step.
+// buildOnboardingSteps folds the canonical agent state into the three core
+// steps, absorbing check into streaming, and appends service setup only when
+// an integration was detected.
 func buildOnboardingSteps(s agentStateView, det installer.Detected, directoryComplete ...bool) []onboardingStepView {
 	four := buildStepperSteps(s, det)
 	install, enroll, stream := four[0], four[1], four[3]
@@ -143,7 +143,7 @@ func buildOnboardingSteps(s agentStateView, det installer.Detected, directoryCom
 var onboardingStepsTmpl = template.Must(
 	template.New("onboarding-steps").Parse(onboardingStepsTemplate))
 
-// renderOnboardingStepsFragment renders the three-step flow from the current
+// renderOnboardingStepsFragment renders the onboarding flow from the current
 // aggregate agent state. It re-renders on every refresh-agent-state trigger,
 // so completing an action collapses the finished step and expands the next
 // without any client-side step bookkeeping.

@@ -45,7 +45,9 @@ func ensurePrivateDir(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create secret store directory: %w", err)
 	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+	// Directories need the execute bit to be traversable; 0700 is the
+	// directory equivalent of a private 0600 file.
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil { // #nosec G302 -- private directory permissions
 		return fmt.Errorf("restrict secret store directory: %w", err)
 	}
 	return nil

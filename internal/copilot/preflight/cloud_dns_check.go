@@ -174,7 +174,9 @@ func (c *CloudDNSGCPEnvChecker) Check(_ context.Context, nodeID string, value an
 		}
 	}
 	cleanPath := filepath.Clean(rawPath)
-	if _, err := os.Stat(cleanPath); err != nil {
+	// This only checks the operator-selected credential path; it does not
+	// expose file contents or combine it with an application-controlled root.
+	if _, err := os.Stat(cleanPath); err != nil { // #nosec G703 -- trusted environment configuration path
 		return CheckResult{
 			NodeID:  nodeID,
 			Check:   "cloud_dns:gcp:env",

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	ldapPasswordEnv    = "KITE_LDAP_BIND_PASSWORD"
+	ldapPasswordEnv    = "KITE_LDAP_BIND_PASSWORD" // #nosec G101 -- environment variable name, not a credential value
 	ldapPasswordSecret = "kite/integrations/active-directory/password"
 )
 

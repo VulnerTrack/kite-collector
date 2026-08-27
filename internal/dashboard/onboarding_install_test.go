@@ -364,16 +364,17 @@ func TestAgentInstall_UserModeQueryParam_ForcesUserModeOptions(t *testing.T) {
 // Card numbering consistency — match the "four steps" copy + 4-pill stepper
 // ---------------------------------------------------------------------------
 
-func TestBuildOnboardingSteps_ThreeStepStates(t *testing.T) {
+func TestBuildOnboardingSteps_CoreAndOptionalServiceStates(t *testing.T) {
 	det := installer.Detected{}
 
 	// Fresh host: install is current, everything else pending.
 	fresh := agentStateView{Install: installer.State{NextAction: installer.ActionInstall}}
 	steps := buildOnboardingSteps(fresh, det)
-	require.Len(t, steps, 3, "the flow is three steps — check is a gate, not a step")
+	require.Len(t, steps, 4, "the three core steps are followed by detected services")
 	assert.Equal(t, "current", steps[0].Status)
 	assert.Equal(t, "pending", steps[1].Status)
 	assert.Equal(t, "pending", steps[2].Status)
+	assert.Equal(t, "pending", steps[3].Status)
 
 	// Installed but not enrolled: connect is the one action.
 	installed := agentStateView{Install: installer.State{NextAction: installer.ActionEnroll}}
@@ -381,6 +382,7 @@ func TestBuildOnboardingSteps_ThreeStepStates(t *testing.T) {
 	assert.Equal(t, "done", steps[0].Status)
 	assert.Equal(t, "current", steps[1].Status)
 	assert.Equal(t, "pending", steps[2].Status)
+	assert.Equal(t, "pending", steps[3].Status)
 
 	// Enrolled but never checked: stream is current — the check runs inside
 	// it, so there is no separate "check" stop on the way.
@@ -392,6 +394,7 @@ func TestBuildOnboardingSteps_ThreeStepStates(t *testing.T) {
 	assert.Equal(t, "done", steps[1].Status)
 	assert.Contains(t, steps[1].Receipt, "9f3a2c1b", "connect receipt carries the fingerprint")
 	assert.Equal(t, "current", steps[2].Status)
+	assert.Equal(t, "pending", steps[3].Status)
 
 	// Streaming: everything collapses to receipts.
 	streaming := enrolled
@@ -402,6 +405,10 @@ func TestBuildOnboardingSteps_ThreeStepStates(t *testing.T) {
 	assert.Equal(t, "done", steps[1].Status)
 	assert.Equal(t, "done", steps[2].Status)
 	assert.Contains(t, steps[2].Receipt, "running")
+	assert.Equal(t, "optional", steps[3].Status)
+
+	steps = buildOnboardingSteps(streaming, det, false, false)
+	require.Len(t, steps, 3, "service setup is absent when no integration is detected")
 }
 
 func TestOnboardingSteps_TrustPanelRendersOnConnectStep(t *testing.T) {

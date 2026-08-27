@@ -17,7 +17,14 @@ const (
 // the read-only mount containing the installed revision; SNAP_COMMON is the
 // root-owned writable directory shared by every revision.
 func RunningInSnap() bool {
-	return os.Getenv("SNAP") != "" && os.Getenv("SNAP_COMMON") != ""
+	snapRoot := filepath.Clean(os.Getenv("SNAP"))
+	if snapRoot == "." || os.Getenv("SNAP_COMMON") == "" {
+		return false
+	}
+	// Desktop launchers (notably VS Code installed as a snap) export their
+	// SNAP_* variables to terminals and every child process. Do not mistake
+	// that inherited environment for Kite itself running under snapd.
+	return filepath.Base(filepath.Dir(snapRoot)) == "kite-collector"
 }
 
 // SnapCommonDir returns snapd's revision-independent writable data directory.

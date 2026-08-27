@@ -149,7 +149,7 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 }
 
 // onboardingBody is the /onboarding shell content: an intro line and the
-// server-rendered three-step flow (#onboarding-steps), which re-renders on
+// server-rendered onboarding flow (#onboarding-steps), which re-renders on
 // every refresh-agent-state trigger. It is composed inside the shared
 // dashboard shell (renderIndexPage) so /onboarding gets the same sidebar +
 // grid chrome as the rest of the dashboard. Step visibility is decided
@@ -159,7 +159,7 @@ const onboardingBody = `<div id="onboarding-toasts" class="toasts" aria-live="po
 
 <div class="onboarding-layout">
   <h2>Collector onboarding</h2>
-  <p class="muted onb-intro">Guided setup. Kite detects what&rsquo;s already done and only shows service configuration when an integration is available.</p>
+  <p class="muted onb-intro">Guided setup. Kite detects what&rsquo;s already done and only shows service configuration when an integration is available. No agent data leaves this host until streaming starts.</p>
 
   <div id="onboarding-steps"
        hx-get="/fragments/onboarding-steps"
