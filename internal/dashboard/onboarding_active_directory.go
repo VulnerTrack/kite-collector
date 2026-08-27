@@ -39,6 +39,17 @@ type onboardingServiceView struct {
 	Configured bool
 }
 
+type integrationAPIView struct {
+	Key              string `json:"key"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	Account          string `json:"account,omitempty"`
+	DomainController string `json:"domain_controller,omitempty"`
+	BaseDN           string `json:"base_dn,omitempty"`
+	TLSMode          string `json:"tls_mode,omitempty"`
+	Status           string `json:"status"`
+}
+
 var onboardingServiceAdapters = []onboardingServiceAdapter{
 	{Key: "ldap", Label: "Active Directory", Description: "Users, computers, groups, organizational units, policies, and relationships through LDAP.", FragmentURL: "/fragments/active-directory-setup"},
 }
@@ -52,7 +63,7 @@ var onboardingServicesTmpl = template.Must(template.New("services-setup").Parse(
         <div><strong>{{.Label}}</strong><p class="muted small">{{.Description}}</p></div>
         <span class="badge {{if .Configured}}badge-green{{else}}badge-blue{{end}}">{{if .Configured}}configured{{else}}detected{{end}}</span>
       </div>
-      <div hx-get="{{.FragmentURL}}" hx-trigger="load" hx-swap="innerHTML"><span class="muted small">Loading {{.Label}} settings&hellip;</span></div>
+      <div id="{{.Key}}-setup-fragment" hx-get="{{.FragmentURL}}" hx-trigger="load" hx-swap="innerHTML"><span class="muted small">Loading {{.Label}} settings&hellip;</span></div>
     </section>
     {{end}}
   {{else}}
@@ -76,6 +87,29 @@ func renderDiscoveredServicesSetup(w io.Writer, ctx context.Context, deps onboar
 		}
 	}
 	return onboardingServicesTmpl.Execute(w, view)
+}
+
+func discoveredIntegrationsAPI(ctx context.Context, deps onboardingDeps) []integrationAPIView {
+	if deps.BaseConfig == nil {
+		return []integrationAPIView{}
+	}
+	out := make([]integrationAPIView, 0, len(onboardingServiceAdapters))
+	for _, adapter := range onboardingServiceAdapters {
+		source, exists := deps.BaseConfig.Discovery.Sources[adapter.Key]
+		if !exists || !source.Enabled {
+			continue
+		}
+		item := integrationAPIView{Key: adapter.Key, Name: adapter.Label, Description: adapter.Description, Status: "detected"}
+		if adapter.Key == "ldap" {
+			defaults := activeDirectorySetupDefaults(deps.BaseConfig)
+			item.Account, item.DomainController, item.BaseDN, item.TLSMode = defaults.BindDN, defaults.DomainController, defaults.BaseDN, defaults.TLSMode
+			if directoryOnboardingComplete(ctx, deps) {
+				item.Status = "configured"
+			}
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func servicesOnboardingComplete(ctx context.Context, deps onboardingDeps) bool {
@@ -185,7 +219,7 @@ var activeDirectorySetupTmpl = template.Must(template.New("ad-setup").Parse(`
 {{if .Message}}<p class="badge badge-green">{{.Message}}</p>{{end}}
 {{if .Error}}<p class="enroll-error badge-red" role="alert">{{.Error}}</p>{{end}}
 {{if .ReadOnly}}<p class="muted small">Scan coordinator unavailable in read-only dashboard mode.</p>{{else}}
-<form hx-post="/api/v1/onboarding/active-directory" hx-target="#directory-fragment" hx-swap="innerHTML">
+<form hx-post="/api/v1/onboarding/active-directory" hx-target="#ldap-setup-fragment" hx-swap="innerHTML" hx-disabled-elt="find button" hx-indicator="find .service-scan-indicator">
   <div class="form-grid">
     <label>Active Directory account<input name="bind_dn" required value="{{.BindDN}}" placeholder="user@example.com"></label>
     <label>Password<input type="password" name="password" {{if not .Configured}}required{{end}} autocomplete="new-password" placeholder="{{if .Configured}}Leave blank to keep current password{{else}}Active Directory password{{end}}"></label>
@@ -207,7 +241,10 @@ var activeDirectorySetupTmpl = template.Must(template.New("ad-setup").Parse(`
     </div>
   </details>
   <p class="muted small">Use any Active Directory account that can read directory objects. Kite accepts user@example.com, DOMAIN\user, a full DN, or a simple username when the domain is detected.</p>
-  <button class="btn" type="submit">Save, test and scan</button>
+  <div class="service-scan-actions">
+    <button class="btn" type="submit">Save, test and scan</button>
+    <span class="htmx-indicator service-scan-indicator muted small">Testing connection and scanning&hellip;</span>
+  </div>
 </form>{{end}}`))
 
 func renderActiveDirectorySetup(w io.Writer, deps onboardingDeps, message, formError string) error {

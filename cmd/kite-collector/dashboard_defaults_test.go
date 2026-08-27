@@ -147,6 +147,7 @@ func TestPrintPlatformEnrollmentComplete_ServiceStarted(t *testing.T) {
 	assert.Contains(t, output, "Welcome to Kite!")
 	assert.Contains(t, output, "Collector service started automatically.")
 	assert.Contains(t, output, "Kite is running at http://127.0.0.1:9090")
+	assert.Contains(t, output, "kite-collector integrations")
 	assert.NotContains(t, output, "Press Ctrl+C to stop.")
 }
 

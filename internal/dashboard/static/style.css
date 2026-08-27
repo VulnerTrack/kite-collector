@@ -3953,6 +3953,7 @@ details.sidenav-alltables .sidenav-tables {
 .service-setup-card { border: 1px solid var(--palette-divider, #dfe3e8); border-radius: 12px; padding: 16px; background: var(--palette-background-paper, #fff); }
 .service-setup-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
 .service-setup-head p { margin: 4px 0 0; max-width: 680px; }
+.service-scan-actions { display: flex; align-items: center; gap: 12px; }
 
 /* Machine page — memory card: figures on the left, usage sparkline on the right. */
 .machine-mem { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }

@@ -278,6 +278,7 @@ lifecycle events for downstream consumption.`, version, commit, date),
 		newInstallCmd(),
 		newUninstallCmd(),
 		newServiceCmd(),
+		newIntegrationsCmd(),
 	)
 
 	return root
@@ -3444,6 +3445,9 @@ func printPlatformEnrollmentComplete(baseURL, serviceAction string) {
 	} else {
 		fmt.Println("No installed collector service was found; enrollment credentials were saved.")
 	}
+	fmt.Println()
+	fmt.Println("Next step — review detected integrations:")
+	fmt.Println("  kite-collector integrations")
 }
 
 func printEnrollmentLaunch(launchURL string, noBrowser bool) {

@@ -91,6 +91,9 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 			return renderDiscoveredServicesSetup(buf, r.Context(), deps)
 		})
 	})
+	mux.HandleFunc("GET /api/v1/integrations", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, deps.Logger, http.StatusOK, discoveredIntegrationsAPI(r.Context(), deps))
+	})
 	mux.HandleFunc("POST /api/v1/onboarding/active-directory", func(w http.ResponseWriter, r *http.Request) {
 		handleActiveDirectorySetup(w, r, deps)
 	})
