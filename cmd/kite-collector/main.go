@@ -165,7 +165,11 @@ func openConnectorSecretStore(dbPath string, identityCfg config.IdentityConfig, 
 	if err != nil {
 		return nil, fmt.Errorf("derive connector secret key: %w", err)
 	}
-	return secretstore.NewAuto(dataDir, key, logger)
+	store, err := secretstore.NewAuto(dataDir, key, logger)
+	if err != nil {
+		return nil, fmt.Errorf("open connector secret store: %w", err)
+	}
+	return store, nil
 }
 
 // networkScanner returns a TCP scanner that persists ScanEvent / OpenPort /

@@ -26,11 +26,11 @@ func NewEncryptedFile(path string, key []byte) (*EncryptedFileStore, error) {
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create AES cipher: %w", err)
 	}
 	aead, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create GCM cipher: %w", err)
 	}
 	return &EncryptedFileStore{path: path, aead: aead}, nil
 }
@@ -56,7 +56,7 @@ func (s *EncryptedFileStore) Get(name string) ([]byte, error) {
 	defer s.mu.Unlock()
 	items, err := s.load()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read connector secret store: %w", err)
 	}
 	value, ok := items[name]
 	if !ok {
@@ -85,7 +85,7 @@ func (s *EncryptedFileStore) load() (map[string][]byte, error) {
 		return map[string][]byte{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read connector secret store: %w", err)
 	}
 	if len(data) < len(encryptedFileMagic)+s.aead.NonceSize() || string(data[:len(encryptedFileMagic)]) != string(encryptedFileMagic) {
 		return nil, fmt.Errorf("invalid connector secret store")
@@ -109,34 +109,37 @@ func (s *EncryptedFileStore) save(items map[string][]byte) error {
 	}
 	plaintext, err := json.Marshal(items)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode connector secrets: %w", err)
 	}
 	defer clear(plaintext)
 	nonce := make([]byte, s.aead.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return err
+	if _, readErr := io.ReadFull(rand.Reader, nonce); readErr != nil {
+		return fmt.Errorf("generate secret nonce: %w", readErr)
 	}
 	data := append(append(append([]byte{}, encryptedFileMagic...), nonce...), s.aead.Seal(nil, nonce, plaintext, encryptedFileMagic)...)
 	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".connector-secrets-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("create temporary secret store: %w", err)
 	}
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }()
 	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
-		return err
+		return fmt.Errorf("restrict temporary secret store: %w", err)
 	}
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
-		return err
+		return fmt.Errorf("write temporary secret store: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
-		return err
+		return fmt.Errorf("sync temporary secret store: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		return fmt.Errorf("close temporary secret store: %w", err)
 	}
-	return os.Rename(tmpName, s.path)
+	if err := os.Rename(tmpName, s.path); err != nil {
+		return fmt.Errorf("replace connector secret store: %w", err)
+	}
+	return nil
 }

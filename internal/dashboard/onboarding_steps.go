@@ -48,15 +48,15 @@ type onboardingStepsView struct {
 }
 
 type onboardingScanSummary struct {
-	StartedAt      string
-	RelativeTime   string
-	Status         string
-	BadgeClass     string
-	TriggerSource  string
-	TotalMachines  int
-	NewMachines    int
+	StartedAt       string
+	RelativeTime    string
+	Status          string
+	BadgeClass      string
+	TriggerSource   string
+	TotalMachines   int
+	NewMachines     int
 	UpdatedMachines int
-	ErrorCount     int
+	ErrorCount      int
 }
 
 // buildOnboardingSteps folds the canonical four-step state (buildStepperSteps

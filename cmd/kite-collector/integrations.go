@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -64,7 +65,10 @@ func runIntegrationsList(cmd *cobra.Command, dashboardURL, output string) error 
 		return fmt.Errorf("unsupported output format %q; use table or json", output)
 	}
 	if output == "json" {
-		return json.NewEncoder(cmd.OutOrStdout()).Encode(items)
+		if err := json.NewEncoder(cmd.OutOrStdout()).Encode(items); err != nil {
+			return fmt.Errorf("encode integrations: %w", err)
+		}
+		return nil
 	}
 	if len(items) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No configurable integrations were detected.")
@@ -76,7 +80,7 @@ func runIntegrationsList(cmd *cobra.Command, dashboardURL, output string) error 
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", item.Name, item.Key, item.Status, item.DomainController)
 	}
 	if err := w.Flush(); err != nil {
-		return err
+		return fmt.Errorf("flush integrations table: %w", err)
 	}
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nConfigure an integration:")
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "  kite-collector integrations configure active-directory")
@@ -132,7 +136,7 @@ func newIntegrationsConfigureCmd(dashboardURL *string) *cobra.Command {
 			endpoint := strings.TrimRight(*dashboardURL, "/") + "/api/v1/onboarding/active-directory"
 			req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 			if err != nil {
-				return err
+				return fmt.Errorf("create integration request: %w", err)
 			}
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.Header.Set("Origin", strings.TrimRight(*dashboardURL, "/"))
@@ -144,7 +148,7 @@ func newIntegrationsConfigureCmd(dashboardURL *string) *cobra.Command {
 			defer func() { _ = resp.Body.Close() }()
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 			if resp.StatusCode != http.StatusOK || strings.Contains(string(body), `role="alert"`) {
-				return fmt.Errorf("Active Directory configuration failed: %s", strings.TrimSpace(stripHTML(string(body))))
+				return fmt.Errorf("active directory configuration failed: %s", strings.TrimSpace(stripHTML(string(body))))
 			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Active Directory configured and scanned successfully.")
 			return nil
@@ -160,7 +164,13 @@ func newIntegrationsConfigureCmd(dashboardURL *string) *cobra.Command {
 
 func fetchIntegrations(baseURL string) ([]integrationCLIView, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/api/v1/integrations")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/api/v1/integrations", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create integrations request: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("connect to local Kite dashboard: %w", err)
 	}
@@ -179,7 +189,7 @@ func readIntegrationPassword(cmd *cobra.Command, fromStdin bool) (string, error)
 	if fromStdin {
 		value, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
 		if err != nil && err != io.EOF {
-			return "", err
+			return "", fmt.Errorf("read integration password: %w", err)
 		}
 		value = strings.TrimSpace(value)
 		if value == "" {

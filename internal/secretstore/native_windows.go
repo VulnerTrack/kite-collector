@@ -31,10 +31,12 @@ func (s *dpapiStore) Available() bool {
 	_, err := exec.LookPath("powershell.exe")
 	return err == nil
 }
+
 func (s *dpapiStore) path(name string) string {
 	sum := sha256.Sum256([]byte(name))
 	return filepath.Join(s.dir, hex.EncodeToString(sum[:])+".dpapi")
 }
+
 func (s *dpapiStore) Put(name string, value []byte) error {
 	path := s.path(name)
 	if err := ensurePrivateDir(path); err != nil {
@@ -45,6 +47,7 @@ func (s *dpapiStore) Put(name string, value []byte) error {
 	cmd.Stdin = bytes.NewReader(value)
 	return cmd.Run()
 }
+
 func (s *dpapiStore) Get(name string) ([]byte, error) {
 	path := s.path(name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
@@ -57,6 +60,7 @@ func (s *dpapiStore) Get(name string) ([]byte, error) {
 	}
 	return out, nil
 }
+
 func (s *dpapiStore) Delete(name string) error {
 	err := os.Remove(s.path(name))
 	if errors.Is(err, os.ErrNotExist) {

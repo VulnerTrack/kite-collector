@@ -43,7 +43,10 @@ func NewAuto(dataDir string, key []byte, logger *slog.Logger) (Store, error) {
 
 func ensurePrivateDir(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
+		return fmt.Errorf("create secret store directory: %w", err)
 	}
-	return os.Chmod(filepath.Dir(path), 0o700)
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("restrict secret store directory: %w", err)
+	}
+	return nil
 }

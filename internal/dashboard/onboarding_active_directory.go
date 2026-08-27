@@ -18,8 +18,10 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/secretstore"
 )
 
-const ldapPasswordEnv = "KITE_LDAP_BIND_PASSWORD"
-const ldapPasswordSecret = "kite/integrations/active-directory/password"
+const (
+	ldapPasswordEnv    = "KITE_LDAP_BIND_PASSWORD"
+	ldapPasswordSecret = "kite/integrations/active-directory/password"
+)
 
 func hydrateIntegrationSecrets(deps onboardingDeps) {
 	if deps.SecretStore == nil {
@@ -117,7 +119,10 @@ func renderDiscoveredServicesSetup(w io.Writer, ctx context.Context, deps onboar
 			view.Services = append(view.Services, onboardingServiceView{onboardingServiceAdapter: adapter, Configured: configured})
 		}
 	}
-	return onboardingServicesTmpl.Execute(w, view)
+	if err := onboardingServicesTmpl.Execute(w, view); err != nil {
+		return fmt.Errorf("render onboarding services: %w", err)
+	}
+	return nil
 }
 
 func discoveredIntegrationsAPI(ctx context.Context, deps onboardingDeps) []integrationAPIView {
@@ -283,7 +288,10 @@ func renderActiveDirectorySetup(w io.Writer, deps onboardingDeps, message, formE
 	v.Configured = directoryOnboardingComplete(context.Background(), deps)
 	v.ReadOnly = deps.Coordinator == nil || deps.BaseConfig == nil
 	v.Message, v.Error = message, formError
-	return activeDirectorySetupTmpl.Execute(w, v)
+	if err := activeDirectorySetupTmpl.Execute(w, v); err != nil {
+		return fmt.Errorf("render Active Directory setup: %w", err)
+	}
+	return nil
 }
 
 func handleActiveDirectorySetup(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
@@ -314,7 +322,7 @@ func handleActiveDirectorySetup(w http.ResponseWriter, r *http.Request, deps onb
 		baseDN = inferBaseDN(bindDN, dc)
 	}
 	if dc == "" {
-		dc = discoverDomainController(bindDN, baseDN)
+		dc = discoverDomainController(r.Context(), bindDN, baseDN)
 	}
 	if baseDN == "" {
 		baseDN = inferBaseDN(bindDN, dc)
@@ -435,7 +443,7 @@ func restoreLDAPSecret(store secretstore.Store, previous []byte, existed bool) {
 	_ = os.Unsetenv(ldapPasswordEnv)
 }
 
-func discoverDomainController(bindDN, baseDN string) string {
+func discoverDomainController(ctx context.Context, bindDN, baseDN string) string {
 	domain := domainFromAccount(bindDN)
 	if domain == "" {
 		domain = strings.ToLower(strings.TrimSpace(os.Getenv("USERDNSDOMAIN")))
@@ -447,7 +455,7 @@ func discoverDomainController(bindDN, baseDN string) string {
 		return ""
 	}
 	for _, name := range []string{"dc._msdcs." + domain, domain} {
-		_, records, err := net.LookupSRV("ldap", "tcp", name)
+		_, records, err := net.DefaultResolver.LookupSRV(ctx, "ldap", "tcp", name)
 		if err == nil && len(records) > 0 {
 			return net.JoinHostPort(strings.TrimSuffix(records[0].Target, "."), fmt.Sprint(records[0].Port))
 		}
