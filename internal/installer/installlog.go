@@ -31,6 +31,12 @@ const (
 	LogCodeInstallDirRejected        = "installer.args.install_dir_rejected"
 	LogCodeBundleSkippedNotAvailable = "installer.bundle.not_available"
 	LogCodeBundleSkippedUserMode     = "installer.bundle.skipped_user_mode"
+	// The host-osquery lane (macOS): kite registers kite-osqueryd against an
+	// osqueryd the operator installed. See osquery_host.go.
+	LogCodeHostOsqueryAdopted     = "installer.osquery.host_adopted"
+	LogCodeHostOsqueryNotFound    = "installer.osquery.host_not_found"
+	LogCodeHostOsqueryUnsupported = "installer.osquery.host_unsupported"
+	LogCodeHostOsqueryConfigKept  = "installer.osquery.config_preserved"
 )
 
 // InstallLogName is the file the install log is appended to inside the

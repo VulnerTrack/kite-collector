@@ -37,6 +37,17 @@ const (
 
 	// OsqueryUnixSocket mirrors the deb's kite-osqueryd.service drop-in.
 	OsqueryUnixSocket = "/run/kite-osquery/kite-osquery.em"
+
+	// OsqueryDarwinSocket is the macOS endpoint. It is deliberately NOT
+	// OsqueryUnixSocket: macOS has no /run, and its /var/run is recreated
+	// empty on every boot, so a socket directory made once at install time
+	// would be gone after the first restart and launchd would restart
+	// kite-osqueryd into a bind failure forever. /var/kite-osquery is the
+	// namespaced analogue of the /var/osquery directory osquery's own pkg
+	// creates: persistent, root-owned, and impossible to collide with a
+	// standalone osquery install. The other end of this contract is
+	// internal/discovery/osquery/socketpaths_darwin.go.
+	OsqueryDarwinSocket = "/var/kite-osquery/kite-osquery.em"
 )
 
 // SCM failure-recovery tuning (RFC-0156 R5) — the Windows counterpart of the
@@ -71,10 +82,26 @@ func OsquerydBinaryName() string {
 // the value written to KITE_OSQUERY_SOCKET and passed as
 // --extensions_socket, so both ends of the contract come from one constant.
 func OsqueryExtensionsEndpoint() string {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		return OsqueryWindowsPipe
+	case "darwin":
+		return OsqueryDarwinSocket
+	default:
+		return OsqueryUnixSocket
 	}
-	return OsqueryUnixSocket
+}
+
+// OsquerySocketDir is the directory the extensions socket is bound in, or ""
+// on Windows (a named pipe has no parent directory to create). osqueryd binds
+// the socket but does NOT create its parent, so an installer that skips this
+// leaves the daemon crash-looping on "cannot bind" — the same reason the deb's
+// unit carries RuntimeDirectory=kite-osquery.
+func OsquerySocketDir() string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	return filepath.Dir(OsqueryExtensionsEndpoint())
 }
 
 // OsqueryDir is the immutable payload root, alongside the collector binary.
@@ -154,8 +181,15 @@ type OsqueryState struct {
 	// Version is the pinned version this binary would install, empty on a
 	// build without the payload compiled in.
 	Version string `json:"version,omitempty"`
-	// DaemonPresent reports the on-disk payload, independent of registration —
-	// the two diverge exactly when an install aborted mid-flight.
+	// DaemonOrigin is set when DaemonPath came from an osquery install the
+	// operator owns rather than from a kite payload (the macOS lane) — see
+	// osquery_host.go. Empty on the bundled lanes.
+	DaemonOrigin string `json:"daemon_origin,omitempty"`
+	// DaemonPresent reports an osqueryd binary on disk at DaemonPath,
+	// independent of registration — the two diverge exactly when an install
+	// aborted mid-flight. On the host lane the binary is the operator's, so
+	// "present but not registered" is also the ordinary state of a machine
+	// that has osquery and has not run install --with-osquery.
 	DaemonPresent bool `json:"daemon_present"`
 	// Bundled reports whether this binary carries an embedded payload at all,
 	// i.e. whether it was built with -tags osquery_bundle.
@@ -175,6 +209,15 @@ func ProbeOsquery(opts Options) OsqueryState {
 		Version:    BundledOsqueryVersion(),
 	}
 	if _, err := os.Stat(st.DaemonPath); err == nil {
+		st.DaemonPresent = true
+	} else if host, found := DetectHostOsqueryd(); found {
+		// No kite-owned payload at the bundle location. On the host lane
+		// (macOS) that is the NORMAL state, not a broken install: the daemon
+		// belongs to the operator's osquery. Reporting the bundle path as
+		// absent and stopping there would tell the dashboard "no osquery here"
+		// on a host that has a perfectly good one.
+		st.DaemonPath = host.Path
+		st.DaemonOrigin = host.Origin
 		st.DaemonPresent = true
 	}
 	st.ServiceState = serviceStateForConfig(BuildOsquerySvcConfig(opts))

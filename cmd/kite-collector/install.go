@@ -167,6 +167,7 @@ func newInstallCmd() *cobra.Command {
 		noStart     bool
 		forceCopy   bool
 		repair      bool
+		withOsquery bool
 	)
 
 	cmd := &cobra.Command{
@@ -199,6 +200,15 @@ What it does:
          single-use and expires in minutes, no durable secret is pasted
        - legacy token flow: pass --token pki_enroll_v1_... to skip sign-in
   6. If enrollment succeeds (or certs are already present), starts the service
+
+Optional osquery half (--with-osquery, macOS): registers the sibling
+"kite-osqueryd" daemon against an osqueryd this host already has — the pkg
+from osquery.io or the Homebrew osquery cask. kite writes only the
+configuration, the state directory, and the launchd job, all namespaced so
+they never collide with osquery's own io.osquery.agent. The daemon binary
+stays osquery's, which is what keeps it signed and TCC-attributed to osquery
+rather than to kite. On Linux and Windows the kite-collector-osquery package
+ships this daemon instead, so the flag is refused there.
 
 One-shot usage (recommended):
   kite-collector install
@@ -240,6 +250,7 @@ One-shot usage (recommended):
 				binaryDirExplicit: binaryDirExplicit,
 				forceCopy:         forceCopy,
 				repair:            repair,
+				withOsquery:       withOsquery,
 			})
 		},
 	}
@@ -278,6 +289,8 @@ One-shot usage (recommended):
 		"copy the binary to --binary-dir even when a package manager owns it")
 	cmd.Flags().BoolVar(&repair, "repair", false,
 		"after re-registering, delete the orphaned binary copy a drifted install left behind")
+	cmd.Flags().BoolVar(&withOsquery, "with-osquery", false,
+		"also register kite-osqueryd against an osqueryd already installed on this host (macOS)")
 
 	return cmd
 }
@@ -554,6 +567,10 @@ type installArgs struct {
 	// repair (--repair) additionally deletes the orphaned binary copy a
 	// previously drifted install left behind, after re-registering.
 	repair bool
+	// withOsquery (--with-osquery) asks for the sibling kite-osqueryd
+	// service to be registered against an osqueryd the operator installed.
+	// Ignored on the bundle artifact, which always installs its own payload.
+	withOsquery bool
 }
 
 // installExecutablePath is a seam over os.Executable so tests can run the
@@ -652,6 +669,7 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 		if !a.noStart {
 			_, _ = fmt.Fprintf(out, "  start service %q\n", cfg.Name)
 		}
+		printOsqueryPlan(out, opts.toInstallerOptions(), a.withOsquery)
 		return nil
 	}
 
@@ -806,7 +824,7 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	// failure is printed now, the rest of the install completes, and the
 	// non-nil return at the end gives scripted callers a non-zero exit code.
 	var bundleErr error
-	if bundleErr = installBundledOsquery(opts.toInstallerOptions(), out, nil); bundleErr != nil {
+	if bundleErr = installSiblingOsquery(opts.toInstallerOptions(), a.withOsquery, out, nil); bundleErr != nil {
 		_, _ = fmt.Fprintf(out, "  ✗  %v\n", bundleErr)
 	}
 

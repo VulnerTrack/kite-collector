@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 
 	"github.com/vulnertrack/kite-collector/internal/installer"
 )
@@ -128,14 +129,121 @@ func installBundledOsquery(
 	return nil
 }
 
-// uninstallBundledOsquery deregisters the sibling daemon alongside the
-// collector's own service. No-op on the plain build.
-func uninstallBundledOsquery(opts installer.Options) error {
-	if !installer.BundleAvailable() {
+// installSiblingOsquery is the CLI entry point for the optional osquery half.
+//
+// Two lanes register the same kite-osqueryd service, and which one applies is
+// decided by the artifact, not by the operator:
+//
+//   - bundled — this binary carries a checksum-pinned osqueryd payload
+//     (-tags osquery_bundle). It installs unconditionally, because an operator
+//     who downloaded kite-collector-osquery has already asked for osquery.
+//   - host — no payload, and the platform adopts the operator's own osqueryd
+//     (macOS). Requested explicitly with --with-osquery: registering a new
+//     machine-wide daemon is not something a plain `install` should do behind
+//     the operator's back.
+//
+// requested is answered rather than ignored on platforms with no host lane: a
+// flag that silently does nothing is worse than one that says why.
+func installSiblingOsquery(
+	opts installer.Options,
+	requested bool,
+	out io.Writer,
+	log *installer.InstallLog,
+) error {
+	if installer.BundleAvailable() {
+		// The payload lane wins: asking for --with-osquery on the bundle
+		// artifact is redundant, not contradictory.
+		return installBundledOsquery(opts, out, log)
+	}
+	if !requested {
 		return nil
 	}
-	if err := installer.UninstallOsqueryBundle(opts); err != nil {
-		return fmt.Errorf("uninstall bundled osquery: %w", err)
+	if !installer.HostOsqueryInstallSupported() {
+		logEvent(log, installer.LogCodeHostOsqueryUnsupported,
+			"host-osquery registration unsupported on this platform",
+			"goos", runtime.GOOS)
+		return fmt.Errorf(
+			"--with-osquery: %w; install the kite-collector-osquery package instead, which ships osqueryd as the %s service",
+			installer.ErrHostOsqueryUnsupported, installer.OsquerySvcName)
+	}
+	return installHostOsquery(opts, out, log)
+}
+
+// installHostOsquery registers kite-osqueryd against the operator's osqueryd.
+func installHostOsquery(
+	opts installer.Options,
+	out io.Writer,
+	log *installer.InstallLog,
+) error {
+	res, err := installer.InstallHostOsquery(opts)
+	switch {
+	case errors.Is(err, installer.ErrHostOsqueryUserMode):
+		// Same reasoning as the bundled lane: skipping loudly beats failing
+		// the whole install, because the collector itself installs fine in
+		// user mode.
+		logEvent(log, installer.LogCodeBundleSkippedUserMode,
+			"osquery service skipped for a per-user install")
+		writeLine(out, "  -  osquery skipped (a per-user install cannot "+
+			"register a machine daemon)")
+		return nil
+	case errors.Is(err, installer.ErrHostOsquerydNotFound):
+		logEvent(log, installer.LogCodeHostOsqueryNotFound,
+			"no osqueryd found on this host")
+		return fmt.Errorf(
+			"--with-osquery: %w; install it first with `brew install --cask osquery` "+
+				"or the pkg from https://osquery.io/downloads", err)
+	case err != nil:
+		logEvent(log, installer.LogCodeServiceRegisterFailed,
+			"host osquery registration failed",
+			"service", installer.OsquerySvcName,
+			"error", err.Error())
+		return fmt.Errorf("register %s: %w", installer.OsquerySvcName, err)
+	}
+
+	logEvent(log, installer.LogCodeHostOsqueryAdopted,
+		"osquery sibling service registered against the host osqueryd",
+		"service", installer.OsquerySvcName,
+		"daemon_path", res.DaemonPath,
+		"daemon_origin", res.DaemonOrigin,
+		"data_dir", res.DataDir,
+		"socket", res.SocketPath,
+		"started", res.Started)
+	writeLine(out, fmt.Sprintf("  ✓  service %q registered against %s",
+		installer.OsquerySvcName, res.DaemonPath))
+	writeLine(out, fmt.Sprintf("  ✓  osquery extensions socket %s", res.SocketPath))
+	if res.ConfigPreserved {
+		logEvent(log, installer.LogCodeHostOsqueryConfigKept,
+			"existing osquery configuration left untouched",
+			"config", installer.OsqueryConfigPath(opts))
+		writeLine(out, fmt.Sprintf("  ›  kept your existing %s",
+			installer.OsqueryConfigPath(opts)))
+	} else {
+		writeLine(out, fmt.Sprintf("  ✓  osquery configuration written to %s",
+			installer.OsqueryConfigPath(opts)))
+	}
+	return nil
+}
+
+// uninstallBundledOsquery deregisters the sibling daemon alongside the
+// collector's own service.
+//
+// Both lanes are torn down, not just the one this binary could have installed:
+// an operator who ran `install --with-osquery` and later moved to the bundle
+// artifact (or the reverse) still has exactly one kite-osqueryd registration,
+// and leaving it behind would keep a machine daemon alive with nothing reading
+// its socket.
+func uninstallBundledOsquery(opts installer.Options) error {
+	if installer.BundleAvailable() {
+		if err := installer.UninstallOsqueryBundle(opts); err != nil {
+			return fmt.Errorf("uninstall bundled osquery: %w", err)
+		}
+		return nil
+	}
+	if !installer.HostOsqueryInstallSupported() {
+		return nil
+	}
+	if err := installer.UninstallHostOsquery(opts); err != nil {
+		return fmt.Errorf("uninstall osquery service: %w", err)
 	}
 	return nil
 }
@@ -155,4 +263,34 @@ func writeLine(out io.Writer, line string) {
 		return
 	}
 	_, _ = fmt.Fprintln(out, line)
+}
+
+// printOsqueryPlan renders the osquery half of a --dry-run. Detection runs for
+// real here — the point of a dry run is to find out whether --with-osquery
+// would find a daemon BEFORE registering a system service, not to be told it
+// will be attempted.
+func printOsqueryPlan(out io.Writer, opts installer.Options, requested bool) {
+	if installer.BundleAvailable() {
+		writeLine(out, fmt.Sprintf("  install bundled osquery %s and register %q",
+			installer.BundledOsqueryVersion(), installer.OsquerySvcName))
+		return
+	}
+	if !requested {
+		return
+	}
+	if !installer.HostOsqueryInstallSupported() {
+		writeLine(out, fmt.Sprintf("  --with-osquery: REFUSED on %s (the kite-collector-osquery package owns %s here)",
+			runtime.GOOS, installer.OsquerySvcName))
+		return
+	}
+	host, found := installer.DetectHostOsqueryd()
+	if !found {
+		writeLine(out, "  --with-osquery: no osqueryd found on this host — nothing would be registered")
+		return
+	}
+	writeLine(out, fmt.Sprintf("  register service %q against %s (%s)",
+		installer.OsquerySvcName, host.Path, host.Origin))
+	writeLine(out, fmt.Sprintf("    config:     %s", installer.OsqueryConfigPath(opts)))
+	writeLine(out, fmt.Sprintf("    flagfile:   %s", installer.OsqueryFlagsPath(opts)))
+	writeLine(out, fmt.Sprintf("    socket:     %s", installer.OsqueryExtensionsEndpoint()))
 }

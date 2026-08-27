@@ -7,16 +7,37 @@ import (
 	"github.com/kardianos/service"
 )
 
+// Which lane registered the sibling daemon. Both produce one kite-osqueryd
+// service with one socket contract; they differ only in who owns the osqueryd
+// binary, which is exactly the fact an operator reading an install log needs.
+const (
+	// OsqueryModeBundled: the payload came from this binary's embedded,
+	// checksum-pinned copy (the deb/MSI/self-contained exe lanes).
+	OsqueryModeBundled = "bundled"
+	// OsqueryModeHost: the daemon belongs to the operator's own osquery
+	// install and kite only registered a namespaced job against it (macOS —
+	// see osquery_host.go).
+	OsqueryModeHost = "host"
+)
+
 // OsqueryInstallResult is what the sibling-daemon install actually did, so the
 // wizard, the CLI, and the install log can all report the same facts instead of
 // each inferring them.
 type OsqueryInstallResult struct {
-	Manifest    BundleManifest `json:"manifest"`
-	InstallDir  string         `json:"install_dir"`
-	DataDir     string         `json:"data_dir"`
-	SocketPath  string         `json:"socket_path"`
-	RecoverySet bool           `json:"recovery_configured"`
-	Started     bool           `json:"started"`
+	Manifest   BundleManifest `json:"manifest"`
+	Mode       string         `json:"mode"`
+	InstallDir string         `json:"install_dir"`
+	DataDir    string         `json:"data_dir"`
+	SocketPath string         `json:"socket_path"`
+	// DaemonPath and DaemonOrigin are set on the host lane only; on the
+	// bundled lane the payload location is implied by InstallDir.
+	DaemonPath   string `json:"daemon_path,omitempty"`
+	DaemonOrigin string `json:"daemon_origin,omitempty"`
+	RecoverySet  bool   `json:"recovery_configured"`
+	Started      bool   `json:"started"`
+	// ConfigPreserved reports that osquery.conf/osquery.flags were already
+	// present and were left as the operator had them.
+	ConfigPreserved bool `json:"config_preserved,omitempty"`
 }
 
 // InstallOsqueryBundle lays down the embedded payload and registers
@@ -47,6 +68,7 @@ type OsqueryInstallResult struct {
 // (`osqueryd.exe -S`) to find out why the start failed.
 func InstallOsqueryBundle(opts Options) (OsqueryInstallResult, error) {
 	res := OsqueryInstallResult{
+		Mode:       OsqueryModeBundled,
 		InstallDir: opts.BinaryDir,
 		DataDir:    OsqueryDataDir(opts),
 		SocketPath: OsqueryExtensionsEndpoint(),

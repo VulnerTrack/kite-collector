@@ -10,17 +10,6 @@ import (
 	"strings"
 )
 
-// defaultSocketPaths are where a root osqueryd puts its extensions socket on
-// Linux and macOS. The kite-collector-osquery deb runs kite-osqueryd with
-// --extensions_socket=/run/kite-osquery/kite-osquery.em (see
-// packaging/deb/kite-osqueryd.service), mirroring the Windows MSI's
-// \\.\pipe\kite-osquery.em contract; the rest are stock osqueryd locations.
-var defaultSocketPaths = []string{
-	"/run/kite-osquery/kite-osquery.em",
-	"/var/osquery/osquery.em",
-	"/var/run/osquery/osquery.em",
-}
-
 // platformDial connects to a unix-domain extensions socket.
 func platformDial(ctx context.Context, path string) (net.Conn, error) {
 	if strings.HasPrefix(path, `\\.\pipe\`) {
@@ -35,6 +24,9 @@ func platformDial(ctx context.Context, path string) (net.Conn, error) {
 }
 
 // detectSocket returns the first default extensions socket that exists, or "".
+// The candidate list is per-platform (socketpaths_darwin.go /
+// socketpaths_unix.go) because the kite-namespaced daemon lives in a different
+// runtime directory on macOS than on Linux.
 func detectSocket() string {
 	for _, p := range defaultSocketPaths {
 		if fi, err := os.Stat(p); err == nil && fi.Mode().Type() == os.ModeSocket {
