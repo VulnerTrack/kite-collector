@@ -572,6 +572,15 @@ func buildMachine(info, sys, osv, kern map[string]string, now time.Time) model.M
 	}
 }
 
+// ResolveSocket is the exported form of the socket precedence, for callers
+// outside a scan that need to answer "which osquery would discovery talk to on
+// this host?" — `kite-collector doctor` in particular. Passing a nil cfg gives
+// the env → auto-detect answer a service with no sources.osquery block gets.
+//
+// Exported rather than reimplemented at the call site so a diagnostic can
+// never disagree with the scan about where the daemon is.
+func ResolveSocket(cfg map[string]any) string { return resolveSocket(cfg) }
+
 // resolveSocket applies the cfg → env → auto-detect precedence.
 func resolveSocket(cfg map[string]any) string {
 	if s := toString(cfg["socket"]); s != "" {

@@ -7,6 +7,7 @@ package main
 //   config        → parses?
 //   database      → opens? migrations current?
 //   certificates  → present? expiring?
+//   osquery       → is there a daemon, and does it answer?
 //   tcp-dial / tls-handshake / otlp-ping → can we reach the collector?
 //
 // Read-only (it never creates the database or mutates certs) and exits
@@ -21,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -28,6 +30,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
+	osquerydisc "github.com/vulnertrack/kite-collector/internal/discovery/osquery"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
@@ -73,9 +76,10 @@ func newDoctorCmd() *cobra.Command {
   2. config         — configuration file parses
   3. database       — SQLite store opens and migrations are current
   4. certificates   — enrollment PEMs present and not expiring
-  5. tcp-dial       — the OTLP collector host:port is reachable
-  6. tls-handshake  — mTLS handshake with the enrollment certificates
-  7. otlp-ping      — a minimal log record is accepted (HTTP 2xx)
+  5. osquery        — an osqueryd is installed and answers on its socket
+  6. tcp-dial       — the OTLP collector host:port is reachable
+  7. tls-handshake  — mTLS handshake with the enrollment certificates
+  8. otlp-ping      — a minimal log record is accepted (HTTP 2xx)
 
 Read-only: nothing is created or modified. Exits non-zero when any check
 fails, so it can gate CI and configuration-management runs. Use --offline
@@ -134,7 +138,7 @@ type doctorOptions struct {
 func runDoctorChecks(ctx context.Context, o doctorOptions) []doctorCheck {
 	opts := statusProbeOptions(o.CertsDir, o.DbPath, o.UserMode, o.UserFlagSet)
 	state := installer.Probe(opts)
-	checks := make([]doctorCheck, 0, 7)
+	checks := make([]doctorCheck, 0, 8)
 
 	checks = append(checks, doctorServiceCheck(state))
 	checks = append(checks, doctorBinaryDriftCheck(opts))
@@ -142,6 +146,7 @@ func runDoctorChecks(ctx context.Context, o doctorOptions) []doctorCheck {
 	checks = append(checks, cfgCheck)
 	checks = append(checks, doctorDatabaseCheck(ctx, opts.DbPath))
 	checks = append(checks, doctorCertificatesCheck(opts.CertsDir, state))
+	checks = append(checks, doctorOsqueryCheck(ctx, opts, o.Timeout))
 
 	if o.Offline {
 		checks = append(checks, doctorCheck{Name: "connectivity", Status: doctorSkip, Detail: "skipped (--offline)"})
@@ -176,6 +181,101 @@ func doctorServiceCheck(state installer.State) doctorCheck {
 		c.Detail = "service manager state unknown"
 	}
 	return c
+}
+
+// osqueryDialTimeout caps the doctor's liveness probe. It is deliberately much
+// shorter than the 30s per-scan Thrift deadline the discovery source uses: a
+// diagnostic that hangs for half a minute on a dead socket is a diagnostic
+// operators stop running.
+const osqueryDialTimeout = 3 * time.Second
+
+// doctorOsqueryCheck answers "would osquery-backed discovery do anything on
+// this host, and if not, why not?".
+//
+// Three facts, in the order that makes the answer actionable: is there a
+// daemon binary at all, is kite's sibling service registered against it, and
+// does something actually answer on the extensions socket. The last one is the
+// only one that matters to a scan — an operator running osquery's own
+// io.osquery.agent job has no kite-osqueryd registration and a perfectly
+// working discovery source, so a registered service is never required for a
+// pass.
+//
+// Never a failure. osquery is optional everywhere: a host without it is a
+// supported configuration, not a broken one.
+func doctorOsqueryCheck(ctx context.Context, opts installer.Options, timeout time.Duration) doctorCheck {
+	c := doctorCheck{Name: "osquery"}
+	st := installer.ProbeOsquery(opts)
+	socket := osquerydisc.ResolveSocket(nil)
+
+	if socket == "" {
+		c.Status = doctorSkip
+		switch {
+		case !st.DaemonPresent:
+			c.Detail = "no osqueryd on this host; osquery-backed discovery is inert"
+			c.Hint = osqueryInstallHint()
+		case st.ServiceState == installer.ServiceNotInstalled:
+			c.Detail = "osqueryd present at " + st.DaemonPath + " but no extensions socket is listening"
+			c.Hint = osqueryRegisterHint()
+		default:
+			c.Detail = fmt.Sprintf("%s is %s and no extensions socket is listening",
+				installer.OsquerySvcName, st.ServiceState)
+			c.Hint = "run: kite-collector service start (the daemon may still be booting)"
+		}
+		return c
+	}
+
+	if timeout <= 0 || timeout > osqueryDialTimeout {
+		timeout = osqueryDialTimeout
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if err := osquerydisc.NewClient(socket).Ping(pingCtx); err != nil {
+		// A socket that exists but does not answer is the signature of a
+		// daemon that died without cleaning up, or one still coming up.
+		c.Status = doctorWarn
+		c.Detail = fmt.Sprintf("socket %s did not answer: %v", socket, err)
+		c.Hint = "check the daemon's own logs; the socket is stale if the daemon is gone"
+		return c
+	}
+
+	c.Status = doctorPass
+	c.Detail = "daemon answering on " + socket
+	if st.DaemonOrigin != "" {
+		c.Detail += " (" + st.DaemonOrigin + ": " + st.DaemonPath + ")"
+	}
+	c.Hint = osqueryReadHint()
+	return c
+}
+
+// osqueryInstallHint names the platform's way of getting an osqueryd.
+func osqueryInstallHint() string {
+	if installer.HostOsqueryInstallSupported() {
+		return "brew install --cask osquery, then: sudo kite-collector install --with-osquery"
+	}
+	return "install the kite-collector-osquery package, which ships osqueryd as " +
+		installer.OsquerySvcName
+}
+
+// osqueryRegisterHint names the platform's way of turning an installed
+// osqueryd into a running one kite can read.
+func osqueryRegisterHint() string {
+	if installer.HostOsqueryInstallSupported() {
+		return "run: sudo kite-collector install --with-osquery (or start osquery's own daemon with `sudo osqueryctl start`)"
+	}
+	return "start the daemon: systemctl start " + installer.OsquerySvcName
+}
+
+// osqueryReadHint carries the one macOS caveat that a green check cannot rule
+// out. TCC denials are not errors: osqueryd reading a protected location
+// without Full Disk Access gets fewer rows, not a failure, so an ungranted
+// host looks exactly like a clean one — the same silent-zero shape the YARA
+// sigfile probe exists to defeat, but enforced by the OS and outside anything
+// kite can prove over the socket.
+func osqueryReadHint() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	return "macOS: grant Full Disk Access to osquery.app or TCC-protected paths read empty (see docs/macos-osquery.md)"
 }
 
 // doctorBinaryDriftCheck detects the split-owner drift signature: the
