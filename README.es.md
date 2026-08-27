@@ -70,6 +70,25 @@ brew install --cask vulnertrack/tap/kite-collector
 kite-collector install
 ```
 
+¿Necesitas también [osquery](https://osquery.io) en el endpoint? macOS no
+recibe un osqueryd incluido — un binario empaquetado por kite correría bajo la
+firma de kite y necesitaría el permiso de Acceso Total al Disco de kite en
+lugar del de osquery — así que kite adopta el daemon que ya tienes:
+
+```bash
+brew install --cask osquery
+sudo kite-collector install --with-osquery
+```
+
+Eso registra el daemon launchd hermano `kite-osqueryd` apuntando a
+`/opt/osquery/lib/osquery.app`, con nombres propios para no chocar con el
+trabajo `io.osquery.agent` de osquery. Si prefieres ejecutar el daemon propio
+de osquery (`sudo osqueryctl start`), el descubrimiento lo detecta solo y no
+hace falta configurar nada. Una advertencia de macOS antes de confiar en un
+resultado limpio: sin Acceso Total al Disco, osqueryd lee las rutas protegidas
+por TCC *vacías en lugar de fallar*. Detalles en
+[docs/macos-osquery.md](docs/macos-osquery.md).
+
 ### Despliegue masivo desde el dashboard
 
 El dashboard local de kite-collector incluye la opción **Mass deployment**.

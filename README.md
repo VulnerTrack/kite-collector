@@ -91,6 +91,25 @@ registration — the cask tears the launchd job down only on
 `brew uninstall --zap`, so this step is the supported path, not a
 convenience.
 
+Need [osquery](https://osquery.io) on the endpoint too? macOS does not get a
+bundled payload — a vendored osqueryd would have to run under kite's signature
+and kite's Full Disk Access grant instead of osquery's — so kite adopts the
+daemon you already have:
+
+```bash
+brew install --cask osquery
+sudo kite-collector install --with-osquery
+```
+
+That registers the sibling `kite-osqueryd` launchd daemon against
+`/opt/osquery/lib/osquery.app`, namespaced so it never collides with
+osquery's own `io.osquery.agent` job. If you would rather just run osquery's
+daemon (`sudo osqueryctl start`), discovery auto-detects it and no kite-side
+setup is needed at all. One macOS caveat is worth reading before you trust a
+clean result: without Full Disk Access, osqueryd reads TCC-protected paths as
+*empty rather than failing*. Details in
+[docs/macos-osquery.md](docs/macos-osquery.md).
+
 ### Mass deployment from the dashboard
 
 The local kite-collector dashboard includes **Mass deployment**. It generates a

@@ -210,6 +210,13 @@ homebrew_casks:
       daemon pointing at the brew-managed binary — `brew upgrade` swaps
       that binary and the running agent restarts itself onto the new one):
         sudo kite-collector install
+      For osquery-backed discovery (FIM, YARA, richer inventory), install
+      osquery first — macOS ships no bundled payload, so kite registers its
+      kite-osqueryd daemon against the one you already have:
+        brew install --cask osquery
+        sudo kite-collector install --with-osquery
+      Grant Full Disk Access to /opt/osquery/lib/osquery.app afterwards, or
+      TCC-protected paths read as empty instead of failing.
       Before `brew uninstall`, remove the service registration:
         sudo kite-collector uninstall
     hooks:
