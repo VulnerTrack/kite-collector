@@ -1744,6 +1744,11 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	}
 }
 
+// hostMetricsCollectTimeout bounds a single collection cycle. It sits below
+// config.MinHostMetricsInterval (15s floor, 60s default) so a slow cycle can
+// never overlap the next tick's.
+const hostMetricsCollectTimeout = 10 * time.Second
+
 // emitHostMetrics runs one host-metrics collect-and-emit cycle (RFC-0157
 // §5.3). Every failure path here is a warning and a return: neither a
 // gopsutil failure nor a transport failure may interrupt discovery scans,
@@ -1758,22 +1763,39 @@ func emitHostMetrics(
 		return
 	}
 
-	snap, err := hostmetrics.Collect(ctx)
+	// Bound the cycle well inside the 60s cadence floor. gopsutil's
+	// syscall-backed readers cannot be interrupted mid-read, but everything
+	// between them can, so a host with a wedged mount degrades to a skipped
+	// tick instead of a collector goroutine parked until shutdown.
+	collectCtx, cancelCollect := context.WithTimeout(ctx, hostMetricsCollectTimeout)
+	defer cancelCollect()
+
+	snap, err := hostmetrics.Collect(collectCtx)
 	if err != nil {
-		slog.Warn("host metrics collection produced no samples",
+		if ctx.Err() != nil {
+			// The parent context died: the agent is stopping mid-cycle.
+			// That is an orderly shutdown, and logging it as a collection
+			// fault would put a warning in every clean stop.
+			return
+		}
+		slog.Warn("host metrics collection failed",
 			"code", string(LogCodeHostMetricsCollectFailed),
 			"error", err,
+			"sample_count", len(snap.Samples),
 			"failures", strings.Join(snap.Failures, "; "))
 		return
 	}
 	if len(snap.Failures) > 0 {
 		// A partial snapshot is still worth emitting; say so once per tick
 		// so an operator can tell "this host has no load average" from
-		// "this host stopped reporting".
+		// "this host stopped reporting". Sources the platform simply does
+		// not implement ride along as context rather than raising the
+		// warning themselves — they would never stop firing.
 		slog.Warn("host metrics collection degraded; emitting partial snapshot",
 			"code", string(LogCodeHostMetricsCollectDegraded),
 			"sample_count", len(snap.Samples),
-			"failures", strings.Join(snap.Failures, "; "))
+			"failures", strings.Join(snap.Failures, "; "),
+			"unsupported", strings.Join(snap.Unsupported, ","))
 	}
 
 	if emitErr := metricsEmitter.EmitSnapshot(ctx, snap); emitErr != nil {

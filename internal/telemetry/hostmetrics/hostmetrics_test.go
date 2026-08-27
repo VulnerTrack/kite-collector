@@ -3,7 +3,9 @@ package hostmetrics
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
+	"os"
 	"testing"
 	"time"
 
@@ -25,20 +27,35 @@ type fakeSource struct {
 	loadErr   error
 	parts     []Partition
 	nics      []NetIO
-	mem       MemStat
-	load      LoadStat
-	uptime    time.Duration
-	cpu       float64
+	// probed records the sources actually read, in order, so a test can
+	// assert that a cancelled context stopped the cycle rather than merely
+	// discarding its results.
+	probed []string
+	mem    MemStat
+	load   LoadStat
+	uptime time.Duration
+	cpu    float64
 }
 
-func (f *fakeSource) CPUPercent(context.Context) (float64, error) { return f.cpu, f.cpuErr }
-func (f *fakeSource) Memory(context.Context) (MemStat, error)     { return f.mem, f.memErr }
+func (f *fakeSource) probe(name string) { f.probed = append(f.probed, name) }
+
+func (f *fakeSource) CPUPercent(context.Context) (float64, error) {
+	f.probe("cpu")
+	return f.cpu, f.cpuErr
+}
+
+func (f *fakeSource) Memory(context.Context) (MemStat, error) {
+	f.probe("memory")
+	return f.mem, f.memErr
+}
 
 func (f *fakeSource) Partitions(context.Context) ([]Partition, error) {
+	f.probe("partitions")
 	return f.parts, f.partsErr
 }
 
 func (f *fakeSource) DiskUsage(_ context.Context, mountpoint string) (DiskStat, error) {
+	f.probe("disk_usage")
 	if f.usageErr != nil {
 		return DiskStat{}, f.usageErr
 	}
@@ -49,14 +66,32 @@ func (f *fakeSource) DiskUsage(_ context.Context, mountpoint string) (DiskStat, 
 	return stat, nil
 }
 
-func (f *fakeSource) NetIO(context.Context) ([]NetIO, error) { return f.nics, f.nicsErr }
+func (f *fakeSource) NetIO(context.Context) ([]NetIO, error) {
+	f.probe("net_io")
+	return f.nics, f.nicsErr
+}
 
 func (f *fakeSource) Uptime(context.Context) (time.Duration, error) {
+	f.probe("uptime")
 	return f.uptime, f.uptimeErr
 }
 
 func (f *fakeSource) LoadAverage(context.Context) (LoadStat, error) {
+	f.probe("load_average")
 	return f.load, f.loadErr
+}
+
+// cancelMidCycle cancels the collection context once the first source has
+// been read, standing in for an agent stopped part-way through a cycle.
+type cancelMidCycle struct {
+	*fakeSource
+	cancel context.CancelFunc
+}
+
+func (c cancelMidCycle) CPUPercent(ctx context.Context) (float64, error) {
+	value, err := c.fakeSource.CPUPercent(ctx)
+	c.cancel()
+	return value, err
 }
 
 // healthySource returns a fixture with every source readable: one real
@@ -312,8 +347,81 @@ func TestCollect_AllSourcesFailingReturnsErrNoSamples(t *testing.T) {
 	snap, err := NewWithSource(src, MaxDevices).Collect(context.Background())
 
 	require.ErrorIs(t, err, ErrNoSamples)
+	// The per-source cause travels with the sentinel: a caller that needs
+	// to tell "no /proc in this container" from "permission denied" can,
+	// without parsing Failures strings.
+	require.ErrorIs(t, err, boom)
 	assert.Empty(t, snap.Samples)
 	assert.Len(t, snap.Failures, 6)
+}
+
+// TestSnapshot_ErrPreservesTheUnderlyingCause is the errors.Is contract on a
+// partially-readable host: Failures is for the log line, Err is for code
+// that has to classify what went wrong.
+func TestSnapshot_ErrPreservesTheUnderlyingCause(t *testing.T) {
+	src := healthySource()
+	src.cpuErr = fmt.Errorf("read /proc/stat: %w", os.ErrPermission)
+
+	snap := collectWith(t, src)
+
+	require.ErrorIs(t, snap.Err(), os.ErrPermission)
+	require.Len(t, snap.Failures, 1)
+	assert.Contains(t, snap.Failures[0], "cpu")
+	assert.Positive(t, names(snap)[MetricMemoryUsage], "one denied read is not the whole snapshot")
+}
+
+// TestCollect_NotImplementedIsAPlatformLimitNotADegradation keeps the
+// per-tick warning honest. Load average is genuinely absent on some
+// platforms; reporting that as a failure every 60s forever is noise no
+// operator can act on, so it lands in Unsupported instead.
+func TestCollect_NotImplementedIsAPlatformLimitNotADegradation(t *testing.T) {
+	src := healthySource()
+	// gopsutil's common.ErrNotImplementedError, which its internal/ tree
+	// keeps out of reach of errors.Is.
+	src.loadErr = errors.New("not implemented yet")
+
+	snap := collectWith(t, src)
+
+	assert.Empty(t, snap.Failures)
+	assert.Equal(t, []string{"load_average"}, snap.Unsupported)
+	assert.ErrorContains(t, snap.Err(), "load_average")
+	assert.Zero(t, names(snap)[MetricLoad1])
+}
+
+// TestCollect_DeadContextIsDistinguishableFromNoSamples: an agent shutting
+// down and a host that stopped answering both produce an empty snapshot.
+// Only the error tells them apart, and the caller logs one but not the
+// other.
+func TestCollect_DeadContextIsDistinguishableFromNoSamples(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	src := healthySource()
+	snap, err := NewWithSource(src, MaxDevices).Collect(ctx)
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, ErrNoSamples)
+	assert.Empty(t, snap.Samples)
+	assert.Empty(t, src.probed, "no source may be read under a dead context")
+}
+
+// TestCollect_CancellationMidCycleStopsTheRemainingProbes covers the
+// shutdown-during-collection path: what was already read is kept, the rest
+// is skipped rather than each failing in turn.
+func TestCollect_CancellationMidCycleStopsTheRemainingProbes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	base := healthySource()
+	snap, err := NewWithSource(cancelMidCycle{fakeSource: base, cancel: cancel}, MaxDevices).
+		Collect(ctx)
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, []string{"cpu"}, base.probed, "later sources must be skipped, not failed")
+	assert.Positive(t, names(snap)[MetricCPUUtilization], "the completed read is kept")
+	assert.Zero(t, names(snap)[MetricMemoryUsage])
+	require.Len(t, snap.Failures, 1)
+	assert.Contains(t, snap.Failures[0], "collection")
 }
 
 // TestCollect_DropsNonFiniteValues guards the JSON encoder: json.Marshal

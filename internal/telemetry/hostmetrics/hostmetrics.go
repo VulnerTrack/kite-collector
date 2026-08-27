@@ -101,8 +101,14 @@ const MaxDevices = 8
 const maxDeviceNameLen = 32
 
 // ErrNoSamples is returned by Collect when every source failed. Callers log
-// and skip the tick — collection failure is never fatal (R3).
+// and skip the tick — collection failure is never fatal (R3). The returned
+// error wraps the per-source causes, so errors.Is against os.ErrPermission
+// or a context error still classifies correctly at the call site.
 var ErrNoSamples = errors.New("hostmetrics: no source produced a sample")
+
+// ErrNonFiniteValue marks a reading that arrived as NaN or ±Inf. It reaches
+// callers only through Snapshot.Err; the sample itself is dropped.
+var ErrNonFiniteValue = errors.New("non-finite value")
 
 // Sample is one measured data point, ready for OTLP serialisation.
 type Sample struct {
@@ -125,8 +131,26 @@ type Snapshot struct {
 	// Present so the caller can log a degraded collection without having to
 	// treat it as an error.
 	Failures []string
-	Samples  []Sample
+	// Unsupported names the sources this platform does not implement at all
+	// (gopsutil's "not implemented yet"). Kept apart from Failures because
+	// it is a permanent property of the platform rather than a degradation:
+	// a caller that warns on every Failures entry would otherwise warn on
+	// every tick, forever, about something no operator can act on.
+	Unsupported []string
+	Samples     []Sample
+	// errs retains the wrapped error behind each Failures and Unsupported
+	// entry. Failures is a flat []string because that is what a log line
+	// wants; errs is what keeps errors.Is working once the snapshot has
+	// crossed a package boundary and the strings are all that is left.
+	errs []error
 }
+
+// Err returns the joined causes behind every failed and unsupported source,
+// or nil when every source was readable. It is the errors.Is entry point
+// for a degraded snapshot:
+//
+//	if errors.Is(snap.Err(), os.ErrPermission) { ... }
+func (s Snapshot) Err() error { return errors.Join(s.errs...) }
 
 // MemStat is the projected subset of gopsutil's mem.VirtualMemoryStat.
 // Decoupling lets tests construct fixtures without importing gopsutil.
@@ -215,6 +239,12 @@ func Memory(ctx context.Context) (MemStat, error) {
 // Collect probes every source once. Per-source failures are collected into
 // Snapshot.Failures rather than aborting; only a total failure (no sample
 // from any source) returns ErrNoSamples.
+//
+// ctx is honoured between sources: a cancelled or expired context stops the
+// remaining probes and is returned as the error, wrapping context.Canceled
+// or context.DeadlineExceeded, even when earlier sources did produce
+// samples. The caller needs that distinction — an agent shutting down and a
+// host that stopped answering are the same empty snapshot otherwise.
 func (c *Collector) Collect(ctx context.Context) (Snapshot, error) {
 	// 11 instruments plus per-device fan-out; a small over-allocation here
 	// is cheaper than the regrowth on a host with several disks and NICs.
@@ -224,14 +254,36 @@ func (c *Collector) Collect(ctx context.Context) (Snapshot, error) {
 		Failures:    make([]string, 0, 4),
 	}
 
-	c.collectCPU(ctx, &snap)
-	c.collectMemory(ctx, &snap)
-	c.collectDisk(ctx, &snap)
-	c.collectNetwork(ctx, &snap)
-	c.collectUptime(ctx, &snap)
-	c.collectLoad(ctx, &snap)
+	probes := []func(context.Context, *Snapshot){
+		c.collectCPU,
+		c.collectMemory,
+		c.collectDisk,
+		c.collectNetwork,
+		c.collectUptime,
+		c.collectLoad,
+	}
+	for _, probe := range probes {
+		// Checked between probes rather than inside each one: gopsutil's
+		// syscall-backed readers (statfs, /proc) do not observe ctx
+		// themselves, so this is the only place cancellation can take
+		// effect without abandoning a goroutine mid-read.
+		if ctx.Err() != nil {
+			break
+		}
+		probe(ctx, &snap)
+	}
 
+	if err := ctx.Err(); err != nil {
+		// Recorded once, here, rather than per skipped source: six copies
+		// of "context canceled" in Failures tells an operator nothing the
+		// single returned error does not.
+		snap.fail("collection", err)
+		return snap, fmt.Errorf("hostmetrics: collection interrupted: %w", err)
+	}
 	if len(snap.Samples) == 0 {
+		if cause := snap.Err(); cause != nil {
+			return snap, fmt.Errorf("%w: %w", ErrNoSamples, cause)
+		}
 		return snap, ErrNoSamples
 	}
 	return snap, nil
@@ -269,6 +321,12 @@ func (c *Collector) collectDisk(ctx context.Context, snap *Snapshot) {
 	}
 
 	for _, p := range c.selectPartitions(parts) {
+		// The one probe that loops over an unbounded external resource: up
+		// to MaxDevices mounts, any of which can be a slow network share.
+		// Collect records the cancellation cause for the whole cycle.
+		if ctx.Err() != nil {
+			return
+		}
 		usage, usageErr := c.src.DiskUsage(ctx, p.Mountpoint)
 		if usageErr != nil {
 			// One unreadable mount (a disconnected network share, a
@@ -408,14 +466,43 @@ func (s *Snapshot) sum(name, unit string, value float64, attrs map[string]string
 // single bad reading would otherwise cost the whole batch.
 func (s *Snapshot) add(sample Sample) {
 	if math.IsNaN(sample.Value) || math.IsInf(sample.Value, 0) {
-		s.Failures = append(s.Failures, sample.Name+": non-finite value")
+		err := fmt.Errorf("%s: %w", sample.Name, ErrNonFiniteValue)
+		s.errs = append(s.errs, err)
+		s.Failures = append(s.Failures, err.Error())
 		return
 	}
 	s.Samples = append(s.Samples, sample)
 }
 
+// fail records a source that could not be read: the wrapped error joins the
+// snapshot's chain, and a flattened copy joins Failures for logging. A
+// source the platform does not implement is recorded as Unsupported instead
+// — still in the chain, but not something to warn about every tick.
 func (s *Snapshot) fail(source string, err error) {
-	s.Failures = append(s.Failures, fmt.Sprintf("%s: %v", source, err))
+	wrapped := fmt.Errorf("%s: %w", source, err)
+	s.errs = append(s.errs, wrapped)
+	if isNotImplemented(err) {
+		s.Unsupported = append(s.Unsupported, source)
+		return
+	}
+	s.Failures = append(s.Failures, wrapped.Error())
+}
+
+// isNotImplemented reports whether err is gopsutil's "this platform does
+// not implement this reading" sentinel.
+//
+// That sentinel is common.ErrNotImplementedError, which lives under
+// gopsutil's internal/ tree and therefore cannot be named — let alone
+// passed to errors.Is — by any package outside gopsutil itself. Matching
+// the message is the only classification available to a consumer. The
+// wording has been stable across v3 and v4 ("not implemented yet"), and a
+// false negative costs nothing worse than the source being reported as a
+// degradation rather than a platform limit.
+func isNotImplemented(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "not implemented")
 }
 
 // ratio converts a gopsutil "used percent" reading into a 0..1 ratio,
