@@ -80,6 +80,13 @@ runs:
         INFRA_RE="${INFRA_RE}|net/http: request canceled"
         INFRA_RE="${INFRA_RE}|temporary failure in name resolution"
         INFRA_RE="${INFRA_RE}|unexpected eof|context deadline exceeded"
+        # Go module fetches through the proxy/checksum mirror. Matched on
+        # "reading <url>" and the HTTP/2 transport errors only: a genuine
+        # go.sum mismatch reports "SECURITY ERROR: checksum mismatch" and
+        # is deliberately NOT matched here, so a tampered dependency still
+        # fails the suite instead of being retried as a blip.
+        INFRA_RE="${INFRA_RE}|reading https://(sum|proxy)\.golang\.org"
+        INFRA_RE="${INFRA_RE}|stream error: stream id|http2: server sent goaway"
 
         MAX_ATTEMPTS=2
         : > "${LOG_FILE}"
