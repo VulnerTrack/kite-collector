@@ -18,6 +18,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/scan"
+	"github.com/vulnertrack/kite-collector/internal/secretstore"
 	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
@@ -36,6 +37,7 @@ type Options struct {
 	Coordinator      *scan.Coordinator
 	BaseConfig       *config.Config
 	StreamController StreamController
+	SecretStore      secretstore.Store
 	// Installer, when non-nil, enables POST /api/v1/agent/install to run a
 	// real install from the dashboard. nil → the endpoint returns 503 with
 	// a CLI hint, which is the safer production default for non-elevated
@@ -720,6 +722,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				TLSConfig:        tlsCfg,
 				Coordinator:      opts.Coordinator,
 				BaseConfig:       opts.BaseConfig,
+				SecretStore:      opts.SecretStore,
 				OAuth:            opts.OAuth,
 				PKIEndpoint:      resolveFleetPKIEndpoint(),
 			})

@@ -650,7 +650,7 @@ See [`samples/streaming-to-otel/`](samples/streaming-to-otel/) for a self-contai
 ## Security
 
 - **Read-only** -- never writes to, modifies, or executes code on discovered systems
-- **No credentials in storage** -- SQLite contains asset data only, never tokens or passwords
+- **Dedicated credential storage** -- connector passwords never enter SQLite or YAML; Kite uses the operating-system credential store when available and an identity-key encrypted AES-256-GCM store on headless hosts
 - **Structured logging** -- `log/slog` JSON output with automatic credential redaction
 - **Minimal privileges** -- works as non-root with graceful degradation for permission-denied paths
 

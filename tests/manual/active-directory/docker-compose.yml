@@ -59,8 +59,6 @@ services:
       - --source
       - ldap
       - --verbose
-    environment:
-      KITE_LDAP_BIND_PASSWORD: ${AD_ADMIN_PASSWORD:?set AD_ADMIN_PASSWORD in .env}
     volumes:
       - ./kite-collector.yaml:/lab/kite-collector.yaml:ro
       - collector_data:/data
@@ -95,7 +93,6 @@ services:
       # lab port while publishing it on the registered host port.
       - "127.0.0.1:9090:19090"
     environment:
-      KITE_LDAP_BIND_PASSWORD: ${AD_ADMIN_PASSWORD:?set AD_ADMIN_PASSWORD in .env}
       KITE_ONBOARDING_BINARY_DIR: /
       KITE_ONBOARDING_CERTS_DIR: /data
     volumes:

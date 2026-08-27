@@ -14,7 +14,7 @@ Derived from the current codebase. Last updated: 2026-04-07.
 | Agent Ed25519 private key | TPM / keyring / file | Impersonate the agent, forge events |
 | mTLS client certificate | Filesystem (`agent.pem`) | Authenticate as the agent to the SaaS |
 | CA certificate chain | Filesystem (`ca.pem`) | Trust anchor for the agent-to-SaaS channel |
-| Discovery source credentials | Environment variables only | Access to customer's cloud/MDM/CMDB APIs |
+| Discovery source credentials | OS credential store or identity-key encrypted local store; environment variables are migration/deployment inputs only | Access to customer's cloud/MDM/CMDB APIs |
 | Customer network topology | Inferred from scan scope + results | Lateral movement roadmap |
 | Enrollment token | Passed at first boot | Register rogue agents against the SaaS |
 
@@ -122,7 +122,7 @@ Three trust boundaries:
 
 | Threat | Current mitigation | Residual risk |
 |--------|--------------------|---------------|
-| Source credentials leaked | Env vars only, never in config or logs | `/proc/<pid>/environ` readable by root; credentials in process memory |
+| Source credentials leaked | Keychain/DPAPI/Secret Service where available; AES-256-GCM identity-key fallback for headless hosts; never in config, SQLite, or logs | Credentials necessarily exist briefly in process memory while a connector authenticates |
 | SSRF via scan scope | Config validation checks CIDR format | **No blocklist** — `169.254.169.254/32` (cloud metadata), `fd00::/8`, link-local addresses scannable |
 | Partial scan reported as complete | Circuit breaker + scan deadline; partial results accepted | Operator may not notice missing sources — no explicit "coverage gap" alert |
 

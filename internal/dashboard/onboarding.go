@@ -30,6 +30,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/scan"
+	"github.com/vulnertrack/kite-collector/internal/secretstore"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -59,6 +60,7 @@ type onboardingDeps struct {
 	TLSConfig        config.TLSConfig
 	Coordinator      *scan.Coordinator
 	BaseConfig       *config.Config
+	SecretStore      secretstore.Store
 	// ScanEnabled tells the post-completion launcher panel whether to surface
 	// the "Run your first scan" CTA. True when the dashboard was wired with
 	// both a scan.Coordinator and a config.Config (the same condition the
@@ -75,6 +77,7 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
 	}
+	hydrateIntegrationSecrets(deps)
 	mux.HandleFunc("GET /onboarding", serveOnboardingPage)
 	mux.HandleFunc("GET /fragments/enroll-form", func(w http.ResponseWriter, r *http.Request) {
 		renderOnboardingFragment(w, deps.Logger, "enroll-form", func(buf io.Writer) error {

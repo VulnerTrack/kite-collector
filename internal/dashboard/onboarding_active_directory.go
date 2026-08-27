@@ -15,9 +15,40 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/scan"
+	"github.com/vulnertrack/kite-collector/internal/secretstore"
 )
 
 const ldapPasswordEnv = "KITE_LDAP_BIND_PASSWORD"
+const ldapPasswordSecret = "kite/integrations/active-directory/password"
+
+func hydrateIntegrationSecrets(deps onboardingDeps) {
+	if deps.SecretStore == nil {
+		return
+	}
+	// One-time compatibility migration: deployments that previously injected
+	// the LDAP password through an environment variable are moved into the
+	// secure backend at startup. The environment value remains available to
+	// the current process because existing connectors resolve *_env lazily.
+	if legacy := os.Getenv(ldapPasswordEnv); legacy != "" {
+		if _, err := deps.SecretStore.Get(ldapPasswordSecret); errors.Is(err, secretstore.ErrNotFound) {
+			if putErr := deps.SecretStore.Put(ldapPasswordSecret, []byte(legacy)); putErr != nil && deps.Logger != nil {
+				deps.Logger.Warn("could not migrate Active Directory credential", "backend", deps.SecretStore.Backend(), "error", putErr)
+			}
+		}
+		return
+	}
+	value, err := deps.SecretStore.Get(ldapPasswordSecret)
+	if err != nil {
+		if !errors.Is(err, secretstore.ErrNotFound) && deps.Logger != nil {
+			deps.Logger.Warn("could not load Active Directory credential", "backend", deps.SecretStore.Backend(), "error", err)
+		}
+		return
+	}
+	defer clear(value)
+	if err := os.Setenv(ldapPasswordEnv, string(value)); err != nil && deps.Logger != nil {
+		deps.Logger.Warn("could not activate Active Directory credential", "error", err)
+	}
+}
 
 // onboardingServiceAdapter is the extension point for credentialed services
 // discovered during onboarding. Adding a service does not change the base
@@ -311,7 +342,22 @@ func handleActiveDirectorySetup(w http.ResponseWriter, r *http.Request, deps onb
 		_ = renderActiveDirectorySetup(w, deps, "", "TLS mode must be Automatic, LDAPS, StartTLS, or LDAP (no TLS).")
 		return
 	}
+	var previousSecret []byte
+	secretWasPresent := false
+	if deps.SecretStore != nil {
+		if old, getErr := deps.SecretStore.Get(ldapPasswordSecret); getErr == nil {
+			previousSecret, secretWasPresent = old, true
+		}
+	}
 	if password != "" {
+		if deps.SecretStore == nil {
+			_ = renderActiveDirectorySetup(w, deps, "", "Secure credential storage is unavailable; the password was not saved.")
+			return
+		}
+		if err := deps.SecretStore.Put(ldapPasswordSecret, []byte(password)); err != nil {
+			http.Error(w, "store LDAP credential securely", http.StatusInternalServerError)
+			return
+		}
 		if err := os.Setenv(ldapPasswordEnv, password); err != nil {
 			http.Error(w, "store LDAP credential", http.StatusInternalServerError)
 			return
@@ -331,6 +377,7 @@ func handleActiveDirectorySetup(w http.ResponseWriter, r *http.Request, deps onb
 	if err != nil {
 		var running *scan.AlreadyRunningError
 		if !errors.As(err, &running) {
+			restoreLDAPSecret(deps.SecretStore, previousSecret, secretWasPresent)
 			_ = renderActiveDirectorySetup(w, deps, "", fmt.Sprintf("Could not start LDAP scan: %v", err))
 			return
 		}
@@ -357,6 +404,7 @@ func handleActiveDirectorySetup(w http.ResponseWriter, r *http.Request, deps onb
 				continue
 			}
 			if event.Error != "" {
+				restoreLDAPSecret(deps.SecretStore, previousSecret, secretWasPresent)
 				_ = renderActiveDirectorySetup(w, deps, "", "LDAP scan failed: "+event.Error)
 				return
 			}
@@ -371,6 +419,20 @@ func handleActiveDirectorySetup(w http.ResponseWriter, r *http.Request, deps onb
 			return
 		}
 	}
+}
+
+func restoreLDAPSecret(store secretstore.Store, previous []byte, existed bool) {
+	if store == nil {
+		return
+	}
+	if existed {
+		_ = store.Put(ldapPasswordSecret, previous)
+		_ = os.Setenv(ldapPasswordEnv, string(previous))
+		clear(previous)
+		return
+	}
+	_ = store.Delete(ldapPasswordSecret)
+	_ = os.Unsetenv(ldapPasswordEnv)
 }
 
 func discoverDomainController(bindDN, baseDN string) string {

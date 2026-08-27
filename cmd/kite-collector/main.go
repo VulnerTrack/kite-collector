@@ -82,6 +82,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/scan"
+	"github.com/vulnertrack/kite-collector/internal/secretstore"
 	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/postgres"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
@@ -149,6 +150,22 @@ func openSQLiteStore(dbPath string, identityCfg config.IdentityConfig) (*sqlite.
 		return nil, fmt.Errorf("open encrypted store: %w", err)
 	}
 	return es, nil
+}
+
+func openConnectorSecretStore(dbPath string, identityCfg config.IdentityConfig, logger *slog.Logger) (secretstore.Store, error) {
+	dataDir := identityCfg.DataDir
+	if dataDir == "" {
+		dataDir = filepath.Dir(dbPath)
+	}
+	id, err := identity.LoadOrCreate(dataDir, logger)
+	if err != nil {
+		return nil, fmt.Errorf("load identity for connector secrets: %w", err)
+	}
+	key, err := id.DeriveStorageKey()
+	if err != nil {
+		return nil, fmt.Errorf("derive connector secret key: %w", err)
+	}
+	return secretstore.NewAuto(dataDir, key, logger)
 }
 
 // networkScanner returns a TCP scanner that persists ScanEvent / OpenPort /
@@ -1482,6 +1499,10 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	// Empty dashboardAddr disables the dashboard (useful for headless deploys).
 	var dashSrv *http.Server
 	if dashboardAddr != "" {
+		connectorSecrets, secretErr := openConnectorSecretStore(dbPath, cfg.Identity, logger)
+		if secretErr != nil {
+			return secretErr
+		}
 		rc := dashboard.NewReportContext(ctx, st, dbPath, version, commit)
 		dashOpts := dashboard.Options{
 			Coordinator:      coord,
@@ -1494,6 +1515,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			PlatformEndpoint: cfg.Streaming.OTLP.Endpoint,
 			OAuth:            dashboardOAuthOptions(cfg),
 			CertsDir:         certsDir,
+			SecretStore:      connectorSecrets,
 		}
 		if enableDashboardInstall {
 			dashOpts.Installer = newRealInstaller()
