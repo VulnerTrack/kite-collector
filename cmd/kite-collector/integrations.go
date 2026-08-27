@@ -197,7 +197,7 @@ func readIntegrationPassword(cmd *cobra.Command, fromStdin bool) (string, error)
 		}
 		return value, nil
 	}
-	fd := int(os.Stdin.Fd())
+	fd := int(os.Stdin.Fd()) //#nosec G115 -- *os.File.Fd() is a kernel fd, fits in int on every supported platform
 	if term.IsTerminal(fd) {
 		_, _ = fmt.Fprint(cmd.ErrOrStderr(), "Active Directory password: ")
 		value, err := term.ReadPassword(fd)
