@@ -371,7 +371,10 @@ func TestSanitizeDeviceName(t *testing.T) {
 }
 
 func TestIsVirtualInterface(t *testing.T) {
-	for _, name := range []string{"lo", "lo0", "docker0", "veth1a2b", "br-abc", "virbr0", "tun0", "utun3", "wg0"} {
+	for _, name := range []string{
+		"lo", "lo0", "docker0", "veth1a2b", "br-abc", "virbr0", "tun0", "utun3",
+		"wg0", "tailscale0",
+	} {
 		assert.True(t, isVirtualInterface(name), "%q should be virtual", name)
 	}
 	for _, name := range []string{"eth0", "ens192", "enp0s31f6", "eno1", "em1", "Ethernet"} {

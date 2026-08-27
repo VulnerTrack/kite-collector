@@ -499,7 +499,8 @@ func isPseudoFilesystem(fstype string) bool {
 var virtualInterfacePrefixes = []string{
 	"lo", "docker", "veth", "br-", "virbr", "vboxnet", "vmnet", "tun", "tap",
 	"cni", "flannel", "cali", "kube-", "utun", "wg", "zt", "ham", "nebula",
-	"anpi", "awdl", "llw", "bridge", "gif", "stf", "ap1", "isatap",
+	"tailscale", "anpi", "awdl", "llw", "bridge", "gif", "stf", "ap1",
+	"isatap",
 }
 
 func isVirtualInterface(name string) bool {
