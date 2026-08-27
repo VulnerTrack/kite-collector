@@ -180,15 +180,35 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/VulnerTrack/kite-collector
     description: "Cybersecurity machine discovery, configuration audit, and posture analysis agent"
-    # brew uninstall unloads the launchd job before removing the binary, so
-    # a service registered by `kite-collector install` (which adopts the
-    # brew-owned binary) never relaunch-loops against a deleted path.
-    uninstall:
+    # The launchd teardown lives under `zap`, NOT `uninstall`, and that
+    # distinction is load-bearing.
+    #
+    # `brew upgrade` of a cask runs the OLD cask's uninstall stanza before
+    # staging the new version (Cask::Installer#start_upgrade ->
+    # uninstall_artifacts(successor:)), and only the `login_item` directive
+    # is skipped when a successor exists. Homebrew's `launchctl` directive
+    # also does more than unload: it runs `launchctl remove <label>` AND
+    # `rm -f /Library/LaunchDaemons/<label>.plist`
+    # (Library/Homebrew/cask/artifact/abstract_uninstall.rb). Under
+    # `uninstall:` that fires on every upgrade, so a daemon registered by
+    # `kite-collector install` would be stopped and DEREGISTERED by a
+    # routine `brew upgrade` — silently, and not even a reboot would bring
+    # it back. That defeats the zero-step upgrade path the collector is
+    # built for: the upgrade watcher (cmd/kite-collector/upgrade_watch.go)
+    # notices brew re-pointing its prefix-bin symlink at the new payload,
+    # drains, and exits so launchd KeepAlive relaunches the new binary —
+    # which only works while the job is still registered.
+    #
+    # Under `zap` the same teardown runs on `brew uninstall --zap`, leaving
+    # plain `brew uninstall` to the documented path in the caveats below:
+    # `sudo kite-collector uninstall` first, which removes the registration
+    # the collector itself created.
+    zap:
       launchctl: [kite-collector]
     caveats: |
       To run kite-collector as a background service (registers a launchd
-      daemon pointing at the brew-managed binary — brew upgrades restart
-      the service automatically):
+      daemon pointing at the brew-managed binary — `brew upgrade` swaps
+      that binary and the running agent restarts itself onto the new one):
         sudo kite-collector install
       Before `brew uninstall`, remove the service registration:
         sudo kite-collector uninstall
