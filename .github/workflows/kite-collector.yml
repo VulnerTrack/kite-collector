@@ -65,6 +65,19 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - run: go vet ./...
+      # Build-tagged files for the other release targets are invisible to a
+      # Linux-only vet: nothing compiles socketpaths_darwin.go, socket_windows.go,
+      # or the darwin/windows halves of internal/installer until goreleaser runs
+      # at tag time. Cross-vetting here turns "the release build broke" into "the
+      # PR broke", which is the whole point of a quality gate.
+      #
+      # There are no macOS or Windows runners in this workflow, so this is the
+      # only compile coverage those platforms get on a pull request.
+      - name: Cross-vet the other release targets
+        run: |
+          GOOS=darwin GOARCH=arm64 go vet ./...
+          GOOS=darwin GOARCH=amd64 go vet ./...
+          GOOS=windows GOARCH=amd64 go vet ./...
 
   lint:
     runs-on: ubuntu-24.04
