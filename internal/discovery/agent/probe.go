@@ -93,19 +93,12 @@ func (p *Probe) Discover(ctx context.Context, cfg map[string]any) ([]model.Machi
 		}
 	}
 
-	// Collect installed software if requested.
-	collectSoftware := false
-	if cs, ok := cfg["collect_software"].(bool); ok {
-		collectSoftware = cs
-	}
-	if collectSoftware {
-		software, err := collectInstalledSoftware(ctx)
-		if err != nil {
-			slog.Warn("agent probe: failed to collect software", "code", string(LogCodeProbeSoftwareCollectFailed), "error", err)
-		} else {
-			slog.Info("agent probe: collected software", "count", len(software))
-		}
-	}
+	// Installed software is deliberately NOT collected here. The engine
+	// runs the package-manager collectors itself after dedup (see
+	// RunWithOptions, keyed on the same collect_software flag) and persists
+	// the result against the agent machine ID. Collecting it here as well
+	// doubled the most expensive part of the local probe (thousands of
+	// packages across a dozen collectors) only to discard the result.
 
 	// Collect loaded drivers (kernel modules + PnP bindings). On by default
 	// per RFC-0128; opt out via collect_drivers=false.
