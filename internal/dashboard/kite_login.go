@@ -642,6 +642,12 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 			return
 		}
 		if err := enrollKiteOAuthToken(r, enrollment, result.Token.AccessToken); err != nil {
+			logger.Error("Kite OAuth enrollment failed after token exchange",
+				"code", string(LogCodeEnrollFailed),
+				"path", "inflight_wait",
+				"collector_url", collectorURL,
+				"error", err.Error(),
+			)
 			http.Error(w, "Kite OAuth enrollment failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -683,6 +689,12 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 	}
 
 	if err := enrollKiteOAuthToken(r, enrollment, token.AccessToken); err != nil {
+		logger.Error("Kite OAuth enrollment failed after token exchange",
+			"code", string(LogCodeEnrollFailed),
+			"path", "primary",
+			"collector_url", collectorURL,
+			"error", err.Error(),
+		)
 		http.Error(w, "Kite OAuth enrollment failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

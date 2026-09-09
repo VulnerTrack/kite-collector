@@ -34,6 +34,7 @@ const (
 	LogCodeEnrollAEADWrap       LogCode = "dashboard.enroll.aead_wrap_failed"
 	LogCodeEnrollUpsert         LogCode = "dashboard.enroll.upsert_failed"
 	LogCodeEnrollSuccess        LogCode = "dashboard.enroll.success"
+	LogCodeEnrollFailed         LogCode = "dashboard.enroll.failed"
 	LogCodeEnrollRender         LogCode = "dashboard.enroll.render_failed"
 	LogCodeEnrollAutoCheck      LogCode = "dashboard.enroll.auto_check_failed"
 	LogCodeIdentityUnwrap       LogCode = "dashboard.identity.unwrap_failed"

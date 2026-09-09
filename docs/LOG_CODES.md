@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 528 codes across 59 packages.
+**Catalog size:** 529 codes across 59 packages.
 
 ---
 
@@ -285,7 +285,7 @@ Source: [`internal/copilot/fsm/logcodes.go`](../internal/copilot/fsm/logcodes.go
 
 ## `dashboard` (internal/dashboard)
 
-Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 37 codes
+Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 38 codes
 
 **observability surface — /observability page + /api/v1/observability/***
 
@@ -310,6 +310,7 @@ Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) ·
 | `dashboard.enroll.aead_wrap_failed` | `LogCodeEnrollAEADWrap` | — |
 | `dashboard.enroll.upsert_failed` | `LogCodeEnrollUpsert` | — |
 | `dashboard.enroll.success` | `LogCodeEnrollSuccess` | — |
+| `dashboard.enroll.failed` | `LogCodeEnrollFailed` | — |
 | `dashboard.enroll.render_failed` | `LogCodeEnrollRender` | — |
 | `dashboard.enroll.auto_check_failed` | `LogCodeEnrollAutoCheck` | — |
 | `dashboard.identity.unwrap_failed` | `LogCodeIdentityUnwrap` | — |
