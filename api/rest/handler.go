@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vulnertrack/kite-collector/api/middleware"
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/model"
@@ -45,23 +44,15 @@ const maxLimit = 1000
 // the underlying store.Store is required to be safe for concurrent use and
 // Handler itself carries no mutable state.
 type Handler struct {
-	store               store.Store
-	logger              *slog.Logger
-	panicsRecovered     *prometheus.CounterVec
-	responseTruncations prometheus.Counter
-	circuitBreaker      *safety.CircuitBreaker
-	coordinator         *scan.Coordinator
-	baseConfig          *config.Config
-	networkScanReader   NetworkScanReader
-	apiKey              string // when non-empty, MTLSOrAPIKey middleware is wired
-	maxRequestBytes     int64
-	maxResponseBytes    int64
-}
-
-// SetPanicsRecovered sets the Prometheus counter used by the recovery
-// middleware to track recovered panics.
-func (h *Handler) SetPanicsRecovered(c *prometheus.CounterVec) {
-	h.panicsRecovered = c
+	store             store.Store
+	logger            *slog.Logger
+	circuitBreaker    *safety.CircuitBreaker
+	coordinator       *scan.Coordinator
+	baseConfig        *config.Config
+	networkScanReader NetworkScanReader
+	apiKey            string // when non-empty, MTLSOrAPIKey middleware is wired
+	maxRequestBytes   int64
+	maxResponseBytes  int64
 }
 
 // SetMaxRequestBytes configures the maximum allowed request body size.
@@ -69,10 +60,6 @@ func (h *Handler) SetMaxRequestBytes(n int64) { h.maxRequestBytes = n }
 
 // SetMaxResponseBytes configures the maximum allowed response body size.
 func (h *Handler) SetMaxResponseBytes(n int64) { h.maxResponseBytes = n }
-
-// SetResponseTruncations sets the Prometheus counter incremented when a
-// response is truncated due to the size limit.
-func (h *Handler) SetResponseTruncations(c prometheus.Counter) { h.responseTruncations = c }
 
 // SetCircuitBreaker sets the circuit breaker used to serve source health.
 func (h *Handler) SetCircuitBreaker(cb *safety.CircuitBreaker) { h.circuitBreaker = cb }
@@ -102,11 +89,9 @@ func (h *Handler) Handler() http.Handler {
 		handler = MaxBytesMiddleware(h.maxRequestBytes, handler)
 	}
 	if h.maxResponseBytes > 0 {
-		handler = ResponseBoundingMiddleware(h.maxResponseBytes, h.responseTruncations, handler)
+		handler = ResponseBoundingMiddleware(h.maxResponseBytes, handler)
 	}
-	if h.panicsRecovered != nil {
-		handler = RecoveryMiddleware(h.panicsRecovered, handler)
-	}
+	handler = RecoveryMiddleware(handler)
 
 	return handler
 }

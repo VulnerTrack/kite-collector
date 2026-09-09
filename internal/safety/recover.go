@@ -8,19 +8,16 @@ import (
 	"log/slog"
 	"runtime/debug"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
-// Recover catches a panic in a deferred call, logs it with a stack trace,
-// and increments the supplied Prometheus counter. If retErr is non-nil, it
-// is set to an error describing the panic.
+// Recover catches a panic in a deferred call and logs it with a stack
+// trace. If retErr is non-nil, it is set to an error describing the panic.
 //
 // Usage:
 //
-//	defer safety.Recover("discovery.docker", counter, &err)
-func Recover(component string, counter *prometheus.CounterVec, retErr *error) {
+//	defer safety.Recover("discovery.docker", &err)
+func Recover(component string, retErr *error) {
 	r := recover()
 	if r == nil {
 		return
@@ -43,18 +40,15 @@ func Recover(component string, counter *prometheus.CounterVec, retErr *error) {
 		"recover_wrapper", "Recover",
 		"hint", panicErr.Hint,
 	)
-	if counter != nil {
-		counter.With(prometheus.Labels{"component": component}).Inc()
-	}
 	if retErr != nil {
 		*retErr = panicErr
 	}
 }
 
-// LogPanic logs a recovered panic and increments the counter. Use this
-// helper when the caller handles recover() itself (e.g., when additional
+// LogPanic logs a recovered panic. Use this helper when the caller handles
+// recover() itself (e.g., when additional
 // cleanup such as a channel send is needed in the same defer).
-func LogPanic(component string, panicVal any, stack string, counter *prometheus.CounterVec) {
+func LogPanic(component string, panicVal any, stack string) {
 	slog.Error(
 		"panic recovered by caller-driven helper; caller will perform cleanup",
 		"code", string(LogCodeSafetyPanicRecovered),
@@ -63,7 +57,4 @@ func LogPanic(component string, panicVal any, stack string, counter *prometheus.
 		"stack_trace", stack,
 		"recover_wrapper", "LogPanic",
 	)
-	if counter != nil {
-		counter.With(prometheus.Labels{"component": component}).Inc()
-	}
 }

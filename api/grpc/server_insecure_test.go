@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -77,8 +76,6 @@ func startInsecureServer(t *testing.T) kitev1.CollectorServiceClient {
 	t.Helper()
 
 	srv := New("127.0.0.1:0", nil, nil)
-	srv.SetPanicsRecovered(prometheus.NewCounterVec(
-		prometheus.CounterOpts{Name: "test_grpc_panics_total"}, []string{"component"}))
 
 	return dialInsecure(t, serveOnEphemeralPort(t, srv))
 }

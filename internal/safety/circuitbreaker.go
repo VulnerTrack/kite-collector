@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
@@ -53,11 +51,9 @@ type sourceState struct {
 
 // CircuitBreaker manages per-source circuit breaker state.
 type CircuitBreaker struct {
-	tripsCounter *prometheus.CounterVec
-	healthGauge  *prometheus.GaugeVec
-	persister    HealthPersister
-	sources      sync.Map // map[string]*sourceState
-	defaultCfg   CircuitBreakerConfig
+	persister  HealthPersister
+	sources    sync.Map // map[string]*sourceState
+	defaultCfg CircuitBreakerConfig
 }
 
 // NewCircuitBreaker creates a CircuitBreaker with the given default config.
@@ -74,13 +70,6 @@ func NewCircuitBreaker(cfg CircuitBreakerConfig) *CircuitBreaker {
 	return &CircuitBreaker{
 		defaultCfg: cfg,
 	}
-}
-
-// SetMetrics sets the Prometheus metrics for circuit breaker trips and
-// source health. Both are optional.
-func (cb *CircuitBreaker) SetMetrics(trips *prometheus.CounterVec, health *prometheus.GaugeVec) {
-	cb.tripsCounter = trips
-	cb.healthGauge = health
 }
 
 // HealthPersister persists a circuit-breaker source-health snapshot so state is
@@ -169,7 +158,6 @@ func (cb *CircuitBreaker) ShouldSkip(sourceName string) bool {
 			"code", string(LogCodeSafetyCircuitHalfOpen),
 			"source", sourceName,
 			"cooldown_elapsed", time.Since(s.lastFailureAt).String())
-		cb.updateHealthGauge(sourceName, CircuitDegraded)
 		return false
 	}
 
@@ -199,7 +187,6 @@ func (cb *CircuitBreaker) RecordSuccess(sourceName string) {
 		s.state = CircuitHealthy
 	}
 
-	cb.updateHealthGauge(sourceName, s.state)
 	snap := s.snapshot(sourceName)
 	s.mu.Unlock()
 
@@ -238,13 +225,9 @@ func (cb *CircuitBreaker) RecordFailure(sourceName string, reason string) {
 				// trip so operators get actionable next steps in the log.
 				"hint", kiteerrors.FromCatalog(kiteerrors.CodeCircuitBreakerTripped, nil).Hint,
 			)
-			if cb.tripsCounter != nil {
-				cb.tripsCounter.With(prometheus.Labels{"source": sourceName}).Inc()
-			}
 		}
 	}
 
-	cb.updateHealthGauge(sourceName, s.state)
 	snap := s.snapshot(sourceName)
 	s.mu.Unlock()
 
@@ -335,20 +318,4 @@ func (cb *CircuitBreaker) GetSourceHealth(sourceName string) (*SourceHealth, err
 		h.LastFailureAt = &t
 	}
 	return h, nil
-}
-
-func (cb *CircuitBreaker) updateHealthGauge(sourceName string, state CircuitState) {
-	if cb.healthGauge == nil {
-		return
-	}
-	var val float64
-	switch state {
-	case CircuitHealthy:
-		val = 1.0
-	case CircuitDegraded:
-		val = 0.5
-	case CircuitOpen:
-		val = 0.0
-	}
-	cb.healthGauge.With(prometheus.Labels{"source": sourceName}).Set(val)
 }

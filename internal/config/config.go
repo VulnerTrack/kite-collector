@@ -29,7 +29,6 @@ type Config struct {
 	Classification ClassificationConfig `mapstructure:"classification"`
 	Fleet          FleetConfig          `mapstructure:"fleet"`
 	Endpoints      []EndpointConfig     `mapstructure:"endpoints"`
-	Metrics        MetricsConfig        `mapstructure:"metrics"`
 	Observability  ObservabilityConfig  `mapstructure:"observability"`
 	Audit          AuditConfig          `mapstructure:"audit"`
 	Connectivity   ConnectivityConfig   `mapstructure:"connectivity"`
@@ -345,12 +344,6 @@ type ManagedConfig struct {
 	RequiredControls []string `mapstructure:"required_controls"`
 }
 
-// MetricsConfig configures the Prometheus metrics endpoint.
-type MetricsConfig struct {
-	Listen  string `mapstructure:"listen"`
-	Enabled bool   `mapstructure:"enabled"`
-}
-
 // StreamingConfig configures the continuous streaming agent mode.
 type StreamingConfig struct {
 	Interval string     `mapstructure:"interval"` // duration string like "6h"
@@ -452,7 +445,7 @@ type PostgresConfig struct {
 }
 
 // APIConfig configures the agent's REST API server (scan coordinator
-// endpoints + /metrics). Addr is the listen address; an empty string
+// endpoints). Addr is the listen address; an empty string
 // disables the server entirely, mirroring the dashboard's empty-addr
 // semantics. Overridable via KITE_API_ADDR.
 type APIConfig struct {
@@ -476,8 +469,6 @@ func Load(path string) (*Config, error) {
 	// VPN host discovery is a local, read-only source (like agent): on by
 	// default, disable with discovery.sources.vpn.enabled=false.
 	v.SetDefault("discovery.sources.vpn.enabled", true)
-	v.SetDefault("metrics.enabled", false)
-	v.SetDefault("metrics.listen", ":9090")
 	v.SetDefault("api.addr", ":8080")
 	v.SetDefault("audit.enabled", true)
 	v.SetDefault("audit.profile", "standard")

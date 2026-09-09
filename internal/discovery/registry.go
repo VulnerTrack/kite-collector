@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
@@ -33,15 +32,8 @@ type HeartbeatRecorder interface {
 // Registry manages discovery sources and runs them in parallel.
 type Registry struct {
 	circuitBreaker    *safety.CircuitBreaker
-	panicsRecovered   *prometheus.CounterVec
 	heartbeatRecorder HeartbeatRecorder
 	sources           []Source
-}
-
-// SetPanicsRecovered sets the Prometheus counter used to track recovered
-// panics. If nil, panics are still recovered and logged but not counted.
-func (r *Registry) SetPanicsRecovered(c *prometheus.CounterVec) {
-	r.panicsRecovered = c
 }
 
 // SetCircuitBreaker sets the circuit breaker used to skip sources that
@@ -105,7 +97,7 @@ func (r *Registry) DiscoverAll(ctx context.Context, configs map[string]map[strin
 
 	for _, src := range r.sources {
 		g.Go(func() error {
-			defer safety.Recover("discovery."+src.Name(), r.panicsRecovered, nil)
+			defer safety.Recover("discovery."+src.Name(), nil)
 
 			// Circuit breaker: skip sources with open circuits. Emit a
 			// 'circuit_open' heartbeat so the reconciler can tell a

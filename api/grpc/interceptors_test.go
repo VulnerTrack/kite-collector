@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -14,11 +12,7 @@ import (
 )
 
 func TestUnaryRecoveryInterceptor_CatchesPanic(t *testing.T) {
-	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "test_grpc_panics",
-	}, []string{"component"})
-
-	interceptor := UnaryRecoveryInterceptor(counter)
+	interceptor := UnaryRecoveryInterceptor()
 
 	panickingHandler := func(ctx context.Context, req any) (any, error) {
 		panic("grpc panic")
@@ -33,13 +27,10 @@ func TestUnaryRecoveryInterceptor_CatchesPanic(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.Internal, st.Code())
-
-	val := testutil.ToFloat64(counter.With(prometheus.Labels{"component": "grpc"}))
-	assert.Equal(t, float64(1), val)
 }
 
 func TestUnaryRecoveryInterceptor_NoPanic(t *testing.T) {
-	interceptor := UnaryRecoveryInterceptor(nil)
+	interceptor := UnaryRecoveryInterceptor()
 
 	normalHandler := func(ctx context.Context, req any) (any, error) {
 		return "ok", nil
@@ -61,11 +52,7 @@ type mockServerStream struct {
 func (m *mockServerStream) Context() context.Context { return m.ctx }
 
 func TestStreamRecoveryInterceptor_CatchesPanic(t *testing.T) {
-	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "test_grpc_stream_panics",
-	}, []string{"component"})
-
-	interceptor := StreamRecoveryInterceptor(counter)
+	interceptor := StreamRecoveryInterceptor()
 
 	panickingHandler := func(srv any, stream grpc.ServerStream) error {
 		panic("stream panic")
@@ -80,13 +67,10 @@ func TestStreamRecoveryInterceptor_CatchesPanic(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.Internal, st.Code())
-
-	val := testutil.ToFloat64(counter.With(prometheus.Labels{"component": "grpc"}))
-	assert.Equal(t, float64(1), val)
 }
 
 func TestStreamRecoveryInterceptor_NoPanic(t *testing.T) {
-	interceptor := StreamRecoveryInterceptor(nil)
+	interceptor := StreamRecoveryInterceptor()
 
 	normalHandler := func(srv any, stream grpc.ServerStream) error {
 		return nil

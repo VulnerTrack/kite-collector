@@ -375,12 +375,12 @@ func newTestConfig() *config.Config {
 }
 
 func newTestEngine(st *mockStore, reg *discovery.Registry, em emitter.Emitter) *Engine {
-	dd := dedup.New(st, nil)
+	dd := dedup.New(st)
 	auth, _ := classifier.NewAuthorizer("", nil)
 	mgr := classifier.NewManager(nil)
 	cls := classifier.New(auth, mgr)
 	pol := policy.New(nil, 168*time.Hour)
-	return New(st, reg, dd, cls, em, pol, nil)
+	return New(st, reg, dd, cls, em, pol)
 }
 
 // ---------------------------------------------------------------------------
@@ -490,9 +490,9 @@ func TestEngine_UnauthorizedMachinesGenerateEvent(t *testing.T) {
 	mgr := classifier.NewManager(nil)
 	cls := classifier.New(auth, mgr)
 
-	dd := dedup.New(ms, nil)
+	dd := dedup.New(ms)
 	pol := policy.New(nil, 168*time.Hour)
-	eng := New(ms, reg, dd, cls, em, pol, nil)
+	eng := New(ms, reg, dd, cls, em, pol)
 	cfg := newTestConfig()
 
 	_, err = eng.Run(context.Background(), cfg)
@@ -907,10 +907,10 @@ func TestEngine_UnauthorizedOverride_StillAppliesEvenWhenNoMaterialChange(t *tes
 	require.NoError(t, err)
 	cls := classifier.New(auth, classifier.NewManager(nil))
 
-	dd := dedup.New(ms, nil)
+	dd := dedup.New(ms)
 	pol := policy.New(nil, 168*time.Hour)
 	em := &recordingEmitter{}
-	eng := New(ms, reg, dd, cls, em, pol, nil)
+	eng := New(ms, reg, dd, cls, em, pol)
 
 	_, err = eng.Run(context.Background(), newTestConfig())
 	require.NoError(t, err)
@@ -964,12 +964,9 @@ func TestStringSliceToAny(t *testing.T) {
 	assert.Equal(t, []any{"a", "b"}, got)
 }
 
-// SetIdentity is optional wiring; a nil-metrics engine must also take
-// recordFindingMetrics as a no-op instead of panicking.
-func TestSetIdentityAndFindingMetricsNilSafety(t *testing.T) {
+// SetIdentity is optional wiring; a nil identity must be a no-op instead
+// of panicking.
+func TestSetIdentityNilSafety(t *testing.T) {
 	e := newTestEngine(newMockStore(), discovery.NewRegistry(), nil)
 	e.SetIdentity(nil)
-	e.recordFindingMetrics([]model.ConfigFinding{{
-		Severity: model.SeverityHigh, Auditor: "ssh",
-	}})
 }

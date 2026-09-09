@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/scan"
@@ -44,7 +43,6 @@ type onboardingDeps struct {
 	Store            *sqlite.SQLiteStore
 	Logger           *slog.Logger
 	ProbeClient      *http.Client
-	ProbeDuration    *prometheus.HistogramVec
 	PKIReader        pkiCertificateReader
 	PKIOperatorToken func(context.Context) (string, error)
 	AppVersion       string
@@ -988,17 +986,13 @@ func actionFor(name probeName, endpoint string) *probeAction {
 	return nil
 }
 
-// timeProbe wraps probe execution with an elapsed-ms measurement and
-// a Prometheus histogram observation. It also ensures Name is set on the
-// returned result so callers do not need to remember to fill it.
+// timeProbe wraps probe execution with an elapsed-ms measurement. It also
+// ensures Name is set on the returned result so callers do not need to remember to fill it.
 func timeProbe(deps onboardingDeps, name probeName, fn func() probeResult) probeResult {
 	start := time.Now()
 	r := fn()
 	r.Name = name
 	r.LatencyMS = time.Since(start).Milliseconds()
-	if deps.ProbeDuration != nil {
-		deps.ProbeDuration.WithLabelValues(string(name), r.Result).Observe(float64(r.LatencyMS))
-	}
 	return r
 }
 

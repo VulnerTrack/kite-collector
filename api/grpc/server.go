@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -43,12 +42,11 @@ const (
 // model.Machine values, and persists them through the store.Store interface.
 type Server struct {
 	kitev1.UnimplementedCollectorServiceServer
-	store           store.Store
-	logger          *slog.Logger
-	panicsRecovered *prometheus.CounterVec
-	tlsConfig       *tls.Config
-	addr            string
-	privacyMode     PrivacyMode
+	store       store.Store
+	logger      *slog.Logger
+	tlsConfig   *tls.Config
+	addr        string
+	privacyMode PrivacyMode
 
 	// mu guards the fields below, which Serve writes and Stop/Addr read from
 	// other goroutines.
@@ -73,12 +71,6 @@ type Server struct {
 // is denied with codes.PermissionDenied rather than accepted untenanted.
 func (s *Server) SetTenantEnforcement(enabled bool) {
 	s.enforceTenant = enabled
-}
-
-// SetPanicsRecovered sets the Prometheus counter used by the gRPC recovery
-// interceptors to track recovered panics.
-func (s *Server) SetPanicsRecovered(c *prometheus.CounterVec) {
-	s.panicsRecovered = c
 }
 
 // New creates a Server that will listen on addr when Serve is called. The
@@ -153,8 +145,8 @@ func (s *Server) Serve() error {
 	}
 
 	opts := []grpc.ServerOption{
-		grpc.ChainUnaryInterceptor(UnaryRecoveryInterceptor(s.panicsRecovered)),
-		grpc.ChainStreamInterceptor(StreamRecoveryInterceptor(s.panicsRecovered)),
+		grpc.ChainUnaryInterceptor(UnaryRecoveryInterceptor()),
+		grpc.ChainStreamInterceptor(StreamRecoveryInterceptor()),
 	}
 
 	addr := lis.Addr().String()

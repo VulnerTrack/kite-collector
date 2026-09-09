@@ -6,15 +6,13 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 )
 
 // RecoveryMiddleware wraps an http.Handler with panic recovery. Panics are
-// caught, logged with a stack trace, counted via the supplied Prometheus
-// counter, and the client receives an HTTP 500 with a structured JSON body.
-func RecoveryMiddleware(counter *prometheus.CounterVec, next http.Handler) http.Handler {
+// caught and logged with a stack trace, and the client receives an HTTP 500
+// with a structured JSON body.
+func RecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
@@ -28,9 +26,6 @@ func RecoveryMiddleware(counter *prometheus.CounterVec, next http.Handler) http.
 					"error", fmt.Sprint(rec),
 					"stack_trace", stack,
 				)
-				if counter != nil {
-					counter.With(prometheus.Labels{"component": "rest"}).Inc()
-				}
 				writeError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()
@@ -57,7 +52,6 @@ func MaxBytesMiddleware(maxBytes int64, next http.Handler) http.Handler {
 // should keep responses well under the cap.
 type boundedResponseWriter struct {
 	http.ResponseWriter
-	counter   prometheus.Counter
 	maxBytes  int64
 	written   int64
 	truncated bool
@@ -88,14 +82,11 @@ func (w *boundedResponseWriter) Write(p []byte) (int, error) {
 }
 
 // markTruncated records that the response hit the size cap: it flips the
-// truncated flag, bumps the counter, and logs the event with the catalogued
+// truncated flag and logs the event with the catalogued
 // KITE-E014 remediation hint (paginate / filter / raise the limit) so the
 // operator sees actionable next steps. Both truncation branches funnel here.
 func (w *boundedResponseWriter) markTruncated() {
 	w.truncated = true
-	if w.counter != nil {
-		w.counter.Inc()
-	}
 	slog.Warn("REST response truncated: size limit exceeded",
 		"code", string(LogCodeMiddlewareResponseTruncated),
 		"max_bytes", w.maxBytes,
@@ -106,7 +97,7 @@ func (w *boundedResponseWriter) markTruncated() {
 
 // ResponseBoundingMiddleware limits the total bytes written to the HTTP
 // response body. When maxBytes is <= 0 the middleware is a no-op.
-func ResponseBoundingMiddleware(maxBytes int64, counter prometheus.Counter, next http.Handler) http.Handler {
+func ResponseBoundingMiddleware(maxBytes int64, next http.Handler) http.Handler {
 	if maxBytes <= 0 {
 		return next
 	}
@@ -114,7 +105,6 @@ func ResponseBoundingMiddleware(maxBytes int64, counter prometheus.Counter, next
 		bw := &boundedResponseWriter{
 			ResponseWriter: w,
 			maxBytes:       maxBytes,
-			counter:        counter,
 		}
 		next.ServeHTTP(bw, r)
 	})

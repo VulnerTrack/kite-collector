@@ -10,8 +10,6 @@ import (
 	"runtime/debug"
 	"sync"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safety"
 )
@@ -30,15 +28,8 @@ type Auditor interface {
 
 // Registry manages a set of auditors and orchestrates parallel execution.
 type Registry struct {
-	auditors        map[string]Auditor
-	panicsRecovered *prometheus.CounterVec
-	mu              sync.RWMutex
-}
-
-// SetPanicsRecovered sets the Prometheus counter used to track recovered
-// panics. If nil, panics are still recovered and logged but not counted.
-func (r *Registry) SetPanicsRecovered(c *prometheus.CounterVec) {
-	r.panicsRecovered = c
+	auditors map[string]Auditor
+	mu       sync.RWMutex
 }
 
 // NewRegistry creates an empty auditor registry.
@@ -82,7 +73,7 @@ func (r *Registry) AuditAll(ctx context.Context, machine model.Machine) ([]model
 			defer func() {
 				if rv := recover(); rv != nil {
 					stack := string(debug.Stack())
-					safety.LogPanic("audit."+aud.Name(), rv, stack, r.panicsRecovered)
+					safety.LogPanic("audit."+aud.Name(), rv, stack)
 					res.err = fmt.Errorf("panic in audit.%s: %v", aud.Name(), rv)
 				}
 				ch <- res

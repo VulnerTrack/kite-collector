@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -122,43 +120,6 @@ func TestCircuitBreaker_SuccessResetsFailures(t *testing.T) {
 	// After success, failures reset. One more failure should not trip.
 	cb.RecordFailure("docker", "err3")
 	assert.NotEqual(t, CircuitOpen, cb.State("docker"))
-}
-
-func TestCircuitBreaker_MetricsIncremented(t *testing.T) {
-	trips := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "test_trips",
-	}, []string{"source"})
-	health := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "test_health",
-	}, []string{"source"})
-
-	cb := testCB()
-	cb.SetMetrics(trips, health)
-
-	cb.RecordFailure("docker", "err1")
-	cb.RecordFailure("docker", "err2")
-	cb.RecordFailure("docker", "err3")
-
-	tripVal := testutil.ToFloat64(trips.With(prometheus.Labels{"source": "docker"}))
-	assert.Equal(t, float64(1), tripVal)
-
-	healthVal := testutil.ToFloat64(health.With(prometheus.Labels{"source": "docker"}))
-	assert.Equal(t, float64(0), healthVal) // open = 0
-}
-
-func TestCircuitBreaker_HealthGaugeValues(t *testing.T) {
-	health := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "test_health_vals",
-	}, []string{"source"})
-
-	cb := testCB()
-	cb.SetMetrics(nil, health)
-
-	cb.RecordSuccess("s1")
-	assert.Equal(t, float64(1.0), testutil.ToFloat64(health.With(prometheus.Labels{"source": "s1"})))
-
-	cb.RecordFailure("s1", "err")
-	assert.Equal(t, float64(0.5), testutil.ToFloat64(health.With(prometheus.Labels{"source": "s1"})))
 }
 
 func TestCircuitBreaker_MinimumThresholdEnforced(t *testing.T) {

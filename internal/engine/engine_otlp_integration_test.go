@@ -220,8 +220,8 @@ func newEngineHarness(t *testing.T, opts harnessOpts) *harness {
 		pol = policy.New(nil, 168*time.Hour)
 	}
 
-	dd := dedup.New(st, nil)
-	eng := New(st, reg, dd, cls, em, pol, nil)
+	dd := dedup.New(st)
+	eng := New(st, reg, dd, cls, em, pol)
 
 	return &harness{
 		engine:     eng,

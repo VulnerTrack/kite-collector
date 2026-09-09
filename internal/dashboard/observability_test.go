@@ -103,8 +103,8 @@ func TestObservability_AgentStateCard(t *testing.T) {
 }
 
 // TestObservability_PageRendersAllSections asserts the /observability page
-// includes all four expected sections (healthchecks, probe metrics, scan
-// metrics, prometheus pointer) even on a fresh harness where probe/scan
+// includes all expected sections (healthchecks, probe metrics, scan
+// metrics) even on a fresh harness where probe/scan
 // data is empty. Empty states should be handled gracefully.
 func TestObservability_PageRendersAllSections(t *testing.T) {
 	h := newInstallHarness(t, nil)
@@ -120,10 +120,6 @@ func TestObservability_PageRendersAllSections(t *testing.T) {
 		"probe metrics section must render — shows empty-state copy when no data")
 	assert.Contains(t, body, "Scan metrics",
 		"scan metrics section must render — shows empty-state copy when no data")
-	assert.Contains(t, body, "Prometheus integration",
-		"prometheus integration pointer must always render — operators wiring Grafana need to find /metrics")
-	assert.Contains(t, body, `href="/metrics"`,
-		"must link to the local /metrics endpoint for Prometheus scrapers")
 	assert.Contains(t, body, "no data leaves this host",
 		"must reaffirm the local-observability promise — no external scrapers required")
 }
@@ -1434,7 +1430,6 @@ func TestObservability_PageJumpNavRendersAllSections(t *testing.T) {
 		{"section-scans", "Scans"},
 		{"section-stream", "Stream"},
 		{"section-runtime", "Runtime"},
-		{"section-prometheus", "Prometheus"},
 	}
 	for _, s := range sections {
 		assert.Contains(t, body, `href="#`+s.id+`"`,

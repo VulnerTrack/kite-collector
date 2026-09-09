@@ -9,7 +9,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -69,8 +68,6 @@ func TestHandlerChain_APIKeyGate(t *testing.T) {
 	h := New(newMockStore(), moreTestLogger())
 	h.SetMaxRequestBytes(1 << 20)
 	h.SetMaxResponseBytes(1 << 20)
-	h.SetResponseTruncations(prometheus.NewCounter(prometheus.CounterOpts{Name: "test_truncations_total"}))
-	h.SetPanicsRecovered(prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_rest_panics_total"}, []string{"component"}))
 
 	open := h.Handler()
 	assert.Equal(t, http.StatusOK, get(t, open, "/api/v1/health", nil).Code,

@@ -17,7 +17,7 @@ The contract is enforced at the agent before any data leaves the host. Any attri
 | **Resource attributes** | Agent identity, host, OS, contract version | 15-key set per §4.2 | Same |
 | **Log records** | Asset lifecycle + finding events | `kite.asset.*` event names from the legacy hand-rolled emitter | Five `event.name`s under `event.domain=security` |
 | **Trace spans** | Scan execution timing | Not emitted yet | Closed span set rooted at `scan` |
-| **Metrics** | Operational counters / histograms | Prometheus only on `:9090` | Catalog of 14 OTLP instruments |
+| **Metrics** | Host resource metrics (RFC-0157); operational counters not yet exported | OTLP `/v1/metrics` when `streaming.otlp.host_metrics.enabled` | Catalog of 14 OTLP instruments |
 
 Trace spans and OTLP metrics are deferred to RFC-0073 (the OTel SDK migration); the resource attribute set and the log-record forbidden-key policy are live as of v1.0.
 

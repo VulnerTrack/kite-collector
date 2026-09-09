@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -24,15 +22,11 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestRecoveryMiddleware_CatchesPanic(t *testing.T) {
-	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "test_rest_panics",
-	}, []string{"component"})
-
 	panicking := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		panic("handler panic")
 	})
 
-	handler := RecoveryMiddleware(counter, panicking)
+	handler := RecoveryMiddleware(panicking)
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
@@ -44,9 +38,6 @@ func TestRecoveryMiddleware_CatchesPanic(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&body)
 	require.NoError(t, err)
 	assert.Equal(t, "internal server error", body.Error)
-
-	val := testutil.ToFloat64(counter.With(prometheus.Labels{"component": "rest"}))
-	assert.Equal(t, float64(1), val)
 }
 
 func TestRecoveryMiddleware_NoPanic(t *testing.T) {
@@ -54,27 +45,13 @@ func TestRecoveryMiddleware_NoPanic(t *testing.T) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	handler := RecoveryMiddleware(nil, normal)
+	handler := RecoveryMiddleware(normal)
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-}
-
-func TestRecoveryMiddleware_NilCounter(t *testing.T) {
-	panicking := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		panic("no counter")
-	})
-
-	handler := RecoveryMiddleware(nil, panicking)
-	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 // ---------------------------------------------------------------------------
@@ -142,17 +119,13 @@ func TestMaxBytesMiddleware_ZeroLimitPassesThrough(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestResponseBoundingMiddleware_TruncatesLargeResponse(t *testing.T) {
-	counter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "test_truncations",
-	})
-
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Write 100 bytes.
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(strings.Repeat("x", 100)))
 	})
 
-	handler := ResponseBoundingMiddleware(50, counter, inner) // 50-byte limit
+	handler := ResponseBoundingMiddleware(50, inner) // 50-byte limit
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
@@ -160,9 +133,6 @@ func TestResponseBoundingMiddleware_TruncatesLargeResponse(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, 50, w.Body.Len(), "response should be truncated to 50 bytes")
-
-	val := testutil.ToFloat64(counter)
-	assert.Equal(t, float64(1), val, "truncation counter should be incremented")
 }
 
 func TestResponseBoundingMiddleware_TruncationLogIncludesCatalogE014Hint(t *testing.T) {
@@ -175,7 +145,7 @@ func TestResponseBoundingMiddleware_TruncationLogIncludesCatalogE014Hint(t *test
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(strings.Repeat("x", 100)))
 	})
-	handler := ResponseBoundingMiddleware(50, nil, inner) // 50-byte limit forces truncation
+	handler := ResponseBoundingMiddleware(50, inner) // 50-byte limit forces truncation
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -195,16 +165,12 @@ func TestResponseBoundingMiddleware_TruncationLogIncludesCatalogE014Hint(t *test
 }
 
 func TestResponseBoundingMiddleware_AllowsSmallResponse(t *testing.T) {
-	counter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "test_truncations_small",
-	})
-
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("small"))
 	})
 
-	handler := ResponseBoundingMiddleware(1000, counter, inner)
+	handler := ResponseBoundingMiddleware(1000, inner)
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
@@ -212,9 +178,6 @@ func TestResponseBoundingMiddleware_AllowsSmallResponse(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "small", w.Body.String())
-
-	val := testutil.ToFloat64(counter)
-	assert.Equal(t, float64(0), val, "truncation counter should not be incremented")
 }
 
 func TestResponseBoundingMiddleware_ZeroLimitPassesThrough(t *testing.T) {
@@ -223,7 +186,7 @@ func TestResponseBoundingMiddleware_ZeroLimitPassesThrough(t *testing.T) {
 		_, _ = w.Write([]byte(strings.Repeat("x", 1000)))
 	})
 
-	handler := ResponseBoundingMiddleware(0, nil, inner)
+	handler := ResponseBoundingMiddleware(0, inner)
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
@@ -232,26 +195,22 @@ func TestResponseBoundingMiddleware_ZeroLimitPassesThrough(t *testing.T) {
 	assert.Equal(t, 1000, w.Body.Len(), "no truncation with zero limit")
 }
 
-func TestResponseBoundingMiddleware_NilCounter(t *testing.T) {
+func TestResponseBoundingMiddleware_SmallLimit(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(strings.Repeat("x", 100)))
 	})
 
-	handler := ResponseBoundingMiddleware(20, nil, inner)
+	handler := ResponseBoundingMiddleware(20, inner)
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
 
-	assert.Equal(t, 20, w.Body.Len(), "truncation should work without counter")
+	assert.Equal(t, 20, w.Body.Len(), "truncation must apply at the configured limit")
 }
 
 func TestResponseBoundingMiddleware_MultipleWrites(t *testing.T) {
-	counter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "test_truncations_multi",
-	})
-
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("aaaa")) // 4 bytes
@@ -259,7 +218,7 @@ func TestResponseBoundingMiddleware_MultipleWrites(t *testing.T) {
 		_, _ = w.Write([]byte("cccc")) // 4 bytes — should be fully truncated
 	})
 
-	handler := ResponseBoundingMiddleware(8, counter, inner)
+	handler := ResponseBoundingMiddleware(8, inner)
 	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	w := httptest.NewRecorder()
 
@@ -267,7 +226,4 @@ func TestResponseBoundingMiddleware_MultipleWrites(t *testing.T) {
 
 	assert.Equal(t, 8, w.Body.Len(), "should truncate at 8 bytes across writes")
 	assert.Equal(t, "aaaabbbb", w.Body.String())
-
-	val := testutil.ToFloat64(counter)
-	assert.Equal(t, float64(1), val, "counter incremented once on truncation")
 }

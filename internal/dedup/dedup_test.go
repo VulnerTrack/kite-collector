@@ -202,7 +202,7 @@ var _ store.Store = (*mockStore)(nil)
 
 func TestDedup_NewMachineGetsUUIDv7(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	machines := []model.Machine{
@@ -220,7 +220,7 @@ func TestDedup_NewMachineGetsUUIDv7(t *testing.T) {
 
 func TestDedup_ExistingMachinePreservesID(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	// Pre-populate the store with an existing machine.
@@ -253,7 +253,7 @@ func TestDedup_ExistingMachinePreservesID(t *testing.T) {
 
 func TestDedup_FirstSeenAtPreservedOnUpdate(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	firstSeen := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -282,7 +282,7 @@ func TestDedup_FirstSeenAtPreservedOnUpdate(t *testing.T) {
 
 func TestDedup_LastSeenAtUpdatedOnRediscovery(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	oldTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -312,7 +312,7 @@ func TestDedup_LastSeenAtUpdatedOnRediscovery(t *testing.T) {
 
 func TestDedup_IntraBatchDedup(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	// Two machines with the same hostname+type in one batch
@@ -351,7 +351,7 @@ func TestDedup_IntraBatchMerge_OrderIndependent(t *testing.T) {
 	}
 
 	fold := func(order []model.Machine) model.Machine {
-		dd := New(newMockStore(), nil, WithClock(func() time.Time {
+		dd := New(newMockStore(), WithClock(func() time.Time {
 			return time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)
 		}))
 		res, err := dd.Deduplicate(ctx, order)
@@ -383,7 +383,7 @@ func TestDedup_IntraBatchMerge_NoChurnAcrossScans(t *testing.T) {
 	ctx := context.Background()
 	ms := newMockStore()
 	clk := func() time.Time { return time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC) }
-	dd := New(ms, nil, WithClock(clk))
+	dd := New(ms, WithClock(clk))
 
 	agent := model.Machine{
 		Hostname: "db01", MachineType: model.MachineTypeServer,
@@ -413,7 +413,7 @@ func TestDedup_IntraBatchMerge_NoChurnAcrossScans(t *testing.T) {
 
 func TestDedup_IntraBatchDedup_DifferentTypes(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	// Same hostname but different types are distinct machines
@@ -431,7 +431,7 @@ func TestDedup_IntraBatchDedup_DifferentTypes(t *testing.T) {
 
 func TestDedup_EmptyInput(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	res, err := dd.Deduplicate(ctx, nil)
@@ -449,7 +449,7 @@ func TestDedup_EmptyInput(t *testing.T) {
 
 func TestDedup_NewMachineFirstSeenEqualsLastSeen(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	machines := []model.Machine{
@@ -515,7 +515,7 @@ func TestMergeTagsJSON(t *testing.T) {
 // keys. The merge must keep BOTH sets, not overwrite one with the other.
 func TestDedup_UnionsTagsAcrossSources(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	existing := model.Machine{
@@ -553,7 +553,7 @@ func TestDedup_UnionsTagsAcrossSources(t *testing.T) {
 
 func TestDedup_MergesOSInfo(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	existing := model.Machine{
@@ -592,7 +592,7 @@ func TestDedup_MergesOSInfo(t *testing.T) {
 func TestDedup_Idempotent(t *testing.T) {
 	ms := newMockStore()
 	fixedTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	dd := New(ms, nil, WithClock(func() time.Time { return fixedTime }))
+	dd := New(ms, WithClock(func() time.Time { return fixedTime }))
 	ctx := context.Background()
 
 	machines := []model.Machine{
@@ -635,7 +635,7 @@ func TestDedup_Idempotent(t *testing.T) {
 
 func TestDedup_SanitizesMachineTextBeforeKeying(t *testing.T) {
 	ms := newMockStore()
-	dd := New(ms, nil)
+	dd := New(ms)
 	ctx := context.Background()
 
 	// Latin-1 hostname bytes, ANSI-decorated OS version, zero-width space

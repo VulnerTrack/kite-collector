@@ -75,11 +75,9 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	memoryseries "github.com/vulnertrack/kite-collector/internal/memoryseries"
-	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/osutil"
 	"github.com/vulnertrack/kite-collector/internal/policy"
-	"github.com/vulnertrack/kite-collector/internal/safenet"
 	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/secretstore"
@@ -492,10 +490,6 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(paas.NewCapRover())
 	registry.Register(codedisc.New())
 
-	// Set up metrics.
-	met := metrics.New()
-	safenet.SetGuardObserver(metrics.NewSafenetObserver(met))
-
 	// Attach the circuit breaker to the registry, metrics, and (for SQLite) the
 	// source_health writer — the production instantiation RFC-0062 shipped but
 	// never performed (Finding F2, RFC-0135 R5). Disabled via
@@ -506,23 +500,13 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 			CooldownDuration: cfg.CircuitBreakerCooldown(),
 			SuccessThreshold: cfg.Safety.CircuitBreaker.SuccessThreshold,
 		})
-		cb.SetMetrics(met.CircuitBreakerTrips, met.SourceHealth)
 		if p, ok := st.(safety.HealthPersister); ok {
 			cb.SetPersister(p)
 		}
 		registry.SetCircuitBreaker(cb)
 	}
-	var metricsSrv *http.Server
-	if cfg.Metrics.Enabled {
-		listen := cfg.Metrics.Listen
-		if listen == "" {
-			listen = ":9090"
-		}
-		metricsSrv = met.Serve(listen)
-	}
-
 	// Set up deduplicator.
-	dd := dedup.New(st, met)
+	dd := dedup.New(st)
 
 	// Set up classifier.
 	authorizer, err := classifier.NewAuthorizer(
@@ -547,7 +531,7 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	pol := policy.New(defaultRules, cfg.StaleThresholdDuration())
 
 	// Create and run the scan engine.
-	eng := engine.New(st, registry, dd, cls, em, pol, met)
+	eng := engine.New(st, registry, dd, cls, em, pol)
 
 	// Wire identity for heartbeat signing + tamper reconciliation. Reload
 	// here is idempotent (LoadOrCreate hits the same identity.json the
@@ -570,13 +554,6 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 		TriggerSource: "cli",
 		TriggeredBy:   currentOSUser(),
 	})
-
-	// Graceful shutdown of metrics server (if started).
-	if metricsSrv != nil {
-		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_ = metricsSrv.Shutdown(shutCtx)
-		shutCancel()
-	}
 
 	if err != nil {
 		return fmt.Errorf("scan failed: %w", err)
@@ -1246,9 +1223,6 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	registry.Register(vps.NewKamatera())
 	registry.Register(wazuhdisc.New())
 
-	met := metrics.New()
-	safenet.SetGuardObserver(metrics.NewSafenetObserver(met))
-
 	// Attach the circuit breaker (RFC-0135 R5); nil when disabled via
 	// safety.circuit_breaker.enabled: false. Also handed to the REST handler
 	// below so /api/v1/source-health serves live circuit state.
@@ -1259,22 +1233,12 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			CooldownDuration: cfg.CircuitBreakerCooldown(),
 			SuccessThreshold: cfg.Safety.CircuitBreaker.SuccessThreshold,
 		})
-		circuitBreaker.SetMetrics(met.CircuitBreakerTrips, met.SourceHealth)
 		if p, ok := st.(safety.HealthPersister); ok {
 			circuitBreaker.SetPersister(p)
 		}
 		registry.SetCircuitBreaker(circuitBreaker)
 	}
-	var metricsSrv *http.Server
-	if cfg.Metrics.Enabled {
-		listen := cfg.Metrics.Listen
-		if listen == "" {
-			listen = ":9090"
-		}
-		metricsSrv = met.Serve(listen)
-	}
-
-	dd := dedup.New(st, met)
+	dd := dedup.New(st)
 
 	authorizer, err := classifier.NewAuthorizer(
 		cfg.Classification.Authorization.AllowlistFile,
@@ -1431,7 +1395,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	}
 	pol := policy.New(defaultRules, cfg.StaleThresholdDuration())
 
-	eng := engine.New(st, registry, dd, cls, em, pol, met)
+	eng := engine.New(st, registry, dd, cls, em, pol)
 
 	// Identity for heartbeat signing + tamper reconciliation. The same
 	// identity.json that gates SQLite encryption is reused — LoadOrCreate
@@ -1468,7 +1432,6 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		apiHandler.SetNetworkScanReader(reader)
 	}
 	apiMux := apiHandler.Mux()
-	apiMux.Handle("/metrics", met.Handler())
 
 	// Empty api.addr disables the REST API, mirroring the dashboard's
 	// empty-addr semantics below. Override via config or KITE_API_ADDR
@@ -1673,9 +1636,6 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			}
 			if dashSrv != nil {
 				_ = dashSrv.Shutdown(shutdownCtx)
-			}
-			if metricsSrv != nil {
-				_ = metricsSrv.Shutdown(shutdownCtx)
 			}
 			// Cancel any API-triggered scan still in flight so the goroutine
 			// can finalise the ScanRun row before the process exits.

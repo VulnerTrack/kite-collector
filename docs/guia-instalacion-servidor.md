@@ -38,7 +38,7 @@ Esta guia cubre la instalacion y configuracion de **Kite Collector**, el agente 
 
 | Puerto | Protocolo | Descripcion |
 |--------|-----------|-------------|
-| 9090   | TCP       | Metricas Prometheus |
+| 9090   | TCP       | Dashboard local (solo 127.0.0.1) |
 | 8081   | TCP       | API HTTP (opcional) |
 
 ---
@@ -273,15 +273,6 @@ classification:
 stale_threshold: 168h       # 7 dias sin actividad = obsoleto
 ```
 
-### 4.5 Metricas Prometheus
-
-```yaml
-metrics:
-  enabled: true
-  listen: :9090
-```
-
----
 
 ## 5. Ejecucion como servicio systemd
 
@@ -351,8 +342,8 @@ sudo journalctl -u kite-collector -f
 ### 6.1 Comprobar que el agente responde
 
 ```bash
-# Metricas Prometheus
-curl -s http://localhost:9090/metrics | head -20
+# Dashboard local
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:9090/
 ```
 
 ### 6.2 Comprobar los logs
@@ -426,12 +417,6 @@ docker compose logs kite-collector
 
 - Verificar que el socket de Docker esta montado: `-v /var/run/docker.sock:/var/run/docker.sock`
 - Verificar permisos: el usuario dentro del contenedor debe tener acceso al socket
-
-### Las metricas no aparecen en Prometheus
-
-- Verificar que el puerto 9090 esta abierto en el firewall
-- Verificar la configuracion de `metrics.listen` en el YAML
-- Probar acceso directo: `curl http://localhost:9090/metrics`
 
 ### Errores de TLS al conectar con proveedores cloud
 

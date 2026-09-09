@@ -191,7 +191,7 @@ GoReleaser produces multi-platform binaries with SHA256 checksums and a GitHub R
 | SQLite | `modernc.org/sqlite` | Pure Go, no CGO |
 | PostgreSQL | `jackc/pgx/v5` | Best Go PG driver |
 | UUID v7 | `google/uuid` | Time-ordered, matches Python-side `uuid.uuid7()` |
-| Metrics | `prometheus/client_golang` | Standard Prometheus client |
+| Metrics | OTLP `/v1/metrics` (hand-rolled JSON, `internal/emitter/otlpmetrics.go`) | Host metrics ship on the same mTLS endpoint as logs; no Prometheus scrape surface |
 | Logging | `log/slog` (stdlib) | No extra dependency |
 | Testing | `stretchr/testify` | Assertions and mocks |
 | Concurrency | `golang.org/x/sync/errgroup` | Parallel fan-out with error propagation |

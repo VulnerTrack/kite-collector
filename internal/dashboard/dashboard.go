@@ -714,7 +714,6 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				DBPath:           rc.DBPath,
 				PlatformEndpoint: opts.PlatformEndpoint,
 				CertsDir:         opts.CertsDir,
-				ProbeDuration:    onboardingProbeDurationHistogram(),
 				PKIReader:        newPKIHTTPCertificateReader(),
 				PKIOperatorToken: operatorToken,
 				Installer:        opts.Installer,

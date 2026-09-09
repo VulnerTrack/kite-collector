@@ -101,8 +101,7 @@ func resetProcessHistoryForTest() {
 // observabilityView is what the /observability page template consumes. It
 // composes everything operators need to self-observe their local agent:
 // healthchecks (is the data we collected actually showing up?), probe
-// metrics (latency + pass-rate per probe), scan stats (counts + durations),
-// and a pointer to the local Prometheus endpoint for tool integration.
+// metrics (latency + pass-rate per probe), and scan stats (counts + durations).
 //
 // All data is read from the SQLite store the dashboard already has
 // access to — no new scrapers, no external observability stack required.
@@ -1321,7 +1320,7 @@ func scanStatusBadge(status string) string {
 }
 
 // observabilityTmpl renders the /observability page body — healthchecks
-// panel, probe metrics table, scan stats card, Prometheus link.
+// panel, probe metrics table, scan stats card.
 var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <div id="observability-root"
      class="observability-page"
@@ -1340,7 +1339,6 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
         description, or a support ticket when you need to share state.
       </p>
       <div class="observability-actions" aria-label="Observability exports and integrations">
-        <a href="/metrics" target="_blank" rel="noopener">Prometheus /metrics</a>
         <a href="/api/v1/observability/snapshot.json" download>JSON snapshot</a>
         <a href="/api/v1/observability/snapshot.md" target="_blank" rel="noopener">Markdown summary</a>
       </div>
@@ -1385,7 +1383,6 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   <a href="#section-scans">Scans</a>
   <a href="#section-stream">Stream</a>
   <a href="#section-runtime">Runtime</a>
-  <a href="#section-prometheus">Prometheus</a>
 </nav>
 </div>
 
@@ -1596,15 +1593,6 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   </table>
   </div>
   <p class="muted small">Heap &amp; goroutine sparklines show up to the last 60 samples (one per page render &middot; 15 minutes of in-memory history at the 15s auto-refresh cadence; lost on dashboard restart).</p>
-</section>
-
-<section class="card observability-card observability-card--wide observability-card--prometheus" id="section-prometheus">
-  <h2>Prometheus integration</h2>
-  <p class="muted">The agent exposes a Prometheus-format scrape endpoint at
-     <a href="/metrics" target="_blank" rel="noopener"><code>/metrics</code></a>
-     for ingestion by Grafana, VictoriaMetrics, or your existing observability stack.
-     Probe duration histograms, scan counters, and HTTP request metrics are all
-     surfaced there.</p>
 </section>
 </div>
 

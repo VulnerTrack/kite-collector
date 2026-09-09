@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/sanitize"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -29,9 +28,8 @@ import (
 // can distinguish new from updated machines by checking whether FirstSeenAt
 // equals LastSeenAt (new) or not (updated).
 type Deduplicator struct {
-	store   store.Store
-	metrics *metrics.Metrics
-	clock   func() time.Time
+	store store.Store
+	clock func() time.Time
 }
 
 // Option configures a Deduplicator.
@@ -43,11 +41,9 @@ func WithClock(fn func() time.Time) Option {
 	return func(d *Deduplicator) { d.clock = fn }
 }
 
-// New creates a Deduplicator backed by the given store. An optional
-// *metrics.Metrics can be passed to record dedup skip counters; pass nil
-// to disable metrics.
-func New(s store.Store, m *metrics.Metrics, opts ...Option) *Deduplicator {
-	d := &Deduplicator{store: s, metrics: m, clock: time.Now}
+// New creates a Deduplicator backed by the given store.
+func New(s store.Store, opts ...Option) *Deduplicator {
+	d := &Deduplicator{store: s, clock: time.Now}
 	for _, o := range opts {
 		o(d)
 	}
@@ -108,9 +104,6 @@ func (d *Deduplicator) Deduplicate(ctx context.Context, machines []model.Machine
 				"natural_key", key,
 				"merged", collapsed,
 			)
-			if d.metrics != nil {
-				d.metrics.DedupSkipped.Add(float64(collapsed))
-			}
 		}
 
 		existing, err := d.store.GetMachineByNaturalKey(ctx, key)

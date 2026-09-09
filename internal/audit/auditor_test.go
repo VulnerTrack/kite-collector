@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -89,15 +87,9 @@ func TestRegistry_AuditAllIsolatesFailures(t *testing.T) {
 	assert.Equal(t, "ok-1", got[0].CheckID)
 }
 
-// A panicking auditor is recovered, counted when a counter is wired, and
-// the rest of the fleet completes.
-func TestRegistry_AuditAllRecoversPanicsAndCounts(t *testing.T) {
-	counter := prometheus.NewCounterVec(
-		prometheus.CounterOpts{Name: "test_panics_recovered_total"},
-		[]string{"component"},
-	)
+// A panicking auditor is recovered and the rest of the fleet completes.
+func TestRegistry_AuditAllRecoversPanics(t *testing.T) {
 	r := NewRegistry()
-	r.SetPanicsRecovered(counter)
 	r.Register(&fakeAuditor{name: "bomb", panicVal: "boom"})
 	r.Register(&fakeAuditor{name: "healthy", findings: []model.ConfigFinding{finding("ok-1")}})
 
@@ -105,15 +97,11 @@ func TestRegistry_AuditAllRecoversPanicsAndCounts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1, "healthy auditor must complete despite the sibling panic")
 	assert.Equal(t, "ok-1", got[0].CheckID)
-	assert.Equal(t, 1.0,
-		testutil.ToFloat64(counter.WithLabelValues("audit.bomb")),
-		"the recovered panic must be counted under audit.<name>")
 }
 
-// A nil panic counter is legal — panics are still recovered.
-func TestRegistry_AuditAllRecoversPanicsWithoutCounter(t *testing.T) {
+// An error-valued panic is recovered the same way as a string one.
+func TestRegistry_AuditAllRecoversErrorPanics(t *testing.T) {
 	r := NewRegistry()
-	r.SetPanicsRecovered(nil)
 	r.Register(&fakeAuditor{name: "bomb", panicVal: errors.New("kaboom")})
 
 	got, err := r.AuditAll(context.Background(), model.Machine{})

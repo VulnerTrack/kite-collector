@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 529 codes across 60 packages.
+**Catalog size:** 528 codes across 59 packages.
 
 ---
 
@@ -1518,16 +1518,6 @@ Source: [`internal/identity/logcodes.go`](../internal/identity/logcodes.go) · 7
 | `identity.lifecycle.stamp_expected_hash_failed` | `LogCodeLifecycleStampExpectedHashFailed` | — |
 | `identity.lifecycle.binary_hash_unavailable` | `LogCodeLifecycleBinaryHashUnavailable` | — |
 | `identity.lifecycle.expected_hash_unavailable_first_boot` | `LogCodeLifecycleExpectedHashUnavailable` | — |
-
-## `metrics` (internal/metrics)
-
-Source: [`internal/metrics/logcodes.go`](../internal/metrics/logcodes.go) · 1 codes
-
-**server surface — Prometheus HTTP server lifecycle failures**
-
-| Code | Constant | Description |
-|---|---|---|
-| `metrics.server.exited` | `LogCodeServerExited` | — |
 
 ## `observability` (internal/observability)
 

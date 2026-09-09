@@ -24,7 +24,6 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/emitter"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/identity"
-	"github.com/vulnertrack/kite-collector/internal/metrics"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/observability"
 	"github.com/vulnertrack/kite-collector/internal/policy"
@@ -38,7 +37,6 @@ type Engine struct {
 	classifier   *classifier.Classifier
 	emitter      emitter.Emitter
 	policy       *policy.Engine
-	metrics      *metrics.Metrics
 	// identity is the per-install signing identity used to stamp probe
 	// heartbeats and verify them during reconciliation. nil disables
 	// synthetic-finding observability (heartbeats, tamper, canary drift).
@@ -297,7 +295,6 @@ func New(
 	cls *classifier.Classifier,
 	em emitter.Emitter,
 	pol *policy.Engine,
-	met *metrics.Metrics,
 ) *Engine {
 	return &Engine{
 		store:        st,
@@ -306,7 +303,6 @@ func New(
 		classifier:   cls,
 		emitter:      em,
 		policy:       pol,
-		metrics:      met,
 	}
 }
 
@@ -592,7 +588,6 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 						"scan_id", scanID,
 						"machine_id", agentMachine.ID,
 						"findings", findingsCount)
-					e.recordFindingMetrics(findings)
 				}
 			}
 		}
@@ -644,7 +639,6 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					"hostname", a.Hostname,
 					"findings", len(codeFindings),
 				)
-				e.recordFindingMetrics(codeFindings)
 			}
 		}
 	}
@@ -698,7 +692,6 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 					continue
 				}
 				findingsCount += len(envFindings)
-				e.recordFindingMetrics(envFindings)
 				slog.Info(
 					"container-env-secret audit complete",
 					"code", string(LogCodeAuditContainerEnvComplete),
@@ -763,7 +756,6 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 				continue
 			}
 			findingsCount += len(ldapFindings)
-			e.recordFindingMetrics(ldapFindings)
 		}
 	}
 
@@ -810,7 +802,6 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 				continue
 			}
 			findingsCount += len(entraFindings)
-			e.recordFindingMetrics(entraFindings)
 		}
 
 		// Tenant-wide ENTRA-001 / 002 / 003: pull the snapshot the
@@ -846,7 +837,6 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 							"finding_count", len(tenantFindings))
 					} else {
 						findingsCount += len(tenantFindings)
-						e.recordFindingMetrics(tenantFindings)
 						slog.Info(
 							"entra tenant audit complete",
 							"code", string(LogCodeAuditEntraTenantComplete),
@@ -982,10 +972,6 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 		}
 	}
 
-	if e.metrics != nil {
-		e.metrics.StaleMachines.Set(float64(len(staleMachines)))
-	}
-
 	allMachines, _ := e.store.ListMachines(ctx, store.MachineFilter{})
 	totalKnown := len(allMachines)
 	coveragePct := 0.0
@@ -998,9 +984,6 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	if scanCtx.Err() == context.DeadlineExceeded {
 		scanStatus = model.ScanStatusTimedOut
 		errorCount = 1
-		if e.metrics != nil {
-			e.metrics.ScanDeadlineExceeded.Inc()
-		}
 		// Record runtime incident for the deadline breach.
 		_ = e.store.InsertRuntimeIncident(ctx, model.RuntimeIncident{
 			ID:           uuid.Must(uuid.NewV7()),
@@ -1172,24 +1155,5 @@ func logSoftwareParseErrors(errs []software.CollectError) {
 			"shown", maxParseErrorLogs,
 			"total", len(errs),
 		)
-	}
-}
-
-// recordFindingMetrics updates the open-findings gauge, cumulative counter,
-// and finding-age histogram for a batch of findings.
-func (e *Engine) recordFindingMetrics(findings []model.ConfigFinding) {
-	if e.metrics == nil {
-		return
-	}
-	now := time.Now().UTC()
-	for _, f := range findings {
-		sev := string(f.Severity)
-		aud := f.Auditor
-		e.metrics.FindingsOpen.WithLabelValues(sev, aud).Inc()
-		e.metrics.FindingsTotal.WithLabelValues(sev, aud).Inc()
-		if !f.FirstSeenAt.IsZero() {
-			ageHours := now.Sub(f.FirstSeenAt).Hours()
-			e.metrics.FindingAgeHours.WithLabelValues(sev, aud).Observe(ageHours)
-		}
 	}
 }

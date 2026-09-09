@@ -146,7 +146,7 @@ VulnerTrack is built on a deliberately minimal, production-proven stack. Every c
 | Backend storage | PostgreSQL | Reliable, mature, JSONB support for flexible machine attributes, strong Go driver ecosystem (`pgx`) |
 | Backend API | REST + gRPC (dual surface) | REST for human-facing clients and integrations; gRPC for high-throughput agent→API streaming |
 | CLI framework | `cobra` + `viper` | De facto standard for Go CLIs; supports subcommands, flags, config files, and environment variables |
-| Metrics surface | Prometheus exposition format (`prometheus/client_golang`) | Drop-in compatibility with any Prometheus scraper and Grafana[^17][^18][^19] |
+| Metrics surface | OTLP `/v1/metrics` over the existing mTLS collector endpoint (RFC-0157) | One authenticated egress path for logs and metrics; the earlier Prometheus scrape endpoint was removed because nothing consumed it[^17][^18][^19] |
 | Structured logging | `log/slog` (Go stdlib, ≥1.21) | Standard library, structured JSON output, no extra dependency |
 | Configuration | YAML file + environment variables (via `viper`) | Human-readable, widely understood in DevOps/infra tooling |
 | Testing | `testing` (stdlib) + `testify` + `testcontainers-go` | Unit, integration, and container-based end-to-end tests in a single framework |
