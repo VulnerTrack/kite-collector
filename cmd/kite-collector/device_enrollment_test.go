@@ -79,16 +79,22 @@ func TestFailedDeviceEnrollmentDoesNotMarkLocalIdentityOrStartService(t *testing
 	require.ErrorIs(t, err, sqlite.ErrNoIdentity)
 }
 
-func TestPlainEnrollmentUsesDeviceFlowOnDesktop(t *testing.T) {
-	t.Setenv("SSH_CONNECTION", "")
-	t.Setenv("SSH_CLIENT", "")
-	t.Setenv("SSH_TTY", "")
-	t.Setenv("DISPLAY", ":0")
-	for _, args := range [][]string{{}, {"--agent-code", "kite-agent"}, {"--certs-dir", t.TempDir()}} {
-		called := false
-		cmd := newEnrollCmdWithDevice(func(_ io.Writer, _, _, _ string, _ bool) error { called = true; return nil })
-		cmd.SetArgs(args)
-		require.NoError(t, cmd.Execute())
-		require.True(t, called)
+func TestPlainEnrollmentSelectsBrowserLocallyAndDeviceOverSSH(t *testing.T) {
+	for _, sshVar := range []string{"", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		t.Run(sshVar, func(t *testing.T) {
+			for _, name := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+				t.Setenv(name, "")
+			}
+			t.Setenv("DISPLAY", ":0")
+			if sshVar != "" {
+				t.Setenv(sshVar, "remote-session")
+			}
+			device, browser := false, false
+			cmd := newEnrollCmdWithFlows(func(_ io.Writer, _, _, _ string, _ bool) error { device = true; return nil }, func(_, _, _ string, _, _ bool) error { browser = true; return nil })
+			cmd.SetArgs([]string{})
+			require.NoError(t, cmd.Execute())
+			require.Equal(t, sshVar != "", device)
+			require.Equal(t, sshVar == "", browser)
+		})
 	}
 }

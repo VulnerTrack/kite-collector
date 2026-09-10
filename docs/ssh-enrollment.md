@@ -6,8 +6,8 @@ Run on the server:
 kite-collector enroll
 ```
 
-This is the default on desktops and SSH servers, including sessions with
-display forwarding. Open the URL printed by the command on your own computer, sign in,
+SSH sessions select this flow automatically, including sessions with display
+forwarding. Local desktop sessions open the normal browser login. Open the URL printed by the command on your own computer, sign in,
 enter the code, and select the organization. Compare the collector and code
 with the terminal before approving. Keep the command running until it confirms
 that the certificate was saved.
@@ -30,7 +30,7 @@ approval, resolve the server error before starting another attempt; device
 access tokens are single use.
 
 For private deployments, set `KITE_PKI_ENDPOINT` to the HTTPS PKI base URL.
-Deploy the application's `/device` page and matching PKI endpoints first.
+Deploy the application's `/auth/device` page and matching PKI endpoints first.
 `PKI_DEVICE_VERIFICATION_URI` on PKI must point to that page; its origin also
 controls browser access. The app's `VITE_PKI_URL` and Content Security Policy
 must allow the same PKI endpoint.

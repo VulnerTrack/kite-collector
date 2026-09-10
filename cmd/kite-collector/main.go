@@ -3188,7 +3188,14 @@ func newEnrollCmd() *cobra.Command {
 }
 
 func newEnrollCmdWithDevice(deviceEnroll func(io.Writer, string, string, string, bool) error) *cobra.Command {
+	return newEnrollCmdWithFlows(deviceEnroll, runPlatformLoginEnroll)
+}
+
+func newEnrollCmdWithFlows(deviceEnroll func(io.Writer, string, string, string, bool) error, browserEnroll func(string, string, string, bool, bool) error) *cobra.Command {
 	var (
+		addr            string
+		cfgFile         string
+		noBrowser       bool
 		agentCode       string
 		token           string
 		enrollmentToken string
@@ -3204,9 +3211,9 @@ func newEnrollCmdWithDevice(deviceEnroll func(io.Writer, string, string, string,
 		Short: "Enroll this collector with VulnerTrack",
 		Long: `Enroll this collector with VulnerTrack.
 
-Enrollment prints a URL and a temporary code. Open the URL on your computer,
-sign in, and approve the collector. This is the default on desktops and SSH
-servers; no browser or inbound login port is needed on the collector.
+Local desktop sessions open the browser sign-in flow. SSH sessions and hosts
+without a graphical display print a URL and a temporary code to approve from
+another computer. No inbound login port is needed for device authorization.
 
 Non-interactive equivalents:
   --token <jwt>                     operator sign-in JWT (skips the browser)
@@ -3215,7 +3222,7 @@ Non-interactive equivalents:
                                     (KITE_PKI_ENDPOINT overrides the PKI URL)
 
 Examples:
-  kite-collector enroll                       # authorize with a device code
+  kite-collector enroll                       # automatically select local or SSH login
   kite-collector enroll --agent-code kite-prod --enrollment-token <tok>`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3234,7 +3241,7 @@ Examples:
 				}
 				return runEnrollWithToken(agentCode, enrollmentToken, certsDir)
 			}
-			if !hasToken {
+			if !hasToken && (noBrowser || isHeadless()) {
 				deviceCertsDir := filepath.Dir(dbPath)
 				if cmd.Flag("certs-dir").Changed {
 					deviceCertsDir = certsDir
@@ -3242,10 +3249,21 @@ Examples:
 				return deviceEnroll(cmd.OutOrStdout(), agentCode, dbPath, deviceCertsDir, userMode)
 			}
 			// Non-interactive operator-JWT path.
-			if !hasAgentCode {
-				return fmt.Errorf("--agent-code and --token must be provided together for PKI enrollment")
+			if hasAgentCode || hasToken {
+				if !hasAgentCode || !hasToken {
+					return fmt.Errorf("--agent-code and --token must be provided together for PKI enrollment")
+				}
+				return runEnroll(agentCode, token, certsDir)
 			}
-			return runEnroll(agentCode, token, certsDir)
+			if cmd.Flag("certs-dir").Changed {
+				if !cmd.Flag("db").Changed {
+					dbPath = filepath.Join(certsDir, "kite.db")
+				}
+				if filepath.Clean(filepath.Dir(dbPath)) != filepath.Clean(certsDir) {
+					return fmt.Errorf("browser enrollment requires --db to be inside --certs-dir")
+				}
+			}
+			return browserEnroll(addr, dbPath, cfgFile, false, userMode)
 		},
 	}
 
@@ -3257,9 +3275,9 @@ Examples:
 		fmt.Sprintf("directory to store certificates (e.g. %s/<agent-code>)", defaultKiteDataDir()))
 	cmd.Flags().StringVar(&dbPath, "db", defaultDB,
 		"path to SQLite database used by the local dashboard login flow")
-	cmd.Flags().String("addr", "127.0.0.1:9090", "listen address for the local dashboard login flow")
-	cmd.Flags().String("config", "kite-collector.yaml", "path to agent config file")
-	cmd.Flags().Bool("no-browser", false, "compatibility flag; device authorization is already the default")
+	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:9090", "listen address for the local dashboard login flow")
+	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to agent config file")
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "use a device code instead of opening a local browser")
 	cmd.Flags().BoolVar(&userMode, "user", false, "resolve --db against the per-user install paths")
 
 	return cmd
