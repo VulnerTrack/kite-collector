@@ -23,6 +23,11 @@ type DeviceAuthorization struct {
 	Interval        int    `json:"interval"`
 }
 
+// deviceVerificationURI is the public browser route shown to SSH operators.
+// Keep this client-side value stable so enrollment does not depend on a stale
+// or misconfigured URI returned by a PKI deployment.
+const deviceVerificationURI = "https://app.vulnertrack.com/auth/device/"
+
 var deviceUserCodePattern = regexp.MustCompile(`^KITE-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$`)
 
 func deviceWait(ctx context.Context, delay time.Duration) error {
@@ -69,6 +74,7 @@ func (c *Client) enrollDevice(ctx context.Context, agentCode string, display fun
 	if err != nil || verify.Scheme != "https" || verify.Host == "" || verify.User != nil || !deviceUserCodePattern.MatchString(authorization.UserCode) || authorization.DeviceCode == "" || authorization.ExpiresIn <= 0 || authorization.ExpiresIn > 3600 || authorization.Interval < 0 || authorization.Interval > 3600 {
 		return nil, fmt.Errorf("invalid device authorization response")
 	}
+	authorization.VerificationURI = deviceVerificationURI
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(authorization.ExpiresIn)*time.Second)
 	defer cancel()
 	if displayErr := display(authorization.DeviceAuthorization); displayErr != nil {
