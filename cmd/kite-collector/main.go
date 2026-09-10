@@ -33,7 +33,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/vulnertrack/kite-collector/api/rest"
 	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
@@ -3733,6 +3732,12 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
+func promptLine(out io.Writer, in *bufio.Reader, label string) string {
+	_, _ = fmt.Fprint(out, label)
+	line, _ := in.ReadString('\n')
+	return strings.TrimSpace(line)
+}
+
 // isHeadless reports whether this host likely has no browser to open — a
 // server / container / bare SSH session. On Linux/BSD that is the absence of
 // an X11 or Wayland display; on macOS/Windows a desktop is assumed present.
@@ -3747,58 +3752,6 @@ func isHeadless() bool {
 	default:
 		return os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
 	}
-}
-
-type interactiveEnrollDeps struct {
-	addr      string
-	dbPath    string
-	cfgFile   string
-	certsDir  string
-	noBrowser bool
-	userMode  bool
-}
-
-// runInteractiveEnroll gives a no-browser operator a clear choice between the
-// two enrollment mechanisms and reads the credential from stdin, so a headless
-// box never hangs on a browser that cannot open.
-func runInteractiveEnroll(cmd *cobra.Command, d interactiveEnrollDeps) error {
-	out := cmd.OutOrStdout()
-	in := bufio.NewReader(cmd.InOrStdin())
-
-	// Non-interactive stdin (piped / no TTY): fall back to the browser sign-in
-	// flow in --no-browser mode, which prints the URL rather than prompting.
-	if f, ok := cmd.InOrStdin().(*os.File); !ok || !term.IsTerminal(int(f.Fd())) { //#nosec G115
-		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true, d.userMode)
-	}
-
-	_, _ = fmt.Fprintln(out, "\nNo browser detected on this host. Choose how to enroll:")
-	_, _ = fmt.Fprintln(out, "  [1] Browser sign-in — open a URL on any device, sign in, paste the code")
-	_, _ = fmt.Fprintln(out, "  [2] Enrollment token — paste a scoped token from your PKI operator")
-	_, _ = fmt.Fprint(out, "Enter 1 or 2 (default 1): ")
-
-	choice, _ := in.ReadString('\n')
-	switch strings.TrimSpace(choice) {
-	case "2":
-		agentCode := promptLine(out, in, "Agent code: ")
-		if agentCode == "" {
-			return fmt.Errorf("agent code is required")
-		}
-		tok := promptLine(out, in, "Enrollment token: ")
-		if tok == "" {
-			return fmt.Errorf("enrollment token is required")
-		}
-		return runEnrollWithToken(agentCode, tok, d.certsDir)
-	default:
-		// Browser sign-in, printing the URL for another device (never auto-open
-		// here — the whole point is that this host has no browser).
-		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true, d.userMode)
-	}
-}
-
-func promptLine(out io.Writer, in *bufio.Reader, label string) string {
-	_, _ = fmt.Fprint(out, label)
-	line, _ := in.ReadString('\n')
-	return strings.TrimSpace(line)
 }
 
 // oauthSignIn runs the interactive OAuth authorization-code + PKCE flow
