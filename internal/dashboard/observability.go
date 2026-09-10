@@ -2,7 +2,9 @@ package dashboard
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"html/template"
@@ -17,9 +19,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
 	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
 )
 
@@ -98,16 +105,20 @@ func resetProcessHistoryForTest() {
 	processHistoryMu.Unlock()
 }
 
-// observabilityView is what the /observability page template consumes. It
-// composes everything operators need to self-observe their local agent:
-// healthchecks (is the data we collected actually showing up?), probe
-// metrics (latency + pass-rate per probe), and scan stats (counts + durations).
+// observabilityView is what the agent profile page (/agent, alias
+// /observability) and the JSON snapshot consume. It composes everything an
+// operator needs to know about the agent on this host: who registered it
+// (certificate identity), whether it is working (healthchecks, scans,
+// streaming), what it runs on (the host record the agent probe wrote), and
+// the diagnostic detail underneath (probe metrics, failures, activity,
+// runtime).
 //
 // All data is read from the SQLite store the dashboard already has
 // access to — no new scrapers, no external observability stack required.
 // "Local-instance observability" by design.
 type observabilityView struct {
 	Stream                     *streamHealth           `json:"stream,omitempty"`
+	Host                       *hostSummary            `json:"host,omitempty"`
 	GeneratedAt                string                  `json:"generated_at"`
 	Endpoint                   string                  `json:"endpoint,omitempty"`
 	EnrolledUserID             string                  `json:"enrolled_user_id,omitempty"`
@@ -117,7 +128,10 @@ type observabilityView struct {
 	HealthSummary              string                  `json:"health_summary"`
 	HealthDetail               string                  `json:"health_detail,omitempty"` // iter-33: names of fail/warn subsystems beside the rollup badge
 	HealthClass                string                  `json:"-"`                       // CSS class, UI-only
+	ScanSchedule               string                  `json:"scan_schedule,omitempty"` // humanized scan cadence from the base config, when one is wired
 	ScanStats                  scanStats               `json:"scan_stats"`
+	Certificate                agentCertificate        `json:"certificate"`
+	Identifiers                identifierSet           `json:"identifiers"`
 	Health                     []healthCheck           `json:"health"`
 	ProbeMetrics               []probeMetric           `json:"probe_metrics"`
 	RecentActivity             []activityEvent         `json:"recent_activity,omitempty"`
@@ -315,7 +329,33 @@ type agentState struct {
 	ConfigFile string `json:"config_file"`
 	DataDir    string `json:"data_dir,omitempty"`
 	DBPath     string `json:"db_path,omitempty"`
-	Enrolled   bool   `json:"enrolled"`
+	// Software card facts the Agent card did not carry before the profile
+	// redesign: what the binary is, and what it was built for.
+	Name            string `json:"name"`
+	Vendor          string `json:"vendor"`
+	AgentType       string `json:"agent_type"`
+	Platform        string `json:"platform"`     // runtime.GOOS
+	Architecture    string `json:"architecture"` // runtime.GOARCH
+	BinaryHash      string `json:"binary_hash,omitempty"`
+	ContractVersion string `json:"contract_version"`
+	Enrolled        bool   `json:"enrolled"`
+}
+
+// runningBinaryHash caches the SHA-256 of the running executable. The page
+// re-renders every 15 seconds and the binary does not change underneath a
+// running process, so hashing it once is enough.
+var (
+	binaryHashOnce  sync.Once
+	binaryHashValue string
+)
+
+func runningBinaryHash() string {
+	binaryHashOnce.Do(func() {
+		if h, err := identity.ComputeBinaryHash(); err == nil {
+			binaryHashValue = h
+		}
+	})
+	return binaryHashValue
 }
 
 // collectAgentState assembles the agent-state card data from the wired
@@ -323,12 +363,19 @@ type agentState struct {
 // all three enrollment PEMs present in the data directory.
 func collectAgentState(deps onboardingDeps) agentState {
 	st := agentState{
-		Version:    deps.AppVersion,
-		Commit:     deps.Commit,
-		BuiltAt:    deps.BuildDate,
-		ConfigFile: deps.ConfigFile,
-		DataDir:    strings.TrimSpace(deps.CertsDir),
-		DBPath:     deps.DBPath,
+		Version:         deps.AppVersion,
+		Commit:          deps.Commit,
+		BuiltAt:         deps.BuildDate,
+		ConfigFile:      deps.ConfigFile,
+		DataDir:         strings.TrimSpace(deps.CertsDir),
+		DBPath:          deps.DBPath,
+		Name:            contract.ServiceName,
+		Vendor:          "Vulnertrack",
+		AgentType:       contract.AgentType,
+		Platform:        runtime.GOOS,
+		Architecture:    runtime.GOARCH,
+		BinaryHash:      runningBinaryHash(),
+		ContractVersion: contract.Version,
 	}
 	if st.ConfigFile == "" {
 		st.ConfigFile = "kite-collector.yaml"
@@ -343,6 +390,198 @@ func collectAgentState(deps onboardingDeps) agentState {
 		}
 	}
 	return st
+}
+
+// agentCertificate is the Registration card's certificate window and client
+// name, read from the agent's own client certificate (agent.pem in the data
+// directory). PKI issues that certificate server-side from the operator's
+// signed-in session, so everything here is reported by the agent and chosen
+// by nobody on this host.
+type agentCertificate struct {
+	SubjectCN     string `json:"subject_cn,omitempty"`
+	NotBefore     string `json:"not_before,omitempty"` // RFC3339
+	NotAfter      string `json:"not_after,omitempty"`  // RFC3339
+	NotAfterHuman string `json:"-"`                    // "12 Nov 2026"
+	WindowNote    string `json:"-"`                    // "64 days left, issued 2 Sep 2026"
+	WindowClass   string `json:"-"`                    // tone class for the days-left note
+	DaysLeft      int    `json:"days_left"`
+	Present       bool   `json:"present"`
+	Expired       bool   `json:"expired"`
+	MutualTLS     bool   `json:"mutual_tls"` // the streaming client presents this certificate
+}
+
+// certExpiryWarnWindow is when the Registration card starts colouring the
+// days-left note: PKI issues 90-day certificates and renews inside the last
+// 30, so under 30 days without a renewal is worth a look.
+const certExpiryWarnWindow = 30 * 24 * time.Hour
+
+// readAgentCertificate parses the first CERTIFICATE block in path. A missing
+// or unreadable file returns Present=false; the card then says so instead of
+// showing blanks.
+func readAgentCertificate(path string, now time.Time) agentCertificate {
+	var out agentCertificate
+	if strings.TrimSpace(path) == "" {
+		return out
+	}
+	pemBytes, err := os.ReadFile(path) //#nosec G304 -- operator-configured data directory
+	if err != nil {
+		return out
+	}
+	for {
+		block, rest := pem.Decode(pemBytes)
+		if block == nil {
+			return out
+		}
+		pemBytes = rest
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, perr := x509.ParseCertificate(block.Bytes)
+		if perr != nil {
+			continue
+		}
+		out.Present = true
+		out.SubjectCN = cert.Subject.CommonName
+		out.NotBefore = cert.NotBefore.UTC().Format(time.RFC3339)
+		out.NotAfter = cert.NotAfter.UTC().Format(time.RFC3339)
+		out.NotAfterHuman = cert.NotAfter.UTC().Format("2 Jan 2006")
+		remaining := cert.NotAfter.Sub(now)
+		out.DaysLeft = int(math.Ceil(remaining.Hours() / 24))
+		issued := "issued " + cert.NotBefore.UTC().Format("2 Jan 2006")
+		switch {
+		case remaining <= 0:
+			out.Expired = true
+			out.DaysLeft = 0
+			out.WindowNote = "expired, " + issued
+			out.WindowClass = "profile-note-error"
+		case remaining <= certExpiryWarnWindow:
+			out.WindowNote = fmt.Sprintf("%d days left, %s", out.DaysLeft, issued)
+			out.WindowClass = "profile-note-warn"
+		default:
+			out.WindowNote = fmt.Sprintf("%d days left, %s", out.DaysLeft, issued)
+		}
+		return out
+	}
+}
+
+// identifierSet collects the values an operator quotes in a support ticket,
+// each with the telemetry attribute it travels as. Tenant, user and client
+// identifiers come from the certificate and live on the top-level view;
+// these two come from elsewhere on the host.
+type identifierSet struct {
+	AgentID string `json:"agent_id,omitempty"` // identity.json agent_id: agent.id and service.instance.id
+	HostID  string `json:"host_id,omitempty"`  // host.id, /etc/machine-id on Linux
+}
+
+// readAgentID returns the agent_id recorded in dir/identity.json, or "" when
+// the file is absent or unreadable. It reads the file directly rather than
+// through identity.LoadOrCreate, which would mint a new identity on a host
+// that has none yet; a read-only page must not do that.
+func readAgentID(dir string) string {
+	if strings.TrimSpace(dir) == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "identity.json")) //#nosec G304 -- operator-configured data directory
+	if err != nil {
+		return ""
+	}
+	var doc struct {
+		AgentID uuid.UUID `json:"agent_id"`
+	}
+	if json.Unmarshal(data, &doc) != nil || doc.AgentID == uuid.Nil {
+		return ""
+	}
+	return doc.AgentID.String()
+}
+
+// identityDirFor mirrors the CLI's resolution of where identity.json lives:
+// the configured identity data directory, else the database's directory.
+func identityDirFor(deps onboardingDeps) string {
+	if deps.BaseConfig != nil && strings.TrimSpace(deps.BaseConfig.Identity.DataDir) != "" {
+		return deps.BaseConfig.Identity.DataDir
+	}
+	if strings.TrimSpace(deps.DBPath) != "" {
+		return filepath.Dir(deps.DBPath)
+	}
+	return ""
+}
+
+// hostSummary is the "This host" card: the machine record the agent probe
+// wrote for the computer it runs on, with the counts that link through to
+// that machine's own detail page.
+type hostSummary struct {
+	ID            uuid.UUID `json:"id"`
+	Hostname      string    `json:"hostname"`
+	OSFamily      string    `json:"os_family"`
+	OSVersion     string    `json:"os_version,omitempty"`
+	KernelVersion string    `json:"kernel_version,omitempty"`
+	Architecture  string    `json:"architecture,omitempty"`
+	Authorized    string    `json:"authorized"`
+	Managed       string    `json:"managed"`
+	FirstSeenAt   string    `json:"first_seen_at"`
+	LastSeenAt    string    `json:"last_seen_at"`
+	LastSeenAgo   string    `json:"-"`
+	SoftwareCount int       `json:"software_count"`
+	FindingsCount int       `json:"findings_count"`
+}
+
+// collectHostSummary finds this computer's machine row by hostname,
+// preferring the row the agent probe wrote (discovery_source "agent") over
+// one a network scan produced for the same name. Returns nil until a scan
+// has recorded the host; the card renders an empty state in that case.
+func collectHostSummary(ctx context.Context, deps onboardingDeps) *hostSummary {
+	if deps.Store == nil {
+		return nil
+	}
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		return nil
+	}
+	machines, err := deps.Store.ListMachines(ctx, store.MachineFilter{Hostname: hostname})
+	if err != nil || len(machines) == 0 {
+		return nil
+	}
+	m := machines[0]
+	for i := range machines {
+		if machines[i].DiscoverySource == "agent" {
+			m = machines[i]
+			break
+		}
+	}
+	out := &hostSummary{
+		ID:            m.ID,
+		Hostname:      m.Hostname,
+		OSFamily:      m.OSFamily,
+		OSVersion:     m.OSVersion,
+		KernelVersion: m.KernelVersion,
+		Architecture:  m.Architecture,
+		Authorized:    string(m.IsAuthorized),
+		Managed:       string(m.IsManaged),
+		FirstSeenAt:   m.FirstSeenAt.UTC().Format(time.RFC3339),
+		LastSeenAt:    m.LastSeenAt.UTC().Format(time.RFC3339),
+		LastSeenAgo:   humanizeRelativeTime(time.Since(m.LastSeenAt)),
+	}
+	// Counts come from the introspection layer's total, not from loading the
+	// rows: a workstation's package inventory runs to tens of thousands of
+	// rows and this page re-renders every 15 seconds.
+	out.SoftwareCount = countRowsForMachine(ctx, deps, "installed_software", m.ID)
+	out.FindingsCount = countRowsForMachine(ctx, deps, "config_findings", m.ID)
+	return out
+}
+
+// countRowsForMachine returns how many rows of table belong to machineID,
+// or 0 when the table or column is unavailable.
+func countRowsForMachine(ctx context.Context, deps onboardingDeps, table string, machineID uuid.UUID) int {
+	_, total, err := deps.Store.ListRows(ctx, store.RowsFilter{
+		Table:       table,
+		WhereColumn: "machine_id",
+		WhereValue:  machineID.String(),
+		Limit:       1,
+	})
+	if err != nil {
+		return 0
+	}
+	return int(total)
 }
 
 // streamHealth is the OTLP stream telemetry view rendered in the
@@ -761,7 +1000,7 @@ func computeHealthChecks(ctx context.Context, deps onboardingDeps) []healthCheck
 			}
 		} else {
 			scanCheck.Status = "warn"
-			scanCheck.Detail = "no scans yet — click 'Run scan' on /onboarding"
+			scanCheck.Detail = "no scans yet — use Run Scan in the top bar"
 			scanCheck.Class = "badge-orange"
 		}
 	} else {
@@ -1319,38 +1558,20 @@ func scanStatusBadge(status string) string {
 	}
 }
 
-// observabilityTmpl renders the /observability page body — healthchecks
-// panel, probe metrics table, scan stats card.
+// observabilityTmpl renders the agent profile page body. The profile comes
+// first (health, scans and streaming, this host, registration, software,
+// identifiers), then a Diagnostics card that jumps to the detailed tables
+// further down: certificates, probe metrics, failures, activity, runtime.
 var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <div id="observability-root"
      class="observability-page"
      hx-get="{{.Freshness.WrapperGetURL}}"
      {{if not .Freshness.Paused}}hx-trigger="every 15s"{{end}}
      hx-swap="outerHTML">
-<header class="onboarding-header observability-hero">
-  <div class="onboarding-header-row">
-    <div class="onboarding-title">
-      <h1>Local observability</h1>
-      <p class="muted small observability-hero-copy">
-        Self-observability for the agent on this host. Health, probes, scans,
-        streaming and runtime signals are computed from local state. Download the
-        JSON snapshot for scripted monitoring or feed it into your existing
-        observability pipeline. Paste the Markdown summary into Slack, a PR
-        description, or a support ticket when you need to share state.
-      </p>
-      <div class="observability-actions" aria-label="Observability exports and integrations">
-        <a href="/api/v1/observability/snapshot.json" download>JSON snapshot</a>
-        <a href="/api/v1/observability/snapshot.md" target="_blank" rel="noopener">Markdown summary</a>
-      </div>
-    </div>
-    <div class="onboarding-mode observability-status-panel">
-      <span class="muted small observability-status-label">Agent status</span>
-      <span class="badge {{.HealthClass}}">{{.HealthSummary}}</span>
-      {{if .HealthDetail}}
-        <span class="muted small health-rollup-detail" title="Subsystems not passing — drill into Healthchecks below for details">&mdash; {{.HealthDetail}}</span>
-      {{end}}
-      <span class="muted small">checked {{.GeneratedAt}}</span>
-    </div>
+<header class="profile-head">
+  <div>
+    <h1>Agent profile</h1>
+    <p class="muted profile-sub">This page is about the agent installed on this machine: who registered it, and whether it is working.</p>
   </div>
   <div class="freshness-chip {{if .Freshness.Paused}}freshness-chip--paused{{else}}freshness-chip--live{{end}}"
        aria-live="polite"
@@ -1371,41 +1592,18 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   </div>
 </header>
 
-<div class="observability-jumpnav">
-<nav class="page-jumpnav" aria-label="Observability page sections">
-  <span class="page-jumpnav-label muted small">Jump to:</span>
-  <a href="#section-agent">Agent</a>
-  <a href="#section-health">Health</a>
-  <a href="#section-certificates">Certificates</a>
-  <a href="#section-failures">Failures</a>
-  <a href="#section-activity">Activity</a>
-  <a href="#section-probes">Probes</a>
-  <a href="#section-scans">Scans</a>
-  <a href="#section-stream">Stream</a>
-  <a href="#section-runtime">Runtime</a>
-</nav>
-</div>
-
-<div class="observability-grid">
-<section class="card observability-card" id="section-agent">
-  <h2>Agent</h2>
-  <p class="muted">Binary identity, file locations, and enrollment &mdash; the same
-     block <code>kite-collector --help</code> prints as &ldquo;Current state&rdquo;.</p>
-  <div class="observability-table-wrap">
-  <table class="kv observability-kv">
-    <tr><td>Version</td><td><code>{{.Agent.Version}}</code></td></tr>
-    <tr><td>Build</td><td><code>{{.Agent.Commit}}</code>{{if .Agent.BuiltAt}} <span class="muted small">built {{.Agent.BuiltAt}}</span>{{end}}</td></tr>
-    <tr><td>Config file</td><td><code>{{.Agent.ConfigFile}}</code></td></tr>
-    <tr><td>Data directory</td><td>{{if .Agent.DataDir}}<code>{{.Agent.DataDir}}</code>{{else}}<span class="muted">not configured</span>{{end}}</td></tr>
-    <tr><td>Database</td><td>{{if .Agent.DBPath}}<code>{{.Agent.DBPath}}</code>{{else}}<span class="muted">not available</span>{{end}}</td></tr>
-    <tr><td>Enrollment</td><td>{{if .Agent.Enrolled}}<span class="badge badge-green">enrolled</span>{{else}}<span class="badge badge-gray">not enrolled</span> <a href="/onboarding">enroll &rarr;</a>{{end}}</td></tr>
-  </table>
-  </div>
-</section>
-
 <section class="card observability-card observability-card--health" id="section-health">
-  <h2>Healthchecks</h2>
-  <p class="muted">Per-subsystem status, recomputed on each page render.</p>
+  <div class="card-head">
+    <h2>Health</h2>
+    <span class="badge {{.HealthClass}}">{{.HealthSummary}}</span>
+    {{if .HealthDetail}}
+      <span class="muted small health-rollup-detail" title="Subsystems not passing — the rows below say why">&mdash; {{.HealthDetail}}</span>
+    {{end}}
+    <span class="muted small">checked {{.GeneratedAt}}</span>
+    {{if ne .HealthSummary "healthy"}}
+      <a class="card-link" href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">Fix agent health &rarr;</a>
+    {{end}}
+  </div>
   <div class="observability-table-wrap">
   <table class="observability-table">
     <thead><tr><th>Subsystem</th><th>Status</th><th>Detail</th></tr></thead>
@@ -1422,6 +1620,206 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   </div>
 </section>
 
+<div class="profile-grid-2">
+<section class="card observability-card" id="section-scans">
+  <div class="card-head">
+    <h2>Scans</h2>
+    <a class="card-link" href="/scans" hx-get="/scans" hx-target="#content" hx-push-url="true">All scans &rarr;</a>
+  </div>
+  {{if .HasScanData}}
+    <div class="metric-row">
+      <span class="metric">{{.ScanStats.LatestStatus}}</span>
+      <span class="muted small">latest run &middot; took {{.ScanStats.LatestDuration}}</span>
+    </div>
+    <div class="observability-table-wrap">
+    <table class="kv observability-kv">
+      <tr><td>Total scans</td><td>{{.ScanStats.Total}}</td></tr>
+      <tr><td>Latest scan</td><td><span class="badge {{.ScanStats.LatestBadge}}">{{.ScanStats.LatestStatus}}</span> &middot; started {{.ScanStats.LatestStartedAt}}</td></tr>
+      <tr><td>Latest duration</td><td>{{.ScanStats.LatestDuration}}</td></tr>
+      <tr><td>Average duration (last 20)</td><td>{{.ScanStats.AverageDuration}}</td></tr>
+      {{if .ScanSchedule}}<tr><td>Schedule</td><td>every {{.ScanSchedule}}</td></tr>{{end}}
+      {{if .Runtime.HasDataRowCounts}}
+      <tr><td>Machines discovered</td><td>{{.Runtime.MachineRows}}</td></tr>
+      <tr><td>Findings surfaced</td><td>{{.Runtime.FindingRows}}</td></tr>
+      {{end}}
+      <tr><td>Recent durations</td><td class="spark-cell">{{.ScanStats.TrendSVG}}</td></tr>
+    </table>
+    </div>
+  {{else}}
+    <p class="muted">No scans yet. Run Scan in the top bar starts one{{if .ScanSchedule}}; the agent also scans every {{.ScanSchedule}}{{end}}.</p>
+  {{end}}
+</section>
+
+<section class="card observability-card" id="section-stream">
+  <div class="card-head">
+    <h2>Streaming</h2>
+    {{if .Stream}}<span class="badge {{.Stream.StateBadge}}">{{.Stream.State}}</span>{{end}}
+  </div>
+  {{if .Stream}}
+    <div class="metric-row">
+      <span class="metric">{{.Stream.TotalSent}}</span>
+      <span class="muted small">events sent since the agent started</span>
+    </div>
+    <div class="observability-table-wrap">
+    <table class="kv observability-kv">
+      <tr><td>State</td><td><span class="badge {{.Stream.StateBadge}}">{{.Stream.State}}</span></td></tr>
+      {{if .Endpoint}}<tr><td>Endpoint</td><td><code>{{.Endpoint}}</code></td></tr>{{end}}
+      <tr><td>Events sent</td><td>{{.Stream.TotalSent}}</td></tr>
+      <tr><td>Backlog depth</td><td>{{.Stream.BacklogDepth}}</td></tr>
+      <tr><td>Last event</td><td>
+        {{if .Stream.LastEventAgo}}
+          <span title="{{.Stream.LastEventAt}}">{{.Stream.LastEventAgo}}</span>
+        {{else}}
+          <span class="muted small">no events yet</span>
+        {{end}}
+      </td></tr>
+      {{if .Stream.LastErrorText}}
+      <tr><td>Last error</td><td><span class="badge badge-red">{{.Stream.LastErrorText}}</span></td></tr>
+      {{end}}
+    </table>
+    </div>
+    <p class="muted small">Backlog depth above zero usually indicates a slow or unreachable OTLP collector. Sustained growth is the early warning before events start dropping.</p>
+  {{else}}
+    <p class="muted">No StreamController wired (inspector / read-only mode). Start the agent with <code>kite-collector dashboard</code> (default --with-agent=true) to populate.</p>
+  {{end}}
+</section>
+</div>
+
+<section class="card observability-card observability-card--wide" id="section-host">
+  <div class="card-head">
+    <h2>This host</h2>
+    <span class="badge badge-gray">self</span>
+    {{if .Host}}
+      <a class="card-link" href="/machines/{{.Host.ID}}" hx-get="/machines/{{.Host.ID}}" hx-target="#content" hx-push-url="true">Explore this machine &rarr;</a>
+    {{end}}
+  </div>
+  {{if .Host}}
+    <div class="profile-grid-3">
+      <table class="kv observability-kv">
+        <tr><td>Hostname</td><td><strong>{{.Host.Hostname}}</strong></td></tr>
+        <tr><td>Operating system</td><td>{{.Host.OSFamily}}{{if .Host.OSVersion}} <span class="muted small">{{.Host.OSVersion}}</span>{{end}}</td></tr>
+        <tr><td>Kernel</td><td>{{if .Host.KernelVersion}}<code>{{.Host.KernelVersion}}</code>{{else}}<span class="muted">not recorded</span>{{end}}</td></tr>
+      </table>
+      <table class="kv observability-kv">
+        <tr><td>Architecture</td><td>{{if .Host.Architecture}}{{.Host.Architecture}}{{else}}<span class="muted">not recorded</span>{{end}}</td></tr>
+        <tr><td>Authorization</td><td>{{.Host.Authorized}}</td></tr>
+        <tr><td>Managed</td><td>{{.Host.Managed}}</td></tr>
+      </table>
+      <table class="kv observability-kv">
+        <tr><td>Software</td><td>{{.Host.SoftwareCount}} <span class="muted small">packages</span></td></tr>
+        <tr><td>Findings</td><td>{{.Host.FindingsCount}} <span class="muted small">on this host</span></td></tr>
+        <tr><td>Last seen</td><td><span title="{{.Host.LastSeenAt}}">{{.Host.LastSeenAgo}}</span> <span class="muted small">first seen {{.Host.FirstSeenAt}}</span></td></tr>
+      </table>
+    </div>
+  {{else}}
+    <p class="muted">No scan has recorded this host yet. The first scan writes the agent&rsquo;s own machine record, and this card then links to its detail page.</p>
+  {{end}}
+</section>
+
+<section class="card observability-card observability-card--wide" id="section-registration">
+  <div class="card-head">
+    <h2>Registration</h2>
+    {{if .Agent.Enrolled}}<span class="badge badge-green">enrolled</span>{{else}}<span class="badge badge-gray">not enrolled</span> <a href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">enroll &rarr;</a>{{end}}
+    <span class="muted small">PKI stamps these from the operator&rsquo;s signed-in session. The agent reports them and cannot choose them.</span>
+  </div>
+  <div class="profile-tiles">
+    <div class="idtile">
+      <div class="idtile-k">Enrolled by</div>
+      <div class="idtile-v">{{if .EnrolledUserEmail}}{{.EnrolledUserEmail}}{{else}}<span class="muted">not available</span>{{end}}</div>
+      <div class="idtile-s">{{if .EnrolledUserID}}<code>{{.EnrolledUserID}}</code>{{else}}the certificate carries the user once enrolled{{end}}</div>
+    </div>
+    <div class="idtile">
+      <div class="idtile-k">Organization</div>
+      <div class="idtile-v">{{if .TenantOrgName}}{{.TenantOrgName}}{{else if .TenantID}}<code>{{.TenantID}}</code>{{else}}<span class="muted">not available</span>{{end}}</div>
+      <div class="idtile-s">{{if and .TenantOrgName .TenantID}}<code>{{.TenantID}}</code>{{else}}tenant{{end}}</div>
+    </div>
+    <div class="idtile">
+      <div class="idtile-k">Certificate</div>
+      {{if .Certificate.Present}}
+        <div class="idtile-v">{{if .Certificate.Expired}}Expired {{else}}Valid to {{end}}{{.Certificate.NotAfterHuman}}</div>
+        <div class="idtile-s {{.Certificate.WindowClass}}">{{.Certificate.WindowNote}}</div>
+      {{else}}
+        <div class="idtile-v"><span class="muted">no client certificate</span></div>
+        <div class="idtile-s">agent.pem appears in the data directory after enrollment</div>
+      {{end}}
+    </div>
+    <div class="idtile">
+      <div class="idtile-k">Reports to</div>
+      <div class="idtile-v">{{if .Endpoint}}{{.Endpoint}}{{else}}<span class="muted">not configured</span>{{end}}</div>
+      <div class="idtile-s">{{if .Certificate.MutualTLS}}over mutual TLS{{else}}without a client certificate{{end}}</div>
+    </div>
+  </div>
+</section>
+
+<section class="card observability-card observability-card--wide" id="section-agent">
+  <div class="card-head">
+    <h2>Software</h2>
+    <span class="muted small">What is installed here and what it was built from &mdash; the same block <code>kite-collector --help</code> prints as &ldquo;Current state&rdquo;.</span>
+  </div>
+  <div class="profile-grid-4">
+    <div class="pgroup">
+      <h4>Application</h4>
+      <div class="prow"><span class="prow-k">Name</span><span class="prow-v">{{.Agent.Name}}</span></div>
+      <div class="prow"><span class="prow-k">Version</span><span class="prow-v"><code>{{.Agent.Version}}</code></span></div>
+      <div class="prow"><span class="prow-k">Vendor</span><span class="prow-v">{{.Agent.Vendor}}</span></div>
+      <div class="prow"><span class="prow-k">Agent type</span><span class="prow-v">{{.Agent.AgentType}}</span></div>
+    </div>
+    <div class="pgroup">
+      <h4>Build</h4>
+      <div class="prow"><span class="prow-k">Build id</span><span class="prow-v"><code>{{.Agent.Commit}}</code></span></div>
+      <div class="prow"><span class="prow-k">Built</span><span class="prow-v">{{if .Agent.BuiltAt}}{{.Agent.BuiltAt}}{{else}}<span class="muted">not stamped</span>{{end}}</span></div>
+      <div class="prow"><span class="prow-k">Binary hash</span><span class="prow-v">{{if .Agent.BinaryHash}}<code>{{.Agent.BinaryHash}}</code>{{else}}<span class="muted">not available</span>{{end}}</span></div>
+      <div class="prow"><span class="prow-k">Go version</span><span class="prow-v"><code>{{.Runtime.GoVersion}}</code></span></div>
+    </div>
+    <div class="pgroup">
+      <h4>Platform</h4>
+      <div class="prow"><span class="prow-k">Architecture</span><span class="prow-v">{{.Agent.Architecture}}</span></div>
+      <div class="prow"><span class="prow-k">Platform</span><span class="prow-v">{{.Agent.Platform}}</span></div>
+      <div class="prow"><span class="prow-k">Telemetry contract</span><span class="prow-v">{{.Agent.ContractVersion}}</span></div>
+    </div>
+    <div class="pgroup">
+      <h4>Files</h4>
+      <div class="prow"><span class="prow-k">Config file</span><span class="prow-v"><code>{{.Agent.ConfigFile}}</code></span></div>
+      <div class="prow"><span class="prow-k">Data directory</span><span class="prow-v">{{if .Agent.DataDir}}<code>{{.Agent.DataDir}}</code>{{else}}<span class="muted">not configured</span>{{end}}</span></div>
+      <div class="prow"><span class="prow-k">Database</span><span class="prow-v">{{if .Agent.DBPath}}<code>{{.Agent.DBPath}}</code>{{else}}<span class="muted">not available</span>{{end}}</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="card observability-card observability-card--wide" id="section-identifiers">
+  <div class="card-head">
+    <h2>Identifiers</h2>
+    <span class="muted small">The values to quote in a support ticket, and the attribute each one travels as.</span>
+  </div>
+  <div class="idlist">
+    <div class="idrow"><span class="idrow-k">Agent</span><span class="idrow-v">{{if .Identifiers.AgentID}}{{.Identifiers.AgentID}}{{else}}<span class="muted">not yet assigned</span>{{end}}</span><span class="idrow-note">agent.id, service.instance.id</span></div>
+    <div class="idrow"><span class="idrow-k">Tenant</span><span class="idrow-v">{{if .TenantID}}{{.TenantID}}{{else}}<span class="muted">not available</span>{{end}}</span><span class="idrow-note">tenant.id, certificate O</span></div>
+    <div class="idrow"><span class="idrow-k">Host</span><span class="idrow-v">{{if .Identifiers.HostID}}{{.Identifiers.HostID}}{{else}}<span class="muted">not available</span>{{end}}</span><span class="idrow-note">host.id</span></div>
+    <div class="idrow"><span class="idrow-k">User</span><span class="idrow-v">{{if .EnrolledUserID}}{{.EnrolledUserID}}{{else}}<span class="muted">not available</span>{{end}}</span><span class="idrow-note">certificate OU</span></div>
+    <div class="idrow"><span class="idrow-k">Client</span><span class="idrow-v">{{if .Certificate.SubjectCN}}{{.Certificate.SubjectCN}}{{else}}<span class="muted">not available</span>{{end}}</span><span class="idrow-note">certificate CN</span></div>
+  </div>
+</section>
+
+<section class="card observability-card observability-card--wide" id="section-diagnostics">
+  <div class="card-head">
+    <h2>Diagnostics</h2>
+    <span class="muted small">The detailed tables, further down this page.</span>
+  </div>
+  <nav class="page-jumpnav profile-jumpnav" aria-label="Diagnostics sections">
+    <a href="#section-certificates">Certificates{{if .CertificateTotal}} <span class="muted small">{{.CertificateTotal}} issued</span>{{end}}</a>
+    <a href="#section-probes">Probes{{if .HasProbeData}} <span class="muted small">last 200 runs</span>{{end}}</a>
+    <a href="#section-failures">Failures{{if .HasFailures}} <span class="muted small">{{len .RecentFailures}} recent</span>{{end}}</a>
+    <a href="#section-activity">Activity{{if .HasActivity}} <span class="muted small">{{len .RecentActivity}} events</span>{{end}}</a>
+    <a href="#section-runtime">Runtime and storage</a>
+  </nav>
+  <div class="observability-actions" aria-label="Observability exports and integrations">
+    <a href="/api/v1/observability/snapshot.json" download>JSON snapshot</a>
+    <a href="/api/v1/observability/snapshot.md" target="_blank" rel="noopener">Markdown summary</a>
+    <span class="muted small observability-actions-note">The snapshot feeds scripted monitoring or an existing observability pipeline; the summary pastes into Slack, a PR description, or a support ticket.</span>
+  </div>
+</section>
+
+<div class="observability-grid">
 <section class="card observability-card observability-card--wide" id="section-certificates">
   <h2>Kite certificates</h2>
   <p class="muted">Tenant-scoped PKI inventory. A mass enrollment issues one certificate per computer; every certificate produced by that fleet enrollment appears here as soon as the remote computer completes enrollment.</p>
@@ -1517,50 +1915,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       {{end}}
     </ol>
   {{else}}
-    <p class="muted">No activity yet. Run a check or trigger a scan from <a href="/onboarding">/onboarding</a>.</p>
-  {{end}}
-</section>
-
-<section class="card observability-card" id="section-scans">
-  <h2>Scan metrics</h2>
-  {{if .HasScanData}}
-    <div class="observability-table-wrap">
-    <table class="kv observability-kv">
-      <tr><td>Total scans</td><td>{{.ScanStats.Total}}</td></tr>
-      <tr><td>Latest scan</td><td><span class="badge {{.ScanStats.LatestBadge}}">{{.ScanStats.LatestStatus}}</span> &middot; started {{.ScanStats.LatestStartedAt}}</td></tr>
-      <tr><td>Latest duration</td><td>{{.ScanStats.LatestDuration}}</td></tr>
-      <tr><td>Average duration (last 20)</td><td>{{.ScanStats.AverageDuration}}</td></tr>
-      <tr><td>Recent durations</td><td class="spark-cell">{{.ScanStats.TrendSVG}}</td></tr>
-    </table>
-    </div>
-  {{else}}
-    <p class="muted">No scans yet. Trigger one from <a href="/onboarding">/onboarding</a>'s launcher panel.</p>
-  {{end}}
-</section>
-
-<section class="card observability-card" id="section-stream">
-  <h2>Stream health</h2>
-  {{if .Stream}}
-    <div class="observability-table-wrap">
-    <table class="kv observability-kv">
-      <tr><td>State</td><td><span class="badge {{.Stream.StateBadge}}">{{.Stream.State}}</span></td></tr>
-      <tr><td>Events sent</td><td>{{.Stream.TotalSent}}</td></tr>
-      <tr><td>Backlog depth</td><td>{{.Stream.BacklogDepth}}</td></tr>
-      <tr><td>Last event</td><td>
-        {{if .Stream.LastEventAgo}}
-          <span title="{{.Stream.LastEventAt}}">{{.Stream.LastEventAgo}}</span>
-        {{else}}
-          <span class="muted small">no events yet</span>
-        {{end}}
-      </td></tr>
-      {{if .Stream.LastErrorText}}
-      <tr><td>Last error</td><td><span class="badge badge-red">{{.Stream.LastErrorText}}</span></td></tr>
-      {{end}}
-    </table>
-    </div>
-    <p class="muted small">Backlog depth above zero usually indicates a slow or unreachable OTLP collector. Sustained growth is the early warning before events start dropping.</p>
-  {{else}}
-    <p class="muted">No StreamController wired (inspector / read-only mode). Start the agent with <code>kite-collector dashboard</code> (default --with-agent=true) to populate.</p>
+    <p class="muted">No activity yet. Run Scan in the top bar, or run a connection check from <a href="/onboarding">/onboarding</a>.</p>
   {{end}}
 </section>
 
@@ -1570,9 +1925,6 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
      heap and goroutine counts for leak symptoms; watch DB size for unbounded growth.</p>
   <div class="observability-table-wrap">
   <table class="kv observability-kv">
-    <tr><td>Enrolled user ID</td><td>{{if .EnrolledUserID}}<code>{{.EnrolledUserID}}</code>{{else}}<span class="muted">not available</span>{{end}}</td></tr>
-    <tr><td>Enrolled user email</td><td>{{if .EnrolledUserEmail}}{{.EnrolledUserEmail}}{{else}}<span class="muted">not available</span>{{end}}</td></tr>
-    <tr><td>Organization (tenant)</td><td>{{if .TenantOrgName}}{{.TenantOrgName}} {{end}}{{if .TenantID}}<code>{{.TenantID}}</code>{{end}}{{if and (not .TenantOrgName) (not .TenantID)}}<span class="muted">not available</span>{{end}}</td></tr>
     <tr><td colspan="2" class="kv-section-header"><span class="muted small">Process</span></td></tr>
     <tr><td>Go version</td><td><code>{{.Runtime.GoVersion}}</code></td></tr>
     <tr><td>Heap allocated</td><td>{{.Runtime.HeapAlloc}} <span class="spark-cell">{{.Runtime.HeapTrendSVG}}</span></td></tr>
@@ -1618,15 +1970,23 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 </div>
 `))
 
-// registerObservabilityRoutes wires the observability page + fragment route
-// + snapshot download endpoint. The snapshot endpoint is the machine-
-// readable counterpart to the human-readable page — same data, JSON
-// formatted, with a download Content-Disposition so browsers offer a
-// "Save as" dialog. Closes the workflows iteration 29 identified:
-// support tickets, pre/post-change archiving, scripted local monitoring.
+// registerObservabilityRoutes wires the agent profile page (/agent, with
+// /observability kept as an alias for older links and bookmarks), its
+// fragment route, and the snapshot download endpoints. The snapshot endpoint
+// is the machine-readable counterpart to the human-readable page — same
+// data, JSON formatted, with a download Content-Disposition so browsers offer
+// a "Save as" dialog. Closes the workflows iteration 29 identified: support
+// tickets, pre/post-change archiving, scripted local monitoring.
 func registerObservabilityRoutes(mux *http.ServeMux, deps onboardingDeps) {
-	mux.HandleFunc("GET /observability", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /agent", func(w http.ResponseWriter, r *http.Request) {
 		serveObservabilityPage(w, r, deps)
+	})
+	mux.HandleFunc("GET /observability", func(w http.ResponseWriter, r *http.Request) {
+		target := "/agent"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("GET /fragments/observability", func(w http.ResponseWriter, r *http.Request) {
 		paused := r.URL.Query().Get("paused") == "1"
@@ -1852,7 +2212,17 @@ func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabil
 		// certificates carry it as the additional O value. Older certs
 		// show the UUID alone.
 		view.TenantID, view.TenantOrgName = telresource.TenantOrgFromCertFile(agentCert)
+		view.Certificate = readAgentCertificate(agentCert, time.Now())
 	}
+	view.Certificate.MutualTLS = deps.TLSConfig.Enabled && strings.TrimSpace(deps.TLSConfig.CertFile) != ""
+	view.Identifiers = identifierSet{
+		AgentID: readAgentID(identityDirFor(deps)),
+		HostID:  telresource.HostID(),
+	}
+	if deps.BaseConfig != nil {
+		view.ScanSchedule = humanizeDuration(deps.BaseConfig.StreamingInterval())
+	}
+	view.Host = collectHostSummary(ctx, deps)
 	view.Health = computeHealthChecks(ctx, deps)
 	view.HealthSummary, view.HealthClass, view.HealthDetail = rollupHealth(view.Health)
 
@@ -1923,7 +2293,7 @@ func serveObservabilityPage(w http.ResponseWriter, r *http.Request, deps onboard
 		}
 		return
 	}
-	if err := renderIndexPage(w, "observability", func(fragBuf io.Writer) error {
+	if err := renderIndexPage(w, "agent", func(fragBuf io.Writer) error {
 		return renderObservabilityFragment(fragBuf, r.Context(), deps, paused)
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

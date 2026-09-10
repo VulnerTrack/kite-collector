@@ -25,8 +25,8 @@ type indexPageView struct {
 }
 
 // indexPageTemplate is the dashboard shell. The layout is a CSS grid with a
-// top header (title + global controls), a left sidebar (views + tables list),
-// and a central content pane that HTMX swaps fragments into.
+// top header (brand + one right-aligned action cluster), a left sidebar (the
+// resource tree), and a central content pane that HTMX swaps fragments into.
 //
 // Each sidebar link uses canonical pretty URLs (e.g. /machines) for both
 // `hx-get` and `href`:
@@ -53,7 +53,7 @@ const indexPageTemplate = `<!DOCTYPE html>
      only on the enroll/sign-in flow that already talks to the backend (see
      renderTurnstileWidgets); every other page stays fully offline. -->
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.6">
+<link rel="stylesheet" href="/static/style.css?v=1.0.7">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
 </head>
@@ -69,23 +69,27 @@ const indexPageTemplate = `<!DOCTYPE html>
          width="160" height="40">
     <span class="brand-sub">kite-collector &middot; Cybersecurity Machine Discovery Agent</span>
   </a>
-  <div class="topbar-nav">
+  <!-- One action cluster, pinned right and vertically centred, never
+       wrapping: health pill, Onboarding, then the scan controls with the
+       primary action last so it lands at the edge of the bar. The scan
+       status is a fixed two-line block beside the button, so the button
+       holds still while the status text changes length. -->
+  <div class="topbar-actions">
     <span id="onboarding-status-badge"
           hx-get="/fragments/onboarding-status-badge"
           hx-trigger="load, every 30s, refresh-agent-state from:body"
           hx-swap="innerHTML"
-          title="Agent onboarding health — drill in via Settings &rarr; Onboarding"
           aria-label="Agent health summary"></span>
-  </div>
-  <div class="topbar-actions">
-    <div class="topbar-scan-group">
-      <span hx-get="/fragments/scan-controls" hx-trigger="load" hx-swap="innerHTML"></span>
-      <div id="scan-status"
-           hx-get="/fragments/scan-status"
-           hx-trigger="load, every 3s"
-           hx-swap="innerHTML">
-        <span class="badge badge-gray">Loading scan status&hellip;</span>
-      </div>
+    <a class="btn btn-ghost{{if eq .ActiveTab "onboarding"}} active{{end}}"
+       href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true"
+       onclick="setActive(this)">Onboarding</a>
+    <span class="topbar-divider" aria-hidden="true"></span>
+    <div id="scan-status"
+         class="scan-cluster"
+         hx-get="/fragments/scan-status"
+         hx-trigger="load, every 3s"
+         hx-swap="innerHTML">
+      <span class="scan-meta"><span class="scan-meta-1">Loading</span><span class="scan-meta-2">scan status</span></span>
     </div>
   </div>
 </header>

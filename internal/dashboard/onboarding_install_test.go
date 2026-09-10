@@ -483,25 +483,25 @@ func TestBadgeViewFor_StatusVocabulary(t *testing.T) {
 	cases := []struct {
 		overall     string
 		wantClass   string
-		wantGlyph   string
+		wantShort   string
 		wantInLabel string
 	}{
-		{overall: "streaming", wantClass: "status-streaming", wantGlyph: "✓", wantInLabel: "streaming"},
-		{overall: installer.ActionReady, wantClass: "status-ready", wantGlyph: "✓", wantInLabel: "ready"},
-		{overall: "degraded", wantClass: "status-degraded", wantGlyph: "!", wantInLabel: "degraded"},
-		{overall: installer.ActionEnroll, wantClass: "status-pending", wantGlyph: "·", wantInLabel: "in progress"},
-		{overall: installer.ActionStartService, wantClass: "status-pending", wantGlyph: "·", wantInLabel: "in progress"},
-		{overall: installer.ActionRegisterService, wantClass: "status-pending", wantGlyph: "·", wantInLabel: "in progress"},
-		{overall: installer.ActionInstall, wantClass: "status-install", wantGlyph: "○", wantInLabel: "not yet installed"},
-		{overall: "novel-future-status", wantClass: "status-pending", wantGlyph: "·", wantInLabel: "novel-future-status"},
+		{overall: "streaming", wantClass: "status-streaming", wantShort: "All systems healthy", wantInLabel: "streaming"},
+		{overall: installer.ActionReady, wantClass: "status-ready", wantShort: "Agent ready", wantInLabel: "ready"},
+		{overall: "degraded", wantClass: "status-degraded", wantShort: "Agent degraded", wantInLabel: "degraded"},
+		{overall: installer.ActionEnroll, wantClass: "status-pending", wantShort: "Onboarding in progress", wantInLabel: "in progress"},
+		{overall: installer.ActionStartService, wantClass: "status-pending", wantShort: "Onboarding in progress", wantInLabel: "in progress"},
+		{overall: installer.ActionRegisterService, wantClass: "status-pending", wantShort: "Onboarding in progress", wantInLabel: "in progress"},
+		{overall: installer.ActionInstall, wantClass: "status-install", wantShort: "Agent not installed", wantInLabel: "not yet installed"},
+		{overall: "novel-future-status", wantClass: "status-pending", wantShort: "Agent novel-future-status", wantInLabel: "novel-future-status"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.overall, func(t *testing.T) {
 			v := badgeViewFor(tc.overall)
 			assert.Equal(t, tc.wantClass, v.Class,
 				"status %q must map to CSS class %q", tc.overall, tc.wantClass)
-			assert.Equal(t, tc.wantGlyph, v.Glyph,
-				"status %q must map to visual glyph %q", tc.overall, tc.wantGlyph)
+			assert.Equal(t, tc.wantShort, v.Short,
+				"status %q must map to pill text %q", tc.overall, tc.wantShort)
 			assert.Contains(t, v.Label, tc.wantInLabel,
 				"status %q label must include actionable copy", tc.overall)
 		})
@@ -514,8 +514,10 @@ func TestOnboardingStatusBadge_RendersAccessibleLink(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
-	assert.Contains(t, body, `class="topbar-status`,
-		"badge must use the topbar-status class so the topbar CSS picks it up")
+	assert.Contains(t, body, `class="topbar-status health-pill`,
+		"badge must use the topbar-status and health-pill classes so the topbar CSS picks it up")
+	assert.Contains(t, body, `class="health-pill-text"`,
+		"the pill must carry visible text beside the dot, not a dot alone")
 	assert.Contains(t, body, `href="/onboarding"`,
 		"badge must link to /onboarding so operators can drill in from any page")
 	assert.Contains(t, body, `hx-push-url="true"`,

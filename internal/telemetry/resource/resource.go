@@ -72,6 +72,10 @@ func Build(cfg Config) map[string]string {
 	}
 }
 
+// HostID returns the host.id value the agent stamps on its telemetry, so
+// operator-facing surfaces can show the same identifier the platform sees.
+func HostID() string { return detectHostID() }
+
 // detectHostID reads the OS machine identifier. Linux uses /etc/machine-id;
 // macOS and Windows currently fall back to the hostname (a richer detector
 // lives in internal/identity/fingerprint.go but we deliberately do not

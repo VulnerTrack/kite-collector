@@ -108,25 +108,25 @@ func TestObservability_AgentStateCard(t *testing.T) {
 // data is empty. Empty states should be handled gracefully.
 func TestObservability_PageRendersAllSections(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
-	assert.Contains(t, body, "Local observability",
-		"page must render the local-observability title")
-	assert.Contains(t, body, "Healthchecks",
-		"healthchecks panel must always render — operators need to know subsystem status even on a fresh install")
+	assert.Contains(t, body, "Agent profile",
+		"page must render the agent profile title")
+	assert.Contains(t, body, ">Health<",
+		"health card must always render — operators need to know subsystem status even on a fresh install")
 	assert.Contains(t, body, "Probe metrics",
 		"probe metrics section must render — shows empty-state copy when no data")
-	assert.Contains(t, body, "Scan metrics",
-		"scan metrics section must render — shows empty-state copy when no data")
+	assert.Contains(t, body, ">Scans<",
+		"scans card must render — shows empty-state copy when no data")
 	assert.Contains(t, body, "no data leaves this host",
 		"must reaffirm the local-observability promise — no external scrapers required")
 }
 
 func TestObservability_HealthchecksReflectStoreState(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -286,25 +286,25 @@ func TestPercentileMS_EmptyReturnsZero(t *testing.T) {
 
 func TestObservabilityRoute_PlainGETReturnsFullShell(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.Contains(t, body, "<html",
 		"plain GET must return the full shell so reload/share-link work")
-	assert.Contains(t, body, "Local observability",
-		"shell must embed the observability fragment")
+	assert.Contains(t, body, "Agent profile",
+		"shell must embed the agent profile fragment")
 }
 
 func TestObservabilityRoute_HXRequestReturnsFragmentOnly(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil,
+	rec := h.do(t, "GET", "/agent", nil,
 		map[string]string{"HX-Request": "true"})
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.NotContains(t, body, "<html",
 		"HX-Request must return fragment-only so nav swap doesn't nest a full doc")
-	assert.Contains(t, body, "Local observability",
-		"fragment must contain the observability content")
+	assert.Contains(t, body, "Agent profile",
+		"fragment must contain the agent profile content")
 }
 
 func TestObservabilityRoute_PopulatedFromRealProbeRuns(t *testing.T) {
@@ -318,7 +318,7 @@ func TestObservabilityRoute_PopulatedFromRealProbeRuns(t *testing.T) {
 		}))
 	}
 
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -409,7 +409,7 @@ func TestObservability_ProbeMetricsTableIncludesTrendColumn(t *testing.T) {
 		}))
 	}
 
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -503,7 +503,7 @@ func TestObservabilitySnapshot_IncludesRuntimeStatsJSON(t *testing.T) {
 
 func TestObservabilityPage_IncludesSnapshotDownloadLink(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -561,7 +561,7 @@ func TestCollectRuntimeStats_DataTableCountsFallbackToPlaceholder(t *testing.T) 
 
 func TestObservability_RuntimeCardRendersDataTableRows(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -686,8 +686,8 @@ func TestObservability_RuntimeCardRendersTrendSparklines(t *testing.T) {
 
 	// Render the page twice so the ring buffer has > 1 sample by the time
 	// we assert on the trend SVG content.
-	_ = h.do(t, "GET", "/observability", nil, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	_ = h.do(t, "GET", "/agent", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -811,7 +811,7 @@ func TestCollectRuntimeStats_NoStoreDegradesGracefully(t *testing.T) {
 
 func TestObservability_RuntimeCardRendersOnPage(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -858,7 +858,7 @@ func TestEnsureStartTime_IdempotentAcrossCalls(t *testing.T) {
 
 func TestObservability_PageSelfPollsEvery15Seconds(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -910,11 +910,11 @@ func TestObservability_StreamCardNotWiredShowsReadOnlyNotice(t *testing.T) {
 	// stream-health card must render the inspector-mode notice instead
 	// of an empty populated card.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
-	assert.Contains(t, body, "Stream health",
+	assert.Contains(t, body, ">Streaming<",
 		"stream health section must always render — even in inspector mode (with empty-state copy)")
 	assert.Contains(t, body, "No StreamController wired",
 		"inspector mode must surface the read-only notice so operators know why no stats are shown")
@@ -953,7 +953,7 @@ func TestObservability_StreamCardPopulatedFromWiredController(t *testing.T) {
 	})
 
 	harness := &onboardingTestHarness{mux: mux, store: st, wrapKey: key}
-	rec := harness.do(t, "GET", "/observability", nil, nil)
+	rec := harness.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -979,15 +979,28 @@ func TestObservability_StreamCardPopulatedFromWiredController(t *testing.T) {
 
 func TestObservability_SidebarLinkAddedToShell(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
-	// The sidebar nav must include an Observability link so operators
-	// discover the surface from anywhere in the dashboard.
-	assert.Contains(t, body, `href="/observability"`,
-		"sidebar nav must include /observability link for cross-page discoverability")
-	assert.True(t, strings.Contains(body, `>Observability<`),
-		"sidebar nav link text must read 'Observability'")
+	// The agent profile leads the sidebar, outside any group, and the old
+	// Observability entry under Operations is gone: one door to the page.
+	assert.Contains(t, body, `href="/agent"`,
+		"sidebar nav must link to /agent so the profile is reachable from anywhere in the dashboard")
+	assert.True(t, strings.Contains(body, `>Agent profile<`),
+		"sidebar nav link text must read 'Agent profile'")
+	assert.NotContains(t, body, `>Observability<`,
+		"the Operations group must no longer carry a second link to the same page")
+	assert.Less(t, strings.Index(body, `>Agent profile<`), strings.Index(body, `>Machines<`),
+		"the agent profile must come before the inventory in the sidebar")
+}
+
+func TestObservabilityRoute_LegacyPathRedirectsToAgent(t *testing.T) {
+	h := newInstallHarness(t, nil)
+	rec := h.do(t, "GET", "/observability?paused=1", nil, nil)
+	assert.Equal(t, http.StatusMovedPermanently, rec.Code,
+		"/observability is an alias for bookmarks and older links")
+	assert.Equal(t, "/agent?paused=1", rec.Header().Get("Location"),
+		"the alias must keep the query string so a paused link stays paused")
 }
 
 // ---------------------------------------------------------------------------
@@ -1000,7 +1013,7 @@ func TestObservability_FreshnessChipLiveByDefault(t *testing.T) {
 	// visible "the page is alive" signal because auto-refresh is otherwise
 	// invisible until the next swap fires.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1023,7 +1036,7 @@ func TestObservability_FreshnessChipPausedOmitsAutoRefresh(t *testing.T) {
 	// hx-trigger attribute disappears from the wrapper (so HTMX stops
 	// swapping), and the toggle invites the operator to Resume.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability?paused=1", nil, nil)
+	rec := h.do(t, "GET", "/agent?paused=1", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1162,7 +1175,7 @@ func TestObservability_ProbeTableAppliesSeverityRowClass(t *testing.T) {
 			ProbeName: "dns", Result: "fail", LatencyMS: 5000, CheckedAt: time.Now().Add(-time.Duration(i) * time.Second),
 		}))
 	}
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.Contains(t, body, `class="probe-row-critical"`,
@@ -1241,7 +1254,7 @@ func TestObservability_RecentActivityCardRenders(t *testing.T) {
 		ProbeName: "tls", Result: "fail", LatencyMS: 0, Diagnostic: "handshake timeout",
 		CheckedAt: time.Now().Add(-1 * time.Minute),
 	}))
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1261,7 +1274,7 @@ func TestObservability_RecentActivityEmptyState(t *testing.T) {
 	// Fresh store: no probe runs, no scans. Card must show the empty
 	// state with a pointer to /onboarding, not blank or broken.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.Contains(t, body, "Recent activity",
@@ -1278,7 +1291,7 @@ func TestObservability_PageTitleScriptReflectsHealth(t *testing.T) {
 	// without focus. Pin the script presence + behaviour so a refactor
 	// that drops it breaks loudly.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1396,7 +1409,7 @@ func TestObservability_ProbeTableRendersUptimeStripColumn(t *testing.T) {
 		CheckedAt: time.Now(),
 	}))
 
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1413,31 +1426,37 @@ func TestObservability_PageJumpNavRendersAllSections(t *testing.T) {
 	// Pin presence + every section anchor + the matching card id so
 	// adding/removing a card forces a deliberate nav update.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
-	assert.Contains(t, body, `class="page-jumpnav"`,
-		"observability page must render the jump-nav chip bar")
-	assert.Contains(t, body, `aria-label="Observability page sections"`,
+	assert.Contains(t, body, `class="page-jumpnav profile-jumpnav"`,
+		"the Diagnostics card must render the jump-nav chip bar")
+	assert.Contains(t, body, `aria-label="Diagnostics sections"`,
 		"jump-nav must carry an accessible label for screen-reader landmark navigation")
 
-	// Every chip + matching section id must exist.
+	// Every chip + matching section id must exist for the diagnostic tables
+	// below the profile.
 	sections := []struct{ id, label string }{
-		{"section-health", "Health"},
-		{"section-activity", "Activity"},
+		{"section-certificates", "Certificates"},
 		{"section-probes", "Probes"},
-		{"section-scans", "Scans"},
-		{"section-stream", "Stream"},
-		{"section-runtime", "Runtime"},
+		{"section-failures", "Failures"},
+		{"section-activity", "Activity"},
+		{"section-runtime", "Runtime and storage"},
 	}
 	for _, s := range sections {
 		assert.Contains(t, body, `href="#`+s.id+`"`,
 			"jump-nav must include link to #%s — every card must be navigable", s.id)
 		assert.Contains(t, body, `id="`+s.id+`"`,
 			"card matching #%s must carry a matching id attribute so the anchor lands", s.id)
-		assert.Contains(t, body, ">"+s.label+"<",
+		assert.Contains(t, body, `">`+s.label,
 			"jump-nav must include a chip labelled %q", s.label)
+	}
+
+	// The profile cards above the jump-nav carry ids too, so a support
+	// ticket can deep-link to them.
+	for _, id := range []string{"section-health", "section-scans", "section-stream", "section-host", "section-registration", "section-agent", "section-identifiers"} {
+		assert.Contains(t, body, `id="`+id+`"`, "profile card #%s must carry its id", id)
 	}
 }
 
@@ -1499,7 +1518,7 @@ func TestObservability_HealthRollupRendersDetailBesideBadge(t *testing.T) {
 	// warns, Last scan warns. Detail must surface those subsystem names
 	// so the operator doesn't have to scroll to the Healthchecks card.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1556,7 +1575,7 @@ func TestObservability_RecentFailuresCardRendersDiagnostics(t *testing.T) {
 		LatencyMS: 5000, CheckedAt: time.Now(),
 	}))
 
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1585,7 +1604,7 @@ func TestObservability_RecentFailuresEmptyStateIsPositive(t *testing.T) {
 		}))
 	}
 
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1599,12 +1618,12 @@ func TestObservability_RecentFailuresEmptyStateIsPositive(t *testing.T) {
 
 func TestObservability_JumpNavIncludesFailuresAnchor(t *testing.T) {
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.Contains(t, body, `href="#section-failures"`,
 		"jump-nav must include the Failures anchor so operators can jump straight to the diagnostic card")
-	assert.Contains(t, body, ">Failures<",
+	assert.Contains(t, body, `">Failures`,
 		"jump-nav must include the Failures chip label")
 }
 
@@ -1779,7 +1798,7 @@ func TestObservabilityPage_IncludesMarkdownLinkBesideJSON(t *testing.T) {
 	// operators pick the right one for their workflow without leaving
 	// the tab.
 	h := newInstallHarness(t, nil)
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1929,7 +1948,7 @@ func TestObservability_FailureCardRendersHintBlock(t *testing.T) {
 		LatencyMS:  120, CheckedAt: time.Now(),
 	}))
 
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
@@ -1957,7 +1976,7 @@ func TestObservability_FailureCardSkipsHintWhenUnclassified(t *testing.T) {
 		LatencyMS:  50, CheckedAt: time.Now(),
 	}))
 
-	rec := h.do(t, "GET", "/observability", nil, nil)
+	rec := h.do(t, "GET", "/agent", nil, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 	assert.Contains(t, body, "really weird thing happened",

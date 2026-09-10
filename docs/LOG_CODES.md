@@ -287,7 +287,7 @@ Source: [`internal/copilot/fsm/logcodes.go`](../internal/copilot/fsm/logcodes.go
 
 Source: [`internal/dashboard/logcodes.go`](../internal/dashboard/logcodes.go) · 38 codes
 
-**observability surface — /observability page + /api/v1/observability/***
+**observability surface — /agent profile page (alias /observability) + /api/v1/observability/***
 
 | Code | Constant | Description |
 |---|---|---|

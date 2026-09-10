@@ -105,7 +105,7 @@ const kiteLoginTemplate = `<!DOCTYPE html>
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
 <!-- No web fonts: typography falls back to the --font-ui system stack so the
      page never fetches a font from the internet. -->
-<link rel="stylesheet" href="/static/style.css?v=1.0.6">
+<link rel="stylesheet" href="/static/style.css?v=1.0.7">
 <style>
   body.kite-auth-page {
     display: flex;
@@ -334,7 +334,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Welcome to Kite Collector</title>
 <!-- No web fonts: system --font-ui stack only, no external font fetch. -->
-<link rel="stylesheet" href="/static/style.css?v=1.0.6">
+<link rel="stylesheet" href="/static/style.css?v=1.0.7">
 <style>
   body.kite-success-page {
     display: flex;
@@ -525,11 +525,11 @@ func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request, oauth OAuthOpt
 		}
 	}
 	if dashboardURL == "" {
-		dashboardURL = "/machines"
+		dashboardURL = "/agent"
 	} else if strings.HasPrefix(dashboardURL, "/") {
 		// Allow in-site relative navigation.
 	} else if !isAllowedKiteLaunchURL(oauth, dashboardURL) {
-		dashboardURL = "/machines"
+		dashboardURL = "/agent"
 	}
 	view := kiteSuccessView{
 		DashboardURL: dashboardURL,

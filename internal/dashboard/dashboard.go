@@ -147,17 +147,21 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 
 	// Dashboard root — context-aware redirect. Fresh hosts (no enrolled
 	// identity) land on /onboarding so the operator sees the install/enroll
-	// flow immediately instead of an empty /machines page. Once enrollment is
-	// done the redirect flips to /machines, which is the steady-state home.
+	// flow immediately. Once enrollment is done the redirect flips to the
+	// agent profile, which answers "is the agent working?" before the
+	// inventory says what it found. The profile route is mounted with the
+	// onboarding surface further down; a store that cannot host it (not
+	// SQLite, no wrap key) keeps the machines table as the landing page.
 	// 307 preserves the request method on the off chance a non-GET client
 	// hits "/".
+	steadyStateHome := "/machines"
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Has("code") || r.URL.Query().Has("state") {
 			serveKiteOAuthCallbackPage(w, r, opts.OAuth, kiteOAuthEnrollment, opts.AppVersion)
 			return
 		}
 
-		target := "/machines"
+		target := steadyStateHome
 		if sqliteStore, ok := st.(*sqlite.SQLiteStore); ok {
 			if _, err := sqliteStore.GetEnrolledIdentity(r.Context()); err != nil {
 				// Any error (including ErrNoIdentity) → assume not yet onboarded
@@ -567,21 +571,15 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		}
 	})
 
-	// Scan status fragment — the #scan-status div re-fetches this every 3s
-	// via HTMX, so the "Run Scan" button transitions through its
-	// queued → running → completed states without a manual page reload.
+	// Scan cluster fragment — the topbar's #scan-status div re-fetches this
+	// every 3s via HTMX. It renders the Run Scan button together with the
+	// two-line status beside it, so the button follows the run (idle,
+	// scanning, done) without a manual page reload and without a second
+	// fragment to keep in step.
+	scanEnabled := opts.Coordinator != nil && opts.BaseConfig != nil
 	mux.HandleFunc("GET /fragments/scan-status", func(w http.ResponseWriter, r *http.Request) {
 		renderFragment(w, "scan-status", func(buf io.Writer) error {
-			return renderScanStatusFragment(buf, r.Context(), st, opts.Coordinator)
-		})
-	})
-
-	// Scan controls fragment — renders the "Run Scan" button enabled or
-	// disabled-with-tooltip depending on whether a coordinator is wired.
-	// The index loads this once on page load.
-	mux.HandleFunc("GET /fragments/scan-controls", func(w http.ResponseWriter, _ *http.Request) {
-		renderFragment(w, "scan-controls", func(buf io.Writer) error {
-			return renderScanControlsFragment(buf, opts.Coordinator != nil && opts.BaseConfig != nil)
+			return renderScanStatusFragment(buf, r.Context(), st, opts.Coordinator, scanEnabled)
 		})
 	})
 
@@ -589,9 +587,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	// wired in; otherwise returns a read-only placeholder so the button
 	// surfaces the right affordance.
 	mux.HandleFunc("POST /api/v1/scan", func(w http.ResponseWriter, r *http.Request) {
-		if opts.Coordinator == nil || opts.BaseConfig == nil {
+		if !scanEnabled {
 			renderFragment(w, "scan-trigger-unavailable", func(buf io.Writer) error {
-				return renderScanStatusFragment(buf, r.Context(), st, nil)
+				return renderScanStatusFragment(buf, r.Context(), st, nil, false)
 			})
 			return
 		}
@@ -614,7 +612,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			logger.Info("dashboard: scan triggered via UI")
 		}
 		renderFragment(w, "scan-status", func(buf io.Writer) error {
-			return renderScanStatusFragment(buf, r.Context(), st, opts.Coordinator)
+			return renderScanStatusFragment(buf, r.Context(), st, opts.Coordinator, scanEnabled)
 		})
 	})
 
@@ -727,6 +725,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 			})
 			kiteOAuthEnrollment.Store = sqliteStore
 			kiteOAuthEnrollment.WrapKey = wrapKey
+			steadyStateHome = "/agent"
 		}
 	} else {
 		logger.Warn("dashboard: onboarding disabled — store is not sqlite-backed",

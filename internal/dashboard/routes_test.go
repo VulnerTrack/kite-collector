@@ -93,7 +93,7 @@ func TestRoute_GET_FindingsPlain_HasActiveOnFindingsLink(t *testing.T) {
 
 // TestRoute_GET_Root_RedirectsToOnboardingWhenUnenrolled — GET / on a fresh
 // host (no enrolled identity) lands on /onboarding so the operator sees the
-// install + enroll flow immediately instead of an empty /machines page.
+// install + enroll flow immediately instead of a profile with nothing in it.
 func TestRoute_GET_Root_RedirectsToOnboardingWhenUnenrolled(t *testing.T) {
 	handler := newTestHandler(t)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
@@ -106,10 +106,10 @@ func TestRoute_GET_Root_RedirectsToOnboardingWhenUnenrolled(t *testing.T) {
 		"fresh store with no enrolled identity should land on /onboarding")
 }
 
-// TestRoute_GET_Root_RedirectsToMachinesWhenEnrolled — once the identity slot
-// is populated, the root redirect flips to /machines so reload / share-link /
-// browser-back land on the steady-state home.
-func TestRoute_GET_Root_RedirectsToMachinesWhenEnrolled(t *testing.T) {
+// TestRoute_GET_Root_RedirectsToAgentProfileWhenEnrolled — once the identity
+// slot is populated, the root redirect flips to /agent so reload / share-link
+// / browser-back land on the agent profile, the steady-state home.
+func TestRoute_GET_Root_RedirectsToAgentProfileWhenEnrolled(t *testing.T) {
 	st := testStore(t)
 	sqliteStore, ok := st.(*sqlite.SQLiteStore)
 	require.True(t, ok, "test store must be a SQLite store")
@@ -125,8 +125,8 @@ func TestRoute_GET_Root_RedirectsToMachinesWhenEnrolled(t *testing.T) {
 	srv.Handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
-	assert.Equal(t, "/machines", rec.Header().Get("Location"),
-		"enrolled host should land on /machines, the steady-state home")
+	assert.Equal(t, "/agent", rec.Header().Get("Location"),
+		"enrolled host should land on /agent, the steady-state home")
 }
 
 func TestRoute_GET_KiteLogin_RendersManualSignInByDefault(t *testing.T) {
@@ -290,7 +290,7 @@ func TestRoute_GET_KiteSuccess_ReturnsWelcomePage(t *testing.T) {
 	assert.Contains(t, body, "Enrollment complete.")
 	assert.Contains(t, body, "Kite is ready.")
 	assert.Contains(t, body, "Go to Dashboard")
-	assert.Contains(t, body, `href="/machines"`)
+	assert.Contains(t, body, `href="/agent"`, "the welcome page must open on the agent profile")
 }
 
 func TestRoute_GET_RootWithOAuthParams_ReturnsAccessGrantedPage(t *testing.T) {

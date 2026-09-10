@@ -187,7 +187,7 @@ var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-in
   <div class="pki-certificate-notice" data-kind="{{if .CertificatesSignInRequired}}auth{{else}}pki{{end}}">
     <strong>{{if .CertificatesSignInRequired}}Sign in required{{else}}PKI unavailable{{end}}:</strong>
     <span>{{.CertificatesError}}</span>
-    {{if .CertificatesSignInRequired}}<a class="btn btn-ghost" href="/kite-login?dashboard=%2Fobservability">Sign in &rarr;</a>{{end}}
+    {{if .CertificatesSignInRequired}}<a class="btn btn-ghost" href="/kite-login?dashboard=%2Fagent">Sign in &rarr;</a>{{end}}
   </div>
 {{else if .HasCertificates}}
   <p class="muted small">Showing this computer's most recently issued active certificate. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>

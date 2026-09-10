@@ -20,7 +20,7 @@ package dashboard
 type LogCode string
 
 const (
-	// observability surface — /observability page + /api/v1/observability/*
+	// observability surface — /agent profile page (alias /observability) + /api/v1/observability/*
 	LogCodeObservabilitySnapshotMarshal LogCode = "dashboard.observability.snapshot_marshal_failed"
 
 	// containers surface — /containers page + /api/v1/containers/*

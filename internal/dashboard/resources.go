@@ -29,10 +29,11 @@ type sidebarEntry struct {
 	// which table page is open, and setActive() handles clicks client-side.
 	Tab string
 	// Table names the backing content table for the count badge. Entries
-	// without one (Observability, Docs, Settings pages) render no badge.
+	// without one (Agent profile, Docs, Settings pages) render no badge.
 	Table string
 	// Count is the row count of Table; -1 renders no badge (static variant
-	// or unknown).
+	// or unknown). Entries without a Table must set it to -1 explicitly,
+	// otherwise the zero value renders as a "0" badge.
 	Count int64
 	// Warn tints the count badge red — used for Findings, where a non-zero
 	// count is a call to action rather than inventory size.
@@ -47,8 +48,15 @@ type sidebarGroup struct {
 
 // sidebarGroups returns the curated resource tree. Counts default to -1
 // (unknown); the counted variant fills them from the introspection catalog.
+//
+// The agent profile leads, outside any group: it is the page the dashboard
+// opens on, and it answers whether the agent is working before the
+// inventory groups say what it found.
 func sidebarGroups() []sidebarGroup {
 	return []sidebarGroup{
+		{Entries: []sidebarEntry{
+			{Label: "Agent profile", Href: "/agent", Tab: "agent", Count: -1},
+		}},
 		{Title: "Inventory", Entries: []sidebarEntry{
 			{Label: "Machines", Href: "/machines", Tab: "machines", Table: "machines", Count: -1},
 			{Label: "Active Directory", Href: "/active-directory", Tab: "active-directory", Table: "ad_directory_users", Count: -1},
@@ -66,14 +74,13 @@ func sidebarGroups() []sidebarGroup {
 		{Title: "Operations", Entries: []sidebarEntry{
 			{Label: "Scans", Href: "/scans", Tab: "scans", Table: "scan_runs", Count: -1},
 			{Label: "Events", Href: "/tables/events", Table: "events", Count: -1},
-			{Label: "Observability", Href: "/observability", Tab: "observability"},
-			{Label: "Docs", Href: "/docs", Tab: "docs"},
+			{Label: "Docs", Href: "/docs", Tab: "docs", Count: -1},
 		}},
 		{Title: "Views", Entries: viewSidebarEntries()},
 		{Title: "Settings", Entries: []sidebarEntry{
-			{Label: "Onboarding", Href: "/onboarding", Tab: "onboarding"},
-			{Label: "Mass deployment", Href: "/fleet", Tab: "fleet"},
-			{Label: "Certificates", Href: "/certificates", Tab: "certificates"},
+			{Label: "Onboarding", Href: "/onboarding", Tab: "onboarding", Count: -1},
+			{Label: "Mass deployment", Href: "/fleet", Tab: "fleet", Count: -1},
+			{Label: "Certificates", Href: "/certificates", Tab: "certificates", Count: -1},
 		}},
 	}
 }
@@ -96,7 +103,9 @@ func viewSidebarEntries() []sidebarEntry {
 // the HTMX history integration match on it.
 const sidebarTreeTemplate = `{{ range .Groups -}}
 <div class="sidenav-section">
+  {{- if .Title }}
   <h4>{{.Title}}</h4>
+  {{- end }}
   {{- range .Entries }}
   <a href="{{.Href}}" hx-get="{{.Href}}" hx-target="#content" hx-push-url="true" class="{{if .Active}}active sidenav-resource{{else}}sidenav-resource{{end}}" onclick="setActive(this)"><span class="sidenav-label">{{.Label}}</span>{{if ge .Count 0}}<span class="badge sidenav-count{{if and .Warn (gt .Count 0)}} sidenav-count-warn{{end}}">{{.Count}}</span>{{end}}</a>
   {{- end }}

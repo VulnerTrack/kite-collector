@@ -1129,25 +1129,26 @@ func headerModeDescriptor(deps onboardingDeps, det installer.Detected) (label, b
 	}
 }
 
-// statusBadgeView feeds the compact topbar onboarding-status badge that
-// renders on every dashboard page. The badge gives operators glance-level
-// agent health without having to navigate to /onboarding — closes the
-// cross-page visibility gap where iterations 1-17 polished /onboarding but
-// the rest of the dashboard had no health signal.
+// statusBadgeView feeds the topbar health pill that renders on every
+// dashboard page: a coloured dot plus a few words, so operators read agent
+// health from anywhere without navigating to /onboarding. Short is the
+// visible text; Label is the full sentence for the tooltip and for
+// assistive technology.
 type statusBadgeView struct {
 	Class string // CSS class: status-ready | status-streaming | status-degraded | status-pending | status-install
-	Glyph string // single-char visual: ✓ ! · ○
-	Label string // short human-readable summary for the badge title attribute
+	Short string // visible pill text, three words or fewer
+	Label string // full human-readable summary for the title attribute and screen readers
 }
 
 var onboardingStatusBadgeTmpl = template.Must(template.New("status-badge").Parse(`
-<a class="topbar-status {{.Class}}"
+<a class="topbar-status health-pill {{.Class}}"
    href="/onboarding"
    hx-get="/onboarding"
    hx-target="#content"
    hx-push-url="true"
    title="{{.Label}}">
-  <span aria-hidden="true">{{.Glyph}}</span>
+  <span class="health-pill-dot" aria-hidden="true"></span>
+  <span class="health-pill-text" aria-hidden="true">{{.Short}}</span>
   <span class="sr-only">{{.Label}}</span>
 </a>
 `))
@@ -1178,23 +1179,23 @@ func renderOnboardingStatusBadgeFragment(w io.Writer, ctx context.Context, deps 
 	return nil
 }
 
-// badgeViewFor maps the aggregated overall_status to the topbar badge's
-// CSS class, glyph, and label. Single source of truth for the topbar
-// status vocabulary so a status-enum addition has exactly one place to
-// teach the visual mapping.
+// badgeViewFor maps the aggregated overall_status to the health pill's CSS
+// class, visible text, and full label. Single source of truth for the
+// topbar status vocabulary so a status-enum addition has exactly one place
+// to teach the visual mapping.
 func badgeViewFor(overallStatus string) statusBadgeView {
 	switch overallStatus {
 	case "streaming":
-		return statusBadgeView{Class: "status-streaming", Glyph: "✓", Label: "Agent streaming — all healthy"}
+		return statusBadgeView{Class: "status-streaming", Short: "All systems healthy", Label: "Agent streaming — all healthy"}
 	case installer.ActionReady:
-		return statusBadgeView{Class: "status-ready", Glyph: "✓", Label: "Agent ready — onboarding complete"}
+		return statusBadgeView{Class: "status-ready", Short: "Agent ready", Label: "Agent ready — onboarding complete"}
 	case "degraded":
-		return statusBadgeView{Class: "status-degraded", Glyph: "!", Label: "Agent degraded — check the onboarding page"}
+		return statusBadgeView{Class: "status-degraded", Short: "Agent degraded", Label: "Agent degraded — check the onboarding page"}
 	case installer.ActionEnroll, installer.ActionStartService, installer.ActionRegisterService:
-		return statusBadgeView{Class: "status-pending", Glyph: "·", Label: "Onboarding in progress — " + overallStatus}
+		return statusBadgeView{Class: "status-pending", Short: "Onboarding in progress", Label: "Onboarding in progress — " + overallStatus}
 	case installer.ActionInstall:
-		return statusBadgeView{Class: "status-install", Glyph: "○", Label: "Agent not yet installed — open Onboarding to start"}
+		return statusBadgeView{Class: "status-install", Short: "Agent not installed", Label: "Agent not yet installed — open Onboarding to start"}
 	default:
-		return statusBadgeView{Class: "status-pending", Glyph: "·", Label: "Agent status: " + overallStatus}
+		return statusBadgeView{Class: "status-pending", Short: "Agent " + overallStatus, Label: "Agent status: " + overallStatus}
 	}
 }
