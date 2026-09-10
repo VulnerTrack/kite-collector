@@ -3,5 +3,5 @@
 ## Unreleased
 
 - Enroll over SSH with a temporary code approved on another computer.
-- Use Device Authorization automatically for SSH and `enroll --no-browser`.
+- Use Device Authorization by default with `kite-collector enroll`.
 - Save certificate-based enrollment without retaining the device access token.

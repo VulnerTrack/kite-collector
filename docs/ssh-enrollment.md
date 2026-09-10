@@ -3,11 +3,11 @@
 Run on the server:
 
 ```sh
-kite-collector enroll --no-browser
+kite-collector enroll
 ```
 
-SSH sessions select this flow automatically, including sessions with display
-forwarding. Open the URL printed by the command on your own computer, sign in,
+This is the default on desktops and SSH servers, including sessions with
+display forwarding. Open the URL printed by the command on your own computer, sign in,
 enter the code, and select the organization. Compare the collector and code
 with the terminal before approving. Keep the command running until it confirms
 that the certificate was saved.

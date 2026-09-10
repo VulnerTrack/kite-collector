@@ -78,3 +78,17 @@ func TestFailedDeviceEnrollmentDoesNotMarkLocalIdentityOrStartService(t *testing
 	_, err = st.Store.(*sqlite.SQLiteStore).GetEnrolledIdentity(context.Background())
 	require.ErrorIs(t, err, sqlite.ErrNoIdentity)
 }
+
+func TestPlainEnrollmentUsesDeviceFlowOnDesktop(t *testing.T) {
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("SSH_CLIENT", "")
+	t.Setenv("SSH_TTY", "")
+	t.Setenv("DISPLAY", ":0")
+	for _, args := range [][]string{{}, {"--agent-code", "kite-agent"}, {"--certs-dir", t.TempDir()}} {
+		called := false
+		cmd := newEnrollCmdWithDevice(func(_ io.Writer, _, _, _ string, _ bool) error { called = true; return nil })
+		cmd.SetArgs(args)
+		require.NoError(t, cmd.Execute())
+		require.True(t, called)
+	}
+}
