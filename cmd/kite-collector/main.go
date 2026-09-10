@@ -3184,6 +3184,10 @@ func runTrust(endpointName, cfgFile, dataDirOverride string) error {
 // ---------------------------------------------------------------------------
 
 func newEnrollCmd() *cobra.Command {
+	return newEnrollCmdWithDevice(runDeviceEnrollment)
+}
+
+func newEnrollCmdWithDevice(deviceEnroll func(io.Writer, string, string, string, bool) error) *cobra.Command {
 	var (
 		agentCode       string
 		token           string
@@ -3208,10 +3212,9 @@ Enrollment works with or without a browser:
   • Desktop:  enroll opens the browser sign-in flow. After enrollment it
     closes the temporary dashboard and starts (or restarts) the installed
     collector service automatically.
-  • Headless (server/container/SSH): enroll detects no display and prompts you
-    to choose an input path — paste a browser sign-in code from any device, or
-    paste a scoped enrollment token from your PKI operator. Nothing hangs on a
-    browser that cannot open.
+  • Headless (server/container/SSH): enroll prints a URL and a temporary code.
+    Open the URL on your computer, sign in, and approve the collector.
+    No browser or inbound port is needed on the server.
 
 Non-interactive equivalents:
   --token <jwt>                     operator sign-in JWT (skips the browser)
@@ -3221,7 +3224,7 @@ Non-interactive equivalents:
 
 Examples:
   kite-collector enroll                       # desktop: browser sign-in
-  kite-collector enroll --no-browser          # print URL, paste code
+  kite-collector enroll --no-browser          # authorize from another computer
   kite-collector enroll --agent-code kite-prod --enrollment-token <tok>`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3240,6 +3243,13 @@ Examples:
 				}
 				return runEnrollWithToken(agentCode, enrollmentToken, certsDir)
 			}
+			if !hasToken && (noBrowser || isHeadless()) {
+				deviceCertsDir := filepath.Dir(dbPath)
+				if cmd.Flag("certs-dir").Changed {
+					deviceCertsDir = certsDir
+				}
+				return deviceEnroll(cmd.OutOrStdout(), agentCode, dbPath, deviceCertsDir, userMode)
+			}
 			// Non-interactive operator-JWT path.
 			if hasAgentCode || hasToken {
 				if !hasAgentCode || !hasToken {
@@ -3249,14 +3259,6 @@ Examples:
 			}
 			if cmd.Flag("certs-dir").Changed {
 				return fmt.Errorf("--certs-dir is only used with --agent-code and --token / --enrollment-token")
-			}
-			// No flags: on a headless host (or with --no-browser) give the
-			// operator a clear input path instead of hanging on a browser open.
-			if noBrowser || isHeadless() {
-				return runInteractiveEnroll(cmd, interactiveEnrollDeps{
-					addr: addr, dbPath: dbPath, cfgFile: cfgFile,
-					certsDir: certsDir, noBrowser: noBrowser, userMode: userMode,
-				})
 			}
 			return runPlatformLoginEnroll(addr, dbPath, cfgFile, noBrowser, userMode)
 		},
@@ -3272,7 +3274,7 @@ Examples:
 		"path to SQLite database used by the local dashboard login flow")
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:9090", "listen address for the local dashboard login flow")
 	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to agent config file")
-	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "print the login URL without opening a browser")
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "authorize this collector from another computer using a device code")
 	cmd.Flags().BoolVar(&userMode, "user", false, "resolve --db against the per-user install paths")
 
 	return cmd
@@ -3733,6 +3735,9 @@ func envOrDefault(key, fallback string) string {
 // an X11 or Wayland display; on macOS/Windows a desktop is assumed present.
 // Used to pick the interactive input flow over a browser auto-open.
 func isHeadless() bool {
+	if os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" || os.Getenv("SSH_CLIENT") != "" {
+		return true
+	}
 	switch runtime.GOOS {
 	case "darwin", "windows":
 		return false

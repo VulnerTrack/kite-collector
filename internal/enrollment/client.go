@@ -80,6 +80,10 @@ func NewClient(logger *slog.Logger) *Client {
 
 // Enroll submits an enrollment request to the PKI server.
 func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, error) {
+	return c.enrollAt(ctx, agentCode, token, enrollURL)
+}
+
+func (c *Client) enrollAt(ctx context.Context, agentCode, token, enrollURL string) (*Result, error) {
 	csrPEM, keyPEM, signer, err := generateEnrollmentCSR(agentCode)
 	if err != nil {
 		return nil, fmt.Errorf("generate enrollment key and CSR: %w", err)
@@ -123,6 +127,9 @@ func (c *Client) Enroll(ctx context.Context, agentCode, token string) (*Result, 
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		if strings.HasSuffix(enrollURL, "/pki/enroll/device") {
+			return nil, fmt.Errorf("device certificate issuance returned HTTP %d; run enroll again after resolving the server error", resp.StatusCode)
+		}
 		// PKI rejected the request (bad/expired token, wrong agent code, ...).
 		return nil, kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
 			fmt.Errorf("PKI server returned %s: %s", resp.Status, data)).
