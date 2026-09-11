@@ -49,7 +49,7 @@ func runDeviceEnrollmentWithDeps(out io.Writer, agentCode, dbPath, certsDir stri
 		return fmt.Errorf("device enrollment requires SQLite")
 	}
 	result, err := enroll(ctx, agentCode, func(auth enrollment.DeviceAuthorization) error {
-		_, displayErr := fmt.Fprintf(out, "\nOn your computer, open: %s\nEnter code: %s\nConfirm collector: %s\nWaiting for approval (expires in %d seconds). Press Ctrl+C to cancel.\n", auth.VerificationURI, auth.UserCode, agentCode, auth.ExpiresIn)
+		_, displayErr := fmt.Fprintf(out, "\nOn your computer, open: %s\nCollector: %s\nWaiting for approval (expires in %d seconds). Press Ctrl+C to cancel.\n", auth.VerificationURIComplete, agentCode, auth.ExpiresIn)
 		if displayErr != nil {
 			return fmt.Errorf("display device code: %w", displayErr)
 		}

@@ -488,18 +488,18 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 		if waitID != "" {
 			setKiteOAuthCookie(w, r, kiteOAuthWaitCookie, waitID)
 			rememberKiteOAuthWait(state, waitID)
-			// authURL's scheme+host derive from server config (the configured
-			// authorize endpoint, or the api.vulnertrack.com default) — never
-			// from request input; only the URL-encoded redirect_uri query param
-			// carries request-derived data. Enforce the destination-host
-			// allowlist explicitly rather than relying on that invariant, then
-			// fall through to the rendered login page if it ever fails to hold.
-			launchURL := resolveKiteOAuthLaunchURL(r.Context(), authURL)
-			if isAllowedKiteLaunchURL(oauth, launchURL) {
-				//#nosec G710 -- launchURL host is validated against a fixed allowlist (the configured authorize host or app.vulnertrack.com) by isAllowedKiteLaunchURL immediately above; the destination host/scheme are never request-derived.
-				http.Redirect(w, r, launchURL, http.StatusSeeOther)
-				return
-			}
+		}
+		// authURL's scheme+host derive from server config (the configured
+		// authorize endpoint, or the api.vulnertrack.com default) — never
+		// from request input; only the URL-encoded redirect_uri query param
+		// carries request-derived data. Enforce the destination-host
+		// allowlist explicitly rather than relying on that invariant, then
+		// fall through to the rendered login page if it ever fails to hold.
+		launchURL := resolveKiteOAuthLaunchURL(r.Context(), authURL)
+		if isAllowedKiteLaunchURL(oauth, launchURL) {
+			//#nosec G710 -- launchURL host is validated against a fixed allowlist (the configured authorize host or app.vulnertrack.com) by isAllowedKiteLaunchURL immediately above; the destination host/scheme are never request-derived.
+			http.Redirect(w, r, launchURL, http.StatusSeeOther)
+			return
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

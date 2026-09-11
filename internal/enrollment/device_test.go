@@ -27,7 +27,7 @@ func TestDeviceEnrollmentPollsThenIssuesCertificate(t *testing.T) {
 		case "/oauth/device/code":
 			require.NoError(t, req.ParseForm())
 			require.Equal(t, "kite-server", req.Form.Get("agent_code"))
-			return deviceResponse(200, `{"device_code":"private-device-code","user_code":"KITE-ABCD-EFGH","verification_uri":"https://app.example/device","expires_in":600,"interval":5}`), nil
+			return deviceResponse(200, `{"device_code":"private-device-code","user_code":"KITE-ABCD-EFGH","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?authorization=v1.abcdefghijklmnop.abcdefghijklmnopqrstuvwxyzABCDEFG_123456789","expires_in":300,"interval":5}`), nil
 		case "/oauth/token":
 			require.True(t, shown)
 			require.NoError(t, req.ParseForm())
@@ -55,6 +55,7 @@ func TestDeviceEnrollmentPollsThenIssuesCertificate(t *testing.T) {
 	result, err := client.enrollDevice(context.Background(), "kite-server", func(auth DeviceAuthorization) error {
 		shown = true
 		require.Equal(t, "KITE-ABCD-EFGH", auth.UserCode)
+		require.Equal(t, "https://app.vulnertrack.com/auth/device/?authorization=v1.abcdefghijklmnop.abcdefghijklmnopqrstuvwxyzABCDEFG_123456789", auth.VerificationURIComplete)
 		encoded, err := json.Marshal(auth)
 		require.NoError(t, err)
 		require.NotContains(t, string(encoded), "private-device-code")
@@ -74,7 +75,7 @@ func TestDeviceEnrollmentStopsOnDenialExpiryAndInvalidResponses(t *testing.T) {
 			client.http = &callbackDoer{do: func(req *http.Request) (*http.Response, error) {
 				calls++
 				if calls == 1 {
-					return deviceResponse(200, `{"device_code":"secret","user_code":"KITE-ABCD-EFGH","verification_uri":"https://app.example/device","expires_in":600}`), nil
+					return deviceResponse(200, `{"device_code":"secret","user_code":"KITE-ABCD-EFGH","verification_uri":"https://app.example/device","verification_uri_complete":"https://app.example/device?authorization=v1.abcdefghijklmnop.abcdefghijklmnopqrstuvwxyzABCDEFG_123456789","expires_in":300}`), nil
 				}
 				return deviceResponse(400, `{"error":"`+oauthError+`","error_description":"secret"}`), nil
 			}}

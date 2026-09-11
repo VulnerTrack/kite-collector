@@ -33,8 +33,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
-
 	"github.com/vulnertrack/kite-collector/api/rest"
 	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
@@ -3206,10 +3204,10 @@ func newEnrollCmdWithFlows(deviceEnroll func(io.Writer, string, string, string, 
 		Short: "Enroll this collector with VulnerTrack",
 		Long: `Enroll this collector with VulnerTrack.
 
-Interactive sessions always offer the local dashboard flow or a remote
-device-code flow. The remote flow prints a public URL and temporary code to
-approve from another computer. No inbound login port is needed for device
-authorization.
+The command opens the local browser flow when a graphical session, a system
+URL launcher, and a browser are available. SSH, headless, container, and
+browserless sessions automatically use the remote device-code flow. That flow
+prints a public URL and temporary code to approve from another computer.
 
 Non-interactive equivalents:
   --token <jwt>                     operator sign-in JWT (skips the browser)
@@ -3218,7 +3216,7 @@ Non-interactive equivalents:
                                     (KITE_PKI_ENDPOINT overrides the PKI URL)
 
 Examples:
-  kite-collector enroll                       # choose local or remote browser login
+  kite-collector enroll                       # automatically select local or remote login
   kite-collector enroll --agent-code kite-prod --enrollment-token <tok>`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3249,17 +3247,10 @@ Examples:
 				if cmd.Flag("certs-dir").Changed {
 					deviceCertsDir = certsDir
 				}
-				return runInteractiveEnroll(cmd, interactiveEnrollDeps{
-					addr:           addr,
-					dbPath:         dbPath,
-					cfgFile:        cfgFile,
-					certsDir:       deviceCertsDir,
-					agentCode:      agentCode,
-					userMode:       userMode,
-					localNoBrowser: isHeadless(),
-					browserEnroll:  browserEnroll,
-					deviceEnroll:   deviceEnroll,
-				})
+				if !canOpenLocalBrowser() {
+					return deviceEnroll(cmd.OutOrStdout(), agentCode, dbPath, deviceCertsDir, userMode)
+				}
+				return browserEnroll(addr, dbPath, cfgFile, false, userMode)
 			}
 			// Non-interactive operator-JWT path.
 			if hasAgentCode || hasToken {
@@ -3752,45 +3743,6 @@ func promptLine(out io.Writer, in *bufio.Reader, label string) string {
 	return strings.TrimSpace(line)
 }
 
-type interactiveEnrollDeps struct {
-	addr           string
-	dbPath         string
-	cfgFile        string
-	certsDir       string
-	agentCode      string
-	userMode       bool
-	localNoBrowser bool
-	browserEnroll  func(string, string, string, bool, bool) error
-	deviceEnroll   func(io.Writer, string, string, string, bool) error
-}
-
-// runInteractiveEnroll lets an operator choose between the existing local
-// dashboard login and the public device-code flow intended for remote hosts.
-func runInteractiveEnroll(cmd *cobra.Command, d interactiveEnrollDeps) error {
-	f, ok := cmd.InOrStdin().(*os.File)
-	isTTY := ok && term.IsTerminal(int(f.Fd())) // #nosec G115
-	return runInteractiveEnrollWithTTY(cmd, d, isTTY)
-}
-
-func runInteractiveEnrollWithTTY(cmd *cobra.Command, d interactiveEnrollDeps, isTTY bool) error {
-	out := cmd.OutOrStdout()
-	if !isTTY {
-		return d.deviceEnroll(out, d.agentCode, d.dbPath, d.certsDir, d.userMode)
-	}
-
-	in := bufio.NewReader(cmd.InOrStdin())
-	_, _ = fmt.Fprintln(out, "\nChoose how to enroll:")
-	_, _ = fmt.Fprintln(out, "  [1] Local browser sign-in — use the collector dashboard on this machine")
-	_, _ = fmt.Fprintln(out, "  [2] Remote browser sign-in — open app.vulnertrack.com/auth/device and enter a code")
-	_, _ = fmt.Fprint(out, "Enter 1 or 2 (default 1): ")
-
-	choice, _ := in.ReadString('\n')
-	if strings.TrimSpace(choice) == "2" {
-		return d.deviceEnroll(out, d.agentCode, d.dbPath, d.certsDir, d.userMode)
-	}
-	return d.browserEnroll(d.addr, d.dbPath, d.cfgFile, d.localNoBrowser, d.userMode)
-}
-
 // isHeadless reports whether this host likely has no browser to open — a
 // server / container / bare SSH session. On Linux/BSD that is the absence of
 // an X11 or Wayland display; on macOS/Windows a desktop is assumed present.
@@ -3805,6 +3757,52 @@ func isHeadless() bool {
 	default:
 		return os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
 	}
+}
+
+// canOpenLocalBrowser verifies the prerequisites used by dashboard.OpenBrowser.
+// SSH is deliberately treated as remote even when X forwarding is configured:
+// device authorization should happen in the operator's own browser.
+func canOpenLocalBrowser() bool {
+	if isHeadless() {
+		return false
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		_, err := exec.LookPath("open")
+		return err == nil
+	case "windows":
+		return true // dashboard.OpenBrowser uses the Windows ShellExecute API.
+	default:
+		if _, err := exec.LookPath("xdg-open"); err != nil {
+			return false
+		}
+		for _, browser := range []string{
+			"google-chrome", "google-chrome-stable", "chromium", "chromium-browser",
+			"firefox", "brave-browser", "microsoft-edge", "microsoft-edge-stable",
+		} {
+			if _, err := exec.LookPath(browser); err == nil {
+				return true
+			}
+		}
+		return browserFromEnvAvailable(os.Getenv("BROWSER"))
+	}
+}
+
+func browserFromEnvAvailable(value string) bool {
+	for candidate := range strings.SplitSeq(value, ":") {
+		fields := strings.Fields(candidate)
+		if len(fields) == 0 {
+			continue
+		}
+		name := strings.ReplaceAll(fields[0], "%s", "")
+		if name != "" {
+			if _, err := exec.LookPath(name); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // oauthSignIn runs the interactive OAuth authorization-code + PKCE flow

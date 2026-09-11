@@ -6,11 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
+	"runtime"
 	"testing"
 
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
@@ -82,13 +80,14 @@ func TestFailedDeviceEnrollmentDoesNotMarkLocalIdentityOrStartService(t *testing
 	require.ErrorIs(t, err, sqlite.ErrNoIdentity)
 }
 
-func TestNonInteractiveEnrollmentUsesDeviceFlowLocallyAndOverSSH(t *testing.T) {
+func TestPlainEnrollmentUsesDeviceFlowWhenLocalBrowserIsUnavailable(t *testing.T) {
 	for _, sshVar := range []string{"", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
 		t.Run(sshVar, func(t *testing.T) {
 			for _, name := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
 				t.Setenv(name, "")
 			}
 			t.Setenv("DISPLAY", ":0")
+			t.Setenv("PATH", t.TempDir())
 			if sshVar != "" {
 				t.Setenv(sshVar, "remote-session")
 			}
@@ -102,45 +101,55 @@ func TestNonInteractiveEnrollmentUsesDeviceFlowLocallyAndOverSSH(t *testing.T) {
 	}
 }
 
-func TestInteractiveEnrollmentOptions(t *testing.T) {
-	for _, tc := range []struct {
-		name        string
-		input       string
-		wantBrowser bool
-		wantDevice  bool
-	}{
-		{name: "default keeps local dashboard flow", input: "\n", wantBrowser: true},
-		{name: "one keeps local dashboard flow", input: "1\n", wantBrowser: true},
-		{name: "two uses remote device flow", input: "2\n", wantDevice: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			cmd := &cobra.Command{}
-			out := &strings.Builder{}
-			cmd.SetIn(strings.NewReader(tc.input))
-			cmd.SetOut(out)
-			browser, device := false, false
-			err := runInteractiveEnrollWithTTY(cmd, interactiveEnrollDeps{
-				addr:      "127.0.0.1:9090",
-				dbPath:    "/tmp/kite.db",
-				certsDir:  "/tmp/certs",
-				agentCode: "kite-test",
-				browserEnroll: func(string, string, string, bool, bool) error {
-					browser = true
-					return nil
-				},
-				deviceEnroll: func(io.Writer, string, string, string, bool) error {
-					device = true
-					return nil
-				},
-			}, true)
-
-			require.NoError(t, err)
-			require.Equal(t, tc.wantBrowser, browser)
-			require.Equal(t, tc.wantDevice, device)
-			assert.Contains(t, out.String(), "Choose how to enroll:")
-			assert.Contains(t, out.String(), "[1] Local browser sign-in")
-			assert.Contains(t, out.String(), "[2] Remote browser sign-in")
-			assert.Contains(t, out.String(), "app.vulnertrack.com/auth/device")
-		})
+func TestPlainEnrollmentUsesLocalFlowWhenBrowserIsAvailable(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux browser prerequisite test")
 	}
+	for _, name := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DISPLAY", ":0")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	binDir := t.TempDir()
+	for _, name := range []string{"xdg-open", "firefox"} {
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\n"), 0o755))
+	}
+	t.Setenv("PATH", binDir)
+
+	device, browser := false, false
+	cmd := newEnrollCmdWithFlows(
+		func(_ io.Writer, _, _, _ string, _ bool) error { device = true; return nil },
+		func(_, _, _ string, noBrowser, _ bool) error {
+			browser = true
+			require.False(t, noBrowser)
+			return nil
+		},
+	)
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+	require.True(t, browser)
+	require.False(t, device)
+}
+
+func TestPlainEnrollmentUsesRemoteFlowOverSSHEvenWithBrowser(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux browser prerequisite test")
+	}
+	t.Setenv("SSH_CONNECTION", "remote session")
+	t.Setenv("DISPLAY", ":0")
+	binDir := t.TempDir()
+	for _, name := range []string{"xdg-open", "firefox"} {
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\n"), 0o755))
+	}
+	t.Setenv("PATH", binDir)
+
+	device, browser := false, false
+	cmd := newEnrollCmdWithFlows(
+		func(_ io.Writer, _, _, _ string, _ bool) error { device = true; return nil },
+		func(_, _, _ string, _, _ bool) error { browser = true; return nil },
+	)
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.Execute())
+	require.True(t, device)
+	require.False(t, browser)
 }

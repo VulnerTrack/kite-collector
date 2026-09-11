@@ -129,7 +129,7 @@ func TestRoute_GET_Root_RedirectsToAgentProfileWhenEnrolled(t *testing.T) {
 		"enrolled host should land on /agent, the steady-state home")
 }
 
-func TestRoute_GET_KiteLogin_RendersManualSignInByDefault(t *testing.T) {
+func TestRoute_GET_KiteLogin_RedirectsToAuthorizeByDefault(t *testing.T) {
 	st := testStore(t)
 	rc := testContext()
 	srv := Serve(":0", st, rc, nil, Options{
@@ -145,12 +145,13 @@ func TestRoute_GET_KiteLogin_RendersManualSignInByDefault(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	assert.Contains(t, body, `<body class="kite-auth-page">`)
-	assert.Contains(t, body, `>Sign In</a>`)
-	assert.Contains(t, body, `href="https://api.example.test/auth/v1/oauth/authorize?`)
-	assert.Empty(t, rec.Header().Get("Location"))
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	authHref := rec.Header().Get("Location")
+	require.NotEmpty(t, authHref)
+	assert.True(t, strings.HasPrefix(authHref, "https://api.example.test/auth/v1/oauth/authorize?"))
+	authURL, err := url.Parse(authHref)
+	require.NoError(t, err)
+	assert.Equal(t, "http://127.0.0.1:9090/oauth/callback", authURL.Query().Get("redirect_uri"))
 
 	var stateCookie, verifierCookie *http.Cookie
 	for _, c := range rec.Result().Cookies() {
@@ -163,6 +164,8 @@ func TestRoute_GET_KiteLogin_RendersManualSignInByDefault(t *testing.T) {
 	}
 	require.NotNil(t, stateCookie)
 	require.NotNil(t, verifierCookie)
+	assert.Equal(t, authURL.Query().Get("state"), stateCookie.Value)
+	assert.Equal(t, authURL.Query().Get("code_challenge"), codeChallengeS256(verifierCookie.Value))
 	assert.True(t, stateCookie.HttpOnly)
 	assert.True(t, verifierCookie.HttpOnly)
 	assert.Equal(t, http.SameSiteLaxMode, stateCookie.SameSite)

@@ -17,10 +17,11 @@ import (
 // DeviceAuthorization contains only the values shown to the operator.
 // The secret device code and access token stay in memory inside EnrollDevice.
 type DeviceAuthorization struct {
-	UserCode        string `json:"user_code"`
-	VerificationURI string `json:"verification_uri"`
-	ExpiresIn       int    `json:"expires_in"`
-	Interval        int    `json:"interval"`
+	UserCode                string `json:"user_code"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURIComplete string `json:"verification_uri_complete"`
+	ExpiresIn               int    `json:"expires_in"`
+	Interval                int    `json:"interval"`
 }
 
 // deviceVerificationURI is the public browser route shown to SSH operators.
@@ -29,6 +30,7 @@ type DeviceAuthorization struct {
 const deviceVerificationURI = "https://app.vulnertrack.com/auth/device/"
 
 var deviceUserCodePattern = regexp.MustCompile(`^KITE-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$`)
+var deviceAuthorizationTicketPattern = regexp.MustCompile(`^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{32,512}$`)
 
 func deviceWait(ctx context.Context, delay time.Duration) error {
 	timer := time.NewTimer(delay)
@@ -71,10 +73,23 @@ func (c *Client) enrollDevice(ctx context.Context, agentCode string, display fun
 		return nil, fmt.Errorf("device authorization returned HTTP %d", status)
 	}
 	verify, err := url.Parse(authorization.VerificationURI)
-	if err != nil || verify.Scheme != "https" || verify.Host == "" || verify.User != nil || !deviceUserCodePattern.MatchString(authorization.UserCode) || authorization.DeviceCode == "" || authorization.ExpiresIn <= 0 || authorization.ExpiresIn > 3600 || authorization.Interval < 0 || authorization.Interval > 3600 {
+	completeResponse, completeErr := url.Parse(authorization.VerificationURIComplete)
+	ticket := ""
+	if completeErr == nil && completeResponse != nil {
+		ticket = completeResponse.Query().Get("authorization")
+	}
+	if err != nil || completeErr != nil || verify.Scheme != "https" || verify.Host == "" || verify.User != nil || completeResponse.Scheme != "https" || completeResponse.Host != verify.Host || completeResponse.Path != verify.Path || completeResponse.User != nil || len(ticket) < 32 || len(ticket) > 1024 || !deviceAuthorizationTicketPattern.MatchString(ticket) || !deviceUserCodePattern.MatchString(authorization.UserCode) || authorization.DeviceCode == "" || authorization.ExpiresIn <= 0 || authorization.ExpiresIn > 3600 || authorization.Interval < 0 || authorization.Interval > 3600 {
 		return nil, fmt.Errorf("invalid device authorization response")
 	}
 	authorization.VerificationURI = deviceVerificationURI
+	complete, err := url.Parse(deviceVerificationURI)
+	if err != nil {
+		return nil, fmt.Errorf("invalid device verification URL")
+	}
+	query := complete.Query()
+	query.Set("authorization", ticket)
+	complete.RawQuery = query.Encode()
+	authorization.VerificationURIComplete = complete.String()
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(authorization.ExpiresIn)*time.Second)
 	defer cancel()
 	if displayErr := display(authorization.DeviceAuthorization); displayErr != nil {
