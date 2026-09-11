@@ -29,8 +29,10 @@ type DeviceAuthorization struct {
 // or misconfigured URI returned by a PKI deployment.
 const deviceVerificationURI = "https://app.vulnertrack.com/auth/device/"
 
-var deviceUserCodePattern = regexp.MustCompile(`^KITE-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$`)
-var deviceAuthorizationTicketPattern = regexp.MustCompile(`^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{32,512}$`)
+var (
+	deviceUserCodePattern            = regexp.MustCompile(`^KITE-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$`)
+	deviceAuthorizationTicketPattern = regexp.MustCompile(`^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{32,512}$`)
+)
 
 func deviceWait(ctx context.Context, delay time.Duration) error {
 	timer := time.NewTimer(delay)
