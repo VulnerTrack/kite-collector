@@ -2889,7 +2889,9 @@ header.profile-head {
 .profile-sub {
   margin: 0;
   font-size: var(--text-md);
-  max-width: 60ch;
+  /* One line on a desktop pane; the head's flex-wrap drops the freshness
+     chip below it on narrower screens instead of squeezing the copy. */
+  max-width: none;
 }
 .profile-head .freshness-chip { margin: 0; }
 
@@ -3101,7 +3103,11 @@ header.profile-head {
   border-radius: 14px;
   box-shadow: 0 14px 34px -30px rgba(20, 26, 33, 0.4);
 }
-.observability-card::before {
+/* The accent rule marks the two cards about identity (This host and
+   Registration) and the diagnostics grid below; the profile cards in between
+   stay plain so the rule reads as emphasis, not decoration. */
+.observability-card.card-rule::before,
+.observability-grid > .observability-card::before {
   content: "";
   position: absolute;
   inset: 0 0 auto;

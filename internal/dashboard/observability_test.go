@@ -120,8 +120,8 @@ func TestObservability_PageRendersAllSections(t *testing.T) {
 		"probe metrics section must render — shows empty-state copy when no data")
 	assert.Contains(t, body, ">Scans<",
 		"scans card must render — shows empty-state copy when no data")
-	assert.Contains(t, body, "no data leaves this host",
-		"must reaffirm the local-observability promise — no external scrapers required")
+	assert.Contains(t, body, "All stats are computed from the on-host SQLite store",
+		"the footnote says where the numbers come from")
 }
 
 func TestObservability_HealthchecksReflectStoreState(t *testing.T) {
@@ -961,19 +961,20 @@ func TestObservability_StreamCardPopulatedFromWiredController(t *testing.T) {
 	// notice must NOT appear.
 	assert.NotContains(t, body, "No StreamController wired",
 		"with StreamController wired, the empty-state notice must not render")
-	// The populated card must show the State / Events sent / Backlog depth
-	// labels. The actual values come from the fake controller's Status().
-	assert.Contains(t, body, ">State<",
-		"populated stream-health card must include the State row")
-	assert.Contains(t, body, ">Events sent<",
-		"populated stream-health card must include the Events sent row")
-	assert.Contains(t, body, ">Backlog depth<",
-		"populated stream-health card must include the Backlog depth row")
-	assert.Contains(t, body, ">Last event<",
-		"populated stream-health card must include the Last event row")
-	// Backlog warning copy must always appear when populated — it's the
+	// The populated card is the three-row block the profile design fixes:
+	// Endpoint, Last export, Spool depth. The values come from the fake
+	// controller's Status(); the state itself is the badge in the card head.
+	assert.Contains(t, body, ">Endpoint<",
+		"populated stream-health card must include the Endpoint row")
+	assert.Contains(t, body, ">Last export<",
+		"populated stream-health card must include the Last export row")
+	assert.Contains(t, body, ">Spool depth<",
+		"populated stream-health card must include the Spool depth row")
+	assert.Contains(t, body, "events sent since the agent started",
+		"the metric names what the count is")
+	// Spool warning copy must always appear when populated — it's the
 	// diagnostic-hint sentence that helps operators interpret the numbers.
-	assert.Contains(t, body, "Backlog depth above zero",
+	assert.Contains(t, body, "Spool depth above zero",
 		"populated card must include the diagnostic-hint copy so operators know what to do with the numbers")
 }
 

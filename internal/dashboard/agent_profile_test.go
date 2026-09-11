@@ -192,8 +192,68 @@ func TestAgentProfile_ThisHostCardLinksToTheMachine(t *testing.T) {
 		"the network-scan row for the same name must not win over the agent's row")
 	assert.Contains(t, body, `>2 <span class="muted small">packages</span>`,
 		"the software count comes from the introspection total for this machine")
-	assert.Contains(t, body, `>0 <span class="muted small">on this host</span>`,
-		"the findings count renders even when it is zero")
+	assert.Contains(t, body, `>0 running <span class="muted small">0 recorded</span>`,
+		"the containers row renders even when nothing is recorded")
+	assert.Contains(t, body, `>0 <span class="muted small">0 reachable off-host</span>`,
+		"the listeners row renders even when nothing is recorded")
+	assert.Contains(t, body, ">Hardware<")
+	assert.Contains(t, body, ">Memory<")
+	assert.Contains(t, body, ">Address<")
+	assert.Contains(t, body, "arch rolling", "the Software card's Distribution row reads the host record")
+}
+
+func TestAgentProfile_ThisHostCardReadsHardwareMemoryAndAddress(t *testing.T) {
+	h := newInstallHarness(t, nil)
+	hostname, err := os.Hostname()
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	self := model.Machine{
+		ID: uuid.Must(uuid.NewV7()), Hostname: hostname, MachineType: model.MachineTypeWorkstation,
+		OSFamily: "linux", Architecture: "amd64", DiscoverySource: "agent",
+		FirstSeenAt: now, LastSeenAt: now,
+		IsAuthorized: model.AuthorizationAuthorized, IsManaged: model.ManagedUnknown,
+		Tags: `{"cpu_type":"x86_64","hardware_vendor":"Dell Inc.","hardware_model":"XPS 15","physical_memory_bytes":134217728000}`,
+		Interfaces: []model.NetworkInterface{
+			{ID: uuid.Must(uuid.NewV7()), InterfaceName: "wlan0", IPAddress: "192.168.0.7"},
+			{ID: uuid.Must(uuid.NewV7()), InterfaceName: "enp4s0", IPAddress: "192.168.0.100", IsPrimary: true},
+		},
+	}
+	self.ComputeNaturalKey()
+	// The batch upsert is the one that persists Interfaces alongside the row.
+	_, _, err = h.store.UpsertMachines(context.Background(), []model.Machine{self})
+	require.NoError(t, err)
+
+	rec := h.do(t, "GET", "/agent", nil, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, "x86_64 · Dell Inc. XPS 15", "the hardware note joins the processor with vendor and model")
+	assert.Contains(t, body, "total, collecting usage", "before the first RAM sample only the osquery total is known")
+	assert.Contains(t, body, `<code>192.168.0.100</code> <span class="muted small">enp4s0</span>`,
+		"the primary interface wins over the first one recorded")
+
+	require.NoError(t, h.store.InsertMemorySample(context.Background(), model.MemorySample{
+		ID: uuid.Must(uuid.NewV7()), MachineID: self.ID, SampledAt: now,
+		TotalBytes: 134217728000, UsedBytes: 44023414784, UsedPercent: 32.8,
+	}))
+	rec = h.do(t, "GET", "/agent", nil, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `<span class="muted small">33%</span>`, "the latest sample words used of total with a percentage")
+}
+
+func TestAgentProfile_ScansCardNamesTheNextRun(t *testing.T) {
+	started := time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)
+	run := model.ScanRun{StartedAt: started}
+	at, in := nextScanDue(run, 6*time.Hour, started.Add(1*time.Hour+48*time.Minute))
+	assert.Equal(t, "2026-09-10T16:00:00Z", at)
+	assert.Equal(t, "in 4h 12m", in)
+	_, overdue := nextScanDue(run, 6*time.Hour, started.Add(7*time.Hour))
+	assert.Equal(t, "due now", overdue)
+	_, none := nextScanDue(run, 0, started)
+	assert.Empty(t, none)
+
+	assert.Equal(t, "v1.4.2", displayVersion("1.4.2"))
+	assert.Equal(t, "v1.4.2", displayVersion("v1.4.2"), "a tagged version keeps its single v")
+	assert.Equal(t, "dev", displayVersion("dev"))
 }
 
 func TestAgentProfile_SnapshotCarriesTheNewFields(t *testing.T) {
@@ -215,7 +275,7 @@ func TestSidebar_EntriesWithoutTablesRenderNoCountBadge(t *testing.T) {
 	// Docs, Onboarding and the agent profile have no backing table. They used
 	// to render a "0" badge because the zero value passed the >= 0 check.
 	tree := string(renderSidebarTreeStatic("agent"))
-	for _, label := range []string{"Agent profile", "Docs", "Onboarding", "Mass deployment", "Certificates"} {
+	for _, label := range []string{"Agent profile", "Docs", "Enroll to VulnerTrack", "Mass deployment", "Kite certificates"} {
 		i := strings.Index(tree, ">"+label+"</span>")
 		require.Greater(t, i, -1, "sidebar must list %s", label)
 		tail := tree[i : i+len(label)+40]
@@ -232,16 +292,16 @@ func TestDashboardShell_TopbarActionClusterOrder(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
-	// Health pill, Onboarding, divider, then the scan cluster: the primary
-	// action lands at the right edge of the bar.
+	// Health pill, Enroll to VulnerTrack, divider, then the scan cluster: the
+	// primary action lands at the right edge of the bar.
 	badge := strings.Index(body, `id="onboarding-status-badge"`)
 	onboarding := strings.Index(body, `hx-get="/onboarding" hx-target="#content" hx-push-url="true"
-       onclick="setActive(this)">Onboarding</a>`)
+       onclick="setActive(this)">Enroll to VulnerTrack</a>`)
 	divider := strings.Index(body, `class="topbar-divider"`)
 	scan := strings.Index(body, `id="scan-status"`)
 	require.True(t, badge > 0 && onboarding > 0 && divider > 0 && scan > 0, "every cluster member must render")
 	assert.True(t, badge < onboarding && onboarding < divider && divider < scan,
-		"cluster order must be health, Onboarding, divider, scan")
+		"cluster order must be health, enrollment, divider, scan")
 	assert.NotContains(t, body, "/fragments/scan-controls",
 		"the button now renders inside the scan-status fragment; no second fragment to keep in step")
 	assert.Contains(t, body, `class="scan-cluster"`)

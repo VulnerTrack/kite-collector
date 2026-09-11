@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,9 @@ var machineTabs = map[string]bool{
 type machinePageView struct {
 	Machine model.Machine
 	Tab     string
+	// IsLocal marks the computer serving this dashboard: the agent's own
+	// machine record, which the agent profile links to.
+	IsLocal bool
 
 	SoftwareCount   int
 	FindingsCount   int
@@ -86,7 +90,7 @@ func renderMachinePageFragment(w io.Writer, ctx context.Context, st store.Store,
 		return fmt.Errorf("get machine %s: %w", id, err)
 	}
 
-	view := machinePageView{Machine: *machine, Tab: tab}
+	view := machinePageView{Machine: *machine, Tab: tab, IsLocal: isLocalMachine(*machine)}
 
 	software, err := st.ListSoftware(ctx, id)
 	if err != nil {
@@ -153,6 +157,19 @@ func renderMachinePageFragment(w io.Writer, ctx context.Context, st store.Store,
 		return fmt.Errorf("render machine page template: %w", err)
 	}
 	return nil
+}
+
+// isLocalMachine reports whether the record is for the computer serving this
+// dashboard: discovered by the local controller, or named like this host.
+func isLocalMachine(m model.Machine) bool {
+	if strings.EqualFold(strings.TrimSpace(m.DiscoverySource), "local_controller") {
+		return true
+	}
+	hostname, err := os.Hostname()
+	if err != nil || strings.TrimSpace(hostname) == "" {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(m.Hostname), strings.TrimSpace(hostname))
 }
 
 // loadMachineMemory fills the view's memory summary: total RAM (human-readable)
@@ -224,6 +241,7 @@ const machinePageTemplate = `<div class="machine-breadcrumb">
       <span class="badge badge-gray">{{.Machine.MachineType}}</span>
       <span class="badge {{authClass .Machine.IsAuthorized}}">{{.Machine.IsAuthorized}}</span>
       <span class="badge badge-gray">{{.Machine.IsManaged}}</span>
+      {{if .IsLocal}}<span class="badge badge-amber">this host</span>{{end}}
     </div>
     <p class="muted machine-head-meta">{{.Machine.OSFamily}}{{if .Machine.OSVersion}} {{.Machine.OSVersion}}{{end}}{{if .Machine.KernelVersion}} &middot; kernel {{.Machine.KernelVersion}}{{end}}{{if .Machine.Architecture}} &middot; {{.Machine.Architecture}}{{end}} &middot; discovered by {{.Machine.DiscoverySource}} &middot; first seen {{formatTime .Machine.FirstSeenAt}} &middot; last seen {{formatTime .Machine.LastSeenAt}}</p>
   </div>

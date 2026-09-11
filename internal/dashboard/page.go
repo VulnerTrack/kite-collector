@@ -53,7 +53,7 @@ const indexPageTemplate = `<!DOCTYPE html>
      only on the enroll/sign-in flow that already talks to the backend (see
      renderTurnstileWidgets); every other page stays fully offline. -->
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.7">
+<link rel="stylesheet" href="/static/style.css?v=1.0.8">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
 </head>
@@ -70,7 +70,7 @@ const indexPageTemplate = `<!DOCTYPE html>
     <span class="brand-sub">kite-collector &middot; Cybersecurity Machine Discovery Agent</span>
   </a>
   <!-- One action cluster, pinned right and vertically centred, never
-       wrapping: health pill, Onboarding, then the scan controls with the
+       wrapping: health pill, enrollment, then the scan controls with the
        primary action last so it lands at the edge of the bar. The scan
        status is a fixed two-line block beside the button, so the button
        holds still while the status text changes length. -->
@@ -82,7 +82,7 @@ const indexPageTemplate = `<!DOCTYPE html>
           aria-label="Agent health summary"></span>
     <a class="btn btn-ghost{{if eq .ActiveTab "onboarding"}} active{{end}}"
        href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true"
-       onclick="setActive(this)">Onboarding</a>
+       onclick="setActive(this)">Enroll to VulnerTrack</a>
     <span class="topbar-divider" aria-hidden="true"></span>
     <div id="scan-status"
          class="scan-cluster"

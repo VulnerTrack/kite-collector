@@ -78,9 +78,9 @@ func sidebarGroups() []sidebarGroup {
 		}},
 		{Title: "Views", Entries: viewSidebarEntries()},
 		{Title: "Settings", Entries: []sidebarEntry{
-			{Label: "Onboarding", Href: "/onboarding", Tab: "onboarding", Count: -1},
+			{Label: "Enroll to VulnerTrack", Href: "/onboarding", Tab: "onboarding", Count: -1},
 			{Label: "Mass deployment", Href: "/fleet", Tab: "fleet", Count: -1},
-			{Label: "Certificates", Href: "/certificates", Tab: "certificates", Count: -1},
+			{Label: "Kite certificates", Href: "/certificates", Tab: "certificates", Count: -1},
 		}},
 	}
 }

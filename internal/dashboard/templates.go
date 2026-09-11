@@ -195,6 +195,9 @@ type machineDisplayRow struct {
 	model.Machine
 	IPAddress string
 	IPLabel   string
+	// IsLocal marks the computer serving this dashboard, so the row can say
+	// "this host" next to its name.
+	IsLocal bool
 }
 
 // machineDisplayRows adds address information for the UI without changing the
@@ -216,7 +219,7 @@ func machineDisplayRows(machines []model.Machine, localHostname, localIP string)
 		} else if net.ParseIP(hostname) != nil {
 			label = "IP"
 		}
-		rows = append(rows, machineDisplayRow{Machine: machine, IPAddress: ip, IPLabel: label})
+		rows = append(rows, machineDisplayRow{Machine: machine, IPAddress: ip, IPLabel: label, IsLocal: isLocal})
 	}
 	return rows
 }
@@ -405,7 +408,7 @@ const machinesTemplate = `<h2>Machines ({{len .Machines}}{{if lt (len .Machines)
   <tbody>
   {{range .Machines}}
     <tr>
-      <td><a class="fk-link" href="/machines/{{.ID}}" hx-get="/machines/{{.ID}}" hx-target="#content" hx-push-url="true" onclick="event.stopPropagation();">{{.Hostname}}</a></td>
+      <td><a class="fk-link" href="/machines/{{.ID}}" hx-get="/machines/{{.ID}}" hx-target="#content" hx-push-url="true" onclick="event.stopPropagation();">{{.Hostname}}</a>{{if .IsLocal}} <span class="badge badge-amber">this host</span>{{end}}</td>
       <td>{{if .IPAddress}}<span class="machine-address"><strong>{{.IPLabel}}:</strong> <code>{{.IPAddress}}</code></span>{{else}}—{{end}}</td>
       <td>{{.MachineType}}</td>
       <td>{{.OSFamily}}{{if .OSVersion}} {{.OSVersion}}{{end}}{{if .KernelVersion}} <span class="muted small">&middot; kernel {{.KernelVersion}}</span>{{end}}</td>

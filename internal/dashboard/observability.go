@@ -129,6 +129,7 @@ type observabilityView struct {
 	HealthDetail               string                  `json:"health_detail,omitempty"` // iter-33: names of fail/warn subsystems beside the rollup badge
 	HealthClass                string                  `json:"-"`                       // CSS class, UI-only
 	ScanSchedule               string                  `json:"scan_schedule,omitempty"` // humanized scan cadence from the base config, when one is wired
+	FindingsHigh               int                     `json:"findings_high"`           // open findings at high or critical severity, fleet-wide
 	ScanStats                  scanStats               `json:"scan_stats"`
 	Certificate                agentCertificate        `json:"certificate"`
 	Identifiers                identifierSet           `json:"identifiers"`
@@ -332,6 +333,8 @@ type agentState struct {
 	// Software card facts the Agent card did not carry before the profile
 	// redesign: what the binary is, and what it was built for.
 	Name            string `json:"name"`
+	DisplayVersion  string `json:"display_version"`        // Version with the leading v a release tag carries
+	Distribution    string `json:"distribution,omitempty"` // OS family and version of the host record, once a scan wrote one
 	Vendor          string `json:"vendor"`
 	AgentType       string `json:"agent_type"`
 	Platform        string `json:"platform"`     // runtime.GOOS
@@ -380,6 +383,7 @@ func collectAgentState(deps onboardingDeps) agentState {
 	if st.ConfigFile == "" {
 		st.ConfigFile = "kite-collector.yaml"
 	}
+	st.DisplayVersion = displayVersion(st.Version)
 	if st.DataDir != "" {
 		st.Enrolled = true
 		for _, name := range installer.EnrollmentFiles {
@@ -390,6 +394,19 @@ func collectAgentState(deps onboardingDeps) agentState {
 		}
 	}
 	return st
+}
+
+// displayVersion is how a release names itself: a numeric version gains the
+// leading v of its tag; anything else (dev, test, a commit) is shown as is.
+func displayVersion(version string) string {
+	v := strings.TrimSpace(version)
+	if v == "" {
+		return ""
+	}
+	if v[0] >= '0' && v[0] <= '9' {
+		return "v" + v
+	}
+	return v
 }
 
 // agentCertificate is the Registration card's certificate window and client
@@ -516,14 +533,36 @@ type hostSummary struct {
 	OSVersion     string    `json:"os_version,omitempty"`
 	KernelVersion string    `json:"kernel_version,omitempty"`
 	Architecture  string    `json:"architecture,omitempty"`
-	Authorized    string    `json:"authorized"`
-	Managed       string    `json:"managed"`
-	FirstSeenAt   string    `json:"first_seen_at"`
-	LastSeenAt    string    `json:"last_seen_at"`
-	LastSeenAgo   string    `json:"-"`
-	SoftwareCount int       `json:"software_count"`
-	FindingsCount int       `json:"findings_count"`
+	// HardwareNote is the processor and model osquery tagged the record
+	// with, shown beside the architecture.
+	HardwareNote string `json:"hardware,omitempty"`
+	// Memory comes from the latest RAM sample the local sampler wrote; the
+	// total alone is known earlier, from the osquery inventory tag.
+	MemoryUsed    string `json:"memory_used,omitempty"`
+	MemoryTotal   string `json:"memory_total,omitempty"`
+	MemoryPercent string `json:"memory_percent,omitempty"`
+	// Address is the primary interface's IP, Interface its name.
+	Address       string `json:"address,omitempty"`
+	Interface     string `json:"interface,omitempty"`
+	Authorized    string `json:"authorized"`
+	Managed       string `json:"managed"`
+	FirstSeenAt   string `json:"first_seen_at"`
+	LastSeenAt    string `json:"last_seen_at"`
+	LastSeenAgo   string `json:"-"`
+	SoftwareCount int    `json:"software_count"`
+	FindingsCount int    `json:"findings_count"`
+	// Containers and listeners the host collectors recorded for this
+	// machine; the off-host count is the listeners bound beyond loopback.
+	ContainersRunning int `json:"containers_running"`
+	ContainersTotal   int `json:"containers_total"`
+	ListenersTotal    int `json:"listeners_total"`
+	ListenersOffHost  int `json:"listeners_off_host"`
 }
+
+// hostMemoryWindow is how far back the This host card looks for the latest
+// RAM sample. The sampler writes one a minute, so a quarter hour is plenty
+// and keeps the query small on a page that re-renders every 15 seconds.
+const hostMemoryWindow = 15 * time.Minute
 
 // collectHostSummary finds this computer's machine row by hostname,
 // preferring the row the agent probe wrote (discovery_source "agent") over
@@ -564,24 +603,153 @@ func collectHostSummary(ctx context.Context, deps onboardingDeps) *hostSummary {
 	// Counts come from the introspection layer's total, not from loading the
 	// rows: a workstation's package inventory runs to tens of thousands of
 	// rows and this page re-renders every 15 seconds.
-	out.SoftwareCount = countRowsForMachine(ctx, deps, "installed_software", m.ID)
-	out.FindingsCount = countRowsForMachine(ctx, deps, "config_findings", m.ID)
+	out.SoftwareCount = countRowsWhere(ctx, deps, "installed_software", "machine_id", m.ID.String())
+	out.FindingsCount = countRowsWhere(ctx, deps, "config_findings", "machine_id", m.ID.String())
+	out.HardwareNote = describeHardware(m)
+	fillHostMemory(ctx, deps, m, out)
+	out.Address, out.Interface = primaryInterface(ctx, deps, m.ID)
+	out.ContainersRunning, out.ContainersTotal = countHostContainers(ctx, deps, m.ID)
+	out.ListenersTotal, out.ListenersOffHost = countHostListeners(ctx, deps, m.ID)
 	return out
 }
 
-// countRowsForMachine returns how many rows of table belong to machineID,
-// or 0 when the table or column is unavailable.
-func countRowsForMachine(ctx context.Context, deps onboardingDeps, table string, machineID uuid.UUID) int {
+// countRowsWhere returns how many rows of table have column equal to value,
+// or 0 when the table or column is unavailable. It reads the introspection
+// total rather than the rows: a package inventory runs to tens of thousands
+// of rows and this page re-renders every 15 seconds.
+func countRowsWhere(ctx context.Context, deps onboardingDeps, table, column, value string) int {
 	_, total, err := deps.Store.ListRows(ctx, store.RowsFilter{
 		Table:       table,
-		WhereColumn: "machine_id",
-		WhereValue:  machineID.String(),
+		WhereColumn: column,
+		WhereValue:  value,
 		Limit:       1,
 	})
 	if err != nil {
 		return 0
 	}
 	return int(total)
+}
+
+// describeHardware words the note beside the architecture: the processor
+// type and the vendor and model osquery tagged the record with, when it did.
+func describeHardware(m model.Machine) string {
+	tags := machineTags(m.Tags)
+	var parts []string
+	if cpu, _ := tags["cpu_type"].(string); strings.TrimSpace(cpu) != "" && !strings.EqualFold(cpu, m.Architecture) {
+		parts = append(parts, strings.TrimSpace(cpu))
+	}
+	vendor, _ := tags["hardware_vendor"].(string)
+	hwModel, _ := tags["hardware_model"].(string)
+	if s := strings.TrimSpace(strings.TrimSpace(vendor) + " " + strings.TrimSpace(hwModel)); s != "" {
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// machineTags decodes a machine's tags JSON, or returns nil when there is
+// none worth reading.
+func machineTags(tagsJSON string) map[string]any {
+	if strings.TrimSpace(tagsJSON) == "" {
+		return nil
+	}
+	var tags map[string]any
+	if json.Unmarshal([]byte(tagsJSON), &tags) != nil {
+		return nil
+	}
+	return tags
+}
+
+// fillHostMemory sets the Memory row from the latest RAM sample, falling
+// back to the osquery total when the sampler has not written one yet.
+func fillHostMemory(ctx context.Context, deps onboardingDeps, m model.Machine, out *hostSummary) {
+	if total, ok := physicalMemoryBytesFromTags(m.Tags); ok && total > 0 {
+		out.MemoryTotal = humanizeBytes(total)
+	}
+	samples, err := deps.Store.ListMemorySamples(ctx, m.ID, time.Now().Add(-hostMemoryWindow), 60)
+	if err != nil || len(samples) == 0 {
+		return
+	}
+	latest := samples[len(samples)-1]
+	out.MemoryTotal = humanizeBytes(int64(latest.TotalBytes)) // #nosec G115 -- RAM sizes fit int64
+	out.MemoryUsed = humanizeBytes(int64(latest.UsedBytes))   // #nosec G115
+	out.MemoryPercent = fmt.Sprintf("%.0f%%", latest.UsedPercent)
+}
+
+// primaryInterface returns the IP and name of the machine's primary network
+// interface, or its first recorded one when none is flagged primary.
+func primaryInterface(ctx context.Context, deps onboardingDeps, machineID uuid.UUID) (address, name string) {
+	rows, _, err := deps.Store.ListRows(ctx, store.RowsFilter{
+		Table:       "network_interfaces",
+		WhereColumn: "machine_id",
+		WhereValue:  machineID.String(),
+		Limit:       50,
+	})
+	if err != nil || len(rows) == 0 {
+		return "", ""
+	}
+	pick := rows[0]
+	for _, r := range rows {
+		if rowFlag(r, "is_primary") {
+			pick = r
+			break
+		}
+	}
+	return rowString(pick, "ip_address"), rowString(pick, "interface_name")
+}
+
+// rowString reads one column of an introspection row as text.
+func rowString(r store.Row, column string) string {
+	for _, c := range r.Columns {
+		if c.Name != column {
+			continue
+		}
+		if c.Value == nil {
+			return ""
+		}
+		return strings.TrimSpace(fmt.Sprint(c.Value))
+	}
+	return ""
+}
+
+// rowFlag reads a SQLite boolean column (stored as 0/1).
+func rowFlag(r store.Row, column string) bool {
+	s := rowString(r, column)
+	return s == "1" || strings.EqualFold(s, "true")
+}
+
+// countHostContainers counts the containers recorded for the machine and
+// how many of them are running.
+func countHostContainers(ctx context.Context, deps onboardingDeps, machineID uuid.UUID) (running, total int) {
+	rows, n, err := deps.Store.ListRows(ctx, store.RowsFilter{
+		Table:       "host_containers",
+		WhereColumn: "machine_id",
+		WhereValue:  machineID.String(),
+		Limit:       500,
+	})
+	if err != nil {
+		return 0, 0
+	}
+	for _, r := range rows {
+		if rowString(r, "state") == "running" {
+			running++
+		}
+	}
+	return running, int(n)
+}
+
+// countHostListeners counts the machine's listening sockets and how many
+// are bound beyond loopback, so reachable from other hosts.
+func countHostListeners(ctx context.Context, deps onboardingDeps, machineID uuid.UUID) (total, offHost int) {
+	listeners, err := deps.Store.ListHostListeners(ctx, machineID)
+	if err != nil {
+		return 0, 0
+	}
+	for _, l := range listeners {
+		if l.Exposure == "internet" || l.Exposure == "lan" {
+			offHost++
+		}
+	}
+	return len(listeners), offHost
 }
 
 // streamHealth is the OTLP stream telemetry view rendered in the
@@ -654,8 +822,27 @@ type scanStats struct {
 	LatestStatus    string        `json:"latest_status,omitempty"`
 	LatestBadge     string        `json:"-"` // CSS class, UI-only
 	AverageDuration string        `json:"average_duration,omitempty"`
-	TrendSVG        template.HTML `json:"-"` // SVG markup, UI-only
+	NextDueAt       string        `json:"next_due_at,omitempty"` // RFC3339; the last start plus the configured interval
+	NextDueIn       string        `json:"next_due_in,omitempty"` // "in 4h 12m", or "due now"
+	TrendSVG        template.HTML `json:"-"`                     // SVG markup, UI-only
 	Total           int           `json:"total"`
+	LatestMachines  int           `json:"latest_machines"`     // machines the latest run saw
+	LatestNew       int           `json:"latest_new_machines"` // of which it saw for the first time
+}
+
+// nextScanDue words when the scheduler's next run is expected: the last
+// start plus the configured interval. A run already past due reads "due
+// now" rather than a negative countdown.
+func nextScanDue(latest model.ScanRun, interval time.Duration, now time.Time) (at, in string) {
+	if interval <= 0 {
+		return "", ""
+	}
+	due := latest.StartedAt.Add(interval)
+	at = due.UTC().Format(time.RFC3339)
+	if !due.After(now) {
+		return at, "due now"
+	}
+	return at, "in " + humanizeDuration(due.Sub(now))
 }
 
 // renderObservabilityFragment is the HTML render entry point. Delegates
@@ -1501,6 +1688,8 @@ func aggregateScanStats(runs []model.ScanRun) scanStats {
 		LatestStartedAt: latest.StartedAt.UTC().Format(time.RFC3339),
 		LatestStatus:    string(latest.Status),
 		LatestBadge:     scanStatusBadge(string(latest.Status)),
+		LatestMachines:  latest.TotalMachines,
+		LatestNew:       latest.NewMachines,
 	}
 	if latest.CompletedAt != nil {
 		s.LatestDuration = latest.CompletedAt.Sub(latest.StartedAt).Round(time.Second).String()
@@ -1571,7 +1760,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <header class="profile-head">
   <div>
     <h1>Agent profile</h1>
-    <p class="muted profile-sub">This page is about the agent installed on this machine: who registered it, and whether it is working.</p>
+    <p class="muted profile-sub">This page shows the information about performance, hardware, usage and customizations collected by Kite.</p>
   </div>
   <div class="freshness-chip {{if .Freshness.Paused}}freshness-chip--paused{{else}}freshness-chip--live{{end}}"
        aria-live="polite"
@@ -1600,9 +1789,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       <span class="muted small health-rollup-detail" title="Subsystems not passing — the rows below say why">&mdash; {{.HealthDetail}}</span>
     {{end}}
     <span class="muted small">checked {{.GeneratedAt}}</span>
-    {{if ne .HealthSummary "healthy"}}
-      <a class="card-link" href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">Fix agent health &rarr;</a>
-    {{end}}
+    <a class="card-link" href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">Fix agent health &rarr;</a>
   </div>
   <div class="observability-table-wrap">
   <table class="observability-table">
@@ -1629,20 +1816,14 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   {{if .HasScanData}}
     <div class="metric-row">
       <span class="metric">{{.ScanStats.LatestStatus}}</span>
-      <span class="muted small">latest run &middot; took {{.ScanStats.LatestDuration}}</span>
+      <span class="muted small" title="started {{.ScanStats.LatestStartedAt}}">last run &middot; {{.ScanStats.LatestDuration}}</span>
     </div>
     <div class="observability-table-wrap">
     <table class="kv observability-kv">
-      <tr><td>Total scans</td><td>{{.ScanStats.Total}}</td></tr>
-      <tr><td>Latest scan</td><td><span class="badge {{.ScanStats.LatestBadge}}">{{.ScanStats.LatestStatus}}</span> &middot; started {{.ScanStats.LatestStartedAt}}</td></tr>
-      <tr><td>Latest duration</td><td>{{.ScanStats.LatestDuration}}</td></tr>
-      <tr><td>Average duration (last 20)</td><td>{{.ScanStats.AverageDuration}}</td></tr>
-      {{if .ScanSchedule}}<tr><td>Schedule</td><td>every {{.ScanSchedule}}</td></tr>{{end}}
-      {{if .Runtime.HasDataRowCounts}}
-      <tr><td>Machines discovered</td><td>{{.Runtime.MachineRows}}</td></tr>
-      <tr><td>Findings surfaced</td><td>{{.Runtime.FindingRows}}</td></tr>
-      {{end}}
-      <tr><td>Recent durations</td><td class="spark-cell">{{.ScanStats.TrendSVG}}</td></tr>
+      <tr><td>Next scheduled</td><td>{{if .ScanStats.NextDueIn}}<span title="{{.ScanStats.NextDueAt}}">{{.ScanStats.NextDueIn}}</span> <span class="muted small">every {{.ScanSchedule}}</span>{{else if .ScanSchedule}}<span class="muted">not while the agent is off</span> <span class="muted small">every {{.ScanSchedule}} when it runs</span>{{else}}<span class="muted">on demand</span>{{end}}</td></tr>
+      <tr><td>Machines seen</td><td>{{.ScanStats.LatestMachines}} <span class="muted small">{{.ScanStats.LatestNew}} new this run</span></td></tr>
+      <tr><td>Findings opened</td><td>{{if .Runtime.HasDataRowCounts}}{{.Runtime.FindingRows}}{{else}}0{{end}} <span class="muted small">{{.FindingsHigh}} high</span></td></tr>
+      <tr><td>Recent durations</td><td class="spark-cell">{{.ScanStats.TrendSVG}} <span class="muted small">{{.ScanStats.Total}} runs, {{.ScanStats.AverageDuration}} on average</span></td></tr>
     </table>
     </div>
   {{else}}
@@ -1662,30 +1843,22 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     </div>
     <div class="observability-table-wrap">
     <table class="kv observability-kv">
-      <tr><td>State</td><td><span class="badge {{.Stream.StateBadge}}">{{.Stream.State}}</span></td></tr>
-      {{if .Endpoint}}<tr><td>Endpoint</td><td><code>{{.Endpoint}}</code></td></tr>{{end}}
-      <tr><td>Events sent</td><td>{{.Stream.TotalSent}}</td></tr>
-      <tr><td>Backlog depth</td><td>{{.Stream.BacklogDepth}}</td></tr>
-      <tr><td>Last event</td><td>
-        {{if .Stream.LastEventAgo}}
-          <span title="{{.Stream.LastEventAt}}">{{.Stream.LastEventAgo}}</span>
-        {{else}}
-          <span class="muted small">no events yet</span>
-        {{end}}
+      <tr><td>Endpoint</td><td>{{if .Endpoint}}<code>{{.Endpoint}}</code>{{else}}<span class="muted">not configured</span>{{end}}</td></tr>
+      <tr><td>Last export</td><td>
+        {{if .Stream.LastEventAgo}}<span title="{{.Stream.LastEventAt}}">{{.Stream.LastEventAgo}}</span>{{else}}<span class="muted">no events yet</span>{{end}}
+        {{if .Stream.LastErrorText}}<span class="badge badge-red">{{.Stream.LastErrorText}}</span>{{else}}<span class="muted small">no errors</span>{{end}}
       </td></tr>
-      {{if .Stream.LastErrorText}}
-      <tr><td>Last error</td><td><span class="badge badge-red">{{.Stream.LastErrorText}}</span></td></tr>
-      {{end}}
+      <tr><td>Spool depth</td><td>{{.Stream.BacklogDepth}} <span class="muted small">{{if .Stream.BacklogDepth}}waiting to send{{else}}nothing queued{{end}}</span></td></tr>
     </table>
     </div>
-    <p class="muted small">Backlog depth above zero usually indicates a slow or unreachable OTLP collector. Sustained growth is the early warning before events start dropping.</p>
+    <p class="muted small">Spool depth above zero usually indicates a slow or unreachable OTLP collector. Sustained growth is the early warning before events start dropping.</p>
   {{else}}
     <p class="muted">No StreamController wired (inspector / read-only mode). Start the agent with <code>kite-collector dashboard</code> (default --with-agent=true) to populate.</p>
   {{end}}
 </section>
 </div>
 
-<section class="card observability-card observability-card--wide" id="section-host">
+<section class="card observability-card observability-card--wide card-rule" id="section-host">
   <div class="card-head">
     <h2>This host</h2>
     <span class="badge badge-gray">self</span>
@@ -1701,14 +1874,14 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
         <tr><td>Kernel</td><td>{{if .Host.KernelVersion}}<code>{{.Host.KernelVersion}}</code>{{else}}<span class="muted">not recorded</span>{{end}}</td></tr>
       </table>
       <table class="kv observability-kv">
-        <tr><td>Architecture</td><td>{{if .Host.Architecture}}{{.Host.Architecture}}{{else}}<span class="muted">not recorded</span>{{end}}</td></tr>
-        <tr><td>Authorization</td><td>{{.Host.Authorized}}</td></tr>
-        <tr><td>Managed</td><td>{{.Host.Managed}}</td></tr>
+        <tr><td>Hardware</td><td>{{if .Host.Architecture}}{{.Host.Architecture}}{{else}}<span class="muted">not recorded</span>{{end}}{{if .Host.HardwareNote}} <span class="muted small">{{.Host.HardwareNote}}</span>{{end}}</td></tr>
+        <tr><td>Memory</td><td>{{if .Host.MemoryUsed}}{{.Host.MemoryUsed}} of {{.Host.MemoryTotal}} <span class="muted small">{{.Host.MemoryPercent}}</span>{{else if .Host.MemoryTotal}}{{.Host.MemoryTotal}} <span class="muted small">total, collecting usage</span>{{else}}<span class="muted">not recorded</span>{{end}}</td></tr>
+        <tr><td>Address</td><td>{{if .Host.Address}}<code>{{.Host.Address}}</code>{{if .Host.Interface}} <span class="muted small">{{.Host.Interface}}</span>{{end}}{{else}}<span class="muted">not recorded</span>{{end}}</td></tr>
       </table>
       <table class="kv observability-kv">
         <tr><td>Software</td><td>{{.Host.SoftwareCount}} <span class="muted small">packages</span></td></tr>
-        <tr><td>Findings</td><td>{{.Host.FindingsCount}} <span class="muted small">on this host</span></td></tr>
-        <tr><td>Last seen</td><td><span title="{{.Host.LastSeenAt}}">{{.Host.LastSeenAgo}}</span> <span class="muted small">first seen {{.Host.FirstSeenAt}}</span></td></tr>
+        <tr><td>Containers</td><td>{{.Host.ContainersRunning}} running <span class="muted small">{{.Host.ContainersTotal}} recorded</span></td></tr>
+        <tr><td>Listeners</td><td>{{.Host.ListenersTotal}} <span class="muted small">{{.Host.ListenersOffHost}} reachable off-host</span></td></tr>
       </table>
     </div>
   {{else}}
@@ -1716,7 +1889,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   {{end}}
 </section>
 
-<section class="card observability-card observability-card--wide" id="section-registration">
+<section class="card observability-card observability-card--wide card-rule" id="section-registration">
   <div class="card-head">
     <h2>Registration</h2>
     {{if .Agent.Enrolled}}<span class="badge badge-green">enrolled</span>{{else}}<span class="badge badge-gray">not enrolled</span> <a href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">enroll &rarr;</a>{{end}}
@@ -1754,34 +1927,29 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <section class="card observability-card observability-card--wide" id="section-agent">
   <div class="card-head">
     <h2>Software</h2>
-    <span class="muted small">What is installed here and what it was built from &mdash; the same block <code>kite-collector --help</code> prints as &ldquo;Current state&rdquo;.</span>
+    <span class="muted small">what is installed here, and what it was built from</span>
   </div>
-  <div class="profile-grid-4">
+  <div class="profile-grid-3">
     <div class="pgroup">
       <h4>Application</h4>
       <div class="prow"><span class="prow-k">Name</span><span class="prow-v">{{.Agent.Name}}</span></div>
-      <div class="prow"><span class="prow-k">Version</span><span class="prow-v"><code>{{.Agent.Version}}</code></span></div>
+      <div class="prow"><span class="prow-k">Display version</span><span class="prow-v">{{.Agent.DisplayVersion}}</span></div>
       <div class="prow"><span class="prow-k">Vendor</span><span class="prow-v">{{.Agent.Vendor}}</span></div>
       <div class="prow"><span class="prow-k">Agent type</span><span class="prow-v">{{.Agent.AgentType}}</span></div>
     </div>
     <div class="pgroup">
       <h4>Build</h4>
+      <div class="prow"><span class="prow-k">Version</span><span class="prow-v"><code>{{.Agent.Version}}</code></span></div>
       <div class="prow"><span class="prow-k">Build id</span><span class="prow-v"><code>{{.Agent.Commit}}</code></span></div>
       <div class="prow"><span class="prow-k">Built</span><span class="prow-v">{{if .Agent.BuiltAt}}{{.Agent.BuiltAt}}{{else}}<span class="muted">not stamped</span>{{end}}</span></div>
       <div class="prow"><span class="prow-k">Binary hash</span><span class="prow-v">{{if .Agent.BinaryHash}}<code>{{.Agent.BinaryHash}}</code>{{else}}<span class="muted">not available</span>{{end}}</span></div>
-      <div class="prow"><span class="prow-k">Go version</span><span class="prow-v"><code>{{.Runtime.GoVersion}}</code></span></div>
     </div>
     <div class="pgroup">
       <h4>Platform</h4>
       <div class="prow"><span class="prow-k">Architecture</span><span class="prow-v">{{.Agent.Architecture}}</span></div>
       <div class="prow"><span class="prow-k">Platform</span><span class="prow-v">{{.Agent.Platform}}</span></div>
+      <div class="prow"><span class="prow-k">Distribution</span><span class="prow-v">{{if .Agent.Distribution}}{{.Agent.Distribution}}{{else}}<span class="muted">not recorded until the first scan</span>{{end}}</span></div>
       <div class="prow"><span class="prow-k">Telemetry contract</span><span class="prow-v">{{.Agent.ContractVersion}}</span></div>
-    </div>
-    <div class="pgroup">
-      <h4>Files</h4>
-      <div class="prow"><span class="prow-k">Config file</span><span class="prow-v"><code>{{.Agent.ConfigFile}}</code></span></div>
-      <div class="prow"><span class="prow-k">Data directory</span><span class="prow-v">{{if .Agent.DataDir}}<code>{{.Agent.DataDir}}</code>{{else}}<span class="muted">not configured</span>{{end}}</span></div>
-      <div class="prow"><span class="prow-k">Database</span><span class="prow-v">{{if .Agent.DBPath}}<code>{{.Agent.DBPath}}</code>{{else}}<span class="muted">not available</span>{{end}}</span></div>
     </div>
   </div>
 </section>
@@ -1931,6 +2099,10 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     <tr><td>Heap system</td><td>{{.Runtime.HeapSys}}</td></tr>
     <tr><td>Goroutines</td><td>{{.Runtime.Goroutines}} <span class="spark-cell">{{.Runtime.GoroutineTrendSVG}}</span></td></tr>
     <tr><td>Dashboard uptime</td><td>{{.Runtime.Uptime}}</td></tr>
+    <tr><td colspan="2" class="kv-section-header"><span class="muted small">Files</span></td></tr>
+    <tr><td>Config file</td><td><code>{{.Agent.ConfigFile}}</code></td></tr>
+    <tr><td>Data directory</td><td>{{if .Agent.DataDir}}<code>{{.Agent.DataDir}}</code>{{else}}<span class="muted">not configured</span>{{end}}</td></tr>
+    <tr><td>Database</td><td>{{if .Agent.DBPath}}<code>{{.Agent.DBPath}}</code>{{else}}<span class="muted">not available</span>{{end}}</td></tr>
     {{if .Runtime.DBPath}}
     <tr><td>SQLite path</td><td><code>{{.Runtime.DBPath}}</code></td></tr>
     <tr><td>SQLite size</td><td>{{.Runtime.DBSize}}</td></tr>
@@ -1948,7 +2120,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 </section>
 </div>
 
-<p class="muted small observability-footnote">Local observability — no data leaves this host. All stats are computed from the on-host SQLite store. <span class="muted small">Auto-refreshes every 15 seconds.</span></p>
+<p class="muted small observability-footnote">All stats are computed from the on-host SQLite store. <span class="muted small">Auto-refreshes every 15 seconds.</span></p>
 
 <script>
   // Iteration-31 passive-monitoring affordance: a backgrounded tab shows
@@ -2240,7 +2412,17 @@ func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabil
 			scanRows = runs
 			view.ScanStats = aggregateScanStats(runs)
 			view.HasScanData = true
+			// The scheduler lives in the agent process: only a dashboard
+			// wired with a coordinator and a config has a next run to name.
+			if deps.ScanEnabled && deps.BaseConfig != nil {
+				view.ScanStats.NextDueAt, view.ScanStats.NextDueIn = nextScanDue(runs[0], deps.BaseConfig.StreamingInterval(), time.Now())
+			}
 		}
+		view.FindingsHigh = countRowsWhere(ctx, deps, "config_findings", "severity", string(model.SeverityHigh)) +
+			countRowsWhere(ctx, deps, "config_findings", "severity", string(model.SeverityCritical))
+	}
+	if view.Host != nil {
+		view.Agent.Distribution = strings.TrimSpace(view.Host.OSFamily + " " + view.Host.OSVersion)
 	}
 	// Activity timeline composes probe + scan rows we already fetched —
 	// no extra queries, no extra round-trips. The 20-event cap keeps the
