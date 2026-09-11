@@ -1786,7 +1786,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     <h2>Health</h2>
     <span class="badge {{.HealthClass}}">{{.HealthSummary}}</span>
     {{if .HealthDetail}}
-      <span class="muted small health-rollup-detail" title="Subsystems not passing — the rows below say why">&mdash; {{.HealthDetail}}</span>
+      <span class="muted small health-rollup-detail" title="The rows below say why">not passing: {{.HealthDetail}}</span>
     {{end}}
     <span class="muted small">checked {{.GeneratedAt}}</span>
     <a class="card-link" href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">Fix agent health &rarr;</a>
@@ -1827,7 +1827,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     </table>
     </div>
   {{else}}
-    <p class="muted">No scans yet. Run Scan in the top bar starts one{{if .ScanSchedule}}; the agent also scans every {{.ScanSchedule}}{{end}}.</p>
+    <p class="muted">No scans yet. Run Scan in the top bar to start one{{if .ScanSchedule}}; the agent also scans every {{.ScanSchedule}}{{end}}.</p>
   {{end}}
 </section>
 
@@ -1851,9 +1851,9 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       <tr><td>Spool depth</td><td>{{.Stream.BacklogDepth}} <span class="muted small">{{if .Stream.BacklogDepth}}waiting to send{{else}}nothing queued{{end}}</span></td></tr>
     </table>
     </div>
-    <p class="muted small">Spool depth above zero usually indicates a slow or unreachable OTLP collector. Sustained growth is the early warning before events start dropping.</p>
+    <p class="muted small">A spool above zero means the OTLP collector is slow or unreachable. If it keeps growing, events will start to drop.</p>
   {{else}}
-    <p class="muted">No StreamController wired (inspector / read-only mode). Start the agent with <code>kite-collector dashboard</code> (default --with-agent=true) to populate.</p>
+    <p class="muted">Streaming is off in inspector mode. Start the agent with <code>kite-collector dashboard</code> (the default, --with-agent=true) to stream events.</p>
   {{end}}
 </section>
 </div>
@@ -1885,7 +1885,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       </table>
     </div>
   {{else}}
-    <p class="muted">No scan has recorded this host yet. The first scan writes the agent&rsquo;s own machine record, and this card then links to its detail page.</p>
+    <p class="muted">No scan has recorded this host yet. The first scan writes its machine record, and this card links to it.</p>
   {{end}}
 </section>
 
@@ -1893,7 +1893,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   <div class="card-head">
     <h2>Registration</h2>
     {{if .Agent.Enrolled}}<span class="badge badge-green">enrolled</span>{{else}}<span class="badge badge-gray">not enrolled</span> <a href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">enroll &rarr;</a>{{end}}
-    <span class="muted small">PKI stamps these from the operator&rsquo;s signed-in session. The agent reports them and cannot choose them.</span>
+    <span class="muted small">Issued by PKI from the operator&rsquo;s signed-in session. The agent cannot change them.</span>
   </div>
   <div class="profile-tiles">
     <div class="idtile">
@@ -1990,7 +1990,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <div class="observability-grid">
 <section class="card observability-card observability-card--wide" id="section-certificates">
   <h2>Kite certificates</h2>
-  <p class="muted">Tenant-scoped PKI inventory. A mass enrollment issues one certificate per computer; every certificate produced by that fleet enrollment appears here as soon as the remote computer completes enrollment.</p>
+  <p class="muted">Certificates PKI issued for this tenant. A mass enrollment issues one per computer, and each appears here once that computer finishes enrolling.</p>
   <div id="pki-certificate-inventory"
        hx-get="/fragments/observability/certificates"
        hx-trigger="load, every 60s"
@@ -2027,14 +2027,14 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     </table>
     </div>
   {{else}}
-    <p class="muted">No probe runs yet. Run a connection check on <a href="/onboarding?step=check">step 3</a> to populate.</p>
+    <p class="muted">No probe runs yet. Run a connection check on <a href="/onboarding?step=check">step 3 of enrollment</a>.</p>
   {{end}}
 </section>
 
 <section class="card observability-card observability-card--failures" id="section-failures">
   <h2>Recent failures</h2>
   {{if .HasFailures}}
-    <p class="muted">Last {{len .RecentFailures}} probe failures with their diagnostic messages. The number-one debugging question — &ldquo;why is it failing?&rdquo; — answered without scrolling through every event.</p>
+    <p class="muted">The last {{len .RecentFailures}} probe failures, each with the diagnostic it returned.</p>
     <ul class="failure-list">
       {{range .RecentFailures}}
         <li class="failure-item">
@@ -2071,7 +2071,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <section class="card observability-card observability-card--activity" id="section-activity">
   <h2>Recent activity</h2>
   {{if .HasActivity}}
-    <p class="muted">Most recent 20 events from probes &amp; scans, interleaved by timestamp. Closes the &ldquo;what just happened?&rdquo; gap between the per-card snapshots.</p>
+    <p class="muted">The 20 most recent probe and scan events.</p>
     <ol class="activity-timeline">
       {{range .RecentActivity}}
         <li class="activity-item {{.Class}}" data-kind="{{.Kind}}" data-severity="{{.Severity}}">
@@ -2083,14 +2083,14 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       {{end}}
     </ol>
   {{else}}
-    <p class="muted">No activity yet. Run Scan in the top bar, or run a connection check from <a href="/onboarding">/onboarding</a>.</p>
+    <p class="muted">No activity yet. Run Scan in the top bar, or run a connection check from <a href="/onboarding">Enroll to VulnerTrack</a>.</p>
   {{end}}
 </section>
 
 <section class="card observability-card observability-card--wide" id="section-runtime">
   <h2>Runtime &amp; storage</h2>
-  <p class="muted">Dashboard process telemetry + on-host SQLite store size. Watch the
-     heap and goroutine counts for leak symptoms; watch DB size for unbounded growth.</p>
+  <p class="muted">Memory, goroutines and uptime of the dashboard process, and the size of the SQLite store.
+     Heap and goroutine counts that keep rising are leak symptoms. A store that keeps growing is unbounded growth.</p>
   <div class="observability-table-wrap">
   <table class="kv observability-kv">
     <tr><td colspan="2" class="kv-section-header"><span class="muted small">Process</span></td></tr>
@@ -2109,14 +2109,14 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     <tr><td colspan="2" class="kv-section-header"><span class="muted small">Operational tables</span></td></tr>
     <tr><td>probe_result rows</td><td>{{.Runtime.ProbeResultRows}}</td></tr>
     <tr><td>scan_runs rows</td><td>{{.Runtime.ScanRunRows}}</td></tr>
-    <tr><td colspan="2" class="kv-section-header"><span class="muted small">Data tables &mdash; what the agent has collected</span></td></tr>
+    <tr><td colspan="2" class="kv-section-header"><span class="muted small">Collected data</span></td></tr>
     <tr><td>machines discovered</td><td>{{.Runtime.MachineRows}}</td></tr>
     <tr><td>events emitted</td><td>{{.Runtime.EventRows}}</td></tr>
     <tr><td>findings surfaced</td><td>{{.Runtime.FindingRows}}</td></tr>
     {{end}}
   </table>
   </div>
-  <p class="muted small">Heap &amp; goroutine sparklines show up to the last 60 samples (one per page render &middot; 15 minutes of in-memory history at the 15s auto-refresh cadence; lost on dashboard restart).</p>
+  <p class="muted small">Heap &amp; goroutine sparklines show up to the last 60 samples, one per refresh, about 15 minutes. The history is kept in memory and clears when the dashboard restarts.</p>
 </section>
 </div>
 

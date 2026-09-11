@@ -568,8 +568,8 @@ func TestObservability_RuntimeCardRendersDataTableRows(t *testing.T) {
 	// Section headers split operational from data tables visually.
 	assert.Contains(t, body, "Operational tables",
 		"runtime card must split operational tables (probe_result, scan_runs) under their own section header")
-	assert.Contains(t, body, "what the agent has collected",
-		"data-tables section header must include the operator-facing copy explaining what these rows are")
+	assert.Contains(t, body, "Collected data",
+		"data-tables section header must name what these rows are")
 
 	// All three data-table rows must render.
 	for _, label := range []string{
@@ -916,7 +916,7 @@ func TestObservability_StreamCardNotWiredShowsReadOnlyNotice(t *testing.T) {
 
 	assert.Contains(t, body, ">Streaming<",
 		"stream health section must always render — even in inspector mode (with empty-state copy)")
-	assert.Contains(t, body, "No StreamController wired",
+	assert.Contains(t, body, "Streaming is off in inspector mode",
 		"inspector mode must surface the read-only notice so operators know why no stats are shown")
 	assert.Contains(t, body, "--with-agent=true",
 		"empty-state copy must point operators at the flag that wires the StreamController")
@@ -959,7 +959,7 @@ func TestObservability_StreamCardPopulatedFromWiredController(t *testing.T) {
 
 	// With a wired controller, the populated path must render — read-only
 	// notice must NOT appear.
-	assert.NotContains(t, body, "No StreamController wired",
+	assert.NotContains(t, body, "Streaming is off in inspector mode",
 		"with StreamController wired, the empty-state notice must not render")
 	// The populated card is the three-row block the profile design fixes:
 	// Endpoint, Last export, Spool depth. The values come from the fake
@@ -974,7 +974,7 @@ func TestObservability_StreamCardPopulatedFromWiredController(t *testing.T) {
 		"the metric names what the count is")
 	// Spool warning copy must always appear when populated — it's the
 	// diagnostic-hint sentence that helps operators interpret the numbers.
-	assert.Contains(t, body, "Spool depth above zero",
+	assert.Contains(t, body, "A spool above zero",
 		"populated card must include the diagnostic-hint copy so operators know what to do with the numbers")
 }
 
