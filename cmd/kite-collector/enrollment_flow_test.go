@@ -116,16 +116,6 @@ func TestEnrollCommand_RejectsIncompleteOrAmbiguousCredentials(t *testing.T) {
 			args:    []string{"--token", "jwt"},
 			wantErr: "--agent-code and --token must be provided together",
 		},
-		{
-			name:    "agent code requires credential",
-			args:    []string{"--agent-code", "kite-agent"},
-			wantErr: "--agent-code and --token must be provided together",
-		},
-		{
-			name:    "certificate directory cannot stand alone",
-			args:    []string{"--certs-dir", t.TempDir()},
-			wantErr: "--certs-dir is only used",
-		},
 	}
 
 	for _, tc := range tests {

@@ -3179,15 +3179,23 @@ func runTrust(endpointName, cfgFile, dataDirOverride string) error {
 // ---------------------------------------------------------------------------
 
 func newEnrollCmd() *cobra.Command {
+	return newEnrollCmdWithDevice(runDeviceEnrollment)
+}
+
+func newEnrollCmdWithDevice(deviceEnroll func(io.Writer, string, string, string, bool) error) *cobra.Command {
+	return newEnrollCmdWithFlows(deviceEnroll, runPlatformLoginEnroll)
+}
+
+func newEnrollCmdWithFlows(deviceEnroll func(io.Writer, string, string, string, bool) error, browserEnroll func(string, string, string, bool, bool) error) *cobra.Command {
 	var (
+		addr            string
+		cfgFile         string
+		noBrowser       bool
 		agentCode       string
 		token           string
 		enrollmentToken string
 		certsDir        string
 		dbPath          string
-		addr            string
-		cfgFile         string
-		noBrowser       bool
 		userMode        bool
 	)
 
@@ -3198,15 +3206,10 @@ func newEnrollCmd() *cobra.Command {
 		Short: "Enroll this collector with VulnerTrack",
 		Long: `Enroll this collector with VulnerTrack.
 
-Enrollment works with or without a browser:
-
-  • Desktop:  enroll opens the browser sign-in flow. After enrollment it
-    closes the temporary dashboard and starts (or restarts) the installed
-    collector service automatically.
-  • Headless (server/container/SSH): enroll detects no display and prompts you
-    to choose an input path — paste a browser sign-in code from any device, or
-    paste a scoped enrollment token from your PKI operator. Nothing hangs on a
-    browser that cannot open.
+Local desktop sessions open the browser sign-in flow. Interactive SSH sessions
+offer the local dashboard flow or a remote device-code flow. The remote flow
+prints a public URL and temporary code to approve from another computer. No
+inbound login port is needed for device authorization.
 
 Non-interactive equivalents:
   --token <jwt>                     operator sign-in JWT (skips the browser)
@@ -3215,8 +3218,7 @@ Non-interactive equivalents:
                                     (KITE_PKI_ENDPOINT overrides the PKI URL)
 
 Examples:
-  kite-collector enroll                       # desktop: browser sign-in
-  kite-collector enroll --no-browser          # print URL, paste code
+  kite-collector enroll                       # automatically select local or SSH login
   kite-collector enroll --agent-code kite-prod --enrollment-token <tok>`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3235,6 +3237,29 @@ Examples:
 				}
 				return runEnrollWithToken(agentCode, enrollmentToken, certsDir)
 			}
+			if !hasToken && noBrowser {
+				deviceCertsDir := filepath.Dir(dbPath)
+				if cmd.Flag("certs-dir").Changed {
+					deviceCertsDir = certsDir
+				}
+				return deviceEnroll(cmd.OutOrStdout(), agentCode, dbPath, deviceCertsDir, userMode)
+			}
+			if !hasToken && isHeadless() {
+				deviceCertsDir := filepath.Dir(dbPath)
+				if cmd.Flag("certs-dir").Changed {
+					deviceCertsDir = certsDir
+				}
+				return runInteractiveEnroll(cmd, interactiveEnrollDeps{
+					addr:          addr,
+					dbPath:        dbPath,
+					cfgFile:       cfgFile,
+					certsDir:      deviceCertsDir,
+					agentCode:     agentCode,
+					userMode:      userMode,
+					browserEnroll: browserEnroll,
+					deviceEnroll:  deviceEnroll,
+				})
+			}
 			// Non-interactive operator-JWT path.
 			if hasAgentCode || hasToken {
 				if !hasAgentCode || !hasToken {
@@ -3243,17 +3268,14 @@ Examples:
 				return runEnroll(agentCode, token, certsDir)
 			}
 			if cmd.Flag("certs-dir").Changed {
-				return fmt.Errorf("--certs-dir is only used with --agent-code and --token / --enrollment-token")
+				if !cmd.Flag("db").Changed {
+					dbPath = filepath.Join(certsDir, "kite.db")
+				}
+				if filepath.Clean(filepath.Dir(dbPath)) != filepath.Clean(certsDir) {
+					return fmt.Errorf("browser enrollment requires --db to be inside --certs-dir")
+				}
 			}
-			// No flags: on a headless host (or with --no-browser) give the
-			// operator a clear input path instead of hanging on a browser open.
-			if noBrowser || isHeadless() {
-				return runInteractiveEnroll(cmd, interactiveEnrollDeps{
-					addr: addr, dbPath: dbPath, cfgFile: cfgFile,
-					certsDir: certsDir, noBrowser: noBrowser, userMode: userMode,
-				})
-			}
-			return runPlatformLoginEnroll(addr, dbPath, cfgFile, noBrowser, userMode)
+			return browserEnroll(addr, dbPath, cfgFile, false, userMode)
 		},
 	}
 
@@ -3267,7 +3289,7 @@ Examples:
 		"path to SQLite database used by the local dashboard login flow")
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:9090", "listen address for the local dashboard login flow")
 	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to agent config file")
-	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "print the login URL without opening a browser")
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "use a device code instead of opening a local browser")
 	cmd.Flags().BoolVar(&userMode, "user", false, "resolve --db against the per-user install paths")
 
 	return cmd
@@ -3723,69 +3745,64 @@ func envOrDefault(key, fallback string) string {
 	return fallback
 }
 
+func promptLine(out io.Writer, in *bufio.Reader, label string) string {
+	_, _ = fmt.Fprint(out, label)
+	line, _ := in.ReadString('\n')
+	return strings.TrimSpace(line)
+}
+
+type interactiveEnrollDeps struct {
+	addr          string
+	dbPath        string
+	cfgFile       string
+	certsDir      string
+	agentCode     string
+	userMode      bool
+	browserEnroll func(string, string, string, bool, bool) error
+	deviceEnroll  func(io.Writer, string, string, string, bool) error
+}
+
+// runInteractiveEnroll lets an SSH operator choose between the existing local
+// dashboard login and the public device-code flow intended for remote hosts.
+func runInteractiveEnroll(cmd *cobra.Command, d interactiveEnrollDeps) error {
+	f, ok := cmd.InOrStdin().(*os.File)
+	isTTY := ok && term.IsTerminal(int(f.Fd())) // #nosec G115
+	return runInteractiveEnrollWithTTY(cmd, d, isTTY)
+}
+
+func runInteractiveEnrollWithTTY(cmd *cobra.Command, d interactiveEnrollDeps, isTTY bool) error {
+	out := cmd.OutOrStdout()
+	if !isTTY {
+		return d.deviceEnroll(out, d.agentCode, d.dbPath, d.certsDir, d.userMode)
+	}
+
+	in := bufio.NewReader(cmd.InOrStdin())
+	_, _ = fmt.Fprintln(out, "\nNo browser detected on this host. Choose how to enroll:")
+	_, _ = fmt.Fprintln(out, "  [1] Local dashboard sign-in — use the browser on this host (127.0.0.1:9090)")
+	_, _ = fmt.Fprintln(out, "  [2] Remote browser sign-in — open app.vulnertrack.com/auth/device and enter a code")
+	_, _ = fmt.Fprint(out, "Enter 1 or 2 (default 1): ")
+
+	choice, _ := in.ReadString('\n')
+	if strings.TrimSpace(choice) == "2" {
+		return d.deviceEnroll(out, d.agentCode, d.dbPath, d.certsDir, d.userMode)
+	}
+	return d.browserEnroll(d.addr, d.dbPath, d.cfgFile, true, d.userMode)
+}
+
 // isHeadless reports whether this host likely has no browser to open — a
 // server / container / bare SSH session. On Linux/BSD that is the absence of
 // an X11 or Wayland display; on macOS/Windows a desktop is assumed present.
 // Used to pick the interactive input flow over a browser auto-open.
 func isHeadless() bool {
+	if os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" || os.Getenv("SSH_CLIENT") != "" {
+		return true
+	}
 	switch runtime.GOOS {
 	case "darwin", "windows":
 		return false
 	default:
 		return os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
 	}
-}
-
-type interactiveEnrollDeps struct {
-	addr      string
-	dbPath    string
-	cfgFile   string
-	certsDir  string
-	noBrowser bool
-	userMode  bool
-}
-
-// runInteractiveEnroll gives a no-browser operator a clear choice between the
-// two enrollment mechanisms and reads the credential from stdin, so a headless
-// box never hangs on a browser that cannot open.
-func runInteractiveEnroll(cmd *cobra.Command, d interactiveEnrollDeps) error {
-	out := cmd.OutOrStdout()
-	in := bufio.NewReader(cmd.InOrStdin())
-
-	// Non-interactive stdin (piped / no TTY): fall back to the browser sign-in
-	// flow in --no-browser mode, which prints the URL rather than prompting.
-	if f, ok := cmd.InOrStdin().(*os.File); !ok || !term.IsTerminal(int(f.Fd())) { //#nosec G115
-		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true, d.userMode)
-	}
-
-	_, _ = fmt.Fprintln(out, "\nNo browser detected on this host. Choose how to enroll:")
-	_, _ = fmt.Fprintln(out, "  [1] Browser sign-in — open a URL on any device, sign in, paste the code")
-	_, _ = fmt.Fprintln(out, "  [2] Enrollment token — paste a scoped token from your PKI operator")
-	_, _ = fmt.Fprint(out, "Enter 1 or 2 (default 1): ")
-
-	choice, _ := in.ReadString('\n')
-	switch strings.TrimSpace(choice) {
-	case "2":
-		agentCode := promptLine(out, in, "Agent code: ")
-		if agentCode == "" {
-			return fmt.Errorf("agent code is required")
-		}
-		tok := promptLine(out, in, "Enrollment token: ")
-		if tok == "" {
-			return fmt.Errorf("enrollment token is required")
-		}
-		return runEnrollWithToken(agentCode, tok, d.certsDir)
-	default:
-		// Browser sign-in, printing the URL for another device (never auto-open
-		// here — the whole point is that this host has no browser).
-		return runPlatformLoginEnroll(d.addr, d.dbPath, d.cfgFile, true, d.userMode)
-	}
-}
-
-func promptLine(out io.Writer, in *bufio.Reader, label string) string {
-	_, _ = fmt.Fprint(out, label)
-	line, _ := in.ReadString('\n')
-	return strings.TrimSpace(line)
 }
 
 // oauthSignIn runs the interactive OAuth authorization-code + PKCE flow
