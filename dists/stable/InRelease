@@ -9,28 +9,28 @@ Architectures: amd64 arm64
 Components: main
 Description: Repositorio oficial de APT para Kite Collector
 MD5Sum:
- adfbf0f13d58b7d4d280c3fcd0e7d0be 1487 main/binary-amd64/Packages
- db945e29dee6cff0b4352da717ef6954 721 main/binary-amd64/Packages.gz
- 50e71c24b22c0667653b8cbb8c38a3e4 590 main/binary-arm64/Packages
- 57d52b9a12e95f4eddae7410df960581 431 main/binary-arm64/Packages.gz
+ 212fe400f2a0fa340a8d4f9a0b9bf048 1487 main/binary-amd64/Packages
+ e5c93637a5a4dfe64eabc4db685c7a29 721 main/binary-amd64/Packages.gz
+ ce9b8143adf6dc26c72745211a83a651 590 main/binary-arm64/Packages
+ b57fce37c92a88b30188e2f7d3cc7b4e 429 main/binary-arm64/Packages.gz
 SHA256:
- a99c92d71a4b210a314b133e90cf179751adae8dcd2328d48072e3de864d72de 1487 main/binary-amd64/Packages
- 1dd384f177e5e66621c56c51fae17ac27cb78646720057b394610d5a9661bece 721 main/binary-amd64/Packages.gz
- e3fc412d3cb81f0ca832920821881b9b0237a8f4eb2b4486386c3b868dc298e2 590 main/binary-arm64/Packages
- 55060db368ce5d870c7b655a8881796dc890c54f37b425af5397a5349fda0ad0 431 main/binary-arm64/Packages.gz
+ 5ea308f1f7c6ae3445a4be314eed5c61a69494008526f49b589798e803da517d 1487 main/binary-amd64/Packages
+ e8669fb7fa2d2190f3bbff20ab1bb67a2cfb6f52d82429081142ef0cc0f87a3f 721 main/binary-amd64/Packages.gz
+ 1fec231d9a000148b6865a33fabb469a422ddd8a8a9a6b45423a0b7b6cc07e38 590 main/binary-arm64/Packages
+ 8a8267c74cf68c220438a296439f6f0531d66e3725d88f0e0a921849497a6364 429 main/binary-arm64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCAAdFiEEiKCktQ80eLwNRyn6eYR/heP/bkMFAmqP2NUACgkQeYR/heP/
-bkOzdA//SNrF7kaEs5rllKityranuwO1nTr9ZWGPulRjzV+Xw0BoCC2zzccb1t5z
-v9FK8av9cwAZ+dmQ82P7lGWMHWKubeqsuBMwA9khODwn+fTodUHML8gDBMLbnBh+
-g7R++UefLZcsGldRqLET8e5wngm18PYyiLXJSdxWxvYdSza5vRtHSvYDO2jk6nS7
-pe1jY0lZL43bwI+m9AkkQn22Mow31zbHp1MHPBScDhpAx6M7CvLssSffwnYOsTMp
-PjyzTAhGPQyOFzT6ZzZVHePsgriqMVpq6hFRne9de/pnev6mwehAgl6XvVxMshZG
-gVrMtCSVN3c3j7mskq14S0HkppKzzRf/6jTJkl8SYnlPgN4sFX6vcDFmxW4yadTZ
-oQLkUbnUWGytNlrSQ+Q4KE/SwKijgNz5WAWiS1grzZ+CD/MPWd1HZULVgLuUPy5q
-3FQFUujUY2zM39JZA9vUJF1b08OjJ5wwD6e8RujmGMCQVz2siepiAx4MpeyBY0c6
-nDD+Vvc2LC1deM7xx/UiJIuw1C5lMsbwpamGKe4m6rhYjPolD+S2qGzUsyB8e+Jp
-lrk5KjYY8X3MWwUTGKPRO0uzg1WBHkQbGByynOoiDTu61YAMc1n7eej3LTnBpvua
-HPFxA6JdJNr5fLEZHBQY2XH3huI+QPyM21UH4fe6PcpsW8UNJIg=
-=GEAf
+iQIzBAEBCAAdFiEEiKCktQ80eLwNRyn6eYR/heP/bkMFAmqjhycACgkQeYR/heP/
+bkP+IRAAgUkztyUxHU5kaCZXtbxGsSZsVSh7z1q7OPP04vnTBNzYmzaas8U2T/hx
+o+PPt+LhFmKLBsHD/p4POK6tvF0vJJK78+qPRvAxlqTbELpFgyLxSs20/FYVtdyK
+38bCbx9FU4NwI+Hms2SccYeOuSnPzh00RJ0POC88NvcEiEDsry5nJD1N61PFhI27
+CDJToCtUIUEfV+Wy29qvwDPlemTQ9GMRJWdJjruanisrfnYS5p6u6Iof1Z3PYYx9
+Jvr8Z/9jEChE0ys41YMEVSAtosZptnfp8nfWDCuqti/ZniBySqdOCCgndtwquLb+
+bkafyB+BmO96xbdEVokh5Gj7gpORvuH/Pj2BpxSSSHx6diQXD/nKp95hMXNBOK0z
+hsrZ9F9nY5cxJwKjCr0v+q7cqjzXSShNNmXCCKM1ucmMECZXo4YrlHkSgkeI1zn0
+KrjFYz1FAFQ+nt/r4y0ErLFGLeOVgI4edgmP0k5faVQGK2uLfyPHvijbmqUdwpII
+/Z3/U97E/p7x9Vw65fhJ8MlYjxXMyXGp17BzzTG+4gkcB2AX9JULm/cuXUXkREFv
+yHQuYdvtK6J3e+Yg2qgTnZjEDIREe2o/P9T3+cIcyJIDvU0F9YV5H0fvFh+CtuYV
+L5EfYFi3n1MAPm+0EpGZCrovHkSFZSNZKRI4Jk7HyRbANajv7PA=
+=PoRb
 -----END PGP SIGNATURE-----
