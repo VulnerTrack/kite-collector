@@ -3206,10 +3206,10 @@ func newEnrollCmdWithFlows(deviceEnroll func(io.Writer, string, string, string, 
 		Short: "Enroll this collector with VulnerTrack",
 		Long: `Enroll this collector with VulnerTrack.
 
-Local desktop sessions open the browser sign-in flow. Interactive SSH sessions
-offer the local dashboard flow or a remote device-code flow. The remote flow
-prints a public URL and temporary code to approve from another computer. No
-inbound login port is needed for device authorization.
+Interactive sessions always offer the local dashboard flow or a remote
+device-code flow. The remote flow prints a public URL and temporary code to
+approve from another computer. No inbound login port is needed for device
+authorization.
 
 Non-interactive equivalents:
   --token <jwt>                     operator sign-in JWT (skips the browser)
@@ -3218,7 +3218,7 @@ Non-interactive equivalents:
                                     (KITE_PKI_ENDPOINT overrides the PKI URL)
 
 Examples:
-  kite-collector enroll                       # automatically select local or SSH login
+  kite-collector enroll                       # choose local or remote browser login
   kite-collector enroll --agent-code kite-prod --enrollment-token <tok>`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3244,20 +3244,21 @@ Examples:
 				}
 				return deviceEnroll(cmd.OutOrStdout(), agentCode, dbPath, deviceCertsDir, userMode)
 			}
-			if !hasToken && isHeadless() {
+			if !hasToken {
 				deviceCertsDir := filepath.Dir(dbPath)
 				if cmd.Flag("certs-dir").Changed {
 					deviceCertsDir = certsDir
 				}
 				return runInteractiveEnroll(cmd, interactiveEnrollDeps{
-					addr:          addr,
-					dbPath:        dbPath,
-					cfgFile:       cfgFile,
-					certsDir:      deviceCertsDir,
-					agentCode:     agentCode,
-					userMode:      userMode,
-					browserEnroll: browserEnroll,
-					deviceEnroll:  deviceEnroll,
+					addr:           addr,
+					dbPath:         dbPath,
+					cfgFile:        cfgFile,
+					certsDir:       deviceCertsDir,
+					agentCode:      agentCode,
+					userMode:       userMode,
+					localNoBrowser: isHeadless(),
+					browserEnroll:  browserEnroll,
+					deviceEnroll:   deviceEnroll,
 				})
 			}
 			// Non-interactive operator-JWT path.
@@ -3752,17 +3753,18 @@ func promptLine(out io.Writer, in *bufio.Reader, label string) string {
 }
 
 type interactiveEnrollDeps struct {
-	addr          string
-	dbPath        string
-	cfgFile       string
-	certsDir      string
-	agentCode     string
-	userMode      bool
-	browserEnroll func(string, string, string, bool, bool) error
-	deviceEnroll  func(io.Writer, string, string, string, bool) error
+	addr           string
+	dbPath         string
+	cfgFile        string
+	certsDir       string
+	agentCode      string
+	userMode       bool
+	localNoBrowser bool
+	browserEnroll  func(string, string, string, bool, bool) error
+	deviceEnroll   func(io.Writer, string, string, string, bool) error
 }
 
-// runInteractiveEnroll lets an SSH operator choose between the existing local
+// runInteractiveEnroll lets an operator choose between the existing local
 // dashboard login and the public device-code flow intended for remote hosts.
 func runInteractiveEnroll(cmd *cobra.Command, d interactiveEnrollDeps) error {
 	f, ok := cmd.InOrStdin().(*os.File)
@@ -3777,8 +3779,8 @@ func runInteractiveEnrollWithTTY(cmd *cobra.Command, d interactiveEnrollDeps, is
 	}
 
 	in := bufio.NewReader(cmd.InOrStdin())
-	_, _ = fmt.Fprintln(out, "\nNo browser detected on this host. Choose how to enroll:")
-	_, _ = fmt.Fprintln(out, "  [1] Local dashboard sign-in — use the browser on this host (127.0.0.1:9090)")
+	_, _ = fmt.Fprintln(out, "\nChoose how to enroll:")
+	_, _ = fmt.Fprintln(out, "  [1] Local browser sign-in — use the collector dashboard on this machine")
 	_, _ = fmt.Fprintln(out, "  [2] Remote browser sign-in — open app.vulnertrack.com/auth/device and enter a code")
 	_, _ = fmt.Fprint(out, "Enter 1 or 2 (default 1): ")
 
@@ -3786,7 +3788,7 @@ func runInteractiveEnrollWithTTY(cmd *cobra.Command, d interactiveEnrollDeps, is
 	if strings.TrimSpace(choice) == "2" {
 		return d.deviceEnroll(out, d.agentCode, d.dbPath, d.certsDir, d.userMode)
 	}
-	return d.browserEnroll(d.addr, d.dbPath, d.cfgFile, true, d.userMode)
+	return d.browserEnroll(d.addr, d.dbPath, d.cfgFile, d.localNoBrowser, d.userMode)
 }
 
 // isHeadless reports whether this host likely has no browser to open — a

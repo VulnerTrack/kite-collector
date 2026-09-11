@@ -82,7 +82,7 @@ func TestFailedDeviceEnrollmentDoesNotMarkLocalIdentityOrStartService(t *testing
 	require.ErrorIs(t, err, sqlite.ErrNoIdentity)
 }
 
-func TestPlainEnrollmentSelectsBrowserLocallyAndDeviceOverSSH(t *testing.T) {
+func TestNonInteractiveEnrollmentUsesDeviceFlowLocallyAndOverSSH(t *testing.T) {
 	for _, sshVar := range []string{"", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
 		t.Run(sshVar, func(t *testing.T) {
 			for _, name := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
@@ -96,8 +96,8 @@ func TestPlainEnrollmentSelectsBrowserLocallyAndDeviceOverSSH(t *testing.T) {
 			cmd := newEnrollCmdWithFlows(func(_ io.Writer, _, _, _ string, _ bool) error { device = true; return nil }, func(_, _, _ string, _, _ bool) error { browser = true; return nil })
 			cmd.SetArgs([]string{})
 			require.NoError(t, cmd.Execute())
-			require.Equal(t, sshVar != "", device)
-			require.Equal(t, sshVar == "", browser)
+			require.True(t, device)
+			require.False(t, browser)
 		})
 	}
 }
@@ -137,7 +137,8 @@ func TestInteractiveEnrollmentOptions(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.wantBrowser, browser)
 			require.Equal(t, tc.wantDevice, device)
-			assert.Contains(t, out.String(), "[1] Local dashboard sign-in")
+			assert.Contains(t, out.String(), "Choose how to enroll:")
+			assert.Contains(t, out.String(), "[1] Local browser sign-in")
 			assert.Contains(t, out.String(), "[2] Remote browser sign-in")
 			assert.Contains(t, out.String(), "app.vulnertrack.com/auth/device")
 		})
