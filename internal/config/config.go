@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/netip"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -137,12 +138,92 @@ type EndpointConfig struct {
 	Priority   int              `mapstructure:"priority"`
 }
 
-// EncryptionConfig configures JWE payload encryption for an endpoint.
+// EncryptionConfig configures the RFC-0072 §4.8 end-to-end payload
+// envelope: every request body is JWS-signed with the agent's key and
+// JWE-encrypted to the receiver's JWK before it leaves the process, so a
+// TLS-terminating proxy or a captured session cannot read or forge it.
+//
+// Used on streaming.otlp (the live telemetry path) and on endpoints[]
+// (RFC-0072 gRPC lane). ServerJWKURL is required when Enabled; Algorithm
+// and ContentEncryption are informational and, when set, must name the
+// only supported pair (ECDH-ES+A256KW / A256GCM) — config that asks for a
+// different suite is rejected rather than silently downgraded.
 type EncryptionConfig struct {
 	ServerJWKURL      string `mapstructure:"server_jwk_url"`
 	Algorithm         string `mapstructure:"algorithm"`
 	ContentEncryption string `mapstructure:"content_encryption"`
 	Enabled           bool   `mapstructure:"enabled"`
+}
+
+// Supported envelope algorithms. Kept as plain strings here so the config
+// package does not import go-jose; envelope.KeyAlgorithm and
+// envelope.ContentEncryption are the typed twins.
+const (
+	EnvelopeKeyAlgorithm      = "ECDH-ES+A256KW"
+	EnvelopeContentEncryption = "A256GCM"
+)
+
+// validate rejects an enabled envelope that cannot possibly work. scope
+// names the YAML path for the error message.
+func (e EncryptionConfig) validate(scope string) error {
+	if !e.Enabled {
+		return nil
+	}
+	if e.ServerJWKURL == "" {
+		return fmt.Errorf("%s.server_jwk_url is required when %s.enabled is true", scope, scope)
+	}
+	u, err := url.Parse(e.ServerJWKURL)
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return fmt.Errorf("%s.server_jwk_url %q must be an http(s) URL", scope, e.ServerJWKURL)
+	}
+	if e.Algorithm != "" && e.Algorithm != EnvelopeKeyAlgorithm {
+		return fmt.Errorf("%s.algorithm %q is not supported (only %s)", scope, e.Algorithm, EnvelopeKeyAlgorithm)
+	}
+	if e.ContentEncryption != "" && e.ContentEncryption != EnvelopeContentEncryption {
+		return fmt.Errorf("%s.content_encryption %q is not supported (only %s)", scope, e.ContentEncryption, EnvelopeContentEncryption)
+	}
+	return nil
+}
+
+// SigningConfig configures payload signing without encryption: every
+// request body is left as-is and a detached JWS over it travels in the
+// X-Kite-Envelope-Signature header, signed with the agent's enrolled
+// client certificate.
+//
+// This is the authenticity-and-integrity half of the RFC-0072 §4.8
+// envelope without the confidentiality half. It exists because the two
+// halves have very different deployment costs: an enveloped body is
+// unreadable to a stock OpenTelemetry Collector and needs a gateway that
+// decrypts it, whereas a signed body is still ordinary OTLP/JSON that any
+// receiver ingests while ignoring one unknown header. Signing can
+// therefore be turned on fleet-wide today and verified server-side
+// whenever the receiving end is ready.
+//
+// Mutually exclusive with EncryptionConfig on the same target: the
+// envelope already signs its inner payload, so enabling both would sign
+// twice and mean two different things by "the signature".
+type SigningConfig struct {
+	// OmitCertificateChain drops the x5c chain from the signature,
+	// leaving kid and x5t#S256 to identify the signer. Set it when the
+	// receiver already holds the agent certificates and the few KB per
+	// request matter — the signature rides in an HTTP header, where
+	// proxies cap the line length.
+	OmitCertificateChain bool `mapstructure:"omit_certificate_chain"`
+	Enabled              bool `mapstructure:"enabled"`
+}
+
+// validate rejects a signing config that cannot coexist with encryption.
+// scope names the YAML path for the error message.
+func (s SigningConfig) validate(scope string, enc EncryptionConfig) error {
+	if !s.Enabled {
+		return nil
+	}
+	if enc.Enabled {
+		return fmt.Errorf(
+			"%s.enabled and %s.encryption.enabled are mutually exclusive: the encryption envelope already signs the payload",
+			scope, strings.TrimSuffix(scope, ".signing"))
+	}
+	return nil
 }
 
 // HealthConfig configures endpoint health checking.
@@ -355,6 +436,8 @@ type OTLPConfig struct {
 	Endpoint    string            `mapstructure:"endpoint"`
 	Protocol    string            `mapstructure:"protocol"` // "grpc" or "http"
 	TLS         TLSConfig         `mapstructure:"tls"`
+	Encryption  EncryptionConfig  `mapstructure:"encryption"`
+	Signing     SigningConfig     `mapstructure:"signing"`
 	HostMetrics HostMetricsConfig `mapstructure:"host_metrics"`
 }
 
@@ -626,6 +709,15 @@ func (c *Config) validate() error {
 		}
 	}
 
+	// An enabled OTLP envelope needs a receiver key to encrypt to, and
+	// cannot be combined with standalone signing.
+	if err := c.Streaming.OTLP.Encryption.validate("streaming.otlp.encryption"); err != nil {
+		return err
+	}
+	if err := c.Streaming.OTLP.Signing.validate("streaming.otlp.signing", c.Streaming.OTLP.Encryption); err != nil {
+		return err
+	}
+
 	// Allowlist file must exist if configured.
 	if p := c.Classification.Authorization.AllowlistFile; p != "" {
 		if _, err := os.Stat(p); err != nil {
@@ -655,6 +747,9 @@ func (c *Config) validate() error {
 			if _, err := time.ParseDuration(ep.Health.Timeout); err != nil {
 				return fmt.Errorf("endpoints[%d] %q: invalid health timeout: %w", i, ep.Name, err)
 			}
+		}
+		if err := ep.Encryption.validate(fmt.Sprintf("endpoints[%d].encryption", i)); err != nil {
+			return err
 		}
 	}
 

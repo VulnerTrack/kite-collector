@@ -150,6 +150,18 @@ The Collector enforces these per-tenant per-day distinct-value caps; above the c
 
 ---
 
+## Payload signature (optional, RFC-0072 §4.8)
+
+With `streaming.otlp.signing.enabled: true` the request body is unchanged — every attribute in this contract is exactly where an unsigned agent would put it, and `Content-Type` stays `application/json`. What is added is a detached JWS (RFC 7515 Appendix F) in the `X-Kite-Envelope-Signature` header: `<protected>..<signature>`, signed with the agent's client-certificate key, with `x5c` carrying the certificate, `kid` its SHA-256 fingerprint, `cty: application/json`, and `iat` / `jti` for freshness. `X-Kite-Envelope-Signer` repeats the `kid` so a gateway can route without parsing the header. One signature covers the whole batch, and therefore every log record in it.
+
+A receiver verifies by base64url-encoding the body it received, splicing it into the signature's empty payload segment, checking the JWS, and validating the `x5c` chain against the PKI CA. `tenant.id` remains server-authoritative and is read off that verified certificate's Subject Organization, exactly as on the plain path. A receiver that does not verify is unaffected: the header is simply an unknown header, and the batch ingests as usual. Both `/v1/logs` and `/v1/metrics` are signed.
+
+## Transport envelope (optional, RFC-0072 §4.8)
+
+With `streaming.otlp.encryption.enabled: true` the agent does not change any attribute in this contract; it changes how the request body is wrapped. The OTLP/JSON body becomes the payload of a compact JWS signed with the agent's client-certificate key (`x5c` carries the certificate; `kid` is its SHA-256 fingerprint; `cty: application/json`), and that JWS becomes the plaintext of a compact JWE encrypted to the receiver's JWK (`ECDH-ES+A256KW` / `A256GCM`). The request is sent as `Content-Type: application/jose` with `X-Kite-Envelope-Key-Id` (receiver `kid`) and `X-Kite-Envelope-Signer` (inner JWS `kid`) headers. Both `/v1/logs` and `/v1/metrics` are affected.
+
+The receiver validates the `x5c` chain against the PKI CA, verifies the JWS with the leaf, and only then parses the OTLP/JSON. `tenant.id` remains server-authoritative: the receiver takes it from the verified certificate's Subject Organization, exactly as the mTLS path does. A stock OpenTelemetry Collector cannot ingest enveloped bodies; the envelope is only enabled behind a gateway that unwraps it. The envelope and the signature are mutually exclusive: the envelope's inner JWS already signs the payload. Implementation: `internal/envelope` (sealer, signer, and the receiving-side `Open` / `VerifyDetached`) and `internal/emitter/wire.go` (request shape).
+
 ## Versioning
 
 ```

@@ -225,6 +225,27 @@ stale_threshold: 168h       # 7 days
 #       enabled: true
 #       cert_file: /etc/kite/tls/client.crt
 #       key_file: /etc/kite/tls/client.key
+#     # Payload signing (RFC-0072 §4.8): the body is left as plain
+#     # OTLP/JSON and a detached JWS over it — signed with the client
+#     # certificate key above — travels in X-Kite-Envelope-Signature.
+#     # The receiver learns which certificate produced those exact bytes;
+#     # one that ignores the header still ingests the batch normally, so
+#     # this can be enabled before the platform verifies anything.
+#     signing:
+#       enabled: false
+#       omit_certificate_chain: false   # optional; drops x5c to save header bytes
+#     # End-to-end payload envelope (RFC-0072 §4.8): every body is
+#     # JWS-signed with the client certificate key above and JWE-encrypted
+#     # to the receiver's JWK, sent as application/jose. Adds
+#     # confidentiality to what signing already gives; mutually exclusive
+#     # with it. Only enable when a gateway that unwraps the envelope
+#     # fronts the OTLP endpoint — a stock OpenTelemetry Collector rejects
+#     # application/jose.
+#     encryption:
+#       enabled: false
+#       server_jwk_url: https://otel.example.com/.well-known/jwks.json
+#       algorithm: ECDH-ES+A256KW      # optional; only supported value
+#       content_encryption: A256GCM    # optional; only supported value
 #     # Host resource metrics (RFC-0157): CPU, memory, disk, network,
 #     # uptime, and load average as an OTLP metrics signal on /v1/metrics.
 #     # Same endpoint, same client certificate, same identity as the log

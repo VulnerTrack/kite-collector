@@ -1,7 +1,6 @@
 package emitter
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vulnertrack/kite-collector/internal/envelope"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/hostmetrics"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/redact"
 )
@@ -49,10 +49,12 @@ const aggregationTemporalityCumulative = 2
 // documented on OTLPEmitter intact — see RFC-0157 §9 Alternative 2 for why
 // the OTel SDK MeterProvider was rejected for this signal.
 type OTLPMetricsEmitter struct {
-	client   *http.Client
-	resource map[string]string
-	endpoint string
-	retry    retryConfig
+	client     *http.Client
+	sealer     *envelope.Sealer // nil = plain OTLP/JSON
+	protection ProtectionMode   // how sealer protects each body
+	resource   map[string]string
+	endpoint   string
+	retry      retryConfig
 
 	mu     sync.Mutex // guards closed
 	closed bool
@@ -86,8 +88,10 @@ func NewOTLPMetrics(cfg OTLPConfig) (*OTLPMetricsEmitter, error) {
 			Transport: transport,
 			Timeout:   30 * time.Second,
 		},
-		endpoint: endpoint,
-		resource: cfg.Resource,
+		endpoint:   endpoint,
+		resource:   cfg.Resource,
+		sealer:     cfg.Sealer,
+		protection: cfg.Protection,
 		retry: retryConfig{
 			maxAttempts: 3,
 			baseDelay:   1 * time.Second,
@@ -152,7 +156,11 @@ func (o *OTLPMetricsEmitter) emit(
 	if err != nil {
 		return fmt.Errorf("otlp metrics: marshal payload: %w", err)
 	}
-	return o.sendWithRetry(ctx, body)
+	wire, err := prepareWire(ctx, o.sealer, o.protection, body)
+	if err != nil {
+		return fmt.Errorf("otlp metrics: %w", err)
+	}
+	return o.sendWithRetry(ctx, wire)
 }
 
 // Shutdown marks the emitter closed and releases idle connections.
@@ -373,7 +381,7 @@ func instrumentDescription(name string) string {
 // exponential backoff with the shared cap, retry only on transient errors,
 // then give up. Host metrics are best-effort telemetry — the next tick's
 // data is unaffected by this one being dropped (RFC-0157 §7.4).
-func (o *OTLPMetricsEmitter) sendWithRetry(ctx context.Context, body []byte) error {
+func (o *OTLPMetricsEmitter) sendWithRetry(ctx context.Context, wire wirePayload) error {
 	var lastErr error
 
 	for attempt := 0; attempt < o.retry.maxAttempts; attempt++ {
@@ -388,7 +396,7 @@ func (o *OTLPMetricsEmitter) sendWithRetry(ctx context.Context, body []byte) err
 			}
 		}
 
-		lastErr = o.doSend(ctx, body)
+		lastErr = o.doSend(ctx, wire)
 		if lastErr == nil {
 			return nil
 		}
@@ -403,12 +411,11 @@ func (o *OTLPMetricsEmitter) sendWithRetry(ctx context.Context, body []byte) err
 	)
 }
 
-func (o *OTLPMetricsEmitter) doSend(ctx context.Context, body []byte) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.endpoint, bytes.NewReader(body))
+func (o *OTLPMetricsEmitter) doSend(ctx context.Context, wire wirePayload) error {
+	req, err := wire.newRequest(ctx, o.endpoint)
 	if err != nil {
 		return fmt.Errorf("otlp metrics: create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.client.Do(req)
 	if err != nil {

@@ -93,13 +93,24 @@ func TestSignVerify(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
-	payload := []byte("test payload")
-	signed, err := sign(payload, priv)
+	sealer, err := NewSealer(SigningKey{Key: priv, KeyID: "agent-1"}, StaticKey(jose.JSONWebKey{}))
 	require.NoError(t, err)
 
-	verified, err := verify(signed, pub)
+	payload := []byte("test payload")
+	signed, err := sealer.sign(payload, "text/plain")
+	require.NoError(t, err)
+
+	jws, err := jose.ParseSigned(signed, signatureAlgorithms)
+	require.NoError(t, err)
+	verified, err := jws.Verify(pub)
 	require.NoError(t, err)
 	assert.Equal(t, payload, verified)
+
+	hdr, err := protectedHeader(signed)
+	require.NoError(t, err)
+	assert.Equal(t, "agent-1", hdr.KeyID)
+	assert.Equal(t, "text/plain", hdr.ContentType)
+	assert.Empty(t, hdr.CertChain, "identity-key signatures carry no x5c")
 }
 
 func TestVerify_WrongKey(t *testing.T) {
@@ -109,10 +120,14 @@ func TestVerify_WrongKey(t *testing.T) {
 	otherPub, _, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
-	signed, err := sign([]byte("payload"), priv)
+	sealer, err := NewSealer(SigningKey{Key: priv, KeyID: "agent-1"}, StaticKey(jose.JSONWebKey{}))
+	require.NoError(t, err)
+	signed, err := sealer.sign([]byte("payload"), "")
 	require.NoError(t, err)
 
-	_, err = verify(signed, otherPub)
+	jws, err := jose.ParseSigned(signed, signatureAlgorithms)
+	require.NoError(t, err)
+	_, err = jws.Verify(otherPub)
 	assert.Error(t, err)
 }
 

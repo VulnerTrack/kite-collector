@@ -48,6 +48,26 @@ streaming:
       ca_file:   /var/lib/kite-collector/<agent-code>/ca.pem
       cert_file: /var/lib/kite-collector/<agent-code>/agent.pem
       key_file:  /var/lib/kite-collector/<agent-code>/agent-key.pem
+    # Payload signing (RFC-0072 §4.8): the body stays plain OTLP/JSON and
+    # a detached JWS over it, signed with agent-key.pem, rides in the
+    # X-Kite-Envelope-Signature header. Authenticity and integrity without
+    # confidentiality; a receiver that ignores the header still ingests
+    # the batch, so this is safe to enable ahead of server-side
+    # verification.
+    signing:
+      enabled: false
+      # Drop the x5c chain from the signature when the receiver already
+      # holds the agent certificates and header bytes are tight.
+      omit_certificate_chain: false
+    # End-to-end payload envelope (RFC-0072 §4.8): bodies are JWS-signed
+    # with agent-key.pem and JWE-encrypted to the platform's JWK before
+    # they leave the process. Adds confidentiality on top of what signing
+    # gives, and is mutually exclusive with it. Off until the platform
+    # gateway advertises a JWKS; a stock OTLP receiver cannot read
+    # enveloped bodies.
+    encryption:
+      enabled: false
+      server_jwk_url: https://otel.vulnertrack.io/.well-known/jwks.json
     # Host resource metrics (RFC-0157) over the same mTLS endpoint, on
     # /v1/metrics. Opt-in per fleet: flip `enabled` once the platform side
     # has KITE_HOST_METRICS_INGEST_ENABLED on. Interval floor is 15s.

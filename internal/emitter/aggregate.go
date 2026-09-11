@@ -122,7 +122,11 @@ func (a *AggregateOTLPEmitter) Flush(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("aggregate: marshal payload: %w", err)
 	}
-	return a.otlp.sendWithRetry(ctx, body)
+	wire, err := prepareWire(ctx, a.otlp.sealer, a.otlp.protection, body)
+	if err != nil {
+		return fmt.Errorf("aggregate: %w", err)
+	}
+	return a.otlp.sendWithRetry(ctx, wire)
 }
 
 // Shutdown flushes remaining aggregates and shuts down the transport.

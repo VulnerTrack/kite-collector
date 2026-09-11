@@ -1,7 +1,6 @@
 package emitter
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/vulnertrack/kite-collector/internal/envelope"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/redact"
@@ -39,9 +39,16 @@ type OTLPConfig struct {
 	// this via internal/telemetry/resource.Build to satisfy the RFC-0115
 	// contract.
 	Resource map[string]string
-	Endpoint string
-	Protocol string // "grpc" or "http"
-	TLS      TLSConfig
+	// Sealer, when non-nil, protects every request body with the agent's
+	// credential (RFC-0072 §4.8). Protection selects how; see wire.go for
+	// the on-the-wire shape. A nil Sealer sends plain OTLP/JSON.
+	Sealer *envelope.Sealer
+	// Protection selects the wire shape when Sealer is set. The zero
+	// value means ProtectionEnvelope.
+	Protection ProtectionMode
+	Endpoint   string
+	Protocol   string // "grpc" or "http"
+	TLS        TLSConfig
 }
 
 // TLSConfig specifies optional mutual-TLS parameters.
@@ -69,6 +76,8 @@ type retryConfig struct {
 // adjust the collector configuration accordingly.
 type OTLPEmitter struct {
 	client         *http.Client
+	sealer         *envelope.Sealer  // nil = plain OTLP/JSON
+	protection     ProtectionMode    // how sealer protects each body
 	resource       map[string]string // RFC-0115 §4.2 resource attributes
 	endpoint       string            // full URL including /v1/logs
 	serviceName    string
@@ -111,6 +120,8 @@ func NewOTLP(cfg OTLPConfig, serviceVersion string) (*OTLPEmitter, error) {
 		serviceName:    "kite-collector",
 		serviceVersion: serviceVersion,
 		resource:       cfg.Resource,
+		sealer:         cfg.Sealer,
+		protection:     cfg.Protection,
 		retry: retryConfig{
 			maxAttempts: 3,
 			baseDelay:   1 * time.Second,
@@ -191,7 +202,34 @@ func (o *OTLPEmitter) EmitBatch(ctx context.Context, events []model.MachineEvent
 		return fmt.Errorf("otlp: marshal payload: %w", err)
 	}
 
-	return o.sendWithRetry(ctx, body)
+	wire, err := prepareWire(ctx, o.sealer, o.protection, body)
+	if err != nil {
+		return fmt.Errorf("otlp: %w", err)
+	}
+	return o.sendWithRetry(ctx, wire)
+}
+
+// Sealed reports whether this emitter wraps bodies in the end-to-end
+// envelope (signed and encrypted).
+func (o *OTLPEmitter) Sealed() bool {
+	return o.sealer != nil && (o.protection == ProtectionEnvelope || o.protection == "")
+}
+
+// Signed reports whether every body carries a signature by the agent's
+// credential, in either protection mode.
+func (o *OTLPEmitter) Signed() bool {
+	return o.sealer != nil && o.protection != ProtectionNone
+}
+
+// Protection reports the wire protection this emitter applies.
+func (o *OTLPEmitter) Protection() ProtectionMode {
+	if o.sealer == nil {
+		return ProtectionNone
+	}
+	if o.protection == "" {
+		return ProtectionEnvelope
+	}
+	return o.protection
 }
 
 // Shutdown marks the emitter as closed and releases the underlying HTTP
@@ -514,7 +552,7 @@ func orUnknown(v string) string {
 // Retry logic
 // ---------------------------------------------------------------------------
 
-func (o *OTLPEmitter) sendWithRetry(ctx context.Context, body []byte) error {
+func (o *OTLPEmitter) sendWithRetry(ctx context.Context, wire wirePayload) error {
 	var lastErr error
 
 	for attempt := 0; attempt < o.retry.maxAttempts; attempt++ {
@@ -527,7 +565,7 @@ func (o *OTLPEmitter) sendWithRetry(ctx context.Context, body []byte) error {
 			}
 		}
 
-		lastErr = o.doSend(ctx, body)
+		lastErr = o.doSend(ctx, wire)
 		if lastErr == nil {
 			return nil
 		}
@@ -541,12 +579,11 @@ func (o *OTLPEmitter) sendWithRetry(ctx context.Context, body []byte) error {
 	return fmt.Errorf("otlp: exhausted %d retry attempts: %w", o.retry.maxAttempts, lastErr)
 }
 
-func (o *OTLPEmitter) doSend(ctx context.Context, body []byte) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.endpoint, bytes.NewReader(body))
+func (o *OTLPEmitter) doSend(ctx context.Context, wire wirePayload) error {
+	req, err := wire.newRequest(ctx, o.endpoint)
 	if err != nil {
 		return fmt.Errorf("otlp: create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.client.Do(req)
 	if err != nil {

@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 529 codes across 59 packages.
+**Catalog size:** 532 codes across 59 packages.
 
 ---
 
@@ -94,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 39 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 42 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -124,6 +124,9 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.telemetry.otlp_configured` | `LogCodeTelemetryOTLPConfigured` | — |
 | `agent.telemetry.otlp_disabled` | `LogCodeTelemetryOTLPDisabled` | — |
 | `agent.telemetry.user_identity_resolved` | `LogCodeTelemetryUserIdentityResolved` | — |
+| `agent.telemetry.envelope_configured` | `LogCodeTelemetryEnvelopeConfigured` | — |
+| `agent.telemetry.envelope_identity_signer` | `LogCodeTelemetryEnvelopeIdentitySigner` | — |
+| `agent.telemetry.signing_configured` | `LogCodeTelemetrySigningConfigured` | — |
 
 **host-metrics surface — RFC-0157 OTLP metrics signal**
 

@@ -34,10 +34,13 @@ const (
 	LogCodeStoreSQLiteSelected   LogCode = "agent.store.backend_selected_sqlite"
 
 	// telemetry surface — OTLP wiring decisions
-	LogCodeTelemetryIdentityUnavailable  LogCode = "agent.telemetry.identity_unavailable"
-	LogCodeTelemetryOTLPConfigured       LogCode = "agent.telemetry.otlp_configured"
-	LogCodeTelemetryOTLPDisabled         LogCode = "agent.telemetry.otlp_disabled"
-	LogCodeTelemetryUserIdentityResolved LogCode = "agent.telemetry.user_identity_resolved"
+	LogCodeTelemetryIdentityUnavailable    LogCode = "agent.telemetry.identity_unavailable"
+	LogCodeTelemetryOTLPConfigured         LogCode = "agent.telemetry.otlp_configured"
+	LogCodeTelemetryOTLPDisabled           LogCode = "agent.telemetry.otlp_disabled"
+	LogCodeTelemetryUserIdentityResolved   LogCode = "agent.telemetry.user_identity_resolved"
+	LogCodeTelemetryEnvelopeConfigured     LogCode = "agent.telemetry.envelope_configured"
+	LogCodeTelemetryEnvelopeIdentitySigner LogCode = "agent.telemetry.envelope_identity_signer"
+	LogCodeTelemetrySigningConfigured      LogCode = "agent.telemetry.signing_configured"
 
 	// host-metrics surface — RFC-0157 OTLP metrics signal
 	LogCodeHostMetricsConfigured      LogCode = "agent.host_metrics.configured"
