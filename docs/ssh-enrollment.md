@@ -6,15 +6,17 @@ Run on the server:
 kite-collector enroll
 ```
 
-SSH sessions select this flow automatically, including sessions with display
-forwarding. Local desktop sessions open the normal browser login. Open the URL printed by the command on your own computer, sign in,
-enter the code, and select the organization. Compare the collector and code
-with the terminal before approving. Keep the command running until it confirms
-that the certificate was saved.
+SSH sessions show two choices, including sessions with display forwarding.
+Option 1 keeps the local dashboard login at `127.0.0.1:9090`. Choose option 2
+for a remote server: open `https://app.vulnertrack.com/auth/device/` on your own
+computer, sign in, enter the code, and select the organization. Compare the
+collector and code with the terminal before approving. Keep the command running
+until it confirms that the certificate was saved. `--no-browser` selects option
+2 directly.
 
-The server makes outbound HTTPS requests. It does not open a login listener,
-launch a browser, or require an SSH port forward. Google sign-in and any MFA
-verification run in your computer's browser.
+With option 2, the server makes outbound HTTPS requests. It does not open a
+login listener, launch a browser, or require an SSH port forward. Google sign-in
+and any MFA verification run in your computer's browser.
 
 Certificates are saved alongside the database by default. The command records
 certificate-based local enrollment and starts or restarts the installed service.

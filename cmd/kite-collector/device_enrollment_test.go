@@ -6,13 +6,16 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/enrollment"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestSSHEnrollmentUsesDeviceFlowEvenWithDisplay(t *testing.T) {
@@ -95,6 +98,48 @@ func TestPlainEnrollmentSelectsBrowserLocallyAndDeviceOverSSH(t *testing.T) {
 			require.NoError(t, cmd.Execute())
 			require.Equal(t, sshVar != "", device)
 			require.Equal(t, sshVar == "", browser)
+		})
+	}
+}
+
+func TestInteractiveEnrollmentOptions(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		input       string
+		wantBrowser bool
+		wantDevice  bool
+	}{
+		{name: "default keeps local dashboard flow", input: "\n", wantBrowser: true},
+		{name: "one keeps local dashboard flow", input: "1\n", wantBrowser: true},
+		{name: "two uses remote device flow", input: "2\n", wantDevice: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			out := &strings.Builder{}
+			cmd.SetIn(strings.NewReader(tc.input))
+			cmd.SetOut(out)
+			browser, device := false, false
+			err := runInteractiveEnrollWithTTY(cmd, interactiveEnrollDeps{
+				addr:      "127.0.0.1:9090",
+				dbPath:    "/tmp/kite.db",
+				certsDir:  "/tmp/certs",
+				agentCode: "kite-test",
+				browserEnroll: func(string, string, string, bool, bool) error {
+					browser = true
+					return nil
+				},
+				deviceEnroll: func(io.Writer, string, string, string, bool) error {
+					device = true
+					return nil
+				},
+			}, true)
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantBrowser, browser)
+			require.Equal(t, tc.wantDevice, device)
+			assert.Contains(t, out.String(), "[1] Local dashboard sign-in")
+			assert.Contains(t, out.String(), "[2] Remote browser sign-in")
+			assert.Contains(t, out.String(), "app.vulnertrack.com/auth/device")
 		})
 	}
 }
