@@ -12,6 +12,10 @@ import (
 // surface to the operator before the browser opens. Kept as a struct so
 // the calling code reads as one assignment rather than a long arg list.
 //
+// Reachability carries the URLs the dashboard can be opened at, resolved
+// from the listen address against this host's interfaces, so the banner
+// prints somewhere a browser can go rather than echoing the bind address.
+//
 // State carries the probed install state so the banner can adapt its
 // content: first-time operators see "will install at <paths>"; repeat
 // operators see "installed at <path>, service running" — same real estate,
@@ -22,6 +26,7 @@ type dashboardLaunchInfo struct {
 	DB            string
 	CertsDir      string
 	State         installer.State
+	Reachability  listenReachability
 	EnableInstall bool
 	WithAgent     bool
 	NoBrowser     bool
@@ -55,7 +60,21 @@ func printDashboardLaunchBanner(w io.Writer, info dashboardLaunchInfo) {
 	_, _ = fmt.Fprintln(w, border)
 	_, _ = fmt.Fprintln(w, "  Kite Collector Dashboard")
 	_, _ = fmt.Fprintln(w)
-	_, _ = fmt.Fprintf(w, "  → Open in browser:  http://%s\n", info.Addr)
+	// Where the dashboard can actually be opened from. A bind address is
+	// not a URL: "0.0.0.0:9090" is not something a browser can visit, and
+	// it hides the LAN address a colleague would need. Print the reachable
+	// set instead, derived from the host's own interfaces.
+	reach := info.Reachability
+	if len(reach.URLs) == 0 && len(reach.Notes) == 0 {
+		// A caller that only supplied the bind address still gets URLs.
+		// Nothing should be able to print this banner without them — the
+		// listen URL is the one line a headless operator needs.
+		reach = dashboardReachability(info.Addr)
+	}
+	_, _ = fmt.Fprintln(w, "  Reachable at:")
+	for _, line := range formatReachability(reach, "    ") {
+		_, _ = fmt.Fprintln(w, line)
+	}
 	if info.NoBrowser {
 		_, _ = fmt.Fprintln(w, "    (browser auto-open disabled by --no-browser)")
 	}

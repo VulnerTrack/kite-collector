@@ -165,3 +165,55 @@ func TestDashboardLaunchBanner_FramesWithBorderAndUrlIsFirstLine(t *testing.T) {
 	assert.True(t, foundURL,
 		"URL must appear in the first 5 banner lines — operators scan top-down for it")
 }
+
+// A wildcard bind is the case the old banner got wrong: it printed
+// "http://0.0.0.0:9090", which no browser can open and which hides the
+// address a colleague needs. The banner must print reachable URLs instead.
+func TestDashboardLaunchBanner_WildcardShowsEveryReachableURL(t *testing.T) {
+	var buf bytes.Buffer
+	printDashboardLaunchBanner(&buf, dashboardLaunchInfo{
+		Addr: "0.0.0.0:9090",
+		DB:   "/var/lib/kite-collector/kite.db",
+		Reachability: listenReachabilityFor("0.0.0.0:9090", hostWith(
+			ifaceAddr("127.0.0.1", "lo"),
+			ifaceAddr("192.168.0.100", "enp4s0"),
+			ifaceAddr("172.17.0.1", "docker0"),
+		)),
+	})
+	out := buf.String()
+
+	assert.Contains(t, out, "→ http://localhost:9090")
+	assert.Contains(t, out, "http://192.168.0.100:9090")
+	assert.Contains(t, out, "local network (enp4s0)")
+	assert.Contains(t, out, "(+1 on container/VM bridges: docker0)")
+	assert.NotContains(t, out, "http://0.0.0.0",
+		"the bind address is not a URL and must never be offered as one")
+}
+
+// An address the host cannot bind must not be dressed up as a link.
+func TestDashboardLaunchBanner_UnbindableAddressShowsReasonNotURL(t *testing.T) {
+	var buf bytes.Buffer
+	printDashboardLaunchBanner(&buf, dashboardLaunchInfo{
+		Addr: "192.168.0.100:9090",
+		DB:   "/var/lib/kite-collector/kite.db",
+		Reachability: listenReachabilityFor("192.168.0.100:9090", hostWith(
+			ifaceAddr("127.0.0.1", "lo"),
+		)),
+	})
+	out := buf.String()
+
+	assert.NotContains(t, out, "http://192.168.0.100:9090")
+	assert.Contains(t, out, "not assigned to any interface")
+	assert.Contains(t, out, "will fail to bind")
+}
+
+// The banner is printed from several call sites; one that knows only the
+// bind address must still produce a URL rather than an empty block.
+func TestDashboardLaunchBanner_DerivesURLsWhenReachabilityOmitted(t *testing.T) {
+	var buf bytes.Buffer
+	printDashboardLaunchBanner(&buf, dashboardLaunchInfo{Addr: "127.0.0.1:9090", DB: "x"})
+	out := buf.String()
+
+	assert.Contains(t, out, "→ http://localhost:9090")
+	assert.Contains(t, out, "http://127.0.0.1:9090")
+}

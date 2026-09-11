@@ -1492,12 +1492,20 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		// tables. Absent or dead daemons degrade to an empty catalog.
 		dashOpts.TableSources = []store.TableSource{osquerydisc.NewTableSource()}
 		dashSrv = dashboard.Serve(dashboardAddr, st, rc, logger, dashOpts)
+		// The agent prints no banner, so the reachable URLs go in the
+		// start log: "addr" says what was bound, "urls" says where to
+		// point a browser, which for a wildcard bind is not the same
+		// thing. Notes carry a bind that cannot work at all.
+		dashReach := dashboardReachability(dashboardAddr)
 		go func() {
 			slog.Info("dashboard server starting",
-				"code", string(LogCodeDashboardStarting),
-				"addr", dashboardAddr,
-				"app_version", version,
-				"commit", commit)
+				append([]any{
+					"code", string(LogCodeDashboardStarting),
+					"addr", dashboardAddr,
+					"urls", strings.Join(reachableURLList(dashReach), " "),
+					"app_version", version,
+					"commit", commit,
+				}, reachabilityNoteAttrs(dashReach)...)...)
 			if srvErr := dashSrv.ListenAndServe(); srvErr != nil && srvErr != http.ErrServerClosed {
 				slog.Error("dashboard server exited with error",
 					append([]any{
@@ -2806,6 +2814,7 @@ installed service uses, so this command Just Works after install.`,
 				Addr:          addr,
 				DB:            dbPath,
 				CertsDir:      certsDir,
+				Reachability:  dashboardReachability(addr),
 				State:         installer.Probe(installer.DetectDefaults().Options),
 				EnableInstall: enableInstall,
 				WithAgent:     withAgent,
