@@ -2155,8 +2155,8 @@ func registerObservabilityRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	})
 	mux.HandleFunc("GET /observability", func(w http.ResponseWriter, r *http.Request) {
 		target := "/agent"
-		if r.URL.RawQuery != "" {
-			target += "?" + r.URL.RawQuery
+		if r.URL.Query().Get("paused") == "1" {
+			target = "/agent?paused=1"
 		}
 		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})

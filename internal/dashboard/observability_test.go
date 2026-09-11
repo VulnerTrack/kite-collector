@@ -1002,6 +1002,11 @@ func TestObservabilityRoute_LegacyPathRedirectsToAgent(t *testing.T) {
 		"/observability is an alias for bookmarks and older links")
 	assert.Equal(t, "/agent?paused=1", rec.Header().Get("Location"),
 		"the alias must keep the query string so a paused link stays paused")
+
+	rec = h.do(t, "GET", "/observability?next=https://example.com&paused=0", nil, nil)
+	assert.Equal(t, http.StatusMovedPermanently, rec.Code)
+	assert.Equal(t, "/agent", rec.Header().Get("Location"),
+		"the alias must discard unrecognized query parameters instead of reflecting them into Location")
 }
 
 // ---------------------------------------------------------------------------
