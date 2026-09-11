@@ -1444,7 +1444,6 @@ func TestObservability_PageJumpNavRendersAllSections(t *testing.T) {
 	// Every chip + matching section id must exist for the diagnostic tables
 	// below the profile.
 	sections := []struct{ id, label string }{
-		{"section-certificates", "Certificates"},
 		{"section-probes", "Probes"},
 		{"section-failures", "Failures"},
 		{"section-activity", "Activity"},

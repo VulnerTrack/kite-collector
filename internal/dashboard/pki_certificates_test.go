@@ -93,35 +93,6 @@ func TestCollectPKICertificatesIncludesMassEnrollmentRows(t *testing.T) {
 	assert.Equal(t, "badge-green", certificates[0].StatusClass)
 }
 
-func TestObservabilityCertificateSectionRendersSingleLatestActiveAgent(t *testing.T) {
-	t.Parallel()
-	view := observabilityView{
-		Certificates: []pkiCertificateSummary{
-			{ID: "1", AgentCode: "kite-fleet-pc-01", Status: "active", StatusClass: "badge-green"},
-		},
-		CertificateTotal: 1,
-		HasCertificates:  true,
-		Freshness:        newFreshness(true),
-	}
-	var body bytes.Buffer
-	require.NoError(t, pkiCertificateInventoryTmpl.Execute(&body, view))
-	assert.Contains(t, body.String(), "kite-fleet-pc-01")
-	assert.Contains(t, body.String(), "this computer's most recently issued active certificate")
-	assert.Contains(t, body.String(), `<dl class="pki-key-values">`)
-	assert.Contains(t, body.String(), `class="pki-copy-button"`)
-	assert.Contains(t, body.String(), `navigator.clipboard.writeText`)
-	assert.NotContains(t, body.String(), `pki-key-value pki-key-value--wide"><dt>SHA-256 fingerprint`)
-	assert.NotContains(t, body.String(), `class="observability-table pki-certificates-table"`)
-}
-
-func TestObservabilityLoadsCertificateInventoryIndependently(t *testing.T) {
-	t.Parallel()
-	var body bytes.Buffer
-	require.NoError(t, observabilityTmpl.Execute(&body, observabilityView{Freshness: newFreshness(false)}))
-	assert.Contains(t, body.String(), `hx-get="/fragments/observability/certificates"`)
-	assert.Contains(t, body.String(), `hx-trigger="load, every 60s"`)
-}
-
 func TestPKICertificateDetailFragmentRendersAllPublicMaterial(t *testing.T) {
 	t.Parallel()
 	certificateID := "019d0000-0000-7000-8000-000000000001"
@@ -132,22 +103,21 @@ func TestPKICertificateDetailFragmentRendersAllPublicMaterial(t *testing.T) {
 		},
 		CertPEM: "PUBLIC-CERT-PEM", CSRPEM: "PUBLIC-CSR-PEM", SyncVersion: 9,
 	}}
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/fragments/observability/certificates/"+certificateID, nil)
-	req.SetPathValue("id", certificateID)
-	recorder := httptest.NewRecorder()
-	handlePKICertificateDetail(recorder, req, onboardingDeps{
+	var out bytes.Buffer
+	require.NoError(t, renderCertificateDrawer(t.Context(), &out, onboardingDeps{
 		PKIReader:        reader,
 		PKIOperatorToken: func(context.Context) (string, error) { return "operator-jwt", nil },
 		PKIEndpoint:      "https://pki.example.test",
-	})
+	}, certificateID))
 
-	assert.Equal(t, http.StatusOK, recorder.Code)
-	body := recorder.Body.String()
+	body := out.String()
 	for _, expected := range []string{"abc123", "kite-pc-01", "tenant-1", "deadbeef", "PUBLIC-CERT-PEM", "PUBLIC-CSR-PEM", ">9<"} {
 		assert.True(t, strings.Contains(body, expected), body)
 	}
 	assert.Contains(t, body, `<dl class="pki-key-values pki-key-values--detail">`)
 	assert.Contains(t, body, `class="pki-copy-button"`)
+	assert.Contains(t, body, `navigator.clipboard.writeText`,
+		"the drawer must ship its own copy helper now that the agent profile no longer embeds it")
 	assert.NotContains(t, body, `<table`)
 }
 

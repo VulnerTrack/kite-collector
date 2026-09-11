@@ -1,7 +1,6 @@
 package dashboard
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,8 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 func collectPKICertificates(
@@ -94,59 +91,6 @@ func pkiCertificateStatusClass(status string) string {
 	}
 }
 
-func handlePKICertificateInventory(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
-	view := observabilityView{}
-	view.Certificates, view.CertificateTotal, view.CertificatesError,
-		view.CertificatesSignInRequired = collectPKICertificates(r.Context(), deps)
-	view.HasCertificates = len(view.Certificates) > 0
-
-	var body bytes.Buffer
-	if err := pkiCertificateInventoryTmpl.Execute(&body, view); err != nil {
-		http.Error(w, "could not render certificate inventory", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(body.Bytes())
-}
-
-func handlePKICertificateDetail(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
-	certificateID := strings.TrimSpace(r.PathValue("id"))
-	if _, err := uuid.Parse(certificateID); err != nil {
-		http.Error(w, "invalid certificate ID", http.StatusBadRequest)
-		return
-	}
-	if deps.PKIReader == nil || deps.PKIOperatorToken == nil {
-		http.Error(w, "PKI certificate inventory is unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	token, err := deps.PKIOperatorToken(r.Context())
-	if err != nil {
-		http.Error(w, "sign in to VulnerTrack to inspect certificates", http.StatusUnauthorized)
-		return
-	}
-	detail, err := deps.PKIReader.Get(r.Context(), deps.PKIEndpoint, token, certificateID)
-	if err != nil {
-		if errors.Is(err, errPKICertificateSignInRequired) {
-			http.Error(w, "VulnerTrack session expired; sign in again", http.StatusUnauthorized)
-			return
-		}
-		if deps.Logger != nil {
-			deps.Logger.Error("observability: load PKI certificate detail",
-				"certificate_id", certificateID, "error", err)
-		}
-		http.Error(w, "could not load certificate detail", http.StatusBadGateway)
-		return
-	}
-	detail.StatusClass = pkiCertificateStatusClass(detail.Status)
-	var body bytes.Buffer
-	if err := pkiCertificateDetailTmpl.Execute(&body, detail); err != nil {
-		http.Error(w, "could not render certificate detail", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(body.Bytes())
-}
-
 var pkiCertificateDetailTmpl = template.Must(template.New("pki-certificate-detail").Parse(`
 {{define "detailCopy"}}{{if .}}<button type="button" class="pki-copy-button" data-copy="{{.}}" onclick="copyPKIValue(this)" title="Copy value" aria-label="Copy value to clipboard"><svg class="pki-copy-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z"></path><path d="M5 16H4V5h11v1"></path></svg><svg class="pki-copy-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button>{{end}}{{end}}
 <div class="pki-certificate-detail">
@@ -179,42 +123,7 @@ var pkiCertificateDetailTmpl = template.Must(template.New("pki-certificate-detai
     {{if .CSRPEM}}<pre class="failure-diagnostic">{{.CSRPEM}}</pre>{{else}}<p class="muted small">No CSR stored for this certificate.</p>{{end}}
   </details>
   <p class="muted small">PKI never returns or stores the certificate private key.</p>
-</div>`))
-
-var pkiCertificateInventoryTmpl = template.Must(template.New("pki-certificate-inventory").Parse(`
-{{define "inventoryCopy"}}{{if .}}<button type="button" class="pki-copy-button" data-copy="{{.}}" onclick="copyPKIValue(this)" title="Copy value" aria-label="Copy value to clipboard"><svg class="pki-copy-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8h11v11H8z"></path><path d="M5 16H4V5h11v1"></path></svg><svg class="pki-copy-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg></button>{{end}}{{end}}
-{{if .CertificatesError}}
-  <div class="pki-certificate-notice" data-kind="{{if .CertificatesSignInRequired}}auth{{else}}pki{{end}}">
-    <strong>{{if .CertificatesSignInRequired}}Sign in required{{else}}PKI unavailable{{end}}:</strong>
-    <span>{{.CertificatesError}}</span>
-    {{if .CertificatesSignInRequired}}<a class="btn btn-ghost" href="/kite-login?dashboard=%2Fagent">Sign in &rarr;</a>{{end}}
-  </div>
-{{else if .HasCertificates}}
-  <p class="muted small">Showing this computer's most recently issued active certificate. Select <strong>Full details</strong> for every <code>pki_certificates</code> field, certificate PEM and CSR.</p>
-  {{range .Certificates}}
-  <dl class="pki-key-values">
-    <div class="pki-key-value"><dt>Agent code</dt><dd><code>{{.AgentCode}}</code>{{template "inventoryCopy" .AgentCode}}</dd></div>
-    <div class="pki-key-value"><dt>Subject CN</dt><dd><code>{{.SubjectCN}}</code>{{template "inventoryCopy" .SubjectCN}}</dd></div>
-    <div class="pki-key-value"><dt>Status</dt><dd><span class="badge {{.StatusClass}}">{{.Status}}</span>{{template "inventoryCopy" .Status}}</dd></div>
-    <div class="pki-key-value"><dt>Serial number</dt><dd><code>{{.SerialNumber}}</code>{{template "inventoryCopy" .SerialNumber}}</dd></div>
-    <div class="pki-key-value"><dt>Tenant ID</dt><dd><code>{{.TenantID}}</code>{{template "inventoryCopy" .TenantID}}</dd></div>
-    <div class="pki-key-value"><dt>Issued at</dt><dd><code>{{.IssuedAt}}</code>{{template "inventoryCopy" .IssuedAt}}</dd></div>
-    <div class="pki-key-value"><dt>Expires at</dt><dd><code>{{.NotAfter}}</code>{{template "inventoryCopy" .NotAfter}}</dd></div>
-    <div class="pki-key-value"><dt>Purpose</dt><dd><span>{{.Purpose}}</span>{{template "inventoryCopy" .Purpose}}</dd></div>
-    <div class="pki-key-value"><dt>Key algorithm</dt><dd><span>{{.KeyAlgorithm}}</span>{{template "inventoryCopy" .KeyAlgorithm}}</dd></div>
-    <div class="pki-key-value"><dt>SHA-256 fingerprint</dt><dd><code>{{.FingerprintSHA256}}</code>{{template "inventoryCopy" .FingerprintSHA256}}</dd></div>
-  </dl>
-  <div class="pki-certificate-actions">
-    <button class="btn btn-ghost" type="button"
-            hx-get="/fragments/observability/certificates/{{.ID}}"
-            hx-target="#certificate-detail-{{.ID}}"
-            hx-swap="innerHTML">Full details</button>
-  </div>
-  <div id="certificate-detail-{{.ID}}"></div>
-  {{end}}
-{{else}}
-  <p class="muted">No PKI certificates have been issued for this organization yet. Certificates from individual and mass enrollments will appear here.</p>
-{{end}}
+</div>
 <script>
 window.copyPKIValue = function(button) {
   var value = button.getAttribute('data-copy') || '';

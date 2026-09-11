@@ -851,8 +851,8 @@ func nextScanDue(latest model.ScanRun, interval time.Duration, now time.Time) (a
 // paused (iteration 30) freezes auto-refresh so operators can inspect.
 func renderObservabilityFragment(w io.Writer, ctx context.Context, deps onboardingDeps, paused bool) error {
 	// Certificate inventory comes from a remote PKI service and must never
-	// delay or cancel the 15-second local-observability refresh. Its card loads
-	// independently through /fragments/observability/certificates.
+	// delay or cancel the 15-second local-observability refresh. The page no
+	// longer shows it; only the JSON/Markdown snapshots still collect it.
 	pageDeps := deps
 	pageDeps.PKIReader = nil
 	pageDeps.PKIOperatorToken = nil
@@ -1750,7 +1750,7 @@ func scanStatusBadge(status string) string {
 // observabilityTmpl renders the agent profile page body. The profile comes
 // first (health, scans and streaming, this host, registration, software,
 // identifiers), then a Diagnostics card that jumps to the detailed tables
-// further down: certificates, probe metrics, failures, activity, runtime.
+// further down: probe metrics, failures, activity, runtime.
 var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <div id="observability-root"
      class="observability-page"
@@ -1893,7 +1893,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   <div class="card-head">
     <h2>Registration</h2>
     {{if .Agent.Enrolled}}<span class="badge badge-green">enrolled</span>{{else}}<span class="badge badge-gray">not enrolled</span> <a href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">enroll &rarr;</a>{{end}}
-    <span class="muted small">Issued by PKI from the operator&rsquo;s signed-in session. The agent cannot change them.</span>
+    <span class="muted small card-subtitle">Issued by PKI from the operator&rsquo;s signed-in session. The agent cannot change them.</span>
   </div>
   <div class="profile-tiles">
     <div class="idtile">
@@ -1927,7 +1927,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <section class="card observability-card observability-card--wide" id="section-agent">
   <div class="card-head">
     <h2>Software</h2>
-    <span class="muted small">what is installed here, and what it was built from</span>
+    <span class="muted small card-subtitle">what is installed here, and what it was built from</span>
   </div>
   <div class="profile-grid-3">
     <div class="pgroup">
@@ -1957,7 +1957,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <section class="card observability-card observability-card--wide" id="section-identifiers">
   <div class="card-head">
     <h2>Identifiers</h2>
-    <span class="muted small">The values to quote in a support ticket, and the attribute each one travels as.</span>
+    <span class="muted small card-subtitle">The values to quote in a support ticket, and the attribute each one travels as.</span>
   </div>
   <div class="idlist">
     <div class="idrow"><span class="idrow-k">Agent</span><span class="idrow-v">{{if .Identifiers.AgentID}}{{.Identifiers.AgentID}}{{else}}<span class="muted">not yet assigned</span>{{end}}</span><span class="idrow-note">agent.id, service.instance.id</span></div>
@@ -1971,10 +1971,9 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 <section class="card observability-card observability-card--wide" id="section-diagnostics">
   <div class="card-head">
     <h2>Diagnostics</h2>
-    <span class="muted small">The detailed tables, further down this page.</span>
+    <span class="muted small card-subtitle">The detailed tables, further down this page.</span>
   </div>
   <nav class="page-jumpnav profile-jumpnav" aria-label="Diagnostics sections">
-    <a href="#section-certificates">Certificates{{if .CertificateTotal}} <span class="muted small">{{.CertificateTotal}} issued</span>{{end}}</a>
     <a href="#section-probes">Probes{{if .HasProbeData}} <span class="muted small">last 200 runs</span>{{end}}</a>
     <a href="#section-failures">Failures{{if .HasFailures}} <span class="muted small">{{len .RecentFailures}} recent</span>{{end}}</a>
     <a href="#section-activity">Activity{{if .HasActivity}} <span class="muted small">{{len .RecentActivity}} events</span>{{end}}</a>
@@ -1988,17 +1987,6 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
 </section>
 
 <div class="observability-grid">
-<section class="card observability-card observability-card--wide" id="section-certificates">
-  <h2>Kite certificates</h2>
-  <p class="muted">Certificates PKI issued for this tenant. A mass enrollment issues one per computer, and each appears here once that computer finishes enrolling.</p>
-  <div id="pki-certificate-inventory"
-       hx-get="/fragments/observability/certificates"
-       hx-trigger="load, every 60s"
-       hx-swap="innerHTML">
-    <p class="muted">Loading certificates&hellip;</p>
-  </div>
-</section>
-
 <section class="card observability-card observability-card--wide observability-card--probes" id="section-probes">
   <h2>Probe metrics</h2>
   {{if .HasProbeData}}
@@ -2172,15 +2160,8 @@ func registerObservabilityRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	mux.HandleFunc("GET /api/v1/observability/snapshot.md", func(w http.ResponseWriter, r *http.Request) {
 		handleObservabilitySnapshotMarkdown(w, r, deps)
 	})
-	mux.HandleFunc("GET /fragments/observability/certificates", func(w http.ResponseWriter, r *http.Request) {
-		handlePKICertificateInventory(w, r, deps)
-	})
-	mux.HandleFunc("GET /fragments/observability/certificates/{id}", func(w http.ResponseWriter, r *http.Request) {
-		handlePKICertificateDetail(w, r, deps)
-	})
-	// Certificates as a first-class Settings page. The inventory fragment is
-	// the same one the Observability page embeds; this page gives it a home
-	// of its own in the sidebar's Settings group.
+	// Certificates as a first-class Settings page, the only place the PKI
+	// inventory renders; the agent profile no longer embeds it.
 	mux.HandleFunc("GET /certificates", func(w http.ResponseWriter, r *http.Request) {
 		serveCertificatesPage(w, r, deps)
 	})

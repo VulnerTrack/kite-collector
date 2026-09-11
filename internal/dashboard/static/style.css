@@ -2895,16 +2895,44 @@ header.profile-head {
 }
 .profile-head .freshness-chip { margin: 0; }
 
-/* Card head: title, badges and a right-aligned link on one line. */
+/* Card head: title, badges and a right-aligned link on one line; the
+   subtitle takes the full width of the next line, under the title. */
 .observability-card .card-head {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 0.3rem 0.6rem;
   margin-bottom: 0.8rem;
 }
 .observability-card .card-head h2 { margin: 0; }
 .observability-card .card-head .muted.small { line-height: 1.4; }
+/* With a subtitle present, the badge (and any inline action next to it)
+   drops onto the subtitle line, centred against its text, so the title
+   line holds only the heading and the right-aligned card link. */
+.observability-card .card-head:has(.card-subtitle)::before {
+  content: "";
+  flex-basis: 100%;
+  height: 0;
+  order: 5;
+  /* The break is a zero-height row; cancel its share of the row gap. */
+  margin-bottom: -0.3rem;
+}
+.observability-card .card-head:has(.card-subtitle) .badge,
+.observability-card .card-head:has(.card-subtitle) > a:not(.card-link) {
+  order: 10;
+  align-self: center;
+}
+.observability-card .card-head .badge {
+  padding: 2px 8px;
+  font-size: calc(var(--text-xs) * 0.9);
+  line-height: 1.3;
+}
+.observability-card .card-head .card-subtitle {
+  flex: 1 1 auto;
+  order: 11;
+  margin: 0;
+  align-self: center;
+}
 .card-link {
   margin-left: auto;
   font-size: var(--text-sm);
