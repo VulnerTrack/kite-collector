@@ -1,4 +1,4 @@
-.PHONY: build build-host build-windows7 test test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-deb-collector test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite install-aur-osquery install-aur install-aur-bin install-aur-release test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: all run observe build build-host build-windows7 test test-race test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-deb-collector test-apt-repo test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite install-aur-osquery install-aur install-aur-bin install-aur-release test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -207,6 +207,14 @@ test-deb-osquery:
 test-deb-collector:
 	./tests/e2e/deb-collector/run.sh
 
+# APT repository battery: drives scripts/publish-apt-repo.sh through first
+# publish, accumulate-onto-published-pool, prune and re-sign-only, checking
+# each with a real apt client over a signed file:// source — including that
+# Valid-Until is Date + 30d and that an expired Release is refused.
+# Needs no prebuilt deb (it generates fixtures). Requires docker.
+test-apt-repo:
+	./tests/e2e/apt-repo/run.sh
+
 # Ubuntu multi-version package-discovery matrix (RFC-0149). Runs the compiled
 # binary's software.Dpkg collector inside real, unmodified ubuntu:20.04/22.04/
 # 24.04/devel images and asserts the discovered packages against per-version
@@ -308,8 +316,28 @@ install-aur-release:
 test-cloud:
 	go test -tags cloud -count=1 -timeout 60s ./internal/discovery/cloud/...
 
+# Versions of the source-loading analysis tools. `latest` keeps the gates
+# current; pin a tag here (e.g. v2.13.2) when a tool release adds checks you
+# want to adopt deliberately rather than on whatever day CI next runs.
+GOLANGCI_LINT_VERSION ?= latest
+GOSEC_VERSION         ?= latest
+GOVULNCHECK_VERSION   ?= latest
+
+# ensure-go-tool.sh installs a tool when missing AND rebuilds it when the Go it
+# was built with is older than the toolchain resolving ./... — these three
+# type-check with the go/types + x/tools compiled into their own binaries, so a
+# stale binary fails in its loader ("file requires newer Go version go1.27",
+# "package \"fmt\" without types", "unknown field wfd in ... splicePipe") while
+# build, vet and test all pass. The guard is a no-op once versions line up; see
+# the script header for the full failure catalog.
+ENSURE_TOOL := bash scripts/ensure-go-tool.sh
+
+# lint runs golangci-lint v2 (config: .golangci.yml) over the whole module.
+# --timeout=5m matches the CI lint job; CI invokes this target so the two cannot
+# drift.
 lint:
-	golangci-lint run ./...
+	@$(ENSURE_TOOL) golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	golangci-lint run --timeout=5m ./...
 
 # Vulnerability scanning gates.
 #
@@ -325,14 +353,17 @@ lint:
 # (also network-bound) -> gosec (CPU-bound static analysis). Each is
 # independently runnable so you can target a specific gate while iterating.
 vulncheck:
-	@command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
+	@$(ENSURE_TOOL) govulncheck golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	govulncheck ./...
 
+# osv-scanner reads go.mod/go.sum, never Go source, so it needs no toolchain
+# guard — presence is the only requirement.
 osv-scan:
 	@command -v osv-scanner >/dev/null 2>&1 || go install github.com/google/osv-scanner/cmd/osv-scanner@latest
 	osv-scanner -r --skip-git .
 
 security: vulncheck osv-scan
+	@$(ENSURE_TOOL) gosec github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION)
 	gosec -exclude-generated ./...
 
 vet:
@@ -392,6 +423,10 @@ DUPL_MIN      ?= 80
 # go install paths for the standalone quality tools. Run `make quality-tools`
 # once to install them under $GOPATH/bin (or $HOME/go/bin), or rely on the
 # `quality` target which invokes them on demand.
+#
+# These three walk the AST and never type-check, so unlike golangci-lint / gosec
+# / govulncheck they do not need the ensure-go-tool.sh toolchain guard: presence
+# is the only requirement, and a binary built by an older Go still parses fine.
 quality-tools:
 	@command -v gocyclo  >/dev/null 2>&1 || go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
 	@command -v gocognit >/dev/null 2>&1 || go install github.com/uudashr/gocognit/cmd/gocognit@latest
