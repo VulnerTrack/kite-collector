@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -21,11 +23,34 @@ import (
 // the row, with the same in-place facet rail the machines/software tabs use —
 // including facets on the asset status itself.
 
+// cellFormat selects how a raw column value is rendered. The zero value shows
+// the stored text verbatim, which is right for identifiers and enums; capacity
+// columns are integers whose stored form ("999501094912") is unreadable.
+type cellFormat string
+
+const (
+	cellVerbatim cellFormat = ""
+	// cellBytes renders an integer byte count as "931.51 GB".
+	cellBytes cellFormat = "bytes"
+	// cellRatioBytes renders Name/Of as a percentage plus a fill bar, with the
+	// two byte counts in the tooltip. Used for "how full is this volume", the
+	// one storage question an operator asks that a pair of raw counters
+	// answers badly.
+	cellRatioBytes cellFormat = "ratio-bytes"
+	// cellRatioCount is cellRatioBytes for dimensionless counters: same bar,
+	// tooltip in units rather than bytes. Inodes exhaust independently of
+	// capacity — a volume can be 3% full and completely unwritable.
+	cellRatioCount cellFormat = "ratio-count"
+)
+
 // hostTableColumn is one displayed column: the raw table column to read and
 // the header to show it under.
 type hostTableColumn struct {
-	Name  string
-	Label string
+	Name   string
+	Label  string
+	Format cellFormat
+	// Of names the denominator column for the cellRatio* formats.
+	Of string
 }
 
 // hostTableSpec configures one curated host-scoped page.
@@ -41,27 +66,30 @@ var (
 	listenersPageSpec = hostTableSpec{
 		Table: "host_listeners", Title: "Listeners", BasePath: "/listeners",
 		Display: []hostTableColumn{
-			{"protocol", "Protocol"},
-			{"bind_address", "Bind address"},
-			{"port", "Port"},
-			{"exposure", "Exposure"},
-			{"process_name", "Process"},
-			{"username", "User"},
-			{"last_seen_at", "Last Seen"},
+			{Name: "protocol", Label: "Protocol"},
+			{Name: "bind_address", Label: "Bind address"},
+			{Name: "port", Label: "Port"},
+			{Name: "exposure", Label: "Exposure"},
+			{Name: "process_name", Label: "Process"},
+			{Name: "username", Label: "User"},
+			{Name: "last_seen_at", Label: "Last Seen"},
 		},
 		FacetCols: []string{"protocol", "exposure", "process_name", "username"},
 	}
 	volumesPageSpec = hostTableSpec{
 		Table: "host_volumes", Title: "Volumes", BasePath: "/volumes",
 		Display: []hostTableColumn{
-			{"mount_point", "Mount"},
-			{"device", "Device"},
-			{"filesystem", "FS"},
-			{"size_bytes", "Size"},
-			{"read_only", "Read-only"},
-			{"removable", "Removable"},
-			{"encryption_state", "Encryption"},
-			{"last_seen_at", "Last Seen"},
+			{Name: "mount_point", Label: "Mount"},
+			{Name: "device", Label: "Device"},
+			{Name: "filesystem", Label: "FS"},
+			{Name: "size_bytes", Label: "Size", Format: cellBytes},
+			{Name: "used_bytes", Label: "Used", Format: cellBytes},
+			{Name: "used_bytes", Of: "size_bytes", Label: "Usage", Format: cellRatioBytes},
+			{Name: "inodes_used", Of: "inodes_total", Label: "Inodes", Format: cellRatioCount},
+			{Name: "read_only", Label: "Read-only"},
+			{Name: "removable", Label: "Removable"},
+			{Name: "encryption_state", Label: "Encryption"},
+			{Name: "last_seen_at", Label: "Last Seen"},
 		},
 		FacetCols: []string{"filesystem", "read_only", "removable", "bootable", "encryption_state"},
 	}
@@ -117,7 +145,7 @@ func renderHostScopedFragment(w io.Writer, ctx context.Context, st store.Store, 
 		}
 		dr := hostScopedRow{Host: host, Authorized: owner.IsAuthorized, Managed: owner.IsManaged}
 		for _, dc := range spec.Display {
-			dr.Cells = append(dr.Cells, template.HTML(template.HTMLEscapeString(cells[dc.Name]))) // #nosec G203 -- escaped
+			dr.Cells = append(dr.Cells, formatHostCell(dc, cells))
 		}
 		display = append(display, dr)
 
@@ -158,6 +186,82 @@ func renderHostScopedFragment(w io.Writer, ctx context.Context, st store.Store, 
 		return fmt.Errorf("render host table %q: %w", spec.Table, err)
 	}
 	return nil
+}
+
+// formatHostCell renders one display column for one row. Every branch either
+// HTML-escapes the stored text or builds markup out of numbers it parsed
+// itself, so no untrusted byte reaches the page unescaped.
+func formatHostCell(col hostTableColumn, cells map[string]string) template.HTML {
+	raw := cells[col.Name]
+	switch col.Format {
+	case cellBytes:
+		n, ok := parseCellInt(raw)
+		if !ok {
+			// An unstattable mount stores NULL. "—" says "not measured",
+			// where a literal 0 would read as "empty disk".
+			return template.HTML(`<span class="muted">&mdash;</span>`)
+		}
+		return template.HTML(template.HTMLEscapeString(humanizeBytes(n))) // #nosec G203 -- escaped
+	case cellRatioBytes, cellRatioCount:
+		used, okUsed := parseCellInt(raw)
+		total, okTotal := parseCellInt(cells[col.Of])
+		if !okUsed || !okTotal || total <= 0 {
+			return template.HTML(`<span class="muted">&mdash;</span>`)
+		}
+		unit := humanizeCount
+		if col.Format == cellRatioBytes {
+			unit = humanizeBytes
+		}
+		return ratioBar(used, total, unit)
+	case cellVerbatim:
+	}
+	return template.HTML(template.HTMLEscapeString(raw)) // #nosec G203 -- escaped
+}
+
+// parseCellInt reads a stored integer column. Empty, NULL and non-numeric all
+// mean "no measurement" rather than zero.
+func parseCellInt(s string) (int64, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// ratioBar renders used/total as a percentage and a proportional fill, tinted
+// once it crosses the thresholds where a full disk stops being trivia and
+// starts being an incident. unit formats the two absolute values shown in the
+// tooltip (bytes for capacity, plain counts for inodes).
+func ratioBar(used, total int64, unit func(int64) string) template.HTML {
+	pct := float64(used) / float64(total) * 100
+	// A filesystem can report used past total (root-reserved blocks); clamp so
+	// the bar never overflows its track.
+	if pct > 100 {
+		pct = 100
+	}
+	if pct < 0 {
+		pct = 0
+	}
+	level := "ok"
+	switch {
+	case pct >= 90:
+		level = "crit"
+	case pct >= 75:
+		level = "warn"
+	}
+	// Every value interpolated below is a number this function computed, so
+	// the markup cannot carry injected content.
+	return template.HTML(fmt.Sprintf( // #nosec G203 -- numeric-only interpolation
+		`<span class="usage-cell" title="%s of %s used">`+
+			`<span class="usage-track"><span class="usage-fill usage-%s" style="width:%.1f%%"></span></span>`+
+			`<span class="usage-pct">%.0f%%</span></span>`,
+		template.HTMLEscapeString(unit(used)),
+		template.HTMLEscapeString(unit(total)),
+		level, pct, pct))
 }
 
 var hostTableTmpl = template.Must(

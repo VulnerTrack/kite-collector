@@ -1002,8 +1002,14 @@ func humanizeBytes(n int64) string {
 		return fmt.Sprintf("%.1f KB", float64(n)/float64(k))
 	case n < k*k*k:
 		return fmt.Sprintf("%.1f MB", float64(n)/float64(k*k))
-	default:
+	case n < k*k*k*k:
 		return fmt.Sprintf("%.2f GB", float64(n)/float64(k*k*k))
+	case n < k*k*k*k*k:
+		// Disks pushed this past GB: an 8 TB volume rendered as "8192.00 GB"
+		// is technically correct and unreadable.
+		return fmt.Sprintf("%.2f TB", float64(n)/float64(k*k*k*k))
+	default:
+		return fmt.Sprintf("%.2f PB", float64(n)/float64(k*k*k*k*k))
 	}
 }
 

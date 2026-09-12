@@ -4111,3 +4111,21 @@ details.sidenav-alltables .sidenav-tables {
 .ad-directory-count { color: var(--palette-primary-main, #ed1c3d); font-size: 1.8rem; font-weight: 800; }
 .ad-directory-card > span:not(.ad-directory-count) { color: var(--text-muted, #667085); font-size: .85rem; }
 .ad-directory-card small { margin-top: auto; color: var(--palette-primary-main, #ed1c3d); font-weight: 700; }
+
+/* Volume capacity cells — a percentage plus a proportional fill, so a table of
+   mounts can be scanned for "which one is about to fill up" without reading a
+   single byte count. Tint thresholds match ratioBar() in host_tables_page.go:
+   warn at 75%, crit at 90%. */
+.usage-cell { display: inline-flex; align-items: center; gap: 8px; min-width: 110px; }
+.usage-track {
+  flex: 1 1 auto;
+  min-width: 48px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--palette-grey-200, #eaecf0);
+  overflow: hidden;
+}
+.usage-fill { display: block; height: 100%; border-radius: 3px; background: var(--palette-success-main, #22C55E); }
+.usage-fill.usage-warn { background: var(--palette-warning-main, #FFAB00); }
+.usage-fill.usage-crit { background: var(--palette-error-main, #FF5630); }
+.usage-pct { flex: 0 0 auto; font-variant-numeric: tabular-nums; font-size: var(--text-xs, .75rem); color: var(--palette-text-secondary, #667085); }
