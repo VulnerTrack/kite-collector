@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 532 codes across 59 packages.
+**Catalog size:** 535 codes across 60 packages.
 
 ---
 
@@ -94,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 42 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 44 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -140,6 +140,8 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.memory_series.sample_failed` | `LogCodeMemorySeriesSampleFailed` | — |
 | `agent.host_listeners.configured` | `LogCodeHostListenersConfigured` | — |
 | `agent.host_listeners.collect_failed` | `LogCodeHostListenersFailed` | — |
+| `agent.host_volumes.configured` | `LogCodeHostVolumesConfigured` | — |
+| `agent.host_volumes.collect_failed` | `LogCodeHostVolumesFailed` | — |
 
 **api surface — REST API server lifecycle**
 
@@ -1496,6 +1498,16 @@ Source: [`internal/envelope/logcodes.go`](../internal/envelope/logcodes.go) · 1
 | Code | Constant | Description |
 |---|---|---|
 | `envelope.jwks.refresh_failed` | `LogCodeJWKSRefreshFailed` | — |
+
+## `hostvolumes` (internal/hostvolumes)
+
+Source: [`internal/hostvolumes/logcodes.go`](../internal/hostvolumes/logcodes.go) · 1 codes
+
+**collect surface — partial inventories from per-mount probe failures**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent.host_volumes.collect_degraded` | `LogCodeCollectDegraded` | — |
 
 ## `identity` (internal/identity)
 
