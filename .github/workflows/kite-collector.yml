@@ -87,9 +87,13 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Install golangci-lint v2
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-      - run: golangci-lint run --timeout=5m ./...
+      # `make lint` installs golangci-lint v2 when it is absent and rebuilds it
+      # when its bundled go/types is older than the toolchain resolving ./...
+      # (scripts/ensure-golangci-lint.sh), then runs it with the repo's flags.
+      # Going through the target means the CI invocation and the local one
+      # cannot drift — the previous copy of the command here had already lost
+      # the --timeout the Makefile carries.
+      - run: make lint
 
   security:
     runs-on: ubuntu-24.04
@@ -247,6 +251,31 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+  # Gates the APT archive generator on every PR. The archive is only
+  # actually published from a v* tag, by which point a broken Release means
+  # a broken `apt update` on every deployed host — so the layout, the
+  # signatures and the Date:/Valid-Until: arithmetic get verified here,
+  # against a real apt client, before a tag can reach them.
+  qa-apt-repo:
+    name: qa-apt-repo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: "!startsWith(github.ref, 'refs/tags/v')"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/kite-qa-suite
+        with:
+          suite-slug: apt-repo
+          make-target: test-apt-repo
+          log-file: qa-apt-repo.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: qa-apt-repo-log
+          path: qa-apt-repo.log
+          retention-days: 30
+          if-no-files-found: warn
+
   qa-smoke-containers:
     name: qa-smoke-containers
     runs-on: ubuntu-24.04
@@ -371,6 +400,15 @@ jobs:
     # for jobs that opt in here. Also enables protection rules (required
     # reviewers, wait timers, branch restrictions) on the release flow.
     environment: Deployment
+    # Serialize every writer of the APT archive. The nightly re-sign
+    # (apt-repo-refresh.yml) shares this group: both jobs regenerate the
+    # whole tree from the pool they cloned at start and then force-push it,
+    # so an interleave silently drops whichever set of debs the loser had
+    # seeded. Job-level, not workflow-level — the rest of the release job
+    # has no reason to queue behind a refresh's cousins.
+    concurrency:
+      group: apt-repo-publish
+      cancel-in-progress: false
     permissions:
       contents: write
       pages: write # Requerido para actualizar la rama gh-pages sin fricciones
@@ -382,10 +420,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Install dependencies (dpkg-dev, WiX, snapcraft)
+      # apt-utils carries apt-ftparchive, which generates the APT repository
+      # indices and Release (scripts/publish-apt-repo.sh). It is not part of
+      # the ubuntu-24.04 runner image's guaranteed set, so install it
+      # explicitly rather than relying on it being pulled in as a
+      # recommendation of something else.
+      - name: Install dependencies (dpkg-dev, apt-utils, WiX, snapcraft)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends dpkg-dev msitools wixl
+          sudo apt-get install -y --no-install-recommends dpkg-dev apt-utils msitools wixl
           sudo snap install snapcraft --classic
 
       # Embed the Windows app manifest (UAC requireAdministrator +
@@ -669,68 +712,65 @@ jobs:
       # ──────────────────────────────────────────────
       # Generación Dinámica del Repositorio APT
       # ──────────────────────────────────────────────
+      # The archive is rebuilt statelessly on every release: the published
+      # pool is the only state, so there is no reprepro/aptly database to
+      # keep alive between runs — which is what makes this safe from an
+      # ephemeral runner writing to a gh-pages branch.
+      #
+      # Index generation and signing live in scripts/publish-apt-repo.sh
+      # (config: packaging/apt/apt-ftparchive.conf) so the nightly
+      # re-sign in apt-repo-refresh.yml drives the identical code path.
+      # tests/e2e/apt-repo guards that; it fails if either workflow stops
+      # calling the script or if hand-rolled index generation returns.
+
+      # Without this the regenerated indices would describe only the debs
+      # this tag produced, and every previously published version would
+      # become unfetchable — the deploy action force-pushes `public/`, so
+      # whatever is not staged here is deleted from the archive. `|| true`
+      # covers exactly one legitimate case: the very first publish, before
+      # gh-pages exists. The script's empty-pool guard catches the rest.
+      - name: Fetch the published pool
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch gh-pages --quiet \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$RUNNER_TEMP/gh-pages" \
+            || echo "::notice::no gh-pages branch yet — publishing a fresh archive"
+          echo "pool debs carried forward: $(find "$RUNNER_TEMP/gh-pages/pool" -name '*.deb' 2>/dev/null | wc -l)"
+
       - name: Generar estructura del repositorio APT y firmar
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          APT_SIGN_KEY: ${{ vars.APT_SIGN_KEY || '79847F85E3FF6E43' }}
         run: |
-          # 1. Importar clave privada GPG
-          echo "$GPG_PRIVATE_KEY" | gpg --import --batch
-
-          # 2. Crear carpetas de arquitectura APT
-          mkdir -p public/dists/stable/main/binary-amd64
-          mkdir -p public/dists/stable/main/binary-arm64
-
-          # 3. Mover los paquetes .deb creados por GoReleaser al directorio público
-          cp dist/*.deb public/dists/stable/main/binary-amd64/ 2>/dev/null || true
-          cp dist/*.deb public/dists/stable/main/binary-arm64/ 2>/dev/null || true
-
-          # Limpiar duplicados cruzados dejando solo lo correspondiente a cada arquitectura
-          rm -f public/dists/stable/main/binary-amd64/*_arm64.deb
-          rm -f public/dists/stable/main/binary-arm64/*_amd64.deb
-
-          # 4. Generar índices de paquetes
-          cd public
-          dpkg-scanpackages dists/stable/main/binary-amd64 /dev/null > dists/stable/main/binary-amd64/Packages
-          gzip -9fk dists/stable/main/binary-amd64/Packages
-
-          dpkg-scanpackages dists/stable/main/binary-arm64 /dev/null > dists/stable/main/binary-arm64/Packages
-          gzip -9fk dists/stable/main/binary-arm64/Packages
-
-          # 5. Estructurar archivo maestro Release
-          cd dists/stable
-          echo "Origin: VulnerTrack" > Release
-          echo "Label: Kite Collector Repo" >> Release
-          echo "Suite: stable" >> Release
-          echo "Codename: stable" >> Release
-          echo "Architectures: amd64 arm64" >> Release
-          echo "Components: main" >> Release
-          echo "Description: Repositorio oficial de APT para Kite Collector" >> Release
-
-          echo "MD5Sum:" >> Release
-          printf " $(md5sum main/binary-amd64/Packages | cut -d' ' -f1) %s main/binary-amd64/Packages\n" $(wc -c < main/binary-amd64/Packages) >> Release
-          printf " $(md5sum main/binary-amd64/Packages.gz | cut -d' ' -f1) %s main/binary-amd64/Packages.gz\n" $(wc -c < main/binary-amd64/Packages.gz) >> Release
-          printf " $(md5sum main/binary-arm64/Packages | cut -d' ' -f1) %s main/binary-arm64/Packages\n" $(wc -c < main/binary-arm64/Packages) >> Release
-          printf " $(md5sum main/binary-arm64/Packages.gz | cut -d' ' -f1) %s main/binary-arm64/Packages.gz\n" $(wc -c < main/binary-arm64/Packages.gz) >> Release
-
-          echo "SHA256:" >> Release
-          printf " $(sha256sum main/binary-amd64/Packages | cut -d' ' -f1) %s main/binary-amd64/Packages\n" $(wc -c < main/binary-amd64/Packages) >> Release
-          printf " $(sha256sum main/binary-amd64/Packages.gz | cut -d' ' -f1) %s main/binary-amd64/Packages.gz\n" $(wc -c < main/binary-amd64/Packages.gz) >> Release
-          printf " $(sha256sum main/binary-arm64/Packages | cut -d' ' -f1) %s main/binary-arm64/Packages\n" $(wc -c < main/binary-arm64/Packages) >> Release
-          printf " $(sha256sum main/binary-arm64/Packages.gz | cut -d' ' -f1) %s main/binary-arm64/Packages.gz\n" $(wc -c < main/binary-arm64/Packages.gz) >> Release
-
-          # 6. Firmar índices con tu clave (79847F85E3FF6E43)
-          gpg --batch --yes --clearsign --digest-algo SHA256 -u 79847F85E3FF6E43 -o InRelease Release
-          gpg --batch --yes --detach-sign --digest-algo SHA256 -u 79847F85E3FF6E43 -o Release.gpg Release
-
-          # 7. Exportar clave pública al raíz del deployment
-          cd ../..
-          gpg --armor --export 79847F85E3FF6E43 > repository.key
+          set -euo pipefail
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --quiet --import
+          # Both packages land in dist/ — the goreleaser-built collector deb
+          # and the kite-collector-osquery bundle from
+          # scripts/build-deb-osquery.sh — so one --deb-dir covers both.
+          ./scripts/publish-apt-repo.sh \
+            --out public \
+            --deb-dir dist \
+            --pool-from "$RUNNER_TEMP/gh-pages" \
+            --sign-key "$APT_SIGN_KEY"
 
       - name: Desplegar repositorio a GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
           folder: public
+          commit-message: "chore(apt): publish ${{ github.ref_name }}"
+          # Force-push a single rootless commit instead of appending.
+          # Without this, every deb ever published stays reachable in
+          # gh-pages history forever: pruning drops the file from the tree
+          # but the blob survives, so the repository grows by ~80 MB per
+          # release no matter what --keep is set to, and the nightly
+          # re-sign adds a commit a day on top. The branch carries no state
+          # worth keeping — the pool is rebuilt from scratch each run — so
+          # history here is pure weight.
+          single-commit: true
 
   # ──────────────────────────────────────────────
   # Phase 4: Snap Store publish (v* tags only)

@@ -1,0 +1,131 @@
+# Nightly re-sign of the APT repository's Release file.
+#
+# This job exists because the archive's Release now carries Valid-Until
+# (Date + 30 days, set by scripts/publish-apt-repo.sh). That field is what
+# stops an attacker from freezing clients on a Release that predates a
+# security fix — but apt enforces it by REFUSING the archive once it
+# passes, so `apt update` fails hard on every deployed host if the
+# signature is never refreshed. Releases are cut on tags, which can easily
+# be more than 30 days apart, so the refresh cannot ride on the release
+# workflow.
+#
+# The run is pool-preserving by construction: no --deb-dir is passed, so
+# the script seeds the pool from the published archive, regenerates the
+# indices over exactly those debs, and re-signs with a fresh
+# Date:/Valid-Until:. Nothing is added and nothing is promoted.
+#
+# If this job breaks, there are ~30 days of grace before clients notice.
+# The failure is silent by nature (a scheduled workflow nobody watches), so
+# the "Fail loudly" step below opens/updates an issue rather than only
+# going red in the Actions tab.
+name: APT repo refresh
+
+on:
+  schedule:
+    # 04:17 UTC daily. Off the hour on purpose — GitHub's scheduler queues
+    # cron runs and :00 is the most contended slot.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never let a refresh and a release publish rewrite gh-pages at once:
+  # both regenerate the whole tree from the pool they read at start, so an
+  # interleave would drop whichever set of debs the loser had seeded.
+  # The release job in kite-collector.yml shares this group.
+  group: apt-repo-publish
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Same binding as the release job — GPG_PRIVATE_KEY may be scoped to
+    # this environment, and environment-scoped secrets are invisible to
+    # jobs that do not opt in.
+    environment: Deployment
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install apt archive tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apt-utils dpkg-dev
+
+      # The published pool is the only state this archive has, so fetching
+      # it is not an optimisation — it IS the input. A failure here must
+      # stop the job: re-signing an empty tree would publish an archive
+      # with no packages and the script's empty-pool guard is the
+      # backstop, not the plan.
+      - name: Fetch the published pool
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! git clone --depth 1 --branch gh-pages --quiet \
+                 "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+                 "$RUNNER_TEMP/gh-pages"; then
+            echo "::error::gh-pages branch not found — nothing published yet, so nothing to refresh"
+            exit 1
+          fi
+          echo "pool debs: $(find "$RUNNER_TEMP/gh-pages/pool" -name '*.deb' 2>/dev/null | wc -l)"
+
+      - name: Re-index and re-sign
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          APT_SIGN_KEY: ${{ vars.APT_SIGN_KEY || '79847F85E3FF6E43' }}
+        run: |
+          set -euo pipefail
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --quiet --import
+          ./scripts/publish-apt-repo.sh \
+            --out public \
+            --pool-from "$RUNNER_TEMP/gh-pages" \
+            --sign-key "$APT_SIGN_KEY"
+
+      - name: Deploy repository to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: public
+          commit-message: "chore(apt): nightly re-sign of Release"
+          # Same reason as the release publish: a commit a day, each one
+          # touching the signed indices, would grow gh-pages without bound
+          # and keep every pruned deb blob alive in history.
+          single-commit: true
+
+      # A scheduled job that only turns the Actions tab red is a job whose
+      # failure is discovered by a customer's broken `apt update`. Surface
+      # it where it will be seen, and keep it to one issue.
+      - name: Fail loudly
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title="APT repo re-sign is failing — Release will expire"
+          existing=$(gh issue list --state open --search "$title in:title" \
+                       --json number --jq '.[0].number' || true)
+          body=$(printf '%s\n' \
+            "The nightly APT repo re-sign failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            "" \
+            "The published Release carries Valid-Until = Date + 30 days. Once that" \
+            "passes, \`apt update\` fails on every host tracking the repository and" \
+            "\`apt install kite-collector\` stops working for new installs." \
+            "" \
+            "Check the current deadline with:" \
+            "" \
+            '```' \
+            "curl -fsSL https://vulnertrack.github.io/kite-collector/dists/stable/Release | grep -E '^(Date|Valid-Until):'" \
+            '```' \
+            "" \
+            "Re-running this workflow (workflow_dispatch) is the fix once the cause is cleared.")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --label "ci" --body "$body"
+          fi
