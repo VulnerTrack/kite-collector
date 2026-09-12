@@ -447,10 +447,11 @@ func buildStatusHealth(report statusReport) []statusHealthCheck {
 	checks := make([]statusHealthCheck, 0, 6)
 	serviceStatus := "warn"
 	serviceDetail := report.Service.State
-	if report.Service.State == installer.ServiceRunning {
+	switch report.Service.State {
+	case installer.ServiceRunning:
 		serviceStatus = "pass"
 		serviceDetail = "collector service is running"
-	} else if report.Service.State == installer.ServiceNotInstalled {
+	case installer.ServiceNotInstalled:
 		serviceStatus = "fail"
 	}
 	checks = append(checks, statusHealthCheck{Name: "Service", Status: serviceStatus, Detail: serviceDetail})

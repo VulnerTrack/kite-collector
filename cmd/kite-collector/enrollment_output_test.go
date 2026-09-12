@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,4 +41,29 @@ func TestPrintEnrollmentSuccessUsesColorWhenEnabled(t *testing.T) {
 	assert.Contains(t, text, "Restarted with the new credentials")
 	assert.Contains(t, text, "http://127.0.0.1:9090")
 	assert.NotContains(t, text, "http://127.0.0.1:9090/")
+}
+
+// failingWriter fails every write and counts attempts.
+type failingWriter struct{ writes int }
+
+func (f *failingWriter) Write(p []byte) (int, error) {
+	f.writes++
+	return 0, errors.New("broken pipe")
+}
+
+// A closed stdout (`kite-collector enroll | head -1`) must surface as the first
+// write error, wrapped, with no further writes attempted — the summary printer
+// keeps a sticky error rather than plowing through every remaining line.
+func TestPrintEnrollmentSuccessReturnsFirstWriteError(t *testing.T) {
+	out := &failingWriter{}
+	err := printEnrollmentSuccessStyled(out, enrollmentSuccessDetails{
+		agentCode:     "kite-server",
+		certsDir:      "/var/lib/kite-collector",
+		serviceAction: "started",
+	}, false)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "write enrollment summary")
+	assert.ErrorContains(t, err, "broken pipe")
+	assert.Equal(t, 1, out.writes, "writes stop after the first failure")
 }

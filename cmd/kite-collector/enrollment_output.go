@@ -33,41 +33,46 @@ func printEnrollmentSuccessStyled(out io.Writer, details enrollmentSuccessDetail
 		}
 		return code + value + enrollANSIReset
 	}
-	row := func(label, value string) error {
+	w := &enrollWriter{out: out}
+	row := func(label, value string) {
 		if value == "" {
-			return nil
+			return
 		}
-		_, err := fmt.Fprintf(out, "   %s  %s\n",
+		w.printf("   %s  %s\n",
 			style(enrollANSIMuted, fmt.Sprintf("%-13s", label)),
 			style(enrollANSICyan, value),
 		)
-		return err
 	}
 
-	heading := style(enrollANSIBold+enrollANSIGreen, "✅  Enrollment complete.")
-	if _, err := fmt.Fprintf(out, "\n%s\n", heading); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(out, "   %s\n\n", style(enrollANSIBold, "Welcome to Kite! Your collector is connected to VulnerTrack.")); err != nil {
-		return err
-	}
-	if err := row("Collector", details.agentCode); err != nil {
-		return err
-	}
-	if err := row("Certificates", details.certsDir); err != nil {
-		return err
-	}
-	if err := row("Service", enrollmentServiceStatus(details.serviceAction)); err != nil {
-		return err
-	}
-	if err := row("Dashboard", strings.TrimRight(details.dashboardURL, "/")); err != nil {
-		return err
-	}
-	_, err := fmt.Fprintf(out, "\n   %s  %s\n\n",
+	w.printf("\n%s\n", style(enrollANSIBold+enrollANSIGreen, "✅  Enrollment complete."))
+	w.printf("   %s\n\n", style(enrollANSIBold, "Welcome to Kite! Your collector is connected to VulnerTrack."))
+	row("Collector", details.agentCode)
+	row("Certificates", details.certsDir)
+	row("Service", enrollmentServiceStatus(details.serviceAction))
+	row("Dashboard", strings.TrimRight(details.dashboardURL, "/"))
+	w.printf("\n   %s  %s\n\n",
 		style(enrollANSIYellow, "Next step →"),
 		style(enrollANSIBold, "kite-collector integrations"),
 	)
-	return err
+	return w.err
+}
+
+// enrollWriter is a sticky-error writer: the first failed write is kept and
+// every later printf is a no-op. The summary then reads as the sequence of
+// lines it is, instead of six identical "if write failed, return" branches,
+// and the caller still sees the first write error.
+type enrollWriter struct {
+	out io.Writer
+	err error
+}
+
+func (w *enrollWriter) printf(format string, args ...any) {
+	if w.err != nil {
+		return
+	}
+	if _, err := fmt.Fprintf(w.out, format, args...); err != nil {
+		w.err = fmt.Errorf("write enrollment summary: %w", err)
+	}
 }
 
 func enrollmentServiceStatus(action string) string {
