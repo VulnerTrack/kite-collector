@@ -8,12 +8,13 @@
 #   1. apt install of the bundle (deps + maintainer scripts sans systemd)
 #   2. package metadata: conflicts/replaces/provides, conffiles
 #   3. installed layout: binaries, symlink, unit, drop-in, state dirs
-#   4. unit passes systemd-analyze verify (offline)
-#   5. the bundled daemon actually runs: socket up, queries answer,
+#   4. package update keeps the legacy shell-cached command path valid
+#   5. unit passes systemd-analyze verify (offline)
+#   6. the bundled daemon actually runs: socket up, queries answer,
 #      augeas lenses wired, version pinned
-#   6. plain kite-collector <-> bundle cross-grade via apt (the deb
+#   7. plain kite-collector <-> bundle cross-grade via apt (the deb
 #      analogue of the MSIs' shared-UpgradeCode swap)
-#   7. remove keeps runtime state, purge deletes it
+#   8. remove keeps runtime state, purge deletes it
 set -uo pipefail
 
 FAILS=0
@@ -77,7 +78,23 @@ else
   fail "kite-collector version runs" "$OUT"
 fi
 
-# ── 4. unit verifies offline ─────────────────────────────────────────────
+# ── 4. legacy command path survives package update ──────────────────────
+rm -f /usr/local/bin/kite-collector
+mkdir -p /usr/local/bin
+printf '#!/bin/sh\necho legacy-version\n' > /usr/local/bin/kite-collector
+chmod +x /usr/local/bin/kite-collector
+kite-collector version > /tmp/kite-legacy-version.out
+rm -f /usr/local/bin/kite-collector
+if apt-get install -y -qq --reinstall "$DEB" >/dev/null 2>&1 \
+   && [ -L /usr/local/bin/kite-collector ] \
+   && [ "$(readlink /usr/local/bin/kite-collector)" = /usr/bin/kite-collector ] \
+   && [ "$(kite-collector version 2>&1)" != legacy-version ]; then
+  pass "upgrade bridge keeps shell-cached legacy path valid"
+else
+  fail "upgrade bridge keeps shell-cached legacy path valid"
+fi
+
+# ── 5. unit verifies offline ─────────────────────────────────────────────
 apt-get install -y -qq systemd >/dev/null 2>&1
 if systemd-analyze verify /usr/lib/systemd/system/kite-osqueryd.service >/tmp/verify.out 2>&1; then
   pass "systemd-analyze verify kite-osqueryd.service"
@@ -85,7 +102,7 @@ else
   fail "systemd-analyze verify kite-osqueryd.service" "$(head -3 /tmp/verify.out | tr '\n' ' ')"
 fi
 
-# ── 5. the daemon runs (ExecStart replicated; RuntimeDirectory by hand) ──
+# ── 6. the daemon runs (ExecStart replicated; RuntimeDirectory by hand) ──
 mkdir -p /run/kite-osquery
 $OSQ \
   --flagfile /etc/kite-collector/osquery/osquery.flags \
@@ -116,7 +133,7 @@ NAUG=$(osq "SELECT count(*) AS n FROM augeas WHERE path='/etc/hosts';" | sed -n 
 kill -0 "$OSQ_PID" 2>/dev/null && pass "daemon still alive" || fail "daemon still alive" "exited during queries"
 kill "$OSQ_PID" 2>/dev/null; wait "$OSQ_PID" 2>/dev/null
 
-# ── 6. cross-grade with a plain kite-collector deb ───────────────────────
+# ── 7. cross-grade with a plain kite-collector deb ───────────────────────
 # Build a stub plain package in-container (content irrelevant — the swap
 # semantics live in the control fields).
 mkdir -p /tmp/stub/DEBIAN
@@ -144,7 +161,7 @@ else
   fail "cross-grade plain -> bundle (apt removed the stub)"
 fi
 
-# ── 7. remove keeps state, purge deletes it ──────────────────────────────
+# ── 8. remove keeps state, purge deletes it ──────────────────────────────
 touch /var/lib/kite-collector/osquery/runtime-canary
 apt-get remove -y -qq kite-collector-osquery >/dev/null 2>&1
 if [ -f /var/lib/kite-collector/osquery/runtime-canary ]; then

@@ -153,7 +153,7 @@ func renderOnboardingStepsFragment(w io.Writer, ctx context.Context, deps onboar
 		stateView,
 		detected,
 		servicesOnboardingComplete(ctx, deps),
-		hasDiscoveredOnboardingServices(deps),
+		hasAvailableOnboardingServices(),
 	)
 
 	allDone := true
@@ -282,7 +282,7 @@ const onboardingStepsTemplate = `<div class="onb-steps">
   </details>
   {{end}}
   {{if eq .Key "services"}}
-  <p class="muted onb-step-copy">Kite detected the services enabled for this collector. Configure only the integrations you want to scan.</p>
+  <p class="muted onb-step-copy">Configure the optional integrations you want Kite to scan.</p>
   <div id="services-fragment" hx-get="{{.FragmentURL}}" hx-trigger="load" hx-swap="innerHTML">
     <div class="htmx-indicator">Detecting services&hellip;</div>
   </div>

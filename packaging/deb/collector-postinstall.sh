@@ -11,26 +11,31 @@
 set -e
 
 # Upgrade bridge: packages before the /usr/bin move installed the binary
-# at /usr/local/bin, and a self-registered kardianos unit under
-# /etc/systemd/system points there. dpkg removes the old path during
-# unpack, which would leave that unit's ExecStart dangling — a compat
-# symlink keeps it working until the operator re-runs install (or removes
-# the /etc unit in favor of the packaged one). Never clobbers: only an
-# empty path gets the link. On rpm the old file is still present at
-# %post time; the posttrans script (collector-posttrans.sh) runs the same
-# bridge after removal.
+# at /usr/local/bin. An already-running shell may keep that old absolute
+# path in its command hash even after dpkg removes the file; a postinst
+# cannot clear the parent shell's hash table. Keep the cached path valid
+# by linking it to /usr/bin on Debian upgrades (the old version is $2).
+# A self-registered unit that still names the legacy path also needs the
+# bridge. Never clobber an existing file. On rpm the old file is still
+# present at %post time; collector-posttrans.sh handles that ordering.
 bridge_legacy_path() {
     unit=/etc/systemd/system/kite-collector.service
     legacy=/usr/local/bin/kite-collector
     newbin=/usr/bin/kite-collector
-    if [ -f "$unit" ] && [ -x "$newbin" ] && grep -q "$legacy" "$unit" \
+    needs_bridge=false
+    if [ -n "${2:-}" ]; then
+        needs_bridge=true
+    elif [ -f "$unit" ] && grep -q "$legacy" "$unit"; then
+        needs_bridge=true
+    fi
+    if [ "$needs_bridge" = true ] && [ -x "$newbin" ] \
         && [ ! -e "$legacy" ] && [ ! -L "$legacy" ]; then
         mkdir -p /usr/local/bin
         ln -s "$newbin" "$legacy" || true
     fi
 }
 
-bridge_legacy_path
+bridge_legacy_path "$@"
 
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true

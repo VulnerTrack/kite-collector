@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -37,6 +40,41 @@ func TestNoBrowserEnrollmentDoesNotNeedStdin(t *testing.T) {
 	cmd.SetArgs([]string{"--no-browser"})
 	require.NoError(t, cmd.Execute())
 	require.True(t, called)
+}
+
+func TestEnrollHidesLogsUnlessVerbose(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		wantLogText bool
+	}{
+		{name: "default", args: []string{"--no-browser"}, wantLogText: false},
+		{name: "verbose", args: []string{"--no-browser", "--verbose"}, wantLogText: true},
+		{name: "short-verbose", args: []string{"--no-browser", "-v"}, wantLogText: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			originalLogger := slog.Default()
+			var stderr bytes.Buffer
+			cmd := newEnrollCmdWithDevice(func(_ io.Writer, _, _, _ string, _ bool) error {
+				slog.Debug("device enrollment debug marker")
+				slog.Info("device enrollment info marker")
+				return nil
+			})
+			cmd.SetErr(&stderr)
+			cmd.SetArgs(test.args)
+
+			require.NoError(t, cmd.Execute())
+			if test.wantLogText {
+				require.Contains(t, stderr.String(), "device enrollment debug marker")
+				require.Contains(t, stderr.String(), "device enrollment info marker")
+			} else {
+				require.Empty(t, stderr.String())
+			}
+			require.Same(t, originalLogger, slog.Default())
+		})
+	}
 }
 
 func TestDeviceEnrollmentPersistsCertificateIdentityBeforeServiceStart(t *testing.T) {
@@ -129,6 +167,74 @@ func TestPlainEnrollmentUsesLocalFlowWhenBrowserIsAvailable(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 	require.True(t, browser)
 	require.False(t, device)
+}
+
+func TestPlainEnrollmentFallsBackToDeviceFlowWhenDashboardIsUnavailable(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux browser prerequisite test")
+	}
+	for _, name := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DISPLAY", ":0")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	binDir := t.TempDir()
+	for _, name := range []string{"xdg-open", "firefox"} {
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\n"), 0o755))
+	}
+	t.Setenv("PATH", binDir)
+
+	var output bytes.Buffer
+	deviceCalls, browserCalls := 0, 0
+	cmd := newEnrollCmdWithFlows(
+		func(_ io.Writer, _, _, _ string, _ bool) error {
+			deviceCalls++
+			return nil
+		},
+		func(_, _, _ string, _, _ bool) error {
+			browserCalls++
+			return fmt.Errorf("start local flow: %w", errEnrollmentDashboardUnavailable)
+		},
+	)
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{})
+
+	require.NoError(t, cmd.Execute())
+	require.Equal(t, 1, browserCalls)
+	require.Equal(t, 1, deviceCalls)
+	require.Contains(t, output.String(), "using remote browser sign-in")
+	require.NotContains(t, output.String(), "dashboard did not become reachable")
+}
+
+func TestPlainEnrollmentDoesNotHideOtherBrowserEnrollmentErrors(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux browser prerequisite test")
+	}
+	for _, name := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DISPLAY", ":0")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	binDir := t.TempDir()
+	for _, name := range []string{"xdg-open", "firefox"} {
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\n"), 0o755))
+	}
+	t.Setenv("PATH", binDir)
+
+	deviceCalls := 0
+	wantErr := errors.New("authorization failed")
+	cmd := newEnrollCmdWithFlows(
+		func(_ io.Writer, _, _, _ string, _ bool) error {
+			deviceCalls++
+			return nil
+		},
+		func(_, _, _ string, _, _ bool) error { return wantErr },
+	)
+	cmd.SetArgs([]string{})
+
+	err := cmd.Execute()
+	require.ErrorIs(t, err, wantErr)
+	require.Zero(t, deviceCalls)
 }
 
 func TestPlainEnrollmentUsesRemoteFlowOverSSHEvenWithBrowser(t *testing.T) {

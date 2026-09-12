@@ -77,7 +77,11 @@ func runDeviceEnrollmentWithDeps(out io.Writer, agentCode, dbPath, certsDir stri
 	if err != nil {
 		return fmt.Errorf("certificate saved; service transition failed: %w", err)
 	}
-	_, err = fmt.Fprintf(out, "Collector %s enrolled. Certificates: %s. Service: %s\n", agentCode, certsDir, action)
+	err = printEnrollmentSuccess(out, enrollmentSuccessDetails{
+		agentCode:     agentCode,
+		certsDir:      certsDir,
+		serviceAction: action,
+	})
 	if err != nil {
 		return fmt.Errorf("display enrollment result: %w", err)
 	}

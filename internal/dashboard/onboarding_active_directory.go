@@ -94,7 +94,7 @@ var onboardingServicesTmpl = template.Must(template.New("services-setup").Parse(
     <section class="service-setup-card">
       <div class="service-setup-head">
         <div><strong>{{.Label}}</strong><p class="muted small">{{.Description}}</p></div>
-        <span class="badge {{if .Configured}}badge-green{{else}}badge-blue{{end}}">{{if .Configured}}configured{{else}}detected{{end}}</span>
+        <span class="badge {{if .Configured}}badge-green{{else}}badge-blue{{end}}">{{if .Configured}}configured{{else}}available{{end}}</span>
       </div>
       <div id="{{.Key}}-setup-fragment" hx-get="{{.FragmentURL}}" hx-trigger="load" hx-swap="innerHTML"><span class="muted small">Loading {{.Label}} settings&hellip;</span></div>
     </section>
@@ -106,18 +106,12 @@ var onboardingServicesTmpl = template.Must(template.New("services-setup").Parse(
 
 func renderDiscoveredServicesSetup(w io.Writer, ctx context.Context, deps onboardingDeps) error {
 	view := onboardingServicesView{}
-	if deps.BaseConfig != nil {
-		for _, adapter := range onboardingServiceAdapters {
-			source, exists := deps.BaseConfig.Discovery.Sources[adapter.Key]
-			if !exists || !source.Enabled {
-				continue
-			}
-			configured := false
-			if adapter.Key == "ldap" {
-				configured = directoryOnboardingComplete(ctx, deps)
-			}
-			view.Services = append(view.Services, onboardingServiceView{onboardingServiceAdapter: adapter, Configured: configured})
+	for _, adapter := range onboardingServiceAdapters {
+		configured := false
+		if adapter.Key == "ldap" {
+			configured = directoryOnboardingComplete(ctx, deps)
 		}
+		view.Services = append(view.Services, onboardingServiceView{onboardingServiceAdapter: adapter, Configured: configured})
 	}
 	if err := onboardingServicesTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("render onboarding services: %w", err)
@@ -126,21 +120,18 @@ func renderDiscoveredServicesSetup(w io.Writer, ctx context.Context, deps onboar
 }
 
 func discoveredIntegrationsAPI(ctx context.Context, deps onboardingDeps) []integrationAPIView {
-	if deps.BaseConfig == nil {
-		return []integrationAPIView{}
-	}
 	out := make([]integrationAPIView, 0, len(onboardingServiceAdapters))
 	for _, adapter := range onboardingServiceAdapters {
-		source, exists := deps.BaseConfig.Discovery.Sources[adapter.Key]
-		if !exists || !source.Enabled {
-			continue
-		}
-		item := integrationAPIView{Key: adapter.Key, Name: adapter.Label, Description: adapter.Description, Status: "detected"}
+		item := integrationAPIView{Key: adapter.Key, Name: adapter.Label, Description: adapter.Description, Status: "available"}
 		if adapter.Key == "ldap" {
 			defaults := activeDirectorySetupDefaults(deps.BaseConfig)
 			item.Account, item.DomainController, item.BaseDN, item.TLSMode = defaults.BindDN, defaults.DomainController, defaults.BaseDN, defaults.TLSMode
 			if directoryOnboardingComplete(ctx, deps) {
 				item.Status = "configured"
+			} else if deps.BaseConfig != nil {
+				if source, exists := deps.BaseConfig.Discovery.Sources[adapter.Key]; exists && source.Enabled {
+					item.Status = "detected"
+				}
 			}
 		}
 		out = append(out, item)
@@ -149,14 +140,7 @@ func discoveredIntegrationsAPI(ctx context.Context, deps onboardingDeps) []integ
 }
 
 func servicesOnboardingComplete(ctx context.Context, deps onboardingDeps) bool {
-	if deps.BaseConfig == nil {
-		return true
-	}
 	for _, adapter := range onboardingServiceAdapters {
-		source, exists := deps.BaseConfig.Discovery.Sources[adapter.Key]
-		if !exists || !source.Enabled {
-			continue
-		}
 		if adapter.Key == "ldap" && !directoryOnboardingComplete(ctx, deps) {
 			return false
 		}
@@ -164,16 +148,8 @@ func servicesOnboardingComplete(ctx context.Context, deps onboardingDeps) bool {
 	return true
 }
 
-func hasDiscoveredOnboardingServices(deps onboardingDeps) bool {
-	if deps.BaseConfig == nil {
-		return false
-	}
-	for _, adapter := range onboardingServiceAdapters {
-		if source, exists := deps.BaseConfig.Discovery.Sources[adapter.Key]; exists && source.Enabled {
-			return true
-		}
-	}
-	return false
+func hasAvailableOnboardingServices() bool {
+	return len(onboardingServiceAdapters) > 0
 }
 
 // startBaseOnboardingScan inventories the collector host immediately after

@@ -9,9 +9,8 @@
 #   2. installed layout: /usr/bin binary runs, unit + example config land
 #   3. unit sanity: ExecStart matches the packaged binary path, and the
 #      unit passes systemd-analyze verify when available
-#   4. /usr/local/bin → /usr/bin upgrade bridge: creates the compat
-#      symlink for a drifted /etc unit, never clobbers a real file,
-#      no-ops without the drift signature
+#   4. /usr/local/bin → /usr/bin upgrade bridge: keeps a shell-cached
+#      legacy path valid after upgrade and never clobbers a real file
 #   5. remove: binary + unit gone, bridge symlink cleaned, /etc conffile
 #      and manual state preserved
 set -uo pipefail
@@ -84,19 +83,33 @@ else
 fi
 
 # ── 4. upgrade bridge ───────────────────────────────────────────────────
-# 4a. Drift signature present (legacy /etc unit, empty legacy path) →
-#     reinstall runs postinst → compat symlink appears.
-mkdir -p /etc/systemd/system
-printf '[Service]\nExecStart=%s service run\n' "$LEGACY" > "$ETC_UNIT"
+# 4a. No legacy unit is required. A Debian upgrade/reinstall passes the
+#     old package version to postinst, which creates the compatibility
+#     path an already-running Bash may still have cached.
+rm -f "$ETC_UNIT"
+rm -f "$LEGACY"
+mkdir -p "$(dirname "$LEGACY")"
+printf '#!/bin/sh\necho legacy-version\n' > "$LEGACY"
+chmod +x "$LEGACY"
+kite-collector version > /tmp/kite-legacy-version.out
+if [ "$(cat /tmp/kite-legacy-version.out)" = legacy-version ] \
+   && [ "$(hash -t kite-collector 2>/dev/null)" = "$LEGACY" ]; then
+  pass "bridge: reproduced Bash cache of legacy command path"
+else
+  fail "bridge: reproduced Bash cache of legacy command path"
+fi
 rm -f "$LEGACY"
 apt-get install -y -qq --reinstall "$DEB" >/dev/null 2>&1
 if [ -L "$LEGACY" ] && [ "$(readlink "$LEGACY")" = "$BIN" ]; then
-  pass "bridge: compat symlink created for drifted /etc unit"
+  pass "bridge: compat symlink created on package update"
 else
-  fail "bridge: compat symlink created for drifted /etc unit"
+  fail "bridge: compat symlink created on package update"
 fi
-"$LEGACY" version >/dev/null 2>&1 \
-  && pass "bridge: symlinked path executes" || fail "bridge: symlinked path executes"
+if OUT=$(kite-collector version 2>&1) && [ "$OUT" != legacy-version ]; then
+  pass "bridge: shell-cached legacy path executes new binary" "$(echo "$OUT" | head -1)"
+else
+  fail "bridge: shell-cached legacy path executes new binary" "$OUT"
+fi
 
 # 4b. Never clobbers a real file at the legacy path.
 rm -f "$LEGACY"
@@ -108,15 +121,6 @@ else
   fail "bridge: existing file at legacy path preserved"
 fi
 rm -f "$LEGACY"
-
-# 4c. No drift signature (no /etc unit) → no symlink.
-rm -f "$ETC_UNIT"
-apt-get install -y -qq --reinstall "$DEB" >/dev/null 2>&1
-if [ ! -e "$LEGACY" ] && [ ! -L "$LEGACY" ]; then
-  pass "bridge: no-op without a drifted /etc unit"
-else
-  fail "bridge: no-op without a drifted /etc unit"
-fi
 
 # ── 5. remove ───────────────────────────────────────────────────────────
 # Recreate the bridge state so postrm's cleanup is exercised.

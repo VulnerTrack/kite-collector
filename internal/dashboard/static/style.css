@@ -3994,6 +3994,11 @@ details.sidenav-alltables .sidenav-tables {
   gap: 12px;
   max-width: 880px;
 }
+/* The collector can be ready without optional integrations. Keep that
+ * completion receipt before service setup even though the setup card is
+ * emitted with the other onboarding steps. */
+.onb-ready { order: 1; }
+#services-card { order: 2; }
 .onb-step { border-radius: 12px; }
 .onb-glyph { flex-shrink: 0; }
 .onb-step-done {

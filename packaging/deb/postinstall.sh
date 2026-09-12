@@ -8,13 +8,22 @@
 set -e
 
 # Upgrade bridge for the /usr/local/bin → /usr/bin move — same logic as the
-# plain deb's collector-postinstall.sh (keep in sync): a self-registered
-# /etc unit pointing at the old collector path keeps working via a compat
-# symlink. Never clobbers an existing file.
+# plain deb's collector-postinstall.sh (keep in sync). Debian passes the
+# previously configured version as $2 during an upgrade. The compat link
+# keeps an old absolute path cached by a running shell valid; maintainer
+# scripts cannot clear the parent shell's command hash. A self-registered
+# unit pointing at the old path also requests the bridge. Never clobber an
+# existing file.
 unit=/etc/systemd/system/kite-collector.service
 legacy=/usr/local/bin/kite-collector
 newbin=/usr/bin/kite-collector
-if [ -f "$unit" ] && [ -x "$newbin" ] && grep -q "$legacy" "$unit" \
+needs_bridge=false
+if [ -n "${2:-}" ]; then
+    needs_bridge=true
+elif [ -f "$unit" ] && grep -q "$legacy" "$unit"; then
+    needs_bridge=true
+fi
+if [ "$needs_bridge" = true ] && [ -x "$newbin" ] \
     && [ ! -e "$legacy" ] && [ ! -L "$legacy" ]; then
     mkdir -p /usr/local/bin
     ln -s "$newbin" "$legacy" || true

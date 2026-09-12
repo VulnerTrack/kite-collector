@@ -73,8 +73,31 @@ func TestRenderStatusReport_EnrolledRunningSystem(t *testing.T) {
 			TotalMachines: 12,
 			NewMachines:   2,
 		},
-		Database:   statusDatabase{Path: "/var/lib/kite/kite.db", Size: "1.5 KB", Exists: true},
-		NextAction: "ready",
+		Database: statusDatabase{Path: "/var/lib/kite/kite.db", Size: "1.5 KB", Exists: true},
+		Registration: statusRegistration{
+			EnrolledByEmail: "operator@example.com",
+			EnrolledByID:    "user-123",
+			Organization:    "Example Org",
+			OrganizationID:  "tenant-456",
+			ClientName:      "kite-client",
+			IssuedAt:        "2026-12-01T00:00:00Z",
+			ExpiresAt:       "2027-03-04T05:06:07Z",
+			MutualTLS:       true,
+		},
+		Software: statusSoftware{
+			Name: "kite-collector", Version: "1.2.3", DisplayVersion: "v1.2.3",
+			Vendor: "VulnerTrack", AgentType: "kite-collector", BuildID: "abcdef1234567890",
+			BuiltAt: "2026-09-12T00:00:00Z", BinaryPath: "/usr/bin/kite-collector",
+			BinaryHash: "sha256:1234", Platform: "linux", Architecture: "amd64",
+			Distribution: "Ubuntu 24.04", TelemetryContract: "1.1",
+		},
+		Identifiers: statusIdentifiers{
+			AgentID: "agent-123", HostID: "host-123", Hostname: "srv-01",
+			ClientID: "kite-client", TenantID: "tenant-456", UserID: "user-123",
+		},
+		HealthStatus: "healthy",
+		Health:       []statusHealthCheck{{Name: "Store", Status: "pass", Detail: "SQLite responding to queries"}},
+		NextAction:   "ready",
 	})
 
 	assert.Contains(t, out, "1.2.3 (abcdef1)")
@@ -85,6 +108,19 @@ func TestRenderStatusReport_EnrolledRunningSystem(t *testing.T) {
 	assert.Contains(t, out, "2026-08-20T01:02:03Z (3h ago) · completed · 12 machines, 2 new")
 	assert.Contains(t, out, "/var/lib/kite/kite.db (1.5 KB)")
 	assert.Contains(t, out, "ready")
+	assert.Contains(t, out, "Registration")
+	assert.Contains(t, out, "operator@example.com · user-123")
+	assert.Contains(t, out, "Example Org · tenant-456")
+	assert.Contains(t, out, "valid until 2027-03-04 (120d left) · issued 2026-12-01")
+	assert.Contains(t, out, "https://otel.example · mutual TLS")
+	assert.Contains(t, out, "Software")
+	assert.Contains(t, out, "sha256:1234")
+	assert.Contains(t, out, "linux/amd64")
+	assert.Contains(t, out, "Identifiers")
+	assert.Contains(t, out, "agent-123")
+	assert.Contains(t, out, "[PASS]")
+	assert.Regexp(t, `Health\s+HEALTHY`, out)
+	assert.Contains(t, out, "SQLite responding to queries")
 	assert.NotContains(t, out, "⚠")
 }
 

@@ -3195,6 +3195,7 @@ func newEnrollCmdWithFlows(deviceEnroll func(io.Writer, string, string, string, 
 		certsDir        string
 		dbPath          string
 		userMode        bool
+		verbose         bool
 	)
 
 	defaultDB := filepath.Join(installer.DetectDefaults().Options.CertsDir, "kite.db")
@@ -3220,12 +3221,30 @@ Examples:
   kite-collector enroll --agent-code kite-prod --enrollment-token <tok>`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			previousLogger := slog.Default()
+			logOutput := io.Writer(io.Discard)
+			if verbose {
+				logOutput = cmd.ErrOrStderr()
+			}
+			enrollLogger := slog.New(slog.NewJSONHandler(logOutput, &slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			})).With("run_id", uuid.Must(uuid.NewV7()).String())
+			slog.SetDefault(enrollLogger)
+			defer slog.SetDefault(previousLogger)
+
 			if userMode && !cmd.Flag("db").Changed {
 				dbPath = filepath.Join(installer.DefaultCertsDir(true), "kite.db")
 			}
 			hasAgentCode := strings.TrimSpace(agentCode) != ""
 			hasToken := strings.TrimSpace(token) != ""
 			hasEnrollToken := strings.TrimSpace(enrollmentToken) != ""
+			runDeviceFlow := func() error {
+				deviceCertsDir := filepath.Dir(dbPath)
+				if cmd.Flag("certs-dir").Changed {
+					deviceCertsDir = certsDir
+				}
+				return deviceEnroll(cmd.OutOrStdout(), agentCode, dbPath, deviceCertsDir, userMode)
+			}
 
 			// Non-interactive scoped-token path (headless / container):
 			// POST /pki/enroll/token with the token in the body.
@@ -3233,31 +3252,30 @@ Examples:
 				if !hasAgentCode {
 					return fmt.Errorf("--enrollment-token requires --agent-code")
 				}
-				return runEnrollWithToken(agentCode, enrollmentToken, certsDir)
+				return runEnrollWithTokenUsingLogger(agentCode, enrollmentToken, certsDir, enrollLogger)
 			}
 			if !hasToken && noBrowser {
-				deviceCertsDir := filepath.Dir(dbPath)
-				if cmd.Flag("certs-dir").Changed {
-					deviceCertsDir = certsDir
-				}
-				return deviceEnroll(cmd.OutOrStdout(), agentCode, dbPath, deviceCertsDir, userMode)
+				return runDeviceFlow()
 			}
 			if !hasToken {
-				deviceCertsDir := filepath.Dir(dbPath)
-				if cmd.Flag("certs-dir").Changed {
-					deviceCertsDir = certsDir
-				}
 				if !canOpenLocalBrowser() {
-					return deviceEnroll(cmd.OutOrStdout(), agentCode, dbPath, deviceCertsDir, userMode)
+					return runDeviceFlow()
 				}
-				return browserEnroll(addr, dbPath, cfgFile, false, userMode)
+				if err := browserEnroll(addr, dbPath, cfgFile, false, userMode); err != nil {
+					if !errors.Is(err, errEnrollmentDashboardUnavailable) {
+						return err
+					}
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Local dashboard is unavailable; using remote browser sign-in instead.")
+					return runDeviceFlow()
+				}
+				return nil
 			}
 			// Non-interactive operator-JWT path.
 			if hasAgentCode || hasToken {
 				if !hasAgentCode || !hasToken {
 					return fmt.Errorf("--agent-code and --token must be provided together for PKI enrollment")
 				}
-				return runEnroll(agentCode, token, certsDir)
+				return runEnrollUsingLogger(agentCode, token, certsDir, enrollLogger)
 			}
 			if cmd.Flag("certs-dir").Changed {
 				if !cmd.Flag("db").Changed {
@@ -3283,6 +3301,7 @@ Examples:
 	cmd.Flags().StringVar(&cfgFile, "config", "kite-collector.yaml", "path to agent config file")
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "use a device code instead of opening a local browser")
 	cmd.Flags().BoolVar(&userMode, "user", false, "resolve --db against the per-user install paths")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "show enrollment logs, including debug messages")
 
 	return cmd
 }
@@ -3292,6 +3311,8 @@ type platformEnrollDeps struct {
 	openBrowser       func(string)
 	waitDashboard     func(string, time.Duration) bool
 }
+
+var errEnrollmentDashboardUnavailable = errors.New("enrollment dashboard unavailable")
 
 func runPlatformLoginEnroll(addr, dbPath, cfgFile string, noBrowser, userMode bool) error {
 	return runPlatformLoginEnrollWithDeps(addr, dbPath, cfgFile, noBrowser, userMode, platformEnrollDeps{
@@ -3306,11 +3327,6 @@ func runPlatformLoginEnrollWithDeps(
 	noBrowser, userMode bool,
 	deps platformEnrollDeps,
 ) error {
-	previousLogger := slog.Default()
-	quietLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	slog.SetDefault(quietLogger)
-	defer slog.SetDefault(previousLogger)
-
 	waitID := uuid.Must(uuid.NewV7()).String()
 	loginURL := dashboardLoginURLWithWait(addr, waitID)
 	baseURL := "http://" + dashboardBrowserAddr(addr)
@@ -3386,7 +3402,10 @@ func runPlatformLoginEnrollWithDeps(
 	}()
 
 	if !waitForDashboard(loginURL, 3*time.Second) {
-		return fmt.Errorf("dashboard did not become reachable at %s", baseURL)
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		_ = srv.Shutdown(shutCtx)
+		return fmt.Errorf("%w at %s", errEnrollmentDashboardUnavailable, baseURL)
 	}
 	// Keep the first navigation local so the browser receives the OAuth state
 	// and PKCE cookies before the dashboard redirects it to VulnerTrack.
@@ -3493,18 +3512,10 @@ func transitionEnrolledServiceWithOps(ops enrolledServiceOps) (string, error) {
 }
 
 func printPlatformEnrollmentComplete(baseURL, serviceAction string) {
-	fmt.Println()
-	fmt.Println("Enrollment complete.")
-	fmt.Println("Welcome to Kite!")
-	if serviceAction != "" {
-		fmt.Printf("Collector service %s automatically.\n", serviceAction)
-		fmt.Printf("Kite is running at %s\n", strings.TrimRight(baseURL, "/"))
-	} else {
-		fmt.Println("No installed collector service was found; enrollment credentials were saved.")
-	}
-	fmt.Println()
-	fmt.Println("Next step — review detected integrations:")
-	fmt.Println("  kite-collector integrations")
+	_ = printEnrollmentSuccess(os.Stdout, enrollmentSuccessDetails{
+		serviceAction: serviceAction,
+		dashboardURL:  baseURL,
+	})
 }
 
 func printEnrollmentLaunch(launchURL string, noBrowser bool) {
@@ -3657,8 +3668,10 @@ func runPlatformUnenroll(dbPath, identityDir string) error {
 func runEnroll(agentCode, token, certsDir string) error {
 	runID := uuid.Must(uuid.NewV7()).String()
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{})).With("run_id", runID)
-	slog.SetDefault(logger)
+	return runEnrollUsingLogger(agentCode, token, certsDir, logger)
+}
 
+func runEnrollUsingLogger(agentCode, token, certsDir string, logger *slog.Logger) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -3706,8 +3719,10 @@ func runEnroll(agentCode, token, certsDir string) error {
 func runEnrollWithToken(agentCode, enrollmentToken, certsDir string) error {
 	runID := uuid.Must(uuid.NewV7()).String()
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{})).With("run_id", runID)
-	slog.SetDefault(logger)
+	return runEnrollWithTokenUsingLogger(agentCode, enrollmentToken, certsDir, logger)
+}
 
+func runEnrollWithTokenUsingLogger(agentCode, enrollmentToken, certsDir string, logger *slog.Logger) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

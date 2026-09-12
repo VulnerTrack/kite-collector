@@ -411,6 +411,15 @@ func TestBuildOnboardingSteps_CoreAndOptionalServiceStates(t *testing.T) {
 	require.Len(t, steps, 3, "service setup is absent when no integration is detected")
 }
 
+func TestServicesSetupOffersActiveDirectoryWithoutPreconfiguration(t *testing.T) {
+	var body strings.Builder
+	require.NoError(t, renderDiscoveredServicesSetup(&body, context.Background(), onboardingDeps{}))
+
+	assert.Contains(t, body.String(), "Active Directory")
+	assert.Contains(t, body.String(), "/fragments/active-directory-setup")
+	assert.Contains(t, body.String(), "available")
+}
+
 func TestOnboardingSteps_TrustPanelRendersOnConnectStep(t *testing.T) {
 	// Render the template directly with connect current, so the assertion is
 	// independent of this host's real install state.

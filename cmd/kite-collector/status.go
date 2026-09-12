@@ -1,9 +1,9 @@
 package main
 
 // `kite-collector status` — the front door for "how is this agent doing?".
-// One screen: service state, enrollment identity + cert expiry, endpoint,
-// last scan, database, and the recommended next action. Read-only: it never
-// creates the database, never mutates certs, never touches the network.
+// It includes the same registration, software, identifiers, and health facts
+// exposed by the dashboard's Agent profile. Read-only: it never creates the
+// database, never mutates certs, never touches the network.
 //
 // Everything shown is derived from disk + the OS service manager, so it works
 // whether or not the agent process is running.
@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -24,8 +25,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
+	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
 )
 
 type statusService struct {
@@ -39,14 +43,58 @@ type statusEnrollment struct {
 	// State is "enrolled", "not enrolled", or "unknown" (the store that
 	// records sign-in enrollment could not be read — typically a non-root
 	// status run against a root-owned install).
-	State          string `json:"state"`
-	Enrolled       bool   `json:"enrolled"`
-	CertsDir       string `json:"certs_dir"`
-	CertNotAfter   string `json:"cert_not_after,omitempty"`
-	CertDaysLeft   int    `json:"cert_days_left,omitempty"`
-	FirstEnrolled  string `json:"first_enrolled_at,omitempty"`
-	KeyFingerprint string `json:"api_key_fingerprint,omitempty"`
-	Warning        string `json:"warning,omitempty"`
+	State           string `json:"state"`
+	Enrolled        bool   `json:"enrolled"`
+	CertsDir        string `json:"certs_dir"`
+	CertNotAfter    string `json:"cert_not_after,omitempty"`
+	CertDaysLeft    int    `json:"cert_days_left,omitempty"`
+	FirstEnrolled   string `json:"first_enrolled_at,omitempty"`
+	KeyFingerprint  string `json:"api_key_fingerprint,omitempty"`
+	Warning         string `json:"warning,omitempty"`
+	LastCheckPassed string `json:"last_check_passed_at,omitempty"`
+	LastCheckFailed string `json:"last_check_failed_at,omitempty"`
+}
+
+type statusRegistration struct {
+	EnrolledByEmail string `json:"enrolled_by_email,omitempty"`
+	EnrolledByID    string `json:"enrolled_by_id,omitempty"`
+	Organization    string `json:"organization,omitempty"`
+	OrganizationID  string `json:"organization_id,omitempty"`
+	ClientName      string `json:"client_name,omitempty"`
+	IssuedAt        string `json:"issued_at,omitempty"`
+	ExpiresAt       string `json:"expires_at,omitempty"`
+	MutualTLS       bool   `json:"mutual_tls"`
+}
+
+type statusSoftware struct {
+	Name              string `json:"name"`
+	DisplayVersion    string `json:"display_version"`
+	Version           string `json:"version"`
+	Vendor            string `json:"vendor"`
+	AgentType         string `json:"agent_type"`
+	BuildID           string `json:"build_id,omitempty"`
+	BuiltAt           string `json:"built_at,omitempty"`
+	BinaryPath        string `json:"binary_path,omitempty"`
+	BinaryHash        string `json:"binary_hash,omitempty"`
+	Platform          string `json:"platform"`
+	Architecture      string `json:"architecture"`
+	Distribution      string `json:"distribution,omitempty"`
+	TelemetryContract string `json:"telemetry_contract"`
+}
+
+type statusIdentifiers struct {
+	AgentID  string `json:"agent_id,omitempty"`
+	HostID   string `json:"host_id,omitempty"`
+	Hostname string `json:"hostname,omitempty"`
+	ClientID string `json:"client_id,omitempty"`
+	TenantID string `json:"tenant_id,omitempty"`
+	UserID   string `json:"user_id,omitempty"`
+}
+
+type statusHealthCheck struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Detail string `json:"detail"`
 }
 
 type statusScan struct {
@@ -65,14 +113,19 @@ type statusDatabase struct {
 }
 
 type statusReport struct {
-	Version    string           `json:"version"`
-	Commit     string           `json:"commit,omitempty"`
-	Service    statusService    `json:"service"`
-	Enrollment statusEnrollment `json:"enrollment"`
-	Endpoint   string           `json:"endpoint,omitempty"`
-	LastScan   *statusScan      `json:"last_scan,omitempty"`
-	Database   statusDatabase   `json:"database"`
-	NextAction string           `json:"next_action"`
+	Version      string              `json:"version"`
+	Commit       string              `json:"commit,omitempty"`
+	Service      statusService       `json:"service"`
+	Enrollment   statusEnrollment    `json:"enrollment"`
+	Endpoint     string              `json:"endpoint,omitempty"`
+	LastScan     *statusScan         `json:"last_scan,omitempty"`
+	Database     statusDatabase      `json:"database"`
+	Registration statusRegistration  `json:"registration"`
+	Software     statusSoftware      `json:"software"`
+	Identifiers  statusIdentifiers   `json:"identifiers"`
+	HealthStatus string              `json:"health_status"`
+	Health       []statusHealthCheck `json:"health"`
+	NextAction   string              `json:"next_action"`
 }
 
 func newStatusCmd() *cobra.Command {
@@ -87,8 +140,8 @@ func newStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show agent state at a glance",
-		Long: `Show the agent's state in one screen: service, enrollment, endpoint,
-last scan, database, and the recommended next action.
+		Long: `Show the full local agent profile: service, registration, certificate,
+software and build, platform, identifiers, health, last scan, and database.
 
 Read-only. All information comes from local disk and the OS service manager.
 Use 'kite-collector doctor' when something here looks wrong.`,
@@ -205,18 +258,29 @@ func buildStatusReport(ctx context.Context, certsDir, dbPath, cfgFile string, us
 		NextAction: state.NextAction,
 	}
 
-	// Endpoint from config (tolerant: missing file → built-in defaults).
+	// Endpoint and identity paths from config (tolerant: missing file → built-in defaults).
+	var loadedCfg *config.Config
 	if cfg, err := config.Load(cfgFile); err == nil && cfg != nil {
+		loadedCfg = cfg
 		report.Endpoint = cfg.Streaming.OTLP.Endpoint
 	}
 
-	// Client certificate expiry, straight from the PEM on disk.
-	if notAfter, err := certNotAfter(filepath.Join(opts.CertsDir, "agent.pem")); err == nil {
-		report.Enrollment.CertNotAfter = notAfter.UTC().Format(time.RFC3339)
-		report.Enrollment.CertDaysLeft = int(time.Until(notAfter).Hours() / 24)
+	// Registration, software, and identifier facts use the same local
+	// sources as the dashboard's Agent profile page.
+	certPath := filepath.Join(opts.CertsDir, "agent.pem")
+	if cert, err := readStatusCertificate(certPath); err == nil {
+		report.Enrollment.CertNotAfter = cert.NotAfter.UTC().Format(time.RFC3339)
+		report.Enrollment.CertDaysLeft = int(time.Until(cert.NotAfter).Hours() / 24)
+		report.Registration.ClientName = cert.Subject.CommonName
+		report.Registration.IssuedAt = cert.NotBefore.UTC().Format(time.RFC3339)
+		report.Registration.ExpiresAt = cert.NotAfter.UTC().Format(time.RFC3339)
 	} else if state.CertsEnrolled {
 		report.Enrollment.Warning = "agent.pem unreadable: " + err.Error()
 	}
+	report.Registration.EnrolledByID, report.Registration.EnrolledByEmail = telresource.UserFromCertFile(certPath)
+	report.Registration.OrganizationID, report.Registration.Organization = telresource.TenantOrgFromCertFile(certPath)
+	report.Registration.MutualTLS = state.CertsEnrolled
+	fillStatusRuntimeDetails(opts, loadedCfg, &report)
 
 	// Database-backed facts (identity timestamps, last scan). Read-only:
 	// only opened when the file already exists, and every failure degrades
@@ -248,6 +312,8 @@ func buildStatusReport(ctx context.Context, certsDir, dbPath, cfgFile string, us
 		(report.NextAction == installer.ActionInstall || report.Enrollment.State == "unknown") {
 		report.NextAction = installer.ActionReady
 	}
+	report.Health = buildStatusHealth(report)
+	report.HealthStatus = overallStatusHealth(report.Health)
 
 	return report
 }
@@ -273,6 +339,12 @@ func fillStatusFromStore(ctx context.Context, dbPath string, report *statusRepor
 	if identity, err := st.GetEnrolledIdentity(ctx); err == nil {
 		report.Enrollment.FirstEnrolled = identity.FirstEnrolledAt.UTC().Format(time.RFC3339)
 		report.Enrollment.KeyFingerprint = identity.ApiKeyFingerprint
+		if identity.LastCheckPassedAt != nil {
+			report.Enrollment.LastCheckPassed = identity.LastCheckPassedAt.UTC().Format(time.RFC3339)
+		}
+		if identity.LastCheckFailedAt != nil {
+			report.Enrollment.LastCheckFailed = identity.LastCheckFailedAt.UTC().Format(time.RFC3339)
+		}
 	} else if !errors.Is(err, sqlite.ErrNoIdentity) && report.Enrollment.Warning == "" {
 		report.Enrollment.Warning = "identity unreadable: " + err.Error()
 	}
@@ -291,19 +363,162 @@ func fillStatusFromStore(ctx context.Context, dbPath string, report *statusRepor
 // certNotAfter parses the first certificate in a PEM file and returns its
 // NotAfter timestamp.
 func certNotAfter(path string) (time.Time, error) {
+	cert, err := readStatusCertificate(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return cert.NotAfter, nil
+}
+
+func readStatusCertificate(path string) (*x509.Certificate, error) {
 	raw, err := os.ReadFile(path) //#nosec G304 -- path derived from the trusted certs-dir option
 	if err != nil {
-		return time.Time{}, fmt.Errorf("read certificate: %w", err)
+		return nil, fmt.Errorf("read certificate: %w", err)
 	}
 	block, _ := pem.Decode(raw)
 	if block == nil {
-		return time.Time{}, fmt.Errorf("no PEM block in %s", filepath.Base(path))
+		return nil, fmt.Errorf("no PEM block in %s", filepath.Base(path))
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("parse certificate: %w", err)
+		return nil, fmt.Errorf("parse certificate: %w", err)
 	}
-	return cert.NotAfter, nil
+	return cert, nil
+}
+
+func fillStatusRuntimeDetails(opts installer.Options, cfg *config.Config, report *statusReport) {
+	attrs := telresource.Build(telresource.Config{ServiceVersion: version})
+	distribution := strings.TrimSpace(attrs["os.name"] + " " + attrs["os.version"])
+	binaryPath, _ := os.Executable()
+	binaryHash, _ := identity.ComputeBinaryHash()
+	report.Software = statusSoftware{
+		Name:              contract.ServiceName,
+		DisplayVersion:    statusDisplayVersion(version),
+		Version:           version,
+		Vendor:            "VulnerTrack",
+		AgentType:         contract.AgentType,
+		BuildID:           commit,
+		BuiltAt:           date,
+		BinaryPath:        binaryPath,
+		BinaryHash:        binaryHash,
+		Platform:          runtime.GOOS,
+		Architecture:      runtime.GOARCH,
+		Distribution:      distribution,
+		TelemetryContract: contract.Version,
+	}
+
+	identityDir := filepath.Dir(opts.DbPath)
+	if cfg != nil && strings.TrimSpace(cfg.Identity.DataDir) != "" {
+		identityDir = cfg.Identity.DataDir
+	}
+	report.Identifiers = statusIdentifiers{
+		AgentID:  readStatusAgentID(identityDir),
+		HostID:   attrs["host.id"],
+		Hostname: attrs["host.name"],
+		ClientID: report.Registration.ClientName,
+		TenantID: report.Registration.OrganizationID,
+		UserID:   report.Registration.EnrolledByID,
+	}
+}
+
+func readStatusAgentID(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, "identity.json")) //#nosec G304 -- path comes from the local install configuration.
+	if err != nil {
+		return ""
+	}
+	var doc struct {
+		AgentID string `json:"agent_id"`
+	}
+	if json.Unmarshal(data, &doc) != nil {
+		return ""
+	}
+	return doc.AgentID
+}
+
+func statusDisplayVersion(v string) string {
+	v = strings.TrimSpace(v)
+	if v != "" && v[0] >= '0' && v[0] <= '9' {
+		return "v" + v
+	}
+	return v
+}
+
+func buildStatusHealth(report statusReport) []statusHealthCheck {
+	checks := make([]statusHealthCheck, 0, 6)
+	serviceStatus := "warn"
+	serviceDetail := report.Service.State
+	if report.Service.State == installer.ServiceRunning {
+		serviceStatus = "pass"
+		serviceDetail = "collector service is running"
+	} else if report.Service.State == installer.ServiceNotInstalled {
+		serviceStatus = "fail"
+	}
+	checks = append(checks, statusHealthCheck{Name: "Service", Status: serviceStatus, Detail: serviceDetail})
+
+	storeStatus, storeDetail := "warn", "database has not been created"
+	if report.Database.Exists && report.Database.Warning == "" {
+		storeStatus, storeDetail = "pass", "SQLite responding to queries"
+	} else if report.Database.Warning != "" {
+		storeStatus, storeDetail = "fail", report.Database.Warning
+	}
+	checks = append(checks, statusHealthCheck{Name: "Store", Status: storeStatus, Detail: storeDetail})
+
+	identityStatus, identityDetail := "fail", report.Enrollment.State
+	if report.Enrollment.Enrolled {
+		identityStatus = "pass"
+		identityDetail = "collector identity is enrolled"
+	} else if report.Enrollment.State == "unknown" {
+		identityStatus = "warn"
+	}
+	checks = append(checks, statusHealthCheck{Name: "Identity", Status: identityStatus, Detail: identityDetail})
+
+	checkStatus, checkDetail := "warn", "no connection check has run yet"
+	passed, passedOK := parseStatusTime(report.Enrollment.LastCheckPassed)
+	failed, failedOK := parseStatusTime(report.Enrollment.LastCheckFailed)
+	switch {
+	case failedOK && (!passedOK || failed.After(passed)):
+		checkStatus, checkDetail = "fail", "last check failed "+relativeAge(failed)
+	case passedOK && time.Since(passed) <= 24*time.Hour:
+		checkStatus, checkDetail = "pass", "passed "+relativeAge(passed)
+	case passedOK:
+		checkDetail = "last passed " + relativeAge(passed)
+	}
+	checks = append(checks, statusHealthCheck{Name: "Last check", Status: checkStatus, Detail: checkDetail})
+
+	scanStatus, scanDetail := "warn", "no scan has run yet"
+	if report.LastScan != nil {
+		scanStatus = "pass"
+		if report.LastScan.Status != "completed" {
+			scanStatus = "warn"
+		}
+		scanDetail = report.LastScan.Status + " " + report.LastScan.Ago
+	}
+	checks = append(checks, statusHealthCheck{Name: "Last scan", Status: scanStatus, Detail: scanDetail})
+
+	endpointStatus, endpointDetail := "warn", "endpoint is not configured"
+	if report.Endpoint != "" {
+		endpointStatus, endpointDetail = "pass", report.Endpoint
+	}
+	checks = append(checks, statusHealthCheck{Name: "OTLP endpoint", Status: endpointStatus, Detail: endpointDetail})
+	return checks
+}
+
+func parseStatusTime(value string) (time.Time, bool) {
+	parsed, err := time.Parse(time.RFC3339, value)
+	return parsed, err == nil
+}
+
+func overallStatusHealth(checks []statusHealthCheck) string {
+	overall := "healthy"
+	for _, check := range checks {
+		switch check.Status {
+		case "fail":
+			return "unhealthy"
+		case "warn":
+			overall = "degraded"
+		}
+	}
+	return overall
 }
 
 func renderStatusReport(cmd *cobra.Command, r statusReport) {
@@ -368,8 +583,76 @@ func renderStatusReport(cmd *cobra.Command, r statusReport) {
 	}
 
 	_, _ = fmt.Fprintf(w, "  Next\t%s\n", nextActionHint(r.NextAction))
+
+	_, _ = fmt.Fprintln(w, "\n  Registration")
+	_, _ = fmt.Fprintf(w, "    State\t%s\n", r.Enrollment.State)
+	_, _ = fmt.Fprintf(w, "    Enrolled by\t%s\n", statusJoinedValue(r.Registration.EnrolledByEmail, r.Registration.EnrolledByID))
+	_, _ = fmt.Fprintf(w, "    Organization\t%s\n", statusJoinedValue(r.Registration.Organization, r.Registration.OrganizationID))
+	_, _ = fmt.Fprintf(w, "    Client\t%s\n", statusValue(r.Registration.ClientName, "not available"))
+	certificate := "not available"
+	if r.Registration.ExpiresAt != "" {
+		certificate = fmt.Sprintf("valid until %s (%dd left)", r.Registration.ExpiresAt[:10], r.Enrollment.CertDaysLeft)
+		if r.Registration.IssuedAt != "" {
+			certificate += " · issued " + r.Registration.IssuedAt[:10]
+		}
+	}
+	_, _ = fmt.Fprintf(w, "    Certificate\t%s\n", certificate)
+	reportsTo := statusValue(r.Endpoint, "not configured")
+	if r.Registration.MutualTLS {
+		reportsTo += " · mutual TLS"
+	}
+	_, _ = fmt.Fprintf(w, "    Reports to\t%s\n", reportsTo)
+
+	_, _ = fmt.Fprintln(w, "\n  Software")
+	_, _ = fmt.Fprintf(w, "    Name\t%s\n", r.Software.Name)
+	_, _ = fmt.Fprintf(w, "    Version\t%s\n", r.Software.Version)
+	_, _ = fmt.Fprintf(w, "    Display version\t%s\n", r.Software.DisplayVersion)
+	_, _ = fmt.Fprintf(w, "    Vendor\t%s\n", r.Software.Vendor)
+	_, _ = fmt.Fprintf(w, "    Agent type\t%s\n", r.Software.AgentType)
+	_, _ = fmt.Fprintf(w, "    Build ID\t%s\n", statusValue(r.Software.BuildID, "not available"))
+	_, _ = fmt.Fprintf(w, "    Built\t%s\n", statusValue(r.Software.BuiltAt, "not available"))
+	_, _ = fmt.Fprintf(w, "    Binary\t%s\n", statusValue(r.Software.BinaryPath, "not available"))
+	_, _ = fmt.Fprintf(w, "    Binary hash\t%s\n", statusValue(r.Software.BinaryHash, "not available"))
+	_, _ = fmt.Fprintf(w, "    Platform\t%s/%s\n", r.Software.Platform, r.Software.Architecture)
+	_, _ = fmt.Fprintf(w, "    Distribution\t%s\n", statusValue(r.Software.Distribution, "not available"))
+	_, _ = fmt.Fprintf(w, "    Telemetry contract\t%s\n", r.Software.TelemetryContract)
+
+	_, _ = fmt.Fprintln(w, "\n  Identifiers")
+	_, _ = fmt.Fprintf(w, "    Agent\t%s\tagent.id, service.instance.id\n", statusValue(r.Identifiers.AgentID, "not available"))
+	_, _ = fmt.Fprintf(w, "    Host\t%s\thost.id\n", statusValue(r.Identifiers.HostID, "not available"))
+	_, _ = fmt.Fprintf(w, "    Hostname\t%s\thost.name\n", statusValue(r.Identifiers.Hostname, "not available"))
+	_, _ = fmt.Fprintf(w, "    Client\t%s\tcertificate CN\n", statusValue(r.Identifiers.ClientID, "not available"))
+	_, _ = fmt.Fprintf(w, "    Tenant\t%s\tcertificate O\n", statusValue(r.Identifiers.TenantID, "not available"))
+	_, _ = fmt.Fprintf(w, "    User\t%s\tcertificate OU\n", statusValue(r.Identifiers.UserID, "not available"))
+
+	_, _ = fmt.Fprintf(w, "\n  Health\t%s\n", strings.ToUpper(r.HealthStatus))
+	for _, check := range r.Health {
+		_, _ = fmt.Fprintf(w, "    [%s]\t%s\t%s\n", strings.ToUpper(check.Status), check.Name, check.Detail)
+	}
 	_ = w.Flush()
 	_, _ = fmt.Fprintln(out)
+}
+
+func statusValue(value, fallback string) string {
+	if strings.TrimSpace(value) == "" || value == "unknown" {
+		return fallback
+	}
+	return value
+}
+
+func statusJoinedValue(primary, identifier string) string {
+	primary = strings.TrimSpace(primary)
+	identifier = strings.TrimSpace(identifier)
+	switch {
+	case primary != "" && identifier != "":
+		return primary + " · " + identifier
+	case primary != "":
+		return primary
+	case identifier != "":
+		return identifier
+	default:
+		return "not available"
+	}
 }
 
 // nextActionHint turns the installer's NextAction token into a copy-paste

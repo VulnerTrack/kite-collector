@@ -145,8 +145,9 @@ func TestPrintPlatformEnrollmentComplete_ServiceStarted(t *testing.T) {
 
 	assert.Contains(t, output, "Enrollment complete.")
 	assert.Contains(t, output, "Welcome to Kite!")
-	assert.Contains(t, output, "Collector service started automatically.")
-	assert.Contains(t, output, "Kite is running at http://127.0.0.1:9090")
+	assert.Contains(t, output, "Service        Started")
+	assert.Contains(t, output, "Dashboard      http://127.0.0.1:9090")
+	assert.Contains(t, output, "Next step →")
 	assert.Contains(t, output, "kite-collector integrations")
 	assert.NotContains(t, output, "Press Ctrl+C to stop.")
 }
@@ -400,6 +401,6 @@ func TestPrintPlatformEnrollmentComplete_NoInstalledService(t *testing.T) {
 
 	assert.Contains(t, output, "Enrollment complete.")
 	assert.Contains(t, output, "Welcome to Kite!")
-	assert.Contains(t, output, "No installed collector service was found")
+	assert.Contains(t, output, "Credentials saved; service not installed")
 	assert.NotContains(t, output, "Press Ctrl+C to stop.")
 }

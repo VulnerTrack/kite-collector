@@ -31,9 +31,14 @@ func writeTestEnrollmentPEMs(t *testing.T, dir string, notAfter time.Time) {
 	require.NoError(t, err)
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "kite-test-agent"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     notAfter,
+		Subject: pkix.Name{
+			CommonName:         "kite-test-agent",
+			Organization:       []string{"0b2d471b-a0c3-4647-9120-29b7d53c43c6", "Test Organization"},
+			OrganizationalUnit: []string{"93a1f124-38ef-4c76-814d-2184009f5343"},
+		},
+		EmailAddresses: []string{"operator@example.com"},
+		NotBefore:      time.Now().Add(-time.Hour),
+		NotAfter:       notAfter,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	require.NoError(t, err)
@@ -75,6 +80,20 @@ func TestBuildStatusReport_EnrolledWithCertExpiry(t *testing.T) {
 	assert.True(t, r.Enrollment.Enrolled)
 	assert.NotEmpty(t, r.Enrollment.CertNotAfter)
 	assert.InDelta(t, 59, r.Enrollment.CertDaysLeft, 1)
+	assert.Equal(t, "kite-test-agent", r.Registration.ClientName)
+	assert.Equal(t, "operator@example.com", r.Registration.EnrolledByEmail)
+	assert.Equal(t, "93a1f124-38ef-4c76-814d-2184009f5343", r.Registration.EnrolledByID)
+	assert.Equal(t, "0b2d471b-a0c3-4647-9120-29b7d53c43c6", r.Registration.OrganizationID)
+	assert.Equal(t, "Test Organization", r.Registration.Organization)
+	assert.True(t, r.Registration.MutualTLS)
+	assert.NotEmpty(t, r.Software.BinaryHash)
+	assert.Equal(t, "kite-collector", r.Software.Name)
+	assert.NotEmpty(t, r.Software.TelemetryContract)
+	assert.Equal(t, "kite-test-agent", r.Identifiers.ClientID)
+	assert.Equal(t, "0b2d471b-a0c3-4647-9120-29b7d53c43c6", r.Identifiers.TenantID)
+	assert.Equal(t, "93a1f124-38ef-4c76-814d-2184009f5343", r.Identifiers.UserID)
+	assert.Len(t, r.Health, 6)
+	assert.Equal(t, "degraded", r.HealthStatus)
 }
 
 func TestBuildStatusReport_ExpiredCertStillReports(t *testing.T) {
@@ -112,6 +131,11 @@ func TestStatusCommand_JSONOutput(t *testing.T) {
 	require.NoError(t, json.Unmarshal(out.Bytes(), &r))
 	assert.Equal(t, "not enrolled", r.Enrollment.State)
 	assert.Equal(t, dbPath, r.Database.Path)
+	assert.Equal(t, "kite-collector", r.Software.Name)
+	assert.NotEmpty(t, r.Software.Platform)
+	assert.NotEmpty(t, r.Identifiers.HostID)
+	assert.Len(t, r.Health, 6)
+	assert.Equal(t, "unhealthy", r.HealthStatus)
 }
 
 func TestInstallEvidenceScore_RunningServiceDominatesEmptyDir(t *testing.T) {
