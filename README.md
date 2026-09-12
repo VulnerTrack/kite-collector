@@ -41,6 +41,21 @@ You can install `kite-collector` on Debian-based distributions (such as Ubuntu, 
    kite-collector install
    ```
 
+The repository keeps the **three most recent releases** of each package, so
+you can pin a version or roll one back without leaving apt:
+
+```bash
+apt-cache policy kite-collector          # candidate + every version on offer
+sudo apt install kite-collector=1.2.3    # pin, e.g. to roll back
+```
+
+Older releases stay downloadable as
+[GitHub Release](https://github.com/VulnerTrack/kite-collector/releases)
+assets once they age out of the repository. The archive's signature is
+refreshed nightly and its `Release` file carries a 30-day `Valid-Until`, so
+`apt update` will tell you outright if you are ever served a stale index
+instead of silently hiding an update.
+
 Need [osquery](https://osquery.io) on the host too? Install `kite-collector-osquery`
 instead — the same agent plus a bundled osqueryd running as the
 `kite-osqueryd` systemd service (extensions socket at

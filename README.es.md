@@ -27,6 +27,21 @@ Puedes instalar `kite-collector` en distribuciones basadas en Debian (como Ubunt
    kite-collector install
    ```
 
+El repositorio conserva las **tres versiones más recientes** de cada
+paquete, así que puedes fijar una versión o volver a una anterior sin salir
+de apt:
+
+```bash
+apt-cache policy kite-collector          # candidata y todas las versiones disponibles
+sudo apt install kite-collector=1.2.3    # fijar una versión, p. ej. para revertir
+```
+
+Las versiones que salen del repositorio siguen disponibles como artefactos
+de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases).
+La firma del archivo se renueva cada noche y su fichero `Release` lleva un
+`Valid-Until` de 30 días, de modo que `apt update` avisará si alguna vez te
+sirven un índice caducado en lugar de ocultar una actualización en silencio.
+
 ¿Necesitas también [osquery](https://osquery.io) en el host? Instala
 `kite-collector-osquery` — el mismo agente más un osqueryd incluido que corre
 como el servicio systemd `kite-osqueryd` (socket de extensiones en
