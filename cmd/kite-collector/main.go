@@ -71,6 +71,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/envelope"
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	hostlisteners "github.com/vulnertrack/kite-collector/internal/hostlisteners"
+	hostvolumes "github.com/vulnertrack/kite-collector/internal/hostvolumes"
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	memoryseries "github.com/vulnertrack/kite-collector/internal/memoryseries"
@@ -1585,6 +1586,37 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		}
 	}
 
+	// Local storage inventory + capacity metrics: enumerate this host's mounted
+	// filesystems, their used/total bytes and inodes, and their encryption
+	// posture, into host_volumes — which is what the dashboard's Volumes page
+	// reads. Zero-config, like listeners; only skipped when the store can't
+	// persist volumes.
+	var volumeCollector *hostvolumes.Collector
+	var volumeBusy atomic.Bool
+	if vc, ok := hostvolumes.New(st, nil, nil); ok {
+		volumeCollector = vc
+		slog.Info("host volumes collection enabled",
+			"code", string(LogCodeHostVolumesConfigured),
+			"interval", hostVolumesInterval.String())
+	}
+	// Always off the caller's goroutine: statfs on a wedged NFS mount blocks
+	// uninterruptibly in the kernel, so a storage cycle may never be on the
+	// path of agent startup or the scan loop. The busy flag drops a tick rather
+	// than overlapping cycles — one skipped capacity sample is harmless,
+	// because the next tick re-reads absolute values rather than deltas.
+	collectHostVolumes := func() {
+		if volumeCollector == nil || !volumeBusy.CompareAndSwap(false, true) {
+			return
+		}
+		go func() {
+			defer volumeBusy.Store(false)
+			if err := volumeCollector.CollectAndStore(ctx); err != nil {
+				slog.Warn("host volumes collection failed",
+					"code", string(LogCodeHostVolumesFailed), "error", err)
+			}
+		}()
+	}
+
 	// A fresh SQLite collector stays empty until onboarding supplies its
 	// directory connection. The onboarding AD step starts the first scan
 	// automatically; already-enrolled installations retain startup scanning.
@@ -1616,6 +1648,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	// Populate host_listeners right after the first scan wrote the local
 	// machine (a no-op if the scan produced no local machine).
 	collectHostListeners()
+	collectHostVolumes()
 
 	ticker := time.NewTicker(scanInterval)
 	defer ticker.Stop()
@@ -1633,6 +1666,19 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		hostMetricsTicker := time.NewTicker(hostMetricsInterval)
 		defer hostMetricsTicker.Stop()
 		hostMetricsTicks = hostMetricsTicker.C
+	}
+
+	// Storage rides its own ticker rather than the scan cycle. Volumes are
+	// inventory, but their capacity is a metric — and the 6h default scan
+	// cadence would leave the dashboard's usage figures up to six hours stale,
+	// which is useless for the thing an operator actually wants from them
+	// ("is anything about to fill up?"). The cost of a cycle is a partition
+	// walk plus one statfs per mount, so a minutes-scale cadence is cheap.
+	var volumeTicks <-chan time.Time
+	if volumeCollector != nil {
+		volumeTicker := time.NewTicker(hostVolumesInterval)
+		defer volumeTicker.Stop()
+		volumeTicks = volumeTicker.C
 	}
 
 	// Local RAM time series (RFC-0157's durable counterpart): sample memory on
@@ -1705,6 +1751,9 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 				// the scan.
 				collectHostListeners()
 			}
+		case <-volumeTicks:
+			// collectHostVolumes already runs off-loop and drops when busy.
+			collectHostVolumes()
 		case <-hostMetricsTicks:
 			// Off the loop goroutine: a hung mount inside gopsutil or a
 			// retrying transport can cost tens of seconds, and R3 says
@@ -1740,6 +1789,15 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 // config.MinHostMetricsInterval (15s floor, 60s default) so a slow cycle can
 // never overlap the next tick's.
 const hostMetricsCollectTimeout = 10 * time.Second
+
+// hostVolumesInterval is how often the local storage inventory and its
+// capacity metrics are refreshed into host_volumes. Five minutes is well
+// inside "a disk filling up is still actionable" while costing one partition
+// walk plus a statfs per mount — orders of magnitude cheaper than a discovery
+// scan. It is a constant rather than a config key on purpose: there is no
+// workload here worth tuning, and the knob would be one more thing to get
+// wrong. Promote it to config if a deployment ever needs a different cadence.
+const hostVolumesInterval = 5 * time.Minute
 
 // emitHostMetrics runs one host-metrics collect-and-emit cycle (RFC-0157
 // §5.3). Every failure path here is a warning and a return: neither a
