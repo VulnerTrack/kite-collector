@@ -297,6 +297,20 @@ type HostListenerStore interface {
 	ListHostListeners(ctx context.Context, machineID uuid.UUID) ([]model.HostListener, error)
 }
 
+// HostVolumeStore persists the local host's mounted filesystems and their
+// capacity metrics. Optional, like HostListenerStore, so stores without the
+// host_volumes table stay compatible.
+//
+// ReplaceHostVolumes is upsert-plus-prune rather than delete-then-insert: a
+// volume keeps its row identity across rescans (the table is keyed on
+// (machine_id, mount_point)) so capacity is a timeline for a stable row, while
+// mounts that have since disappeared are deleted so an unplugged USB disk does
+// not linger as a stale row.
+type HostVolumeStore interface {
+	ReplaceHostVolumes(ctx context.Context, machineID uuid.UUID, volumes []model.HostVolume) error
+	ListHostVolumes(ctx context.Context, machineID uuid.UUID) ([]model.HostVolume, error)
+}
+
 // Store defines the persistence interface for the kite-collector.
 // Implementations must be safe for concurrent use.
 type Store interface {
