@@ -604,6 +604,27 @@ A JSON snapshot mirrors the page for scripted monitoring:
 `GET /api/v1/containers/snapshot.json`. Full details, engine resolution
 order, and the collection model: [docs/container-observability.md](docs/container-observability.md).
 
+## Storage
+
+The **Volumes** page (`/volumes`) shows every mounted filesystem across the
+fleet with its capacity, how full it is, inode pressure and encryption
+posture — joined to the machine that owns each mount, with the usual facet
+rail over filesystem, encryption state, removable and read-only.
+
+- **Capacity at a glance** — Size and Used as human sizes, plus a usage bar
+  tinted amber at 75 % and red at 90 %, so a table of mounts can be scanned
+  for "what is about to fill up" without reading a byte count.
+- **Inode pressure as its own bar** — a volume can be 3 % full and completely
+  unwritable. Filesystems that don't report inode counts (btrfs, vfat, APFS)
+  show `—`, as does any mount the agent couldn't stat: "not measured" and
+  "empty" are different facts.
+- **Encryption posture** — LUKS / BitLocker / FileVault detection per OS,
+  feeding the CWE-311 query for unencrypted boot volumes.
+
+The local agent refreshes this every 5 minutes, independently of the discovery
+scan. Details, write semantics and cadence rationale:
+[docs/storage-observability.md](docs/storage-observability.md).
+
 ## Streaming to OpenTelemetry
 
 kite-collector pushes asset lifecycle events to any OTLP-compatible collector (Grafana Alloy, OpenTelemetry Collector, Datadog Agent, etc.) as **OTLP log records over HTTP/JSON**.
