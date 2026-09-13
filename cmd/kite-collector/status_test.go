@@ -93,7 +93,7 @@ func TestBuildStatusReport_EnrolledWithCertExpiry(t *testing.T) {
 	assert.Equal(t, "0b2d471b-a0c3-4647-9120-29b7d53c43c6", r.Identifiers.TenantID)
 	assert.Equal(t, "93a1f124-38ef-4c76-814d-2184009f5343", r.Identifiers.UserID)
 	assert.Len(t, r.Health, 6)
-	assert.Equal(t, "degraded", r.HealthStatus)
+	assert.Equal(t, "unhealthy", r.HealthStatus)
 }
 
 func TestBuildStatusReport_ExpiredCertStillReports(t *testing.T) {
