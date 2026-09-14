@@ -1,4 +1,4 @@
-.PHONY: all run observe build build-host build-windows7 test test-race test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-deb-collector test-apt-repo test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite install-aur-osquery install-aur install-aur-bin install-aur-release test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
+.PHONY: all run observe build build-host build-windows7 test test-race test-e2e test-smoke-containers test-kite-containers test-deb-osquery test-deb-collector test-apt-repo test-installer test-installer-live test-ubuntu-matrix pin-ubuntu-matrix check-ubuntu-matrix-digests sim-osquery osquery-checks osquery-edge test-osquery-kite install-aur-osquery install-aur install-aur-bin install-aur-release test-cloud test-otlp test-all lint security vet clean coverage quality quality-tools check-parse-errors vulncheck osv-scan fuzz-quick windows-resources clean-windows-resources validate-wxs
 
 # Let the Go toolchain auto-download the version pinned in go.mod when the
 # host `go` is older. Without this, `go 1.26.5` in go.mod fails on hosts with
@@ -214,6 +214,21 @@ test-deb-collector:
 # Needs no prebuilt deb (it generates fixtures). Requires docker.
 test-apt-repo:
 	./tests/e2e/apt-repo/run.sh
+
+# One-liner installer battery: pipes installers/installer.sh into sh inside
+# stock debian/ubuntu/fedora/almalinux/opensuse/alpine/arch containers, the
+# way `curl -fsSL <url> | sh` runs it, against a locally built release served
+# over HTTP (signed APT archive, rpms, static binaries, checksums.txt). Covers
+# the apt/rpm/binary methods, the osquery-bundle default and flavor swaps,
+# pinning, upgrade, sudo and rootless installs, and refusal of tampered
+# downloads and truncated scripts. Requires docker + go.
+test-installer:
+	./tests/e2e/installer/run.sh
+
+# The same one-liner against the real latest GitHub release and APT
+# repository: a post-release smoke test. Requires docker + internet.
+test-installer-live:
+	MODE=live ./tests/e2e/installer/run.sh
 
 # Ubuntu multi-version package-discovery matrix (RFC-0149). Runs the compiled
 # binary's software.Dpkg collector inside real, unmodified ubuntu:20.04/22.04/
