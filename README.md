@@ -20,6 +20,32 @@ Results are stored in a local SQLite database. No servers, no dependencies, full
 > remove the data directory. The deb/rpm packages ship their own systemd
 > unit, so on those systems `install` only enrolls and enables it.
 
+### Quick install (Linux, macOS, FreeBSD, OpenBSD)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/VulnerTrack/kite-collector/main/installers/installer.sh | sh
+sudo kite-collector install
+```
+
+The script picks the native channel: the APT repository below on
+Debian/Ubuntu, the release `.rpm` on Fedora/RHEL/SUSE, and the static binary in
+`/usr/local/bin` elsewhere. Downloaded artifacts are SHA256-checked against the
+release's `checksums.txt`. On Debian/Ubuntu amd64 it installs
+`kite-collector-osquery` (the collector plus a bundled osqueryd) by default.
+Elsewhere it installs the plain collector and prints how to add osquery.
+
+Set these on the `sh` side of the pipe:
+
+| variable | effect |
+|----------|--------|
+| `KITE_VERSION=1.2.3` | pin a release |
+| `KITE_OSQUERY=no` | plain collector, even where the bundle exists (`yes` requires the bundle) |
+| `KITE_INSTALL_METHOD=binary` | force `apt`, `rpm` or `binary` |
+| `KITE_INSTALL_DIR=$HOME/.local/bin` | binary target; a directory you can write needs no root |
+
+For example, `curl -fsSL …/installer.sh | KITE_OSQUERY=no sh`. Re-running the
+one-liner upgrades whichever flavor is already installed.
+
 ### Ubuntu / Debian (APT Repository)
 
 You can install `kite-collector` on Debian-based distributions (such as Ubuntu, Linux Mint, or Pop!_OS) using the official APT repository:
