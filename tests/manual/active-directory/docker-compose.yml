@@ -59,6 +59,10 @@ services:
       - --source
       - ldap
       - --verbose
+    # `scan` never opens the connector secret store (only the dashboard does),
+    # so the LDAP source still resolves bind_password_env from the environment.
+    environment:
+      KITE_LDAP_BIND_PASSWORD: ${AD_ADMIN_PASSWORD:?set AD_ADMIN_PASSWORD in .env}
     volumes:
       - ./kite-collector.yaml:/lab/kite-collector.yaml:ro
       - collector_data:/data
