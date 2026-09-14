@@ -36,6 +36,9 @@ services:
     command: ["/bin/bash", "/lab/seed-directory.sh"]
     volumes:
       - ./seed-directory.sh:/lab/seed-directory.sh:ro
+      # `samba-tool gpo create` opens an SMB session to write SYSVOL and needs
+      # the domain's smb.conf (realm/workgroup); this container is unprovisioned.
+      - samba_etc:/usr/local/samba/etc:ro
     depends_on:
       dc01:
         condition: service_healthy
