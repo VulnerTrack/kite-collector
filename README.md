@@ -24,7 +24,8 @@ Results are stored in a local SQLite database. No servers, no dependencies, full
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VulnerTrack/kite-collector/main/installers/installer.sh | sh
-sudo kite-collector install
+sudo kite-collector install   # register the service (enabled at boot)
+sudo kite-collector enroll    # sign in; the service starts once enrolled
 ```
 
 The script picks the native channel: the APT repository below on

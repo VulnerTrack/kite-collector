@@ -10,7 +10,8 @@ Un solo binario que escanea tu red, inventaria el software instalado, audita la 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VulnerTrack/kite-collector/main/installers/installer.sh | sh
-sudo kite-collector install
+sudo kite-collector install   # registra el servicio (habilitado al arranque)
+sudo kite-collector enroll    # inicia sesion; el servicio arranca al enrolarse
 ```
 
 El script elige el canal nativo: el repositorio APT en Debian/Ubuntu, el `.rpm`

@@ -161,7 +161,8 @@ fi
 expect_log "picked the $METHOD method" "using $METHOD"
 expect_log "picked $EXPECT_PKG" "Installing $EXPECT_PKG "
 expect_version "$BIN" "$OLD_VERSION" "binary reports the pinned version"
-expect_log "prints the next step" "kite-collector install"
+expect_log "prints the install step" "kite-collector install"
+expect_log "prints the enroll step" "kite-collector enroll"
 if [ -n "$RUN_AS" ]; then
     expect_log "privileged commands went through sudo" "^+ sudo "
 fi

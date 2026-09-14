@@ -435,9 +435,11 @@ main() {
     root_prefix=""
     [ "$(id -u)" = 0 ] || root_prefix="${SUDO:-sudo} "
     say ""
-    say "Next, enroll this host and register the background service:"
+    say "Next, register the background service, then enroll this host (the"
+    say "service starts once enrollment succeeds):"
     say ""
     say "  ${root_prefix}kite-collector install"
+    say "  ${root_prefix}kite-collector enroll"
 
     if [ "$KITE_OSQUERY" = auto ] && [ "$PACKAGE" = kite-collector ] && [ "$BUNDLE_PUBLISHED" = false ]; then
         osquery_hint=""
