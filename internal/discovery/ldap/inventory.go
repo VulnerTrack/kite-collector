@@ -2,6 +2,8 @@ package ldap
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -15,6 +17,9 @@ const (
 	ouSearchFilter     = "(objectClass=organizationalUnit)"
 	gpoSearchFilter    = "(objectClass=groupPolicyContainer)"
 	domainSearchFilter = "(objectClass=domainDNS)"
+	// crossRefSearchFilter matches domain partitions only; configuration,
+	// schema and application partitions carry no NetBIOS name.
+	crossRefSearchFilter = "(&(objectClass=crossRef)(nETBIOSName=*))"
 )
 
 func collectDirectoryInventory(ctx context.Context, conn directoryConn, conf *ldapConfig) (model.ADInventory, error) {
@@ -67,12 +72,23 @@ func collectDirectoryInventory(ctx context.Context, conn directoryConn, conf *ld
 	for _, entry := range result.Entries {
 		inventory.Computers = append(inventory.Computers, adComputer(entry))
 	}
-	result, err = searchPaged(ctx, conn, conf, domainSearchFilter, []string{"distinguishedName", "dnsRoot", "nETBIOSName", "objectSid", "whenCreated"})
+	result, err = searchPaged(ctx, conn, conf, domainSearchFilter, []string{"distinguishedName", "objectSid", "whenCreated"})
 	if err != nil {
 		return inventory, err
 	}
 	for _, entry := range result.Entries {
 		inventory.Domains = append(inventory.Domains, adDomain(entry))
+	}
+	if len(inventory.Domains) > 0 {
+		// The NetBIOS name is identity metadata, not inventory: a bind account
+		// that cannot read the configuration partition still gets a full scan.
+		names, lookupErr := netBIOSNamesByNC(conn, conf)
+		if lookupErr != nil {
+			slog.Warn("ldap: could not resolve domain NetBIOS names", "code", string(LogCodeInventoryNetBIOSLookupFailed), "error", lookupErr)
+		}
+		for i := range inventory.Domains {
+			inventory.Domains[i].NetBIOSName = names[strings.ToLower(inventory.Domains[i].DistinguishedName)]
+		}
 	}
 	return inventory, nil
 }
@@ -99,8 +115,41 @@ func adComputer(entry *ldapv3.Entry) model.ADComputer {
 	return model.ADComputer{DistinguishedName: entry.DN, Name: entry.GetAttributeValue("sAMAccountName"), DNSHostName: entry.GetAttributeValue("dnsHostName"), OperatingSystem: entry.GetAttributeValue("operatingSystem"), OperatingSystemVersion: entry.GetAttributeValue("operatingSystemVersion"), ObjectSID: parseObjectSID(entry.GetRawAttributeValue("objectSid")), Enabled: uac&uacAccountDisable == 0, LastLogon: ldapTime(entry.GetAttributeValue("lastLogonTimestamp")), PasswordLastSet: ldapTime(entry.GetAttributeValue("pwdLastSet")), ServicePrincipalNames: trimmed(entry.GetAttributeValues("servicePrincipalName"))}
 }
 
+// adDomain maps a domainDNS object. dnsRoot and nETBIOSName are not populated
+// on that object in AD (dnsRoot is a crossRef-only attribute), so the DNS root
+// comes from the domain naming context's DC= components and the NetBIOS name
+// is filled in from the partition's crossRef by resolveNetBIOSNames.
 func adDomain(entry *ldapv3.Entry) model.ADDomain {
-	return model.ADDomain{DistinguishedName: entry.DN, DNSRoot: entry.GetAttributeValue("dnsRoot"), NetBIOSName: entry.GetAttributeValue("nETBIOSName"), ObjectSID: parseObjectSID(entry.GetRawAttributeValue("objectSid")), WhenCreated: entry.GetAttributeValue("whenCreated")}
+	return model.ADDomain{DistinguishedName: entry.DN, DNSRoot: domainFromBaseDN(entry.DN), ObjectSID: parseObjectSID(entry.GetRawAttributeValue("objectSid")), WhenCreated: entry.GetAttributeValue("whenCreated")}
+}
+
+// netBIOSNamesByNC reads every crossRef under CN=Partitions of the forest
+// configuration partition and returns nETBIOSName keyed by the lowercased
+// nCName. The configuration partition is a separate naming context, so a
+// subtree search from base_dn never reaches it.
+func netBIOSNamesByNC(conn directoryConn, conf *ldapConfig) (map[string]string, error) {
+	rootDSE, err := conn.Search(ldapv3.NewSearchRequest("", ldapv3.ScopeBaseObject, ldapv3.NeverDerefAliases, 0, conf.timeoutSeconds, false, "(objectClass=*)", []string{"configurationNamingContext"}, nil))
+	if err != nil {
+		return nil, fmt.Errorf("read rootDSE: %w", err)
+	}
+	var configNC string
+	if len(rootDSE.Entries) > 0 {
+		configNC = rootDSE.Entries[0].GetAttributeValue("configurationNamingContext")
+	}
+	if configNC == "" {
+		return nil, fmt.Errorf("rootDSE has no configurationNamingContext")
+	}
+	result, err := conn.Search(ldapv3.NewSearchRequest("CN=Partitions,"+configNC, ldapv3.ScopeSingleLevel, ldapv3.NeverDerefAliases, 0, conf.timeoutSeconds, false, crossRefSearchFilter, []string{"nCName", "nETBIOSName"}, nil))
+	if err != nil {
+		return nil, fmt.Errorf("search crossRef partitions: %w", err)
+	}
+	names := make(map[string]string, len(result.Entries))
+	for _, entry := range result.Entries {
+		if nc, name := entry.GetAttributeValue("nCName"), entry.GetAttributeValue("nETBIOSName"); nc != "" && name != "" {
+			names[strings.ToLower(nc)] = name
+		}
+	}
+	return names, nil
 }
 
 func ldapTime(value string) string {

@@ -12,9 +12,11 @@ import (
 )
 
 // fakeConn implements directoryConn for the unit tests. It records calls
-// and serves a canned SearchWithPaging result.
+// and serves a canned result, or routes each request through searchFn
+// when a test needs per-request answers.
 type fakeConn struct {
 	result      *ldapv3.SearchResult
+	searchFn    func(*ldapv3.SearchRequest) (*ldapv3.SearchResult, error)
 	bindErr     error
 	startTLSErr error
 	searchErr   error
@@ -29,7 +31,13 @@ func (c *fakeConn) Bind(dn, pwd string) error {
 	return c.bindErr
 }
 func (c *fakeConn) StartTLS(*tls.Config) error { c.startTLSed = true; return c.startTLSErr }
-func (c *fakeConn) SearchWithPaging(_ *ldapv3.SearchRequest, _ uint32) (*ldapv3.SearchResult, error) {
+func (c *fakeConn) Search(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
+	return c.SearchWithPaging(req, 0)
+}
+func (c *fakeConn) SearchWithPaging(req *ldapv3.SearchRequest, _ uint32) (*ldapv3.SearchResult, error) {
+	if c.searchFn != nil {
+		return c.searchFn(req)
+	}
 	if c.searchErr != nil {
 		return nil, c.searchErr
 	}

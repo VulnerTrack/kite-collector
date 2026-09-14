@@ -15,6 +15,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeSearchSkipMalformedEntry,
 		LogCodeSearchMaxObjectsTripped,
 		LogCodeDialFailedNextDC,
+		LogCodeInventoryNetBIOSLookupFailed,
 	}
 	for _, c := range codes {
 		s := string(c)
@@ -38,6 +39,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 		LogCodeSearchSkipMalformedEntry,
 		LogCodeSearchMaxObjectsTripped,
 		LogCodeDialFailedNextDC,
+		LogCodeInventoryNetBIOSLookupFailed,
 	}
 	for _, c := range all {
 		assert.False(t, seen[c],

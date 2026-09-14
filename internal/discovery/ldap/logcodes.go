@@ -18,4 +18,7 @@ const (
 
 	// --- dial surface (DC connection attempts) -----------------------
 	LogCodeDialFailedNextDC LogCode = "ldap.dial.failed_next_dc"
+
+	// --- inventory surface (directory objects beyond computers) ------
+	LogCodeInventoryNetBIOSLookupFailed LogCode = "ldap.inventory.netbios_lookup_failed"
 )

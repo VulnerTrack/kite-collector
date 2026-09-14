@@ -59,6 +59,7 @@ var computerAttributes = []string{
 type directoryConn interface {
 	Bind(username, password string) error
 	StartTLS(config *tls.Config) error
+	Search(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error)
 	SearchWithPaging(req *ldapv3.SearchRequest, pagingSize uint32) (*ldapv3.SearchResult, error)
 	Close() error
 }

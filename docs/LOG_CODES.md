@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 535 codes across 60 packages.
+**Catalog size:** 536 codes across 60 packages.
 
 ---
 
@@ -931,7 +931,7 @@ Source: [`internal/discovery/lan/wsdiscovery/logcodes.go`](../internal/discovery
 
 ## `ldap` (internal/discovery/ldap)
 
-Source: [`internal/discovery/ldap/logcodes.go`](../internal/discovery/ldap/logcodes.go) · 3 codes
+Source: [`internal/discovery/ldap/logcodes.go`](../internal/discovery/ldap/logcodes.go) · 4 codes
 
 **--- search surface (computer object enumeration) ----------------**
 
@@ -945,6 +945,12 @@ Source: [`internal/discovery/ldap/logcodes.go`](../internal/discovery/ldap/logco
 | Code | Constant | Description |
 |---|---|---|
 | `ldap.dial.failed_next_dc` | `LogCodeDialFailedNextDC` | — |
+
+**--- inventory surface (directory objects beyond computers) ------**
+
+| Code | Constant | Description |
+|---|---|---|
+| `ldap.inventory.netbios_lookup_failed` | `LogCodeInventoryNetBIOSLookupFailed` | — |
 
 ## `manifests` (internal/discovery/manifests)
 
