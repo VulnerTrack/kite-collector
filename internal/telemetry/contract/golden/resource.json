@@ -13,5 +13,5 @@
   "agent.type": "kite-collector",
   "tenant.id": "01931cb6-b7c4-7c41-b000-fedcba987654",
   "deployment.environment": "pilot",
-  "kite.contract.version": "1.1"
+  "kite.contract.version": "1.2"
 }

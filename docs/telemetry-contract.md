@@ -81,6 +81,33 @@ See [`internal/telemetry/contract/golden/`](../internal/telemetry/contract/golde
 
 ---
 
+## Machine inventory attributes (v1.2, additive)
+
+Both machine events (`machine.discovered`, `machine.changed`) MAY carry the machine's identity hashes and service inventory. They are lifted off `Machine.Tags` by `MachineEvent.FromMachine` and emitted twice — legacy snake_case key and contract key — like every other machine attribute. All are omitted when empty, so a plain host record is unchanged.
+
+| Contract key | Legacy key | Value | Set by |
+|---|---|---|---|
+| `security.machine.container.id` | `container_id` | full 64-hex engine container id | docker source (`container_id_full` tag) |
+| `security.machine.container.image.id` | `image_id` | engine image id, `sha256:<hex>` of the image config (changes on every rebuild) | docker source (`image_id` tag) |
+| `security.machine.container.image.digest` | `image_digest` | registry content digest of the pulled manifest, `sha256:<hex>` — the key a vulnerability feed matches on; empty for never-pushed local builds | docker source (`image_digest` tag, joined from `/images/json` `RepoDigests`) |
+| `security.machine.services` | `services` | JSON array of `{name, category, version?, protocol?, port?, exposure?, source?}` (`model.MachineService`), sorted by category, name, port; at most 64 entries | every source below |
+| `security.machine.service.categories` | `service_categories` | sorted, comma-joined categories present in `services` | derived |
+
+`category` is a closed set (`contract.AllowedServiceCategories`): `directory` (Active Directory, LDAP, Kerberos, FreeIPA), `database`, `cache`, `search`, `message_queue`, `web`, `remote_access`, `file_sharing`, `object_storage`, `mail`, `dns`, `monitoring`, `identity`, `secrets`, `container_platform`, `ci`, `other`. `name` is the canonical product/protocol id (`active_directory`, `postgresql`, `mssql`, `redis`, `rabbitmq`, `ssh`, …).
+
+Who fills `services`, and the `source` each entry carries:
+
+| Source | How | `source` |
+|---|---|---|
+| **docker** | image reference (`postgres:16` → `postgresql`/`database`, version from a numeric tag; `samba-ad-dc` → `active_directory`) plus the container's exposed private ports through the well-known-port table; `exposure` is `published` (host binding) or `internal` | `image`, `port` |
+| **network** scan | fingerprintx handshake per open port (protocol + banner version); unfingerprinted open ports fall back to the well-known-port table | `banner`, `port` |
+| **agent** (local host) | the engine folds this host's `host_listeners` rows (fingerprinted LISTEN sockets) into the agent machine before persisting, with `exposure` = `internet`/`lan`/`loopback` | `listener` |
+| **ldap** | a domain controller (`SERVER_TRUST_ACCOUNT`) always offers `active_directory` + `ldap` + `kerberos`; any computer's `servicePrincipalName`s name what it serves (`MSSQLSvc/host:1433` → `mssql` on 1433, `TERMSRV` → `rdp`, `WSMAN` → `winrm`, …) | `directory`, `spn` |
+
+Because `services` lives in `Machine.Tags`, it is persisted, merged by the deduper (incoming key wins, so a source's list replaces its previous one and stale services drop out), and covered by `MaterialFingerprint` — a new database appearing on a host is a `machine.changed`, not an `analyzed` tick. Well-known-port classification deliberately skips ambiguous ports (3000, 8000, 9000, …): a wrong "database" label is worse than none.
+
+The log-record body (`details`) repeats `container_id`, `image_id`, `image_digest`, `services` and `service_categories` for human triage.
+
 ## Spans (target: §4.5)
 
 Spans land when the SDK migration (RFC-0073) ships. The closed span set:
@@ -166,6 +193,8 @@ The receiver validates the `x5c` chain against the PKI CA, verifies the JWS with
 
 ```
 v1.0  — this document; frozen at agent v0.5.x
+v1.1  — additive: probe.heartbeat event
+v1.2  — additive: container identity hashes + service inventory on machine events
 v1.x  — purely additive: new MAY attributes, MAY span attributes, metric labels
 v2.0  — breaking: removal/rename of MUST attributes, enum semantic change, event removal
         Requires a 90-day dual-emit window (RFC-0115 §2.3).

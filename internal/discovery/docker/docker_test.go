@@ -83,8 +83,8 @@ func newMockDockerAPI(t *testing.T) *httptest.Server {
 
 	mux.HandleFunc("/v1.43/images/json", func(w http.ResponseWriter, _ *http.Request) {
 		images := []imageSummary{
-			{ID: "sha256:deadbeef", RepoTags: []string{"nginx:1.25"}, Size: 150_000_000, Created: 1700000000},
-			{ID: "sha256:cafebabe", RepoTags: []string{"redis:7"}, Size: 120_000_000, Created: 1700000100},
+			{ID: "sha256:deadbeef", RepoTags: []string{"nginx:1.25"}, RepoDigests: []string{"nginx@sha256:1111"}, Size: 150_000_000, Created: 1700000000},
+			{ID: "sha256:cafebabe", RepoTags: []string{"redis:7"}, RepoDigests: []string{"redis@sha256:2222", "docker.io/library/redis@sha256:2222"}, Size: 120_000_000, Created: 1700000100},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(images)
@@ -133,6 +133,20 @@ func TestDocker_Discover_Success(t *testing.T) {
 	assert.Equal(t, "myapp", tags["compose_project"])
 	assert.Equal(t, "80/tcp->8080", tags["ports"])
 
+	// Identity hashes: short id for display, full id + both image digests
+	// for matching.
+	assert.Equal(t, "abc123def456", tags["container_id"])
+	assert.Equal(t, "abc123def456789012345678", tags[model.TagContainerID])
+	assert.Equal(t, "sha256:deadbeef", tags[model.TagImageID])
+	assert.Equal(t, "sha256:1111", tags[model.TagImageDigest])
+	assert.Equal(t, []any{"nginx@sha256:1111"}, tags[model.TagImageRepoDigests])
+
+	// Services: nginx from the image, http from the exposed port, folded.
+	nginxServices := model.ServicesFromTags(nginx.Tags)
+	require.Len(t, nginxServices, 2)
+	assert.Equal(t, model.MachineService{Name: "http", Category: model.ServiceCategoryWeb, Port: 80, Protocol: "tcp", Exposure: "published", Source: "port"}, nginxServices[0])
+	assert.Equal(t, model.MachineService{Name: "nginx", Category: model.ServiceCategoryWeb, Version: "1.25", Source: "image"}, nginxServices[1])
+
 	// Verify second container (non-privileged).
 	redis := machines[1]
 	assert.Equal(t, "redis-cache", redis.Hostname)
@@ -142,6 +156,65 @@ func TestDocker_Discover_Success(t *testing.T) {
 	assert.Equal(t, false, redisTags["privileged"])
 	assert.Equal(t, "bridge", redisTags["network_mode"])
 	assert.Equal(t, "appuser", redisTags["user"])
+	assert.Equal(t, "sha256:2222", redisTags[model.TagImageDigest])
+	assert.Equal(t, []any{"docker.io/library/redis@sha256:2222", "redis@sha256:2222"}, redisTags[model.TagImageRepoDigests], "repo digests are sorted")
+
+	// The lifecycle event lifts the hashes and services off the tags.
+	var evt model.MachineEvent
+	evt.FromMachine(redis)
+	assert.Equal(t, "def789abc123456789012345", evt.ContainerID)
+	assert.Equal(t, "sha256:cafebabe", evt.ImageID)
+	assert.Equal(t, "sha256:2222", evt.ImageDigest)
+	require.Len(t, evt.Services, 1)
+	assert.Equal(t, "redis", evt.Services[0].Name)
+	assert.Equal(t, model.ServiceCategoryCache, evt.Services[0].Category)
+}
+
+func TestImageDigestIndexAndContentDigest(t *testing.T) {
+	idx := imageDigestIndex([]imageSummary{
+		{ID: "sha256:a", RepoDigests: []string{"z@sha256:1", "a@sha256:1", ""}},
+		{ID: "sha256:b", RepoDigests: []string{"<none>@<none>"}},
+		{ID: "sha256:c"},
+		{ID: ""},
+	})
+	assert.Equal(t, map[string][]string{"sha256:a": {"a@sha256:1", "z@sha256:1"}}, idx)
+	assert.Equal(t, "sha256:1", contentDigest(idx["sha256:a"]))
+	assert.Equal(t, "", contentDigest(nil))
+	assert.Equal(t, "", contentDigest([]string{"broken@"}))
+}
+
+func TestContainerServices(t *testing.T) {
+	// Unrecognised custom image: the well-known ports still name services;
+	// ambiguous and duplicate ports do not.
+	services := containerServices(containerSummary{
+		Image: "ghcr.io/acme/backend:v3",
+		Ports: []portMapping{
+			{PrivatePort: 5432, Type: "tcp"},
+			{PrivatePort: 5432, PublicPort: 15432, Type: "tcp"},
+			{PrivatePort: 9000, Type: "tcp"},
+			{PrivatePort: 389, PublicPort: 389, Type: "tcp"},
+		},
+	})
+	require.Len(t, services, 2)
+	assert.Equal(t, "postgresql", services[0].Name)
+	assert.Equal(t, "published", services[0].Exposure, "published by its second host binding")
+	assert.Equal(t, "ldap", services[1].Name)
+	assert.Equal(t, "published", services[1].Exposure)
+
+	// Samba AD DC image → Active Directory, plus its well-known ports.
+	services = containerServices(containerSummary{
+		Image: "nowsci/samba-domain:latest",
+		Ports: []portMapping{{PrivatePort: 389, Type: "tcp"}, {PrivatePort: 88, Type: "tcp"}, {PrivatePort: 445, Type: "tcp"}},
+	})
+	cats := model.ServiceCategories(services)
+	assert.Equal(t, []string{model.ServiceCategoryDirectory, model.ServiceCategoryFileSharing}, cats)
+	names := make([]string, 0, len(services))
+	for _, s := range services {
+		names = append(names, s.Name)
+	}
+	assert.ElementsMatch(t, []string{"active_directory", "ldap", "kerberos", "smb"}, names)
+
+	assert.Nil(t, containerServices(containerSummary{Image: "ghcr.io/acme/backend:v3"}))
 }
 
 func TestDocker_Discover_UnreachableHost(t *testing.T) {

@@ -407,6 +407,7 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 	}
 
 	machines := e.classifier.ClassifyAll(dedupResult.Machines)
+	e.attachLocalListenerServices(ctx, machines)
 
 	// Snapshot the pre-update view of every machine by natural key BEFORE
 	// the upsert, so the event-classification block below can compare
@@ -1097,6 +1098,39 @@ func findAgentMachineID(machines []model.Machine) uuid.UUID {
 		}
 	}
 	return uuid.Nil
+}
+
+// attachLocalListenerServices folds the local host's fingerprinted LISTEN
+// sockets (host_listeners, refreshed by the hostlisteners collector each
+// scan) into the agent machine's services tag before the upsert, so the
+// services this host offers travel with its lifecycle events and a change
+// in them counts as a material update. Stores without host_listeners and
+// hosts not yet written (first scan) are a quiet no-op.
+func (e *Engine) attachLocalListenerServices(ctx context.Context, machines []model.Machine) {
+	listenerStore, ok := e.store.(store.HostListenerStore)
+	if !ok {
+		return
+	}
+	agentID := findAgentMachineID(machines)
+	if agentID == uuid.Nil {
+		return
+	}
+	listeners, err := listenerStore.ListHostListeners(ctx, agentID)
+	if err != nil || len(listeners) == 0 {
+		return
+	}
+	services := model.ServicesFromListeners(listeners)
+	if len(services) == 0 {
+		return
+	}
+	for i := range machines {
+		if machines[i].ID != agentID {
+			continue
+		}
+		existing := model.ServicesFromTags(machines[i].Tags)
+		machines[i].Tags = model.WithServicesInTags(machines[i].Tags, model.MergeServices(existing, services))
+		return
+	}
 }
 
 // stringSliceToAny converts a typed string slice into the []any shape that

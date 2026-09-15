@@ -12,5 +12,7 @@
   "security.machine.authorization": "authorized",
   "security.machine.managed_status": "managed",
   "security.machine.first_seen": "2026-04-23T11:14:02Z",
-  "security.machine.discovery.source": "agent"
+  "security.machine.discovery.source": "agent",
+  "security.machine.services": "[{\"name\":\"postgresql\",\"category\":\"database\",\"version\":\"16.3\",\"protocol\":\"tcp\",\"exposure\":\"lan\",\"source\":\"listener\",\"port\":5432},{\"name\":\"ssh\",\"category\":\"remote_access\",\"version\":\"OpenSSH_9.6\",\"protocol\":\"tcp\",\"exposure\":\"lan\",\"source\":\"listener\",\"port\":22}]",
+  "security.machine.service.categories": "database,remote_access"
 }

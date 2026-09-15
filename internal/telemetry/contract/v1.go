@@ -22,7 +22,7 @@ package contract
 //
 // 1.1 (additive): adds EventProbeHeartbeat for synthetic per-source liveness
 // signals plus tamper detection. No prior attribute removed or renamed.
-const Version = "1.1"
+const Version = "1.2"
 
 // ResourceAttributeKey enumerates every resource attribute the agent is
 // permitted to attach to a signal. The set is closed: anything not declared
@@ -220,6 +220,45 @@ const (
 	AttrADDistinguishedName  = "ad.distinguished_name"
 )
 
+// Machine inventory attributes added in contract v1.2 (additive MAY
+// attributes on machine.discovered / machine.changed). The three hashes
+// identify a container: the full engine container id, the engine-local
+// image id (config digest, "sha256:…") and the registry content digest
+// of the pulled manifest — the key vulnerability feeds match images on.
+// The services pair describes what the machine offers: a JSON array of
+// {name, category, version?, protocol?, port?, exposure?, source?} objects
+// (model.MachineService) and, for cheap filtering, the sorted
+// comma-joined set of categories drawn from AllowedServiceCategories.
+const (
+	AttrMachineContainerID       = "security.machine.container.id"
+	AttrMachineImageID           = "security.machine.container.image.id"
+	AttrMachineImageDigest       = "security.machine.container.image.digest"
+	AttrMachineServices          = "security.machine.services"
+	AttrMachineServiceCategories = "security.machine.service.categories"
+)
+
+// AllowedServiceCategories is the closed vocabulary of
+// security.machine.service.categories members (model.ServiceCategory*).
+var AllowedServiceCategories = map[string]struct{}{
+	"directory":          {},
+	"database":           {},
+	"cache":              {},
+	"search":             {},
+	"message_queue":      {},
+	"web":                {},
+	"remote_access":      {},
+	"file_sharing":       {},
+	"object_storage":     {},
+	"mail":               {},
+	"dns":                {},
+	"monitoring":         {},
+	"identity":           {},
+	"secrets":            {},
+	"container_platform": {},
+	"ci":                 {},
+	"other":              {},
+}
+
 // AllowedAuditModules is the closed audit.<module> span suffix.
 var AllowedAuditModules = map[string]struct{}{
 	"ssh":         {},
@@ -317,6 +356,11 @@ var EventAttributes = map[EventName]map[string]struct{}{
 		"security.machine.managed_status":   {},
 		"security.machine.first_seen":       {},
 		"security.machine.discovery.source": {},
+		AttrMachineContainerID:              {},
+		AttrMachineImageID:                  {},
+		AttrMachineImageDigest:              {},
+		AttrMachineServices:                 {},
+		AttrMachineServiceCategories:        {},
 	},
 	EventMachineChanged: {
 		AttrEventDomain:                     {},
@@ -338,6 +382,11 @@ var EventAttributes = map[EventName]map[string]struct{}{
 		"security.machine.change.field":     {},
 		"security.machine.change.before":    {},
 		"security.machine.change.after":     {},
+		AttrMachineContainerID:              {},
+		AttrMachineImageID:                  {},
+		AttrMachineImageDigest:              {},
+		AttrMachineServices:                 {},
+		AttrMachineServiceCategories:        {},
 	},
 	EventFindingConfiguration: {
 		AttrEventDomain:                     {},

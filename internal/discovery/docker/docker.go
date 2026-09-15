@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -125,22 +126,26 @@ func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		return nil, fmt.Errorf("docker: list containers: %w", err)
 	}
 
+	// Images first: the container summary only carries the engine-local
+	// image id, while the registry content digest (what a vulnerability
+	// feed keys on) lives on the image record. Join the two by image id.
+	images, imgErr := client.listImages(ctx)
+	if imgErr != nil {
+		slog.Warn("docker: list images failed", "code", string(LogCodeEnumerateListImagesFailed), "error", imgErr)
+	} else {
+		slog.Info("docker: images discovered", "count", len(images)) //#nosec G706 -- structured slog
+	}
+	digests := imageDigestIndex(images)
+
 	now := time.Now().UTC()
 	machines := make([]model.Machine, 0, len(containers))
 
 	for _, c := range containers {
 		detail, inspErr := client.inspectContainer(ctx, c.ID)
 		if inspErr != nil {
-			slog.Warn("docker: inspect failed", "code", string(LogCodeEnumerateInspectFailed), "container", c.ID[:12], "error", inspErr)
+			slog.Warn("docker: inspect failed", "code", string(LogCodeEnumerateInspectFailed), "container", truncate(c.ID, 12), "error", inspErr)
 		}
-		machines = append(machines, containerToMachine(c, detail, now))
-	}
-
-	images, imgErr := client.listImages(ctx)
-	if imgErr != nil {
-		slog.Warn("docker: list images failed", "code", string(LogCodeEnumerateListImagesFailed), "error", imgErr)
-	} else {
-		slog.Info("docker: images discovered", "count", len(images)) //#nosec G706 -- structured slog
+		machines = append(machines, containerToMachine(c, detail, digests[c.ImageID], now))
 	}
 
 	slog.Info("docker: discovery complete", "containers", len(machines)) //#nosec G706 -- structured slog
@@ -252,10 +257,48 @@ type containerDetail struct {
 }
 
 type imageSummary struct {
-	ID       string   `json:"Id"`
-	RepoTags []string `json:"RepoTags"`
-	Size     int64    `json:"Size"`
-	Created  int64    `json:"Created"`
+	ID          string   `json:"Id"`
+	RepoTags    []string `json:"RepoTags"`
+	RepoDigests []string `json:"RepoDigests"`
+	Size        int64    `json:"Size"`
+	Created     int64    `json:"Created"`
+}
+
+// imageDigestIndex maps each image id to its registry repo digests
+// ("repo@sha256:…"), sorted for a stable tag encoding. Images that were
+// built locally and never pushed or pulled have none.
+func imageDigestIndex(images []imageSummary) map[string][]string {
+	out := make(map[string][]string, len(images))
+	for _, img := range images {
+		if img.ID == "" || len(img.RepoDigests) == 0 {
+			continue
+		}
+		refs := make([]string, 0, len(img.RepoDigests))
+		for _, ref := range img.RepoDigests {
+			if ref == "" || strings.HasPrefix(ref, "<none>") {
+				continue
+			}
+			refs = append(refs, ref)
+		}
+		if len(refs) == 0 {
+			continue
+		}
+		sort.Strings(refs)
+		out[img.ID] = refs
+	}
+	return out
+}
+
+// contentDigest extracts the bare "sha256:<hex>" from a "repo@sha256:<hex>"
+// reference. Every repo digest of one image resolves to the same manifest
+// digest, so the first is representative.
+func contentDigest(repoDigests []string) string {
+	for _, ref := range repoDigests {
+		if at := strings.LastIndex(ref, "@"); at >= 0 && at < len(ref)-1 {
+			return ref[at+1:]
+		}
+	}
+	return ""
 }
 
 // -------------------------------------------------------------------------
@@ -306,13 +349,13 @@ func (c *dockerClient) listImages(ctx context.Context) ([]imageSummary, error) {
 // Machine mapping
 // -------------------------------------------------------------------------
 
-func containerToMachine(c containerSummary, detail *containerDetail, now time.Time) model.Machine {
+func containerToMachine(c containerSummary, detail *containerDetail, repoDigests []string, now time.Time) model.Machine {
 	name := ""
 	if len(c.Names) > 0 {
 		name = strings.TrimPrefix(c.Names[0], "/")
 	}
 
-	tags := buildContainerTags(c, detail)
+	tags := buildContainerTags(c, detail, repoDigests)
 	tagsJSON, _ := json.Marshal(tags)
 
 	created := time.Unix(c.Created, 0).UTC()
@@ -332,14 +375,22 @@ func containerToMachine(c containerSummary, detail *containerDetail, now time.Ti
 	}
 }
 
-func buildContainerTags(c containerSummary, detail *containerDetail) map[string]any {
+func buildContainerTags(c containerSummary, detail *containerDetail, repoDigests []string) map[string]any {
 	tags := map[string]any{
-		"container_id": truncate(c.ID, 12),
-		"image":        c.Image,
-		"image_id":     c.ImageID,
-		"state":        c.State,
-		"ports":        formatPorts(c.Ports),
-		"networks":     networkNames(c),
+		"container_id":       truncate(c.ID, 12),
+		model.TagContainerID: c.ID,
+		"image":              c.Image,
+		model.TagImageID:     c.ImageID,
+		"state":              c.State,
+		"ports":              formatPorts(c.Ports),
+		"networks":           networkNames(c),
+	}
+	if digest := contentDigest(repoDigests); digest != "" {
+		tags[model.TagImageDigest] = digest
+		tags[model.TagImageRepoDigests] = repoDigests
+	}
+	if services := containerServices(c); len(services) > 0 {
+		tags[model.TagServices] = services
 	}
 
 	if project, ok := c.Labels["com.docker.compose.project"]; ok {
@@ -357,6 +408,46 @@ func buildContainerTags(c containerSummary, detail *containerDetail) map[string]
 	}
 
 	return tags
+}
+
+// containerServices names what the container serves: the image reference
+// says which product it runs ("postgres:16" → postgresql/database), the
+// exposed ports say where — and a well-known port on its own still names
+// the service when the image is an unrecognised custom build.
+func containerServices(c containerSummary) []model.MachineService {
+	var out []model.MachineService
+	if svc, ok := model.ServiceFromImage(c.Image); ok {
+		out = append(out, svc)
+	}
+	// A port is "published" when any of its mappings reaches the host; the
+	// engine lists the same private port once per host binding.
+	published := make(map[int]bool, len(c.Ports))
+	for _, p := range c.Ports {
+		if p.PublicPort > 0 {
+			published[p.PrivatePort] = true
+		}
+	}
+	seen := make(map[int]bool, len(c.Ports))
+	for _, p := range c.Ports {
+		if p.PrivatePort <= 0 || seen[p.PrivatePort] {
+			continue
+		}
+		seen[p.PrivatePort] = true
+		svc, ok := model.ServiceFromPort(p.PrivatePort)
+		if !ok {
+			continue
+		}
+		svc.Source = "port"
+		if p.Type != "" {
+			svc.Protocol = strings.ToLower(p.Type)
+		}
+		svc.Exposure = "internal"
+		if published[p.PrivatePort] {
+			svc.Exposure = "published"
+		}
+		out = append(out, svc)
+	}
+	return model.MergeServices(out)
 }
 
 func formatPorts(ports []portMapping) string {

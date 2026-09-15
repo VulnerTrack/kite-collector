@@ -372,6 +372,9 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 				if labels := servicesTagLabels(results); len(labels) > 0 {
 					tags = withServicesTag(tags, labels)
 				}
+				if services := servicesFromScan(open, results); len(services) > 0 {
+					tags = model.WithServicesInTags(tags, services)
+				}
 				software = append(software, serviceSoftware(results)...)
 			}
 			if parsed.WebFingerprint {

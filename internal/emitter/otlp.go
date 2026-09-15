@@ -429,6 +429,11 @@ func buildAttributes(e *model.MachineEvent) []otlpKeyValue {
 	add("discovery_source", e.DiscoverySource)
 	add("is_authorized", string(e.IsAuthorized))
 	add("is_managed", string(e.IsManaged))
+	add("container_id", e.ContainerID)
+	add("image_id", e.ImageID)
+	add("image_digest", e.ImageDigest)
+	add("services", model.EncodeServices(e.Services))
+	add("service_categories", strings.Join(model.ServiceCategories(e.Services), ","))
 
 	// RFC-0115 contract v1 attribute set, emitted ALONGSIDE the legacy keys
 	// above (§2.3 dual-emit window: consumers migrate to the security.*
@@ -480,6 +485,13 @@ func contractAttributes(e *model.MachineEvent) [][2]string {
 	if name == contract.EventMachineChanged {
 		add("security.machine.change.field", contractChangeField(e.EventType))
 	}
+	// v1.2 additive inventory attributes: container identity hashes and the
+	// service inventory (directory / database / queue …).
+	add(contract.AttrMachineContainerID, e.ContainerID)
+	add(contract.AttrMachineImageID, e.ImageID)
+	add(contract.AttrMachineImageDigest, e.ImageDigest)
+	add(contract.AttrMachineServices, model.EncodeServices(e.Services))
+	add(contract.AttrMachineServiceCategories, strings.Join(model.ServiceCategories(e.Services), ","))
 	return pairs
 }
 

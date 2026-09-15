@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -123,6 +124,9 @@ func (c *computerEntry) toMachine(now time.Time) model.Machine {
 	if len(c.memberOf) > 0 {
 		tags[contract.AttrADGroups] = c.memberOf
 	}
+	if services := directoryServices(c.uacFlags, c.servicePrincipals); len(services) > 0 {
+		tags[model.TagServices] = services
+	}
 
 	tagsJSON, _ := json.Marshal(tags)
 
@@ -141,6 +145,75 @@ func (c *computerEntry) toMachine(now time.Time) model.Machine {
 	}
 	machine.ComputeNaturalKey()
 	return machine
+}
+
+// spnServices maps a servicePrincipalName service class (the part before
+// the first "/", case-insensitive) onto the service vocabulary. Classes
+// that name Windows plumbing rather than a network service (HOST,
+// RestrictedKrbHost, Dfsr-…) are deliberately absent.
+var spnServices = map[string]string{
+	"mssqlsvc":    "mssql",
+	"ldap":        "ldap",
+	"gc":          "active_directory",
+	"kadmin":      "kerberos",
+	"http":        "http",
+	"https":       "https",
+	"termsrv":     "rdp",
+	"wsman":       "winrm",
+	"cifs":        "smb",
+	"nfs":         "nfs",
+	"ftp":         "ftp",
+	"dns":         "dns",
+	"smtpsvc":     "smtp",
+	"smtp":        "smtp",
+	"exchangemdb": "smtp",
+	"imap":        "imap",
+	"imap4":       "imap",
+	"pop":         "pop3",
+	"pop3":        "pop3",
+	"postgres":    "postgresql",
+	"postgresql":  "postgresql",
+	"mysql":       "mysql",
+	"oracle":      "oracle",
+	"mongodb":     "mongodb",
+	"vnc":         "vnc",
+	"sip":         "sip",
+}
+
+// directoryServices derives what an AD computer object serves. A domain
+// controller (SERVER_TRUST_ACCOUNT) always offers Active Directory, LDAP
+// and Kerberos; any computer's registered SPNs name the services Kerberos
+// clients authenticate to on it (MSSQLSvc → mssql, TERMSRV → rdp, …). The
+// SPN's ":port" suffix, when numeric, is kept.
+func directoryServices(uacFlags uint32, spns []string) []model.MachineService {
+	var out []model.MachineService
+	if uacFlags&uacServerTrust != 0 {
+		for _, name := range []string{"active_directory", "ldap", "kerberos"} {
+			svc, _ := model.ServiceFromProtocol(name)
+			svc.Source = "directory"
+			out = append(out, svc)
+		}
+	}
+	for _, spn := range spns {
+		class, rest, ok := strings.Cut(spn, "/")
+		if !ok {
+			continue
+		}
+		name, known := spnServices[strings.ToLower(strings.TrimSpace(class))]
+		if !known {
+			continue
+		}
+		svc, _ := model.ServiceFromProtocol(name)
+		svc.Source = "spn"
+		if i := strings.LastIndex(rest, ":"); i >= 0 {
+			if port, err := strconv.Atoi(rest[i+1:]); err == nil && port > 0 && port < 65536 {
+				svc.Port = port
+				svc.Protocol = "tcp"
+			}
+		}
+		out = append(out, svc)
+	}
+	return model.MergeServices(out)
 }
 
 // classifyMachine maps the userAccountControl trust bits + operatingSystem

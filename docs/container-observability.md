@@ -116,6 +116,21 @@ with per-layer size, creation time, and tags. Shell wrappers are trimmed
 shows the untrimmed command. `<missing>` rows are intermediate layers whose
 IDs the daemon no longer tracks — normal for pulled images.
 
+## What leaves the agent
+
+The dashboard is local-only; what the platform receives about containers
+comes from the `docker` discovery source, whose machine events carry (see
+[telemetry-contract.md](telemetry-contract.md#machine-inventory-attributes-v12-additive)):
+
+- **identity hashes** — the full container id, the engine image id
+  (`sha256:` of the image config) and the registry content digest of the
+  pulled manifest (`RepoDigests`, joined from `/images/json`). The digest is
+  what a vulnerability feed matches; the image id changes on every rebuild.
+- **services** — what the container serves, classified from the image
+  reference (`postgres:16` → `postgresql`/`database`, `samba-ad-dc` →
+  `active_directory`/`directory`) and from its exposed ports, with
+  `exposure` = `published` when a host binding exists.
+
 ## Failure modes
 
 - **No engine found** → the page renders a hint card (config →

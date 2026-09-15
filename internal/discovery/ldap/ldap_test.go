@@ -34,6 +34,7 @@ func (c *fakeConn) StartTLS(*tls.Config) error { c.startTLSed = true; return c.s
 func (c *fakeConn) Search(req *ldapv3.SearchRequest) (*ldapv3.SearchResult, error) {
 	return c.SearchWithPaging(req, 0)
 }
+
 func (c *fakeConn) SearchWithPaging(req *ldapv3.SearchRequest, _ uint32) (*ldapv3.SearchResult, error) {
 	if c.searchFn != nil {
 		return c.searchFn(req)

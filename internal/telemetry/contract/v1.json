@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vulnertrack.io/schemas/kite-collector/telemetry-contract/v1.json",
   "title": "kite-collector → central OTel telemetry contract",
-  "description": "Closed set of resource attributes, log event names, span names, metric instruments, and per-event attribute keys the kite-collector agent is permitted to emit. RFC-0115 v1.1 (additive: probe.heartbeat).",
+  "description": "Closed set of resource attributes, log event names, span names, metric instruments, and per-event attribute keys the kite-collector agent is permitted to emit. RFC-0115 v1.2 (additive: probe.heartbeat; container image hashes + service inventory on machine events).",
   "type": "object",
   "properties": {
-    "version": { "const": "1.1" },
+    "version": { "const": "1.2" },
     "resource_attributes": { "$ref": "#/$defs/ResourceAttributes" },
     "events": { "$ref": "#/$defs/Events" },
     "spans": { "$ref": "#/$defs/Spans" },
@@ -32,7 +32,7 @@
         "agent.type":          { "type": "string", "const": "kite-collector" },
         "tenant.id":           { "type": "string" },
         "deployment.environment": { "type": "string", "enum": ["production", "staging", "pilot", "development"] },
-        "kite.contract.version":  { "type": "string", "const": "1.1" }
+        "kite.contract.version":  { "type": "string", "const": "1.2" }
       },
       "required": [
         "service.name", "service.version", "service.namespace", "service.instance.id",
@@ -91,6 +91,18 @@
             "vpn.mullvad", "vpn.globalprotect",
             "dns", "ssh-known-hosts", "ldap"
           ]
+        },
+        "security.machine.container.id":           { "type": "string", "description": "v1.2: full engine container id (64 hex)" },
+        "security.machine.container.image.id":     { "type": "string", "description": "v1.2: engine image id, sha256:<hex> of the image config" },
+        "security.machine.container.image.digest": { "type": "string", "description": "v1.2: registry content digest of the pulled manifest, sha256:<hex>" },
+        "security.machine.services": {
+          "type": "string",
+          "description": "v1.2: JSON array of {name, category, version?, protocol?, port?, exposure?, source?} — the machine's service inventory (directory, database, queue, …)"
+        },
+        "security.machine.service.categories": {
+          "type": "string",
+          "description": "v1.2: sorted, comma-joined categories present in security.machine.services; members drawn from the closed set below",
+          "pattern": "^(directory|database|cache|search|message_queue|web|remote_access|file_sharing|object_storage|mail|dns|monitoring|identity|secrets|container_platform|ci|other)(,(directory|database|cache|search|message_queue|web|remote_access|file_sharing|object_storage|mail|dns|monitoring|identity|secrets|container_platform|ci|other))*$"
         }
       }
     },

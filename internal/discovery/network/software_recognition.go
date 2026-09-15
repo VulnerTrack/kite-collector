@@ -132,6 +132,37 @@ func serviceSoftware(services map[int]servicefp.Result) []model.InstalledSoftwar
 	return out
 }
 
+// servicesFromScan builds the structured service inventory of a scanned
+// host: every fingerprinted port classifies by its handshake protocol
+// (with the banner version), and every open port the fingerprinter could
+// not name falls back to the well-known port table — so a PostgreSQL that
+// refused the handshake still shows up as "postgresql on 5432".
+func servicesFromScan(open []int, results map[int]servicefp.Result) []model.MachineService {
+	out := make([]model.MachineService, 0, len(open))
+	for _, port := range open {
+		if res, ok := results[port]; ok && res.Protocol != "" {
+			svc, ok := model.ServiceFromProtocol(res.Protocol)
+			if !ok {
+				continue
+			}
+			if res.TLS && svc.Name == "http" {
+				svc.Name = "https"
+			}
+			svc.Version = cleanVersion(res.Version)
+			svc.Port = port
+			svc.Protocol = "tcp"
+			svc.Source = "banner"
+			out = append(out, svc)
+			continue
+		}
+		if svc, ok := model.ServiceFromPort(port); ok {
+			svc.Source = "port"
+			out = append(out, svc)
+		}
+	}
+	return model.MergeServices(out)
+}
+
 // versionToken matches a dotted numeric version embedded in evidence
 // strings (e.g. a CDN URL "bootstrap/3.4.1/…" or a header value). It is
 // deliberately conservative: at least major.minor, optional patch/suffix.

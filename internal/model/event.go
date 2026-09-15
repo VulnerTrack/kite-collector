@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,9 +34,19 @@ type MachineEvent struct {
 	DiscoverySource string             `json:"discovery_source,omitempty"`
 	IsAuthorized    AuthorizationState `json:"is_authorized,omitempty"`
 	IsManaged       ManagedState       `json:"is_managed,omitempty"`
-	ID              uuid.UUID          `json:"id"`
-	MachineID       uuid.UUID          `json:"machine_id"`
-	ScanRunID       uuid.UUID          `json:"scan_run_id"`
+	// ContainerID / ImageID / ImageDigest carry a container's identity
+	// hashes (full container id, engine image id, registry content digest)
+	// lifted from Machine.Tags so the platform can match the image against
+	// vulnerability data without a store lookup. Empty for non-containers.
+	ContainerID string `json:"container_id,omitempty"`
+	ImageID     string `json:"image_id,omitempty"`
+	ImageDigest string `json:"image_digest,omitempty"`
+	// Services is the machine's service inventory (directory, database,
+	// queue, …) lifted from the TagServices tag.
+	Services  []MachineService `json:"services,omitempty"`
+	ID        uuid.UUID        `json:"id"`
+	MachineID uuid.UUID        `json:"machine_id"`
+	ScanRunID uuid.UUID        `json:"scan_run_id"`
 }
 
 // BuildEventDetails returns a compact JSON-encoded summary of an machine event
@@ -88,6 +99,20 @@ func BuildEventDetails(a Machine, eventType EventType) string {
 	if !a.LastSeenAt.IsZero() {
 		details["last_seen_at"] = a.LastSeenAt.Format(time.RFC3339)
 	}
+	tags := ParseTagObject(a.Tags)
+	if v := TagString(tags, TagContainerID); v != "" {
+		details["container_id"] = v
+	}
+	if v := TagString(tags, TagImageID); v != "" {
+		details["image_id"] = v
+	}
+	if v := TagString(tags, TagImageDigest); v != "" {
+		details["image_digest"] = v
+	}
+	if services := ServicesFromTags(a.Tags); len(services) > 0 {
+		details["services"] = EncodeServices(services)
+		details["service_categories"] = strings.Join(ServiceCategories(services), ",")
+	}
 
 	encoded, err := json.Marshal(details)
 	if err != nil {
@@ -114,4 +139,9 @@ func (e *MachineEvent) FromMachine(a Machine) {
 	e.IsAuthorized = a.IsAuthorized
 	e.IsManaged = a.IsManaged
 	e.FirstSeenAt = a.FirstSeenAt
+	tags := ParseTagObject(a.Tags)
+	e.ContainerID = TagString(tags, TagContainerID)
+	e.ImageID = TagString(tags, TagImageID)
+	e.ImageDigest = TagString(tags, TagImageDigest)
+	e.Services = ServicesFromTags(a.Tags)
 }
