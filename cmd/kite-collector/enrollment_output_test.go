@@ -18,7 +18,7 @@ func TestPrintEnrollmentSuccessPlain(t *testing.T) {
 	}))
 
 	text := out.String()
-	assert.Contains(t, text, "✅  Enrollment complete.")
+	assert.Contains(t, text, "✅ Enrollment complete.")
 	assert.Contains(t, text, "Welcome to Kite! Your collector is connected to VulnerTrack.")
 	assert.Contains(t, text, "Collector      kite-server")
 	assert.Contains(t, text, "Certificates   /var/lib/kite-collector")
