@@ -245,6 +245,17 @@ func mergeMachine(existing *model.Machine, incoming *model.Machine, now time.Tim
 		merged.Criticality = incoming.Criticality
 	}
 
+	// Transient carries (Interfaces, Software) are never hydrated from the
+	// store, so `merged := *existing` starts with them empty. Take the
+	// incoming scan's rows or UpsertMachines has nothing to replace and an
+	// existing machine never refreshes its interfaces / software inventory.
+	if len(incoming.Interfaces) > 0 {
+		merged.Interfaces = incoming.Interfaces
+	}
+	if len(incoming.Software) > 0 {
+		merged.Software = incoming.Software
+	}
+
 	return merged
 }
 

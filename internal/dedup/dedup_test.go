@@ -586,6 +586,48 @@ func TestDedup_MergesOSInfo(t *testing.T) {
 	assert.Equal(t, "6.1", res.Machines[0].OSVersion, "OS version must be merged from incoming")
 }
 
+// TestDedup_MergeCarriesTransientInventory pins that an existing machine's
+// merge keeps the incoming scan's Interfaces and Software: the store never
+// hydrates them, so starting from *existing would otherwise drop them and
+// UpsertMachines would have nothing to replace.
+func TestDedup_MergeCarriesTransientInventory(t *testing.T) {
+	ms := newMockStore()
+	dd := New(ms)
+	ctx := context.Background()
+
+	existing := model.Machine{
+		ID:              uuid.Must(uuid.NewV7()),
+		Hostname:        "carry-host",
+		MachineType:     model.MachineTypeServer,
+		DiscoverySource: "network",
+		FirstSeenAt:     time.Now().UTC().Add(-time.Hour),
+		LastSeenAt:      time.Now().UTC().Add(-time.Hour),
+	}
+	existing.ComputeNaturalKey()
+	ms.machines[existing.NaturalKey] = existing
+
+	res, err := dd.Deduplicate(ctx, []model.Machine{{
+		Hostname:        "carry-host",
+		MachineType:     model.MachineTypeServer,
+		DiscoverySource: "network",
+		Interfaces:      []model.NetworkInterface{{IPAddress: "10.0.0.7"}},
+		Software:        []model.InstalledSoftware{{SoftwareName: "PostgreSQL", Version: "16.3"}},
+	}})
+	require.NoError(t, err)
+	require.Len(t, res.Machines, 1)
+	assert.Equal(t, existing.ID, res.Machines[0].ID, "identity preserved")
+	require.Len(t, res.Machines[0].Interfaces, 1)
+	assert.Equal(t, "10.0.0.7", res.Machines[0].Interfaces[0].IPAddress)
+	require.Len(t, res.Machines[0].Software, 1)
+	assert.Equal(t, "PostgreSQL", res.Machines[0].Software[0].SoftwareName)
+
+	// An empty incoming carry leaves the (empty) existing carry alone so a
+	// source that saw the host offline cannot erase the last inventory.
+	res, err = dd.Deduplicate(ctx, []model.Machine{{Hostname: "carry-host", MachineType: model.MachineTypeServer, DiscoverySource: "network"}})
+	require.NoError(t, err)
+	assert.Empty(t, res.Machines[0].Software)
+}
+
 // TestDedup_Idempotent verifies that running Deduplicate twice with the same
 // input produces deterministic counts (NewCount=2 then UpdatedCount=2) and
 // preserves machine IDs across runs. Uses a fixed clock for determinism.
