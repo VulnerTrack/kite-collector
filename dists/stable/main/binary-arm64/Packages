@@ -1,0 +1,16 @@
+Package: kite-collector
+Architecture: arm64
+Version: 0.60.5
+Priority: optional
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 34699
+Conflicts: kite-collector-osquery
+Filename: pool/main/k/kite-collector/kite-collector_0.60.5_linux_arm64.deb
+Size: 12249628
+MD5sum: a019932463010f60fee7150b0065c189
+SHA1: fd6bf804b5d98a88c09db80d2d3e93aa786eb6f3
+SHA256: bd3e8b882b8adabc032996dc0c9eca876919846cacaa24a65977b6539908aa7a
+SHA512: f0d33c71e226cb33a0e635fcc73bddba932cc87164c17856165c8f51f917606ca61f10d44d4f17031d4d98b8dcf03763e219a557cc59c469025a7db2559b467a
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
+

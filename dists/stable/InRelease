@@ -1,0 +1,61 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA256
+
+Architectures: amd64 arm64
+Codename: stable
+Components: main
+Date: Tue, 15 Sep 2026 09:28:20 +0000
+Description: Repositorio oficial de APT para Kite Collector
+Label: Kite Collector Repo
+Origin: VulnerTrack
+Signed-By: 88A0A4B50F3478BC0D4729FA79847F85E3FF6E43
+Suite: stable
+Valid-Until: Thu, 15 Oct 2026 09:28:20 +0000
+MD5Sum:
+ f544d267f0ee4d7109e5bf8b8a670201              317 Release
+ 234f3e04c11d1d34d70c908ffc1549c6             1761 main/binary-amd64/Packages
+ 1e2aa08f15fbd0b001e8a79604f4a235              886 main/binary-amd64/Packages.gz
+ fecfdd2fe3262475796924c5ec571055              976 main/binary-amd64/Packages.xz
+ 79c93a83e1bca494946ec350149328a5              723 main/binary-arm64/Packages
+ 3ffd76392754a61dacaacdd6af031aa6              517 main/binary-arm64/Packages.gz
+ 8d0924239e153024ec51fccc076623ad              612 main/binary-arm64/Packages.xz
+SHA1:
+ 3e75ed98bf18e9b9c361a5e1b47b2a62b3481a0d              317 Release
+ b1061f8ecd9d56408773e7883b4af4fe248c2d9f             1761 main/binary-amd64/Packages
+ ac7dc5d9fa11c653327808488aa193c5a3bfb023              886 main/binary-amd64/Packages.gz
+ 4eff1c4189329daf5f9a9e946d9ada687eb8ab75              976 main/binary-amd64/Packages.xz
+ e05d89f8d6e2b424cb920adfd3102b7e4b90f2a8              723 main/binary-arm64/Packages
+ 3e2d43029f57cc6ec53be306b5305a1338bf5b20              517 main/binary-arm64/Packages.gz
+ bd4ec168fc79135507c802aa3989394b483c3d77              612 main/binary-arm64/Packages.xz
+SHA256:
+ e1f84543ec1ce60ba91b907432961ee747d64be601839a1228158e6e7bf9977b              317 Release
+ cfa4e57156cf46ee4c9594f8fea42d066a357799e9a16c46fde30b8e9f8c1998             1761 main/binary-amd64/Packages
+ 232b12b3464afbca5931427e1e62c5ae48f546651ee996ff2f2467c782b50950              886 main/binary-amd64/Packages.gz
+ c5f7e2c9b18c341046c39718400614b7e2098a36bf9880060a2325c02fa56e27              976 main/binary-amd64/Packages.xz
+ 4fb86b80afa97616009754e89bce29aa20795d2e057be81f7e10a22de0a042e5              723 main/binary-arm64/Packages
+ 0083e6a7150f57636ea05ab81f0ef8ce9e6c9e8c01e932574e7be7d18d5535bc              517 main/binary-arm64/Packages.gz
+ 46ff46e0d0f1778d2600befd1099856d2e7ffea2cd59893fddf70393eb782157              612 main/binary-arm64/Packages.xz
+SHA512:
+ a0fc8a617a3ab859d32924c152e9839afd47216576198b4987f5057144bd38cab46db434894ed18a9f5bfd6a7e78c0e2bbdd57b939e17fe38126626c6c4c34c5              317 Release
+ 43791cd675ae7d08afa765564cb1f7c66ba03d7e0f86662b2172a215399776cddcea9edde4c722f66b028e4ee67ac89be3b8e7df6b808d60d51eef2a878da63e             1761 main/binary-amd64/Packages
+ 59c344c09d41ec80f0df2fcf2908f3144d0dfe9aed0713db2efd27bc13f4ac037c93c7c9d0d772e508fd80268ca012a7368c776b4d926a589b1eda52c274f982              886 main/binary-amd64/Packages.gz
+ dd823078272558d638d13525fb316cfcd18106de4ce5f39e7d637096ef9b033061b60325c3fc2e7f73b106b90a71134568e5c0165fa8bc8ab635f733fd527a9f              976 main/binary-amd64/Packages.xz
+ 9d0e7535e8d71c60f593238aa22c016caa55f34fd5a775034b65877e0f7f663a6cde49a44ff9e28cc121f1607f1c1ebf9098014196cde66ebe3af984eef03002              723 main/binary-arm64/Packages
+ e075a9d674d538166e2c75f12a36497fe08b4e9d57aaee435c5de79cdf75d5c1fcdb5a60f460d90d9a5242f8527847e89d3dfe45ee10a732a105e5ea3a6e6199              517 main/binary-arm64/Packages.gz
+ c8034890c4df883d1a2571828bb2a9fc6a3666ae6f5a7003e6605511fe63454f105cfdcee162daf89abce7ce549184c41c76dd93ea3faae693cbf2e9ada7a3e4              612 main/binary-arm64/Packages.xz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCAAdFiEEiKCktQ80eLwNRyn6eYR/heP/bkMFAmqpD7QACgkQeYR/heP/
+bkMNLg//fITGn52MP+DAIY3JllMFGNDWD3MkSpdXks6RRTAGG0Xj/YazKzj+y9Sx
+XmK/a3ya4/VTM5XDO2aVGVR7QWsUp170lWkrZCSG/LY0AnGFUTYSerppUYD3N7Ok
+09lhEcbt5Uq3N5HnWqdjxd3QsZKMAn32io829IBDgjBvC2eCpweDpIpY/yg9Snw/
+JM4+ar3LcfByggZn7Zzeh06pH998eLHIJVuQ/3Y9VRE/VqnRnPfzXm7BjmiQ4efF
+koMNET/EXghF2MHL20zS0csPpqZYjOZNNYAycal7coP7xeozglAq5CE4QIrvbMCO
+tcQQCbhye8vFX2saE1tEd+3ZtSNt/jxCkdc10nMseq89t1zqLeUhRT3keNnrTQPh
+OHZ/Wzjy2q6hhAT0cYbhpyetp0PmVx6KpIApU+dke2pKLdQWFBJGX2GNb+DOYf7l
+QW6y8BgOjnhw86IyPQFLoahTXl22OF+hZLJvQDphpk2PcvrekcFWvEsbrToxQchO
+feHRXZGg8Bn+/5lYYYtO8rXWpbl8IKekC1/d6jr18qYdrrZNPl/2JdBraASDjapO
+MMn6xTE9MCNSlOqT0G25P59UKlP/WdJzzRrHq6IHplCOuqpIGhfA4ZCFHUcw1R3z
+QB1PdAIQ88fL3E6bFs4xNNXT2nMS23HJcoDMorYrPN4PhKY69Ao=
+=OFDD
+-----END PGP SIGNATURE-----
