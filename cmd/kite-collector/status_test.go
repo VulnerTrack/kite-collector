@@ -69,7 +69,21 @@ func TestBuildStatusReport_FreshHost(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "status must be read-only")
 }
 
+// stubServiceState pins the probed service state so health assertions hold
+// on hosts that do and do not have kite-collector installed as a service.
+func stubServiceState(t *testing.T, state string) {
+	t.Helper()
+	orig := probeInstall
+	probeInstall = func(opts installer.Options) installer.State {
+		st := orig(opts)
+		st.ServiceState = state
+		return st
+	}
+	t.Cleanup(func() { probeInstall = orig })
+}
+
 func TestBuildStatusReport_EnrolledWithCertExpiry(t *testing.T) {
+	stubServiceState(t, installer.ServiceNotInstalled)
 	certsDir := t.TempDir()
 	writeTestEnrollmentPEMs(t, certsDir, time.Now().Add(60*24*time.Hour))
 	dbPath := filepath.Join(t.TempDir(), "kite.db")

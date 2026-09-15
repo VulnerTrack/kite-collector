@@ -170,6 +170,11 @@ Use 'kite-collector doctor' when something here looks wrong.`,
 	return cmd
 }
 
+// probeInstall reads the host's install state. Tests replace it so status
+// output does not depend on whether the machine running them has the
+// collector service installed.
+var probeInstall = installer.Probe
+
 // statusProbeOptions picks which install to report on. An explicit --user
 // pins the mode; otherwise both modes are probed and the one with more
 // evidence of a real install wins (a running service dominates; an empty
@@ -186,8 +191,8 @@ func statusProbeOptions(certsDir, dbPath string, userMode, userFlagSet bool) ins
 		detected := installer.DetectDefaults().Options
 		system := installModeOptions(false)
 		user := installModeOptions(true)
-		sysScore := installEvidenceScore(installer.Probe(system))
-		usrScore := installEvidenceScore(installer.Probe(user))
+		sysScore := installEvidenceScore(probeInstall(system))
+		usrScore := installEvidenceScore(probeInstall(user))
 		switch {
 		case sysScore > usrScore:
 			opts = system
@@ -239,7 +244,7 @@ func installEvidenceScore(s installer.State) int {
 
 func buildStatusReport(ctx context.Context, certsDir, dbPath, cfgFile string, userMode, userFlagSet bool) statusReport {
 	opts := statusProbeOptions(certsDir, dbPath, userMode, userFlagSet)
-	state := installer.Probe(opts)
+	state := probeInstall(opts)
 
 	report := statusReport{
 		Version: version,
