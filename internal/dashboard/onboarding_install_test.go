@@ -371,6 +371,7 @@ func TestBuildOnboardingSteps_CoreAndOptionalServiceStates(t *testing.T) {
 	fresh := agentStateView{Install: installer.State{NextAction: installer.ActionInstall}}
 	steps := buildOnboardingSteps(fresh, det)
 	require.Len(t, steps, 4, "the three core steps are followed by detected services")
+	assert.Equal(t, "Integrations", steps[3].Title)
 	assert.Equal(t, "current", steps[0].Status)
 	assert.Equal(t, "pending", steps[1].Status)
 	assert.Equal(t, "pending", steps[2].Status)
@@ -411,13 +412,64 @@ func TestBuildOnboardingSteps_CoreAndOptionalServiceStates(t *testing.T) {
 	require.Len(t, steps, 3, "service setup is absent when no integration is detected")
 }
 
-func TestServicesSetupOffersActiveDirectoryWithoutPreconfiguration(t *testing.T) {
-	var body strings.Builder
-	require.NoError(t, renderDiscoveredServicesSetup(&body, context.Background(), onboardingDeps{}))
+func TestIntegrationsPage_ShowsFullCatalogWithUnavailableCards(t *testing.T) {
+	t.Setenv("USERDNSDOMAIN", "")
+	t.Setenv("KITE_LDAP_DOMAIN_CONTROLLER", "")
+	t.Setenv("KITE_LDAP_BASE_DN", "")
+	t.Setenv("KITE_LDAP_BIND_DN", "")
+	t.Setenv(ldapPasswordEnv, "")
+	h := newInstallHarness(t, nil)
 
-	assert.Contains(t, body.String(), "Active Directory")
-	assert.Contains(t, body.String(), "/fragments/active-directory-setup")
-	assert.Contains(t, body.String(), "available")
+	full := h.do(t, "GET", "/integrations", nil, nil)
+	require.Equal(t, http.StatusOK, full.Code)
+	assert.Contains(t, full.Body.String(), `<h2>Integrations</h2>`)
+	assert.Contains(t, full.Body.String(), `href="/integrations"`)
+	assert.Contains(t, full.Body.String(), `class="btn btn-ghost topbar-integrations active"`)
+	assert.Contains(t, full.Body.String(), `hx-get="/fragments/services-setup"`)
+
+	fragment := h.do(t, "GET", "/fragments/services-setup", nil, nil)
+	require.Equal(t, http.StatusOK, fragment.Code)
+	body := fragment.Body.String()
+	assert.Equal(t, 1, strings.Count(body, `class="service-setup-card`))
+	assert.Contains(t, body, "Active Directory")
+	assert.NotContains(t, body, "Microsoft Entra ID")
+	assert.NotContains(t, body, "Docker")
+	assert.Contains(t, body, `integration-card-unavailable`)
+	assert.Contains(t, body, `Integration unavailable`)
+	assert.Contains(t, body, `data-integration="Active Directory"`)
+	assert.Contains(t, body, `data-integration-key="ldap"`)
+	assert.Contains(t, body, `onclick="showUnavailableIntegration(this)"`)
+	assert.Contains(t, body, `connectRequestedIntegration`)
+	assert.Contains(t, body, `id="integration-unavailable-modal"`)
+	assert.Contains(t, body, `hidden`)
+	assert.Contains(t, body, `>Connect</button>`)
+}
+
+func TestIntegrationsPage_RendersSetupAfterDetection(t *testing.T) {
+	t.Setenv("KITE_LDAP_DOMAIN_CONTROLLER", "dc.example.test:636")
+	h := newInstallHarness(t, nil)
+
+	rec := h.do(t, "GET", "/fragments/services-setup", nil, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	body := rec.Body.String()
+	assert.Contains(t, body, `Integration available`)
+	assert.Contains(t, body, `data-fragment-url="/fragments/active-directory-setup"`)
+	assert.Contains(t, body, `data-target-selector="#ldap-setup-fragment"`)
+	assert.Contains(t, body, `onclick="toggleIntegrationSettings(this)"`)
+	assert.Contains(t, body, `aria-expanded="false"`)
+	assert.Contains(t, body, `button.hidden = true`)
+
+	setup := h.do(t, "GET", "/fragments/active-directory-setup", nil, nil)
+	require.Equal(t, http.StatusOK, setup.Code)
+	assert.Contains(t, setup.Body.String(), `onclick="hideIntegrationSettings('ldap')">Hide settings</button>`)
+
+	var form bytes.Buffer
+	require.NoError(t, activeDirectorySetupTmpl.Execute(&form, activeDirectorySetupView{}))
+	formBody := form.String()
+	saveButton := strings.Index(formBody, `>Save, test and scan</button>`)
+	hideButton := strings.Index(formBody, `onclick="hideIntegrationSettings('ldap')">Hide settings</button>`)
+	require.GreaterOrEqual(t, saveButton, 0)
+	require.Greater(t, hideButton, saveButton, "Hide settings must render beside and after the save action")
 }
 
 func TestOnboardingSteps_TrustPanelRendersOnConnectStep(t *testing.T) {
@@ -1338,7 +1390,7 @@ func TestEnroll_SuccessEmitsScrollToCheck(t *testing.T) {
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"})
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "refresh-agent-state", rec.Header().Get("HX-Trigger"))
+	assert.JSONEq(t, `{"refresh-agent-state":{},"show-optional-integrations":{}}`, rec.Header().Get("HX-Trigger"))
 	assert.Contains(t, rec.Header().Get("HX-Trigger-After-Settle"),
 		`"target":"#stream-card"`,
 		"successful enroll points at the stream card — the check is its gate now")

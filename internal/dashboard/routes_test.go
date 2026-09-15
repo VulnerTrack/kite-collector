@@ -127,6 +127,13 @@ func TestRoute_GET_Root_RedirectsToAgentProfileWhenEnrolled(t *testing.T) {
 	assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
 	assert.Equal(t, "/agent", rec.Header().Get("Location"),
 		"enrolled host should land on /agent, the steady-state home")
+
+	promptReq := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?integration_prompt=1", nil)
+	promptRec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(promptRec, promptReq)
+	assert.Equal(t, http.StatusTemporaryRedirect, promptRec.Code)
+	assert.Equal(t, "/agent?integration_prompt=1", promptRec.Header().Get("Location"),
+		"the root redirect must preserve the one-time integrations prompt")
 }
 
 func TestRoute_GET_KiteLogin_RedirectsToAuthorizeByDefault(t *testing.T) {
@@ -293,7 +300,18 @@ func TestRoute_GET_KiteSuccess_ReturnsWelcomePage(t *testing.T) {
 	assert.Contains(t, body, "Enrollment complete.")
 	assert.Contains(t, body, "Kite is ready.")
 	assert.Contains(t, body, "Go to Dashboard")
-	assert.Contains(t, body, `href="/agent"`, "the welcome page must open on the agent profile")
+	assert.Contains(t, body, `href="/agent?integration_prompt=1"`, "the welcome page must open on the agent profile and show the optional integrations prompt")
+	var promptCookie *http.Cookie
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == kiteIntegrationPromptCookie {
+			promptCookie = cookie
+			break
+		}
+	}
+	require.NotNil(t, promptCookie, "the successful enrollment must persist the prompt across dashboard redirects")
+	assert.Equal(t, "1", promptCookie.Value)
+	assert.False(t, promptCookie.HttpOnly, "the dashboard consumes and clears this non-sensitive UI flag")
+	assert.Equal(t, http.SameSiteLaxMode, promptCookie.SameSite)
 }
 
 func TestRoute_GET_RootWithOAuthParams_ReturnsAccessGrantedPage(t *testing.T) {

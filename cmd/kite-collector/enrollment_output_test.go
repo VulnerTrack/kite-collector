@@ -23,7 +23,11 @@ func TestPrintEnrollmentSuccessPlain(t *testing.T) {
 	assert.Contains(t, text, "Collector      kite-server")
 	assert.Contains(t, text, "Certificates   /var/lib/kite-collector")
 	assert.Contains(t, text, "Service        Started")
-	assert.Contains(t, text, "Next step →  kite-collector integrations")
+	assert.Contains(t, text, "You're all set — Kite is enrolled and running. No further action is required.")
+	assert.Contains(t, text, "Optional → Review detected integrations at any time:")
+	assert.Contains(t, text, "kite-collector integrations list")
+	assert.Contains(t, text, "Check status →")
+	assert.Contains(t, text, "kite-collector status")
 	assert.NotContains(t, text, "\x1b[")
 }
 

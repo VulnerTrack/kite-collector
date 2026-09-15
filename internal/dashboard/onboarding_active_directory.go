@@ -58,6 +58,7 @@ func hydrateIntegrationSecrets(deps onboardingDeps) {
 // here. The first adapter is LDAP/Active Directory.
 type onboardingServiceAdapter struct {
 	Key         string
+	SourceKey   string
 	Label       string
 	Description string
 	FragmentURL string
@@ -70,6 +71,7 @@ type onboardingServicesView struct {
 type onboardingServiceView struct {
 	onboardingServiceAdapter
 	Configured bool
+	Available  bool
 }
 
 type integrationAPIView struct {
@@ -84,34 +86,153 @@ type integrationAPIView struct {
 }
 
 var onboardingServiceAdapters = []onboardingServiceAdapter{
-	{Key: "ldap", Label: "Active Directory", Description: "Users, computers, groups, organizational units, policies, and relationships through LDAP.", FragmentURL: "/fragments/active-directory-setup"},
+	{Key: "ldap", SourceKey: "ldap", Label: "Active Directory", Description: "Users, computers, groups, policies, and relationships through LDAP.", FragmentURL: "/fragments/active-directory-setup"},
 }
 
 var onboardingServicesTmpl = template.Must(template.New("services-setup").Parse(`
-<div class="service-setup-list">
-  {{if .Services}}
-    {{range .Services}}
-    <section class="service-setup-card">
+<div class="service-setup-list integration-catalog">
+  {{range .Services}}
+    <section class="service-setup-card integration-card{{if not .Available}} integration-card-unavailable{{end}}">
       <div class="service-setup-head">
-        <div><strong>{{.Label}}</strong><p class="muted small">{{.Description}}</p></div>
-        <span class="badge {{if .Configured}}badge-green{{else}}badge-blue{{end}}">{{if .Configured}}configured{{else}}available{{end}}</span>
+        <div class="integration-identity">
+          <span class="integration-logo" aria-hidden="true">AD</span>
+          <div><strong>{{.Label}}</strong><p class="muted small">{{.Description}}</p></div>
+        </div>
+        <span class="badge {{if .Configured}}badge-green{{else if .Available}}badge-blue{{else}}badge-gray{{end}}">{{if .Configured}}Configured{{else if .Available}}Integration available{{else}}Integration unavailable{{end}}</span>
       </div>
-      <div id="{{.Key}}-setup-fragment" hx-get="{{.FragmentURL}}" hx-trigger="load" hx-swap="innerHTML"><span class="muted small">Loading {{.Label}} settings&hellip;</span></div>
+      <div class="integration-card-actions">
+        {{if .Configured}}
+          <button class="btn btn-outline" type="button" data-integration-key="{{.Key}}" disabled>Connected</button>
+        {{else if .Available}}
+          <button class="btn integration-settings-toggle" type="button"
+                  data-integration-key="{{.Key}}"
+                  data-fragment-url="{{.FragmentURL}}"
+                  data-target-selector="#{{.Key}}-setup-fragment"
+                  aria-controls="{{.Key}}-setup-fragment"
+                  aria-expanded="false"
+                  onclick="toggleIntegrationSettings(this)">Connect</button>
+        {{else}}
+          <button class="btn btn-outline integration-unavailable-connect" type="button" data-integration-key="{{.Key}}" data-integration="{{.Label}}" onclick="showUnavailableIntegration(this)">Connect</button>
+        {{end}}
+      </div>
+      <div id="{{.Key}}-setup-fragment"></div>
     </section>
-    {{end}}
-  {{else}}
-    <p class="muted">No credentialed services were detected. You can continue using the collector normally.</p>
   {{end}}
-</div>`))
+</div>
+<div id="integration-unavailable-modal" class="integration-modal-backdrop" hidden>
+  <section class="integration-modal" role="dialog" aria-modal="true" aria-labelledby="integration-unavailable-title">
+    <span class="integration-modal-icon" aria-hidden="true">!</span>
+    <h2 id="integration-unavailable-title">Integration unavailable</h2>
+    <p><strong id="unavailable-integration-name">This integration</strong> was not detected on this network.</p>
+    <button class="btn" type="button" onclick="closeUnavailableIntegration()">Close</button>
+  </section>
+</div>
+<script>
+window.showUnavailableIntegration = function(button) {
+  var modal = document.getElementById('integration-unavailable-modal');
+  var name = document.getElementById('unavailable-integration-name');
+  if (name) name.textContent = button.getAttribute('data-integration') || 'This integration';
+  if (modal) modal.hidden = false;
+};
+window.closeUnavailableIntegration = function() {
+  var modal = document.getElementById('integration-unavailable-modal');
+  if (modal) modal.hidden = true;
+};
+window.toggleIntegrationSettings = function(button) {
+  var target = document.querySelector(button.getAttribute('data-target-selector'));
+  if (!target) return;
+  var isOpen = button.getAttribute('aria-expanded') === 'true';
+  if (isOpen) {
+    target.innerHTML = '';
+    button.setAttribute('aria-expanded', 'false');
+    button.hidden = false;
+    button.textContent = 'Connect';
+    button.className = 'btn integration-settings-toggle';
+    return;
+  }
+  button.setAttribute('aria-expanded', 'true');
+  button.hidden = true;
+  var fragmentURL = button.getAttribute('data-fragment-url');
+  if (fragmentURL && window.htmx) {
+    window.htmx.ajax('GET', fragmentURL, {target: target, swap: 'innerHTML'});
+  }
+};
+window.hideIntegrationSettings = function(key) {
+  var buttons = document.querySelectorAll('[data-integration-key]');
+  for (var i = 0; i < buttons.length; i++) {
+    if (buttons[i].getAttribute('data-integration-key') === key) {
+      toggleIntegrationSettings(buttons[i]);
+      break;
+    }
+  }
+};
+(function connectRequestedIntegration() {
+  var currentURL = new URL(window.location.href);
+  var requestedKey = currentURL.searchParams.get('connect');
+  if (!requestedKey) return;
+  currentURL.searchParams.delete('connect');
+  window.history.replaceState(window.history.state, '', currentURL.pathname + currentURL.search + currentURL.hash);
+  window.setTimeout(function() {
+    var buttons = document.querySelectorAll('[data-integration-key]');
+    for (var i = 0; i < buttons.length; i++) {
+      if (buttons[i].getAttribute('data-integration-key') === requestedKey) {
+        buttons[i].click();
+        break;
+      }
+    }
+  }, 0);
+})();
+</script>`))
+
+const integrationsBody = `<div class="onboarding-layout integrations-layout">
+  <header class="onb-page-hero integrations-page-hero">
+    <span class="onb-page-hero-icon" aria-hidden="true">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M8 8V5.5a2.5 2.5 0 015 0V8m-5 8v2.5a2.5 2.5 0 005 0V16M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="3" y="8" width="7" height="8" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="8" width="7" height="8" rx="2" stroke="currentColor" stroke-width="1.8"/></svg>
+    </span>
+    <div class="onb-page-hero-copy">
+      <span class="onb-page-eyebrow">Extend discovery</span>
+      <h2>Integrations</h2>
+      <p>Connect additional services to enrich your inventory. Integrations are optional and can be configured at any time.</p>
+    </div>
+    <span class="badge badge-blue onb-page-optional">Optional</span>
+  </header>
+  <section class="integrations-surface" id="integrations-card">
+    <div id="services-fragment" hx-get="/fragments/services-setup" hx-trigger="load" hx-swap="innerHTML">
+      <div class="htmx-indicator">Detecting integrations&hellip;</div>
+    </div>
+  </section>
+</div>`
+
+// serveIntegrationsPage exposes credentialed service setup as a first-class
+// dashboard destination. The same fragment remains in onboarding so existing
+// setup flows and deep links continue to work.
+func serveIntegrationsPage(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Header.Get("HX-Request") == "true" {
+		_, _ = io.WriteString(w, integrationsBody)
+		return
+	}
+
+	var buf strings.Builder
+	if err := renderIndexPage(&buf, "integrations", func(fragBuf io.Writer) error {
+		_, err := io.WriteString(fragBuf, integrationsBody)
+		return err
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_, _ = io.WriteString(w, buf.String())
+}
 
 func renderDiscoveredServicesSetup(w io.Writer, ctx context.Context, deps onboardingDeps) error {
 	view := onboardingServicesView{}
 	for _, adapter := range onboardingServiceAdapters {
-		configured := false
-		if adapter.Key == "ldap" {
-			configured = directoryOnboardingComplete(ctx, deps)
-		}
-		view.Services = append(view.Services, onboardingServiceView{onboardingServiceAdapter: adapter, Configured: configured})
+		configured := integrationConfigured(ctx, deps, adapter)
+		view.Services = append(view.Services, onboardingServiceView{
+			onboardingServiceAdapter: adapter,
+			Configured:               configured,
+			Available:                configured || integrationDetected(ctx, deps, adapter),
+		})
 	}
 	if err := onboardingServicesTmpl.Execute(w, view); err != nil {
 		return fmt.Errorf("render onboarding services: %w", err)
@@ -122,17 +243,15 @@ func renderDiscoveredServicesSetup(w io.Writer, ctx context.Context, deps onboar
 func discoveredIntegrationsAPI(ctx context.Context, deps onboardingDeps) []integrationAPIView {
 	out := make([]integrationAPIView, 0, len(onboardingServiceAdapters))
 	for _, adapter := range onboardingServiceAdapters {
-		item := integrationAPIView{Key: adapter.Key, Name: adapter.Label, Description: adapter.Description, Status: "available"}
+		item := integrationAPIView{Key: adapter.Key, Name: adapter.Label, Description: adapter.Description, Status: "unavailable"}
+		if integrationConfigured(ctx, deps, adapter) {
+			item.Status = "configured"
+		} else if integrationDetected(ctx, deps, adapter) {
+			item.Status = "detected"
+		}
 		if adapter.Key == "ldap" {
 			defaults := activeDirectorySetupDefaults(deps.BaseConfig)
 			item.Account, item.DomainController, item.BaseDN, item.TLSMode = defaults.BindDN, defaults.DomainController, defaults.BaseDN, defaults.TLSMode
-			if directoryOnboardingComplete(ctx, deps) {
-				item.Status = "configured"
-			} else if deps.BaseConfig != nil {
-				if source, exists := deps.BaseConfig.Discovery.Sources[adapter.Key]; exists && source.Enabled {
-					item.Status = "detected"
-				}
-			}
 		}
 		out = append(out, item)
 	}
@@ -148,8 +267,44 @@ func servicesOnboardingComplete(ctx context.Context, deps onboardingDeps) bool {
 	return true
 }
 
-func hasAvailableOnboardingServices() bool {
+func hasAvailableOnboardingServices(ctx context.Context, deps onboardingDeps) bool {
 	return len(onboardingServiceAdapters) > 0
+}
+
+func integrationConfigured(ctx context.Context, deps onboardingDeps, adapter onboardingServiceAdapter) bool {
+	if adapter.Key == "ldap" {
+		return directoryOnboardingComplete(ctx, deps)
+	}
+	if deps.BaseConfig == nil {
+		return false
+	}
+	source, ok := deps.BaseConfig.Discovery.Sources[adapter.SourceKey]
+	return ok && source.Enabled
+}
+
+func integrationDetected(ctx context.Context, deps onboardingDeps, adapter onboardingServiceAdapter) bool {
+	if adapter.Key != "ldap" {
+		return false
+	}
+	if directoryOnboardingComplete(ctx, deps) {
+		return true
+	}
+	if deps.Store != nil {
+		if services, err := deps.Store.ListDirectorySoftware(ctx); err == nil && len(services) > 0 {
+			return true
+		}
+	}
+
+	defaults := activeDirectorySetupDefaults(deps.BaseConfig)
+	if strings.TrimSpace(defaults.DomainController) != "" {
+		return true
+	}
+	if strings.TrimSpace(defaults.BaseDN) == "" && strings.TrimSpace(os.Getenv("USERDNSDOMAIN")) == "" {
+		return false
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return discoverDomainController(lookupCtx, defaults.BindDN, defaults.BaseDN) != ""
 }
 
 // startBaseOnboardingScan inventories the collector host immediately after
@@ -163,7 +318,7 @@ func startBaseOnboardingScan(ctx context.Context, coordinator *scan.Coordinator,
 	base.Discovery.Sources = make(map[string]config.SourceConfig, len(cfg.Discovery.Sources))
 	for key, source := range cfg.Discovery.Sources {
 		for _, adapter := range onboardingServiceAdapters {
-			if key == adapter.Key {
+			if adapter.FragmentURL != "" && key == adapter.SourceKey {
 				source.Enabled = false
 				break
 			}
@@ -230,7 +385,7 @@ var activeDirectorySetupTmpl = template.Must(template.New("ad-setup").Parse(`
 {{if .Configured}}<p><span class="badge badge-green">configured</span> Active Directory is ready.</p>{{end}}
 {{if .Message}}<p class="badge badge-green">{{.Message}}</p>{{end}}
 {{if .Error}}<p class="enroll-error badge-red" role="alert">{{.Error}}</p>{{end}}
-{{if .ReadOnly}}<p class="muted small">Scan coordinator unavailable in read-only dashboard mode.</p>{{else}}
+{{if .ReadOnly}}<p class="muted small">Scan coordinator unavailable in read-only dashboard mode.</p><button class="btn btn-outline" type="button" onclick="hideIntegrationSettings('ldap')">Hide settings</button>{{else}}
 <form hx-post="/api/v1/onboarding/active-directory" hx-target="#ldap-setup-fragment" hx-swap="innerHTML" hx-disabled-elt="find button" hx-indicator="find .service-scan-indicator">
   <div class="form-grid">
     <label>Active Directory account<input name="bind_dn" required value="{{.BindDN}}" placeholder="user@example.com"></label>
@@ -255,6 +410,7 @@ var activeDirectorySetupTmpl = template.Must(template.New("ad-setup").Parse(`
   <p class="muted small">Use any Active Directory account that can read directory objects. Kite accepts user@example.com, DOMAIN\user, a full DN, or a simple username when the domain is detected.</p>
   <div class="service-scan-actions">
     <button class="btn" type="submit">Save, test and scan</button>
+    <button class="btn btn-outline" type="button" onclick="hideIntegrationSettings('ldap')">Hide settings</button>
     <span class="htmx-indicator service-scan-indicator muted small">Testing connection and scanning&hellip;</span>
   </div>
 </form>{{end}}`))

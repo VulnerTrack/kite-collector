@@ -121,7 +121,7 @@ func buildOnboardingSteps(s agentStateView, det installer.Detected, directoryCom
 	}
 
 	servicesView := onboardingStepView{
-		Key: "services", CardID: "services-card", Title: "Add services (optional)",
+		Key: "services", CardID: "services-card", Title: "Integrations",
 		FragmentURL: "/fragments/services-setup",
 		Pending:     "available after streaming starts",
 	}
@@ -129,7 +129,7 @@ func buildOnboardingSteps(s agentStateView, det installer.Detected, directoryCom
 		servicesView.Status = "pending"
 	} else if directoryReady {
 		servicesView.Status = "done"
-		servicesView.Receipt = "Discovered services configured"
+		servicesView.Receipt = "Integrations configured"
 	} else {
 		servicesView.Status = "optional"
 	}
@@ -153,7 +153,7 @@ func renderOnboardingStepsFragment(w io.Writer, ctx context.Context, deps onboar
 		stateView,
 		detected,
 		servicesOnboardingComplete(ctx, deps),
-		hasAvailableOnboardingServices(),
+		hasAvailableOnboardingServices(ctx, deps),
 	)
 
 	allDone := true

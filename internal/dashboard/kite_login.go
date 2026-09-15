@@ -91,6 +91,7 @@ const (
 	kiteOAuthVerifierCookie      = "kite_oauth_code_verifier"
 	kiteOAuthDashboardCookie     = "kite_oauth_dashboard"
 	kiteOAuthWaitCookie          = "kite_oauth_wait_id"
+	kiteIntegrationPromptCookie  = "kite_optional_integrations_prompt"
 	kiteOAuthTokenMaxBody        = 1 << 20
 )
 
@@ -518,6 +519,7 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 
 func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions, appVersion string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setIntegrationPromptCookie(w, r)
 	dashboardURL := r.URL.Query().Get("dashboard")
 	if dashboardURL == "" {
 		if cookie, err := r.Cookie(kiteOAuthDashboardCookie); err == nil && cookie.Value != "" {
@@ -531,6 +533,7 @@ func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request, oauth OAuthOpt
 	} else if !isAllowedKiteLaunchURL(oauth, dashboardURL) {
 		dashboardURL = "/agent"
 	}
+	dashboardURL = addIntegrationPrompt(dashboardURL)
 	view := kiteSuccessView{
 		DashboardURL: dashboardURL,
 		AppVersion:   appVersion,
@@ -538,6 +541,29 @@ func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request, oauth OAuthOpt
 	if err := kiteSuccessTmpl.Execute(w, view); err != nil {
 		http.Error(w, fmt.Sprintf("render kite success: %v", err), http.StatusInternalServerError)
 	}
+}
+
+func setIntegrationPromptCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{ //#nosec G124 -- Secure is conditional because enrollment is commonly completed on http://localhost; this short-lived cookie contains only a UI prompt flag
+		Name:     kiteIntegrationPromptCookie,
+		Value:    "1",
+		Path:     "/",
+		MaxAge:   int(kiteOAuthCookieTTL.Seconds()),
+		Expires:  time.Now().Add(kiteOAuthCookieTTL),
+		Secure:   r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func addIntegrationPrompt(dashboardURL string) string {
+	parsed, err := url.Parse(dashboardURL)
+	if err != nil {
+		return dashboardURL
+	}
+	query := parsed.Query()
+	query.Set("integration_prompt", "1")
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 // kiteOAuthInflight deduplicates concurrent callback requests for the same

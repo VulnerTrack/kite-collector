@@ -292,17 +292,30 @@ func TestDashboardShell_TopbarActionClusterOrder(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	body := rec.Body.String()
 
-	// Health pill, Enroll to VulnerTrack, divider, then the scan cluster: the
+	// Health pill, enrollment, integrations, divider, then the scan cluster: the
 	// primary action lands at the right edge of the bar.
 	badge := strings.Index(body, `id="onboarding-status-badge"`)
 	onboarding := strings.Index(body, `hx-get="/onboarding" hx-target="#content" hx-push-url="true"
        onclick="setActive(this)">Enroll to VulnerTrack</a>`)
+	integrations := strings.Index(body, `href="/integrations" hx-get="/integrations"`)
 	divider := strings.Index(body, `class="topbar-divider"`)
 	scan := strings.Index(body, `id="scan-status"`)
-	require.True(t, badge > 0 && onboarding > 0 && divider > 0 && scan > 0, "every cluster member must render")
-	assert.True(t, badge < onboarding && onboarding < divider && divider < scan,
-		"cluster order must be health, enrollment, divider, scan")
+	require.True(t, badge > 0 && onboarding > 0 && integrations > 0 && divider > 0 && scan > 0, "every cluster member must render")
+	assert.Contains(t, body, `>Integrations</a>`)
+	assert.Contains(t, body, `class="btn btn-ghost topbar-integrations"`,
+		"the integrations action must keep its red-accent class on every dashboard page")
+	assert.True(t, badge < onboarding && onboarding < integrations && integrations < divider && divider < scan,
+		"cluster order must be health, enrollment, integrations, divider, scan")
 	assert.NotContains(t, body, "/fragments/scan-controls",
 		"the button now renders inside the scan-status fragment; no second fragment to keep in step")
 	assert.Contains(t, body, `class="scan-cluster"`)
+	assert.Contains(t, body, `id="optional-integrations-modal"`)
+	assert.Contains(t, body, `>Optional</span>`)
+	assert.Contains(t, body, `>Active Directory</strong>`)
+	assert.Contains(t, body, `href="/integrations?connect=ldap"`)
+	assert.Contains(t, body, `>Connect</a>`)
+	assert.Contains(t, body, `>Skip for now</button>`)
+	assert.Contains(t, body, `show-optional-integrations`)
+	assert.Contains(t, body, `integration_prompt`)
+	assert.Contains(t, body, `kite_optional_integrations_prompt=1`)
 }

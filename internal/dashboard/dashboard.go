@@ -169,6 +169,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				target = "/onboarding"
 			}
 		}
+		if r.URL.Query().Get("integration_prompt") == "1" {
+			target += "?integration_prompt=1"
+		}
 		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 	})
 

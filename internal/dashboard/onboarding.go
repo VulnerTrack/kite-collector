@@ -77,6 +77,9 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 	}
 	hydrateIntegrationSecrets(deps)
 	mux.HandleFunc("GET /onboarding", serveOnboardingPage)
+	mux.HandleFunc("GET /integrations", func(w http.ResponseWriter, r *http.Request) {
+		serveIntegrationsPage(w, r, deps)
+	})
 	mux.HandleFunc("GET /fragments/enroll-form", func(w http.ResponseWriter, r *http.Request) {
 		renderOnboardingFragment(w, deps.Logger, "enroll-form", func(buf io.Writer) error {
 			return renderEnrollFragment(buf, r.Context(), deps)
@@ -156,8 +159,17 @@ func registerOnboardingRoutes(mux *http.ServeMux, deps onboardingDeps) {
 const onboardingBody = `<div id="onboarding-toasts" class="toasts" aria-live="polite" aria-atomic="false" role="status"></div>
 
 <div class="onboarding-layout">
-  <h2>Collector onboarding</h2>
-  <p class="muted onb-intro">Guided setup. Kite detects what&rsquo;s already done and only shows service configuration when an integration is available. No agent data leaves this host until streaming starts.</p>
+  <header class="onb-page-hero">
+    <span class="onb-page-hero-icon" aria-hidden="true">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.6-2.8 8-7 10-4.2-2-7-5.4-7-10V6l7-3z" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 12l2.2 2.2 4.8-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </span>
+    <div class="onb-page-hero-copy">
+      <span class="onb-page-eyebrow">Collector setup</span>
+      <h2>Collector onboarding</h2>
+      <p>Guided setup. Install, authorize, and start streaming while Kite automatically recognizes every completed step. No agent data leaves this host until streaming starts.</p>
+    </div>
+    <span class="onb-page-hero-chip"><span aria-hidden="true"></span>Local-first setup</span>
+  </header>
 
   <div id="onboarding-steps"
        hx-get="/fragments/onboarding-steps"
@@ -518,7 +530,7 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 	// a second click. The HX-Trigger header tells the onboarding-header
 	// fragment to re-render immediately so the stepper advances enroll →
 	// check on the next HTMX cycle without waiting for the 10s heartbeat.
-	w.Header().Set("HX-Trigger", "refresh-agent-state")
+	w.Header().Set("HX-Trigger", `{"refresh-agent-state":{},"show-optional-integrations":{}}`)
 	// After-Settle fires the smooth-scroll to the check card after the new
 	// enroll fragment + OOB-swapped check fragment have both landed.
 	// Operator sees the auto-run probe results without scrolling manually.

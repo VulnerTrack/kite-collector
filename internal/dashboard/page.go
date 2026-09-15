@@ -53,7 +53,7 @@ const indexPageTemplate = `<!DOCTYPE html>
      only on the enroll/sign-in flow that already talks to the backend (see
      renderTurnstileWidgets); every other page stays fully offline. -->
 <link rel="stylesheet" href="/static/tabulator.min.css">
-<link rel="stylesheet" href="/static/style.css?v=1.0.8">
+<link rel="stylesheet" href="/static/style.css?v=1.0.15">
 <script src="/static/htmx.min.js"></script>
 <script src="/static/tabulator.min.js"></script>
 </head>
@@ -83,6 +83,9 @@ const indexPageTemplate = `<!DOCTYPE html>
     <a class="btn btn-ghost{{if eq .ActiveTab "onboarding"}} active{{end}}"
        href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true"
        onclick="setActive(this)">Enroll to VulnerTrack</a>
+    <a class="btn btn-ghost topbar-integrations{{if eq .ActiveTab "integrations"}} active{{end}}"
+       href="/integrations" hx-get="/integrations" hx-target="#content" hx-push-url="true"
+       onclick="setActive(this)">Integrations</a>
     <span class="topbar-divider" aria-hidden="true"></span>
     <div id="scan-status"
          class="scan-cluster"
@@ -125,7 +128,58 @@ const indexPageTemplate = `<!DOCTYPE html>
 
 </div>
 
+<div id="optional-integrations-modal" class="integration-modal-backdrop" hidden>
+  <section class="integration-modal optional-integrations-modal" role="dialog" aria-modal="true" aria-labelledby="optional-integrations-title">
+    <span class="badge badge-blue">Optional</span>
+    <h2 id="optional-integrations-title">Optional integrations</h2>
+    <p>Enhance your scans by connecting an integration. This step is optional, and you can configure it at any time.</p>
+    <div class="optional-integration-item">
+      <div>
+        <strong>Active Directory</strong>
+        <span>Discover users, computers, groups, policies, and relationships through LDAP.</span>
+      </div>
+      <a class="btn optional-integration-connect" href="/integrations?connect=ldap" onclick="closeOptionalIntegrationsModal()">Connect</a>
+    </div>
+    <div class="optional-integrations-actions">
+      <button class="btn btn-outline" type="button" onclick="closeOptionalIntegrationsModal()">Skip for now</button>
+    </div>
+  </section>
+</div>
+
 <script>
+function showOptionalIntegrationsModal() {
+  var modal = document.getElementById('optional-integrations-modal');
+  if (modal) modal.hidden = false;
+}
+function closeOptionalIntegrationsModal() {
+  var modal = document.getElementById('optional-integrations-modal');
+  if (modal) modal.hidden = true;
+}
+document.body.addEventListener('show-optional-integrations', showOptionalIntegrationsModal);
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') closeOptionalIntegrationsModal();
+});
+document.getElementById('optional-integrations-modal').addEventListener('click', function(event) {
+  if (event.target === this) closeOptionalIntegrationsModal();
+});
+(function showEnrollmentIntegrationPrompt() {
+  var currentURL = new URL(window.location.href);
+  var shouldShow = currentURL.searchParams.get('integration_prompt') === '1';
+  var promptCookie = 'kite_optional_integrations_prompt=1';
+  var hasPromptCookie = document.cookie.split(';').some(function(cookie) {
+    return cookie.trim() === promptCookie;
+  });
+  if (hasPromptCookie) {
+    shouldShow = true;
+    document.cookie = 'kite_optional_integrations_prompt=; Path=/; Max-Age=0; SameSite=Lax';
+  }
+  if (!shouldShow) return;
+  if (currentURL.searchParams.has('integration_prompt')) {
+    currentURL.searchParams.delete('integration_prompt');
+    window.history.replaceState(window.history.state, '', currentURL.pathname + currentURL.search + currentURL.hash);
+  }
+  showOptionalIntegrationsModal();
+})();
 function setActive(el) {
   document.querySelectorAll('.sidenav a, .topbar a.btn-ghost').forEach(function(a) { a.classList.remove('active'); });
   el.classList.add('active');

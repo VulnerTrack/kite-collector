@@ -42,39 +42,46 @@ func printEnrollmentSuccessStyled(out io.Writer, details enrollmentSuccessDetail
 			style(enrollANSIMuted, fmt.Sprintf("%-13s", label)),
 			style(enrollANSICyan, value),
 		)
-		if err != nil {
-			return fmt.Errorf("write enrollment detail: %w", err)
-		}
-		return nil
 	}
 
-	heading := style(enrollANSIBold+enrollANSIGreen, "✅  Enrollment complete.")
-	if _, err := fmt.Fprintf(out, "\n%s\n", heading); err != nil {
-		return fmt.Errorf("write enrollment heading: %w", err)
+	w.printf("\n%s\n", style(enrollANSIBold+enrollANSIGreen, "✅  Enrollment complete."))
+	w.printf("   %s\n\n", style(enrollANSIBold, "Welcome to Kite! Your collector is connected to VulnerTrack."))
+	row("Collector", details.agentCode)
+	row("Certificates", details.certsDir)
+	row("Service", enrollmentServiceStatus(details.serviceAction))
+	row("Dashboard", strings.TrimRight(details.dashboardURL, "/"))
+	if details.serviceAction == "" {
+		w.printf("\n   %s\n",
+			style(enrollANSIYellow, "Next step → Install or start the Kite service to begin scanning."),
+		)
+	} else {
+		w.printf("\n   %s\n",
+			style(enrollANSIGreen, "You're all set — Kite is enrolled and running. No further action is required."),
+		)
 	}
-	if _, err := fmt.Fprintf(out, "   %s\n\n", style(enrollANSIBold, "Welcome to Kite! Your collector is connected to VulnerTrack.")); err != nil {
-		return fmt.Errorf("write enrollment welcome: %w", err)
+	w.printf("\n   %s\n", style(enrollANSIYellow, "Optional → Review detected integrations at any time:"))
+	w.printf("   %s\n", style(enrollANSIBold, "kite-collector integrations list"))
+	w.printf("\n   %s\n", style(enrollANSICyan, "Check status →"))
+	w.printf("   %s\n\n", style(enrollANSIBold, "kite-collector status"))
+	return w.err
+}
+
+// enrollWriter is a sticky-error writer: the first failed write is kept and
+// every later printf is a no-op. The summary then reads as the sequence of
+// lines it is, instead of six identical "if write failed, return" branches,
+// and the caller still sees the first write error.
+type enrollWriter struct {
+	out io.Writer
+	err error
+}
+
+func (w *enrollWriter) printf(format string, args ...any) {
+	if w.err != nil {
+		return
 	}
-	if err := row("Collector", details.agentCode); err != nil {
-		return err
+	if _, err := fmt.Fprintf(w.out, format, args...); err != nil {
+		w.err = fmt.Errorf("write enrollment summary: %w", err)
 	}
-	if err := row("Certificates", details.certsDir); err != nil {
-		return err
-	}
-	if err := row("Service", enrollmentServiceStatus(details.serviceAction)); err != nil {
-		return err
-	}
-	if err := row("Dashboard", strings.TrimRight(details.dashboardURL, "/")); err != nil {
-		return err
-	}
-	_, err := fmt.Fprintf(out, "\n   %s  %s\n\n",
-		style(enrollANSIYellow, "Next step →"),
-		style(enrollANSIBold, "kite-collector integrations"),
-	)
-	if err != nil {
-		return fmt.Errorf("write enrollment next step: %w", err)
-	}
-	return nil
 }
 
 func enrollmentServiceStatus(action string) string {

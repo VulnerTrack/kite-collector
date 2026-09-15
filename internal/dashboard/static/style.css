@@ -523,6 +523,17 @@ header.topbar {
   border: 1px solid rgba(225, 29, 72, 0.25) !important;
   box-shadow: 0 0 12px rgba(225, 29, 72, 0.15) !important;
 }
+.btn.btn-ghost.topbar-integrations {
+  background: rgba(225, 29, 72, 0.12);
+  color: #ff4d73;
+  border-color: rgba(225, 29, 72, 0.25);
+  box-shadow: 0 0 12px rgba(225, 29, 72, 0.15);
+}
+.btn.btn-ghost.topbar-integrations:hover {
+  background: rgba(225, 29, 72, 0.2);
+  color: #ff6b8a;
+  border-color: rgba(225, 29, 72, 0.4);
+}
 
 /* Hide the brand sub-text on narrow viewports so the actions row keeps room. */
 @media (max-width: 720px) {
@@ -3987,12 +3998,83 @@ details.sidenav-alltables .sidenav-tables {
  * Done steps collapse to receipts, one step renders expanded, pending steps
  * are dashed placeholders. The connection check lives inside the stream step.
  * ------------------------------------------------------------------------- */
+.onboarding-layout {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.onb-page-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  margin-bottom: 18px;
+  padding: 24px 26px;
+  border: 1px solid rgba(145, 158, 171, .2);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(225, 29, 72, .1), transparent 34%),
+    linear-gradient(135deg, #fff 0%, #fbfcfe 100%);
+  box-shadow: 0 12px 34px rgba(31, 41, 55, .055);
+}
+.onb-page-hero::after {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -95px;
+  bottom: -125px;
+  border: 24px solid rgba(225, 29, 72, .045);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.onb-page-hero-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #f82b52, #ce1238);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(225, 29, 72, .22);
+}
+.onb-page-hero-copy { min-width: 0; flex: 1; }
+.onb-page-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--palette-primary-main, #e11d48);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+#content .onb-page-hero h2 { margin: 0 0 5px; font-size: 1.35rem; }
+.onb-page-hero p { max-width: 720px; margin: 0; color: var(--palette-text-secondary, #637381); line-height: 1.5; }
+.onb-page-hero-chip {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border: 1px solid rgba(34, 197, 94, .2);
+  border-radius: 999px;
+  background: rgba(34, 197, 94, .08);
+  color: #118d57;
+  font-size: .72rem;
+  font-weight: 700;
+}
+.onb-page-hero-chip > span { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 4px rgba(34, 197, 94, .1); }
+.onb-page-optional { position: relative; z-index: 1; flex: 0 0 auto; }
 .onb-intro { max-width: 760px; margin: 0 0 20px; }
 .onb-steps {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-width: 880px;
+  gap: 10px;
+  max-width: none;
 }
 /* The collector can be ready without optional integrations. Keep that
  * completion receipt before service setup even though the setup card is
@@ -4005,9 +4087,12 @@ details.sidenav-alltables .sidenav-tables {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 20px;
-  border: 1px solid rgba(145, 158, 171, 0.2);
-  background: rgba(34, 197, 94, 0.03);
+  min-height: 58px;
+  padding: 14px 18px;
+  border: 1px solid rgba(145, 158, 171, .18);
+  border-left: 3px solid rgba(34, 197, 94, .72);
+  background: linear-gradient(90deg, rgba(34, 197, 94, .045), #fff 20%);
+  box-shadow: 0 4px 14px rgba(31, 41, 55, .025);
 }
 .onb-step-line {
   flex-grow: 1;
@@ -4016,7 +4101,7 @@ details.sidenav-alltables .sidenav-tables {
   gap: 10px;
   flex-wrap: wrap;
 }
-.onb-step-title { font-size: 0.88rem; font-weight: 700; }
+.onb-step-title { font-size: .9rem; font-weight: 750; }
 .onb-step-pending {
   display: flex;
   align-items: center;
@@ -4027,8 +4112,8 @@ details.sidenav-alltables .sidenav-tables {
 .onb-step-pending .onb-step-title { color: var(--palette-text-disabled); }
 .onb-step-current {
   border: 1px solid rgba(225, 29, 72, 0.25);
-  box-shadow: 0 4px 16px rgba(225, 29, 72, 0.05);
-  padding: 24px 28px;
+  box-shadow: 0 10px 30px rgba(31, 41, 55, .06);
+  padding: 26px 28px;
 }
 .onb-step-optional { border: 1px solid var(--palette-divider, #dfe3e8); background: var(--palette-background-paper, #fff); }
 .onb-step-head {
@@ -4062,6 +4147,14 @@ details.sidenav-alltables .sidenav-tables {
   margin-left: 36px;
 }
 .onb-ready #onb-scan-status { margin: 10px 0 0 36px; }
+.onb-ready {
+  border-color: rgba(34, 197, 94, .32);
+  background:
+    radial-gradient(circle at 100% 0, rgba(34, 197, 94, .09), transparent 30%),
+    var(--palette-background-paper, #fff);
+  box-shadow: 0 12px 32px rgba(17, 141, 87, .075);
+}
+.onb-ready .onb-step-head h2 { font-size: 1.15rem; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 16px; }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: .82rem; font-weight: 700; }
 .form-grid input, .form-grid select { width: 100%; padding: 10px 12px; border: 1px solid var(--palette-divider, #dfe3e8); border-radius: 8px; background: var(--palette-background-paper, #fff); color: inherit; }
@@ -4075,10 +4168,131 @@ details.sidenav-alltables .sidenav-tables {
 .onb-scan-row small { color: var(--palette-text-secondary, #637381); font-size: .72rem; }
 @media (max-width: 760px) { .onb-scan-row { grid-template-columns: 90px 1fr 70px; } .onb-scan-row > span:nth-child(n+4) { display: none; } }
 .service-setup-list { display: grid; gap: 12px; }
+.integration-catalog { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .service-setup-card { border: 1px solid var(--palette-divider, #dfe3e8); border-radius: 12px; padding: 16px; background: var(--palette-background-paper, #fff); }
 .service-setup-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
 .service-setup-head p { margin: 4px 0 0; max-width: 680px; }
+.integration-identity { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.integration-logo {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(14, 165, 233, .18);
+  border-radius: 11px;
+  background: linear-gradient(145deg, rgba(14, 165, 233, .13), rgba(59, 130, 246, .06));
+  color: #0369a1;
+  font-size: .74rem;
+  font-weight: 850;
+  letter-spacing: .03em;
+}
 .service-scan-actions { display: flex; align-items: center; gap: 12px; }
+.integration-card { display: flex; min-height: 184px; flex-direction: column; }
+.integration-card .service-setup-head { flex: 1; }
+.integration-card-actions { margin-top: auto; }
+.integration-card-actions:not(:has(button:not([hidden]))) { display: none; }
+.integrations-page-hero { margin-bottom: 18px; }
+.integrations-surface { min-height: 120px; }
+.integrations-layout .integration-card {
+  min-height: 0;
+  padding: 24px;
+  border-color: rgba(145, 158, 171, .22);
+  border-radius: 16px;
+  box-shadow: 0 12px 34px rgba(31, 41, 55, .055);
+}
+.integrations-layout .service-setup-head { align-items: center; margin-bottom: 18px; }
+.integrations-layout .service-setup-head strong { font-size: 1rem; }
+.integrations-layout .integration-card > [id$="-setup-fragment"]:not(:empty) {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid rgba(145, 158, 171, .16);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.integrations-layout .form-grid input,
+.integrations-layout .form-grid select { background-color: #fff; transition: border-color .15s ease, box-shadow .15s ease; }
+.integrations-layout .form-grid input:focus,
+.integrations-layout .form-grid select:focus { outline: none; border-color: rgba(225, 29, 72, .55); box-shadow: 0 0 0 3px rgba(225, 29, 72, .08); }
+.integrations-layout .trust-panel { background: #fff; }
+.integration-card-unavailable {
+  border-color: #d8dde5;
+  background: #f4f6f8;
+  color: #7c8798;
+  box-shadow: none;
+}
+.integration-card-unavailable .muted { color: #98a2b3; }
+.integration-card-unavailable .integration-unavailable-connect {
+  border-color: #c8ced8;
+  color: #697586;
+  background: #eef1f4;
+}
+.integration-card-unavailable .integration-unavailable-connect:hover {
+  border-color: #98a2b3;
+  color: #344054;
+  background: #e4e8ed;
+}
+.integration-modal-backdrop[hidden] { display: none; }
+.integration-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(11, 15, 25, .58);
+  backdrop-filter: blur(3px);
+}
+.integration-modal {
+  width: min(460px, 100%);
+  padding: 28px;
+  border: 1px solid var(--palette-divider, #dfe3e8);
+  border-radius: 14px;
+  background: var(--palette-background-paper, #fff);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+  text-align: center;
+}
+.integration-modal h2 { margin: 12px 0 8px; }
+.integration-modal p { margin: 0 0 22px; color: var(--palette-text-secondary, #637381); line-height: 1.55; }
+.integration-modal-icon {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(225, 29, 72, .1);
+  color: var(--palette-primary-main, #e11d48);
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+@media (max-width: 720px) {
+  .onb-page-hero { align-items: flex-start; padding: 20px; }
+  .onb-page-hero-chip, .onb-page-optional { display: none; }
+  .onb-page-hero-icon { width: 44px; height: 44px; border-radius: 12px; }
+  .onb-step-current { padding: 22px 18px; }
+  .onb-step-current > div[id$="-fragment"], .onb-step-copy, .onb-trust-line, .onb-trust, .onb-ready-actions, .onb-ready #onb-scan-status, .onb-recent-scans { margin-left: 0; }
+  .integrations-layout .integration-card { padding: 18px; }
+  .integrations-layout .service-setup-head { align-items: flex-start; }
+}
+.optional-integrations-modal { width: min(520px, 100%); }
+.optional-integrations-modal > .badge { display: inline-flex; }
+.optional-integration-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 0 24px;
+  padding: 16px;
+  border: 1px solid var(--palette-divider, #dfe3e8);
+  border-radius: 10px;
+  background: #f8fafc;
+  text-align: left;
+}
+.optional-integration-item > div { min-width: 0; }
+.optional-integration-connect { flex: 0 0 auto; }
+.optional-integration-item strong { display: block; margin-bottom: 4px; color: var(--palette-text-primary, #212b36); }
+.optional-integration-item span { display: block; color: var(--palette-text-secondary, #637381); font-size: .84rem; line-height: 1.45; }
+.optional-integrations-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
 
 /* Machine page — memory card: figures on the left, usage sparkline on the right. */
 .machine-mem { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
