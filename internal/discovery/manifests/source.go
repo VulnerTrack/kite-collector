@@ -17,6 +17,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
 	"github.com/vulnertrack/kite-collector/internal/discovery/manifests/parsers"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 )
 
 // Compile-time interface check.
@@ -273,7 +274,7 @@ func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time
 			Timestamp:   now,
 			Auditor:     "manifest_scanner",
 			CheckID:     "git:stale_repo",
-			Title:       fmt.Sprintf("Stale repository: %s (no commits in %d days)", info.RepoName, sc.gitStaleDays),
+			Title:       fmt.Sprintf("Stale repository: %s (no commits in %s)", info.RepoName, plural.Count(sc.gitStaleDays, "day")),
 			Severity:    model.SeverityMedium,
 			Evidence:    fmt.Sprintf("Last commit: %s", info.LastCommitDate.Format(time.RFC3339)),
 			Remediation: "Review repository for relevance; update or archive.",
