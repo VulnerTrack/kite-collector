@@ -1,36 +1,30 @@
 #!/bin/sh
 # postinst for kite-collector-osquery. Mirrors the Windows MSI's
-# ServiceInstall/ServiceControl behavior: register + start kite-osqueryd.
+# ServiceInstall/ServiceControl behavior: register + start kite-osqueryd,
+# and enable (not start) kite-collector, which `kite-collector enroll`
+# starts once the host is enrolled — same as the plain package's postinst.
 #
 # Every systemd interaction is guarded on /run/systemd/system so installs
 # inside containers (no systemd as PID 1) and chroots succeed cleanly —
 # the container e2e test (tests/e2e/deb-osquery/run.sh) relies on this.
 set -e
 
-# Upgrade bridge for the /usr/local/bin → /usr/bin move — same logic as the
-# plain deb's collector-postinstall.sh (keep in sync). Debian passes the
-# previously configured version as $2 during an upgrade. The compat link
-# keeps an old absolute path cached by a running shell valid; maintainer
-# scripts cannot clear the parent shell's command hash. A self-registered
-# unit pointing at the old path also requests the bridge. Never clobber an
-# existing file.
-unit=/etc/systemd/system/kite-collector.service
+# Legacy-path bridge for the /usr/local/bin → /usr/bin move — same logic
+# as the plain deb's collector-postinstall.sh (keep in sync). A running
+# shell keeps the old absolute path in its command hash after the file is
+# gone, and maintainer scripts cannot clear another shell's hash; the
+# compat link keeps that cached path valid on every install. Never clobber
+# an existing file.
 legacy=/usr/local/bin/kite-collector
 newbin=/usr/bin/kite-collector
-needs_bridge=false
-if [ -n "${2:-}" ]; then
-    needs_bridge=true
-elif [ -f "$unit" ] && grep -q "$legacy" "$unit"; then
-    needs_bridge=true
-fi
-if [ "$needs_bridge" = true ] && [ -x "$newbin" ] \
-    && [ ! -e "$legacy" ] && [ ! -L "$legacy" ]; then
+if [ -x "$newbin" ] && [ ! -e "$legacy" ] && [ ! -L "$legacy" ]; then
     mkdir -p /usr/local/bin
     ln -s "$newbin" "$legacy" || true
 fi
 
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
+    systemctl enable kite-collector.service || true
     systemctl enable kite-osqueryd.service || true
     # restart (not start) so upgrades pick up the new daemon binary.
     systemctl restart kite-osqueryd.service || true

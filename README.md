@@ -18,7 +18,7 @@ Results are stored in a local SQLite database. No servers, no dependencies, full
 > installation where the service drifted onto a stale copy (`kite-collector
 > doctor` tells you when that's the case), and `uninstall --purge` to also
 > remove the data directory. The deb/rpm packages ship their own systemd
-> unit, so on those systems `install` only enrolls and enables it.
+> unit and enable it on install, so on those systems `install` only enrolls.
 
 ### Quick install (Linux, macOS, FreeBSD, OpenBSD)
 
