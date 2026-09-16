@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -104,7 +105,7 @@ func (v *scanStatusView) fillFromLatest(now time.Time) {
 			v.Line1 = "Completed"
 			v.Line2 = "just now"
 			if run.TotalMachines > 0 {
-				v.Line2 += fmt.Sprintf(" · %d machines", run.TotalMachines)
+				v.Line2 += " · " + plural.Count(run.TotalMachines, "machine")
 			}
 			return
 		}

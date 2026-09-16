@@ -24,6 +24,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/store"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
@@ -472,10 +473,10 @@ func readAgentCertificate(path string, now time.Time) agentCertificate {
 			out.WindowNote = "expired, " + issued
 			out.WindowClass = "profile-note-error"
 		case remaining <= certExpiryWarnWindow:
-			out.WindowNote = fmt.Sprintf("%d days left, %s", out.DaysLeft, issued)
+			out.WindowNote = fmt.Sprintf("%s left, %s", plural.Count(out.DaysLeft, "day"), issued)
 			out.WindowClass = "profile-note-warn"
 		default:
-			out.WindowNote = fmt.Sprintf("%d days left, %s", out.DaysLeft, issued)
+			out.WindowNote = fmt.Sprintf("%s left, %s", plural.Count(out.DaysLeft, "day"), issued)
 		}
 		return out
 	}
@@ -1635,7 +1636,7 @@ func aggregateRecentActivity(probes []sqlite.ProbeResultRecord, runs []model.Sca
 				AtRel:    humanizeRelativeTime(time.Since(*r.CompletedAt)),
 				Kind:     "scan." + status,
 				Label:    "scan " + verb,
-				Detail:   fmt.Sprintf("%s · %d machines", dur, r.TotalMachines),
+				Detail:   fmt.Sprintf("%s · %s", dur, plural.Count(r.TotalMachines, "machine")),
 				Severity: sev,
 				Class:    cls,
 			})
