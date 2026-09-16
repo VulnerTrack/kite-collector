@@ -11,9 +11,9 @@
 #   everything else (Alpine, Arch,    the static release binary,
 #   macOS, FreeBSD, OpenBSD, ...)     SHA256-verified, into /usr/local/bin
 #
-# It then runs `kite-collector install --no-enroll` to register the
-# background service (enabled at boot, started once the host is enrolled),
-# leaving one step: `sudo kite-collector enroll`.
+# It then runs `kite-collector install` to register the background service
+# (enabled at boot, started once the host is enrolled), leaving one step:
+# `sudo kite-collector enroll`.
 #
 # Environment variables:
 #   KITE_VERSION         pin a release, e.g. "0.60.5" (default: latest)
@@ -232,27 +232,69 @@ install_binary() {
     fi
 }
 
-# register_service runs `kite-collector install --no-enroll`, which
-# registers the service with the OS service manager (or adopts the unit a
-# deb/rpm shipped) and enables it at boot. --no-enroll keeps it from signing
-# in here, where nobody could complete that. The service only starts once
-# the host is enrolled, so a fresh install stays idle and an upgrade over a
-# running, enrolled service is restarted onto the new binary. Its own report
-# is kept out of the way — this script prints the single step that remains —
-# and shown in full only when registration fails. Returns non-zero when it
-# could not run (no root available) or failed, so main prints the one
-# command that does everything instead.
+# bridge_legacy_path keeps /usr/local/bin/kite-collector valid after a
+# package install put the binary at /usr/bin. An already-open shell caches
+# command paths (bash `hash`), so a cached /usr/local/bin entry — from an
+# earlier binary-method install, or a package from before the /usr/bin
+# move — keeps failing with "No such file or directory" until the user
+# runs `hash -r`, which nobody should have to know. Current packages
+# create this link in their postinst; this covers older releases, and
+# replaces a binary-method copy this script left there earlier, which
+# would otherwise shadow the package on PATH. Any other file at that path
+# is left alone.
+bridge_legacy_path() {
+    legacy=/usr/local/bin/kite-collector
+    [ "$INSTALLED_BIN" = /usr/bin/kite-collector ] && [ -x /usr/bin/kite-collector ] || return 0
+    # An existing symlink is either ours already or the admin's; keep it.
+    [ -L "$legacy" ] && return 0
+    if [ -e "$legacy" ]; then
+        case "$("$legacy" version 2>/dev/null | head -n 1)" in
+            "kite-collector "*) ;;
+            *)
+                warn "$legacy exists and is not kite-collector; it shadows /usr/bin/kite-collector on PATH."
+                return 0
+                ;;
+        esac
+        as_root rm -f "$legacy"
+    fi
+    as_root mkdir -p /usr/local/bin
+    as_root ln -s /usr/bin/kite-collector "$legacy"
+}
+
+# install_flags prints the flags for `kite-collector install`. Releases
+# from 0.62 accept --no-enroll, which keeps a flag-less install from
+# starting the interactive sign-in here, where nobody could complete it.
+# Older releases never sign in without --agent-code, so they run install
+# bare — this script may be newer than the release it just installed.
+install_flags() {
+    if "$INSTALLED_BIN" install --help 2>/dev/null | grep -q -- '--no-enroll'; then
+        printf '%s' '--no-enroll'
+    fi
+}
+
+# register_service runs `kite-collector install`, which registers the
+# service with the OS service manager (or adopts the unit a deb/rpm shipped)
+# and enables it at boot. The service only starts once the host is
+# enrolled, so a fresh install stays idle and an upgrade over a running,
+# enrolled service is restarted onto the new binary. Its own report is kept
+# out of the way — this script prints the single step that remains — and
+# shown in full only when registration fails. Returns non-zero when it could
+# not run (no root available) or failed, so main prints the one command that
+# does everything instead.
 register_service() {
     if [ "$(id -u)" != 0 ] && [ -z "$SUDO" ]; then
         # Binary method into a user-writable directory, no sudo/doas
         # requested: registering a system service needs root.
         return 1
     fi
-    printf '+ %s%s install --no-enroll\n' "${SUDO:+$SUDO }" "$INSTALLED_BIN" >&2
+    flags=$(install_flags)
+    printf '+ %s%s install%s\n' "${SUDO:+$SUDO }" "$INSTALLED_BIN" "${flags:+ $flags}" >&2
+    # $flags is intentionally unquoted: it is empty or one flag.
+    # shellcheck disable=SC2086
     if [ -n "$SUDO" ]; then
-        "$SUDO" "$INSTALLED_BIN" install --no-enroll >"$TMP_DIR/install.log" 2>&1 && return 0
+        "$SUDO" "$INSTALLED_BIN" install $flags >"$TMP_DIR/install.log" 2>&1 && return 0
     else
-        "$INSTALLED_BIN" install --no-enroll >"$TMP_DIR/install.log" 2>&1 && return 0
+        "$INSTALLED_BIN" install $flags >"$TMP_DIR/install.log" 2>&1 && return 0
     fi
     warn "service registration failed:"
     cat "$TMP_DIR/install.log" >&2
@@ -443,6 +485,7 @@ main() {
     esac
 
     # Step 5: prove the result runs, and is the version that was asked for.
+    bridge_legacy_path
     version_line=$("$INSTALLED_BIN" version 2>/dev/null | head -n 1) || true
     [ -n "$version_line" ] || die "$INSTALLED_BIN was installed but does not run"
     if [ -n "$KITE_VERSION" ] && [ "$version_line" != "kite-collector $KITE_VERSION" ]; then
