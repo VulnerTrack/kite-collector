@@ -41,6 +41,20 @@ echo "  drift guard: goreleaser and nfpm-collector configs agree"
 DEB="${DEB:-}"
 if [[ -z "$DEB" ]]; then
   DEB=$(ls "$REPO_ROOT"/dist/kite-collector_*_amd64.deb 2>/dev/null | grep -v osquery | head -1 || true)
+  # A cached deb carries the maintainer scripts and unit it was built
+  # with; a stale one makes a postinst change pass or fail for the wrong
+  # reason. Rebuild when any packaging input is newer than the package.
+  if [[ -n "$DEB" ]]; then
+    for input in "$REPO_ROOT"/packaging/deb/collector-*.sh \
+                 "$REPO_ROOT"/packaging/deb/nfpm-collector.yaml \
+                 "$REPO_ROOT"/packaging/systemd/kite-collector.service; do
+      if [[ "$input" -nt "$DEB" ]]; then
+        echo "  $DEB is older than $(basename "$input") — rebuilding"
+        rm -f "$DEB"; DEB=""
+        break
+      fi
+    done
+  fi
 fi
 if [[ -z "$DEB" ]]; then
   echo "  no collector deb in dist/ — building one"

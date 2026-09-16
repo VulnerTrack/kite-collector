@@ -53,6 +53,11 @@ if dpkg -S "$BIN" >/dev/null 2>&1; then
 else
   fail "dpkg owns the binary"
 fi
+if [ -L "$LEGACY" ] && [ "$(readlink "$LEGACY")" = "$BIN" ]; then
+  pass "bridge: compat symlink created on fresh install"
+else
+  fail "bridge: compat symlink created on fresh install" "$(ls -l "$LEGACY" 2>&1)"
+fi
 
 # ── 3. unit sanity ──────────────────────────────────────────────────────
 if grep -q "ExecStart=$BIN " "$UNIT"; then
@@ -83,8 +88,7 @@ else
 fi
 
 # ── 4. upgrade bridge ───────────────────────────────────────────────────
-# 4a. No legacy unit is required. A Debian upgrade/reinstall passes the
-#     old package version to postinst, which creates the compatibility
+# 4a. No legacy unit is required. Any install creates the compatibility
 #     path an already-running Bash may still have cached.
 rm -f "$ETC_UNIT"
 rm -f "$LEGACY"

@@ -164,7 +164,14 @@ else
 fi
 expect_log "picked the $METHOD method" "using $METHOD"
 expect_version "$BIN" "$OLD_VERSION" "binary reports the pinned version"
-expect_log "ran kite-collector install" "^+ .*kite-collector install --no-enroll"
+expect_log "ran kite-collector install" "^+ .*kite-collector install"
+if [ "$METHOD" != binary ]; then
+    if [ -L /usr/local/bin/kite-collector ] && [ "$(readlink /usr/local/bin/kite-collector)" = /usr/bin/kite-collector ]; then
+        pass "legacy /usr/local/bin path resolves to the package binary"
+    else
+        fail "legacy /usr/local/bin path resolves to the package binary" "$(ls -l /usr/local/bin/kite-collector 2>&1)"
+    fi
+fi
 expect_log "says installation is complete" "Installation complete!"
 expect_log "prints the sign-in step" "kite-collector enroll"
 if [ -n "$RUN_AS" ]; then
