@@ -2,6 +2,7 @@ package model
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -136,10 +137,10 @@ func (a *Machine) MaterialFingerprint() string {
 		// natural key plus hostname so we never panic.
 		fallback := fmt.Sprintf("%s|%s", a.NaturalKey, a.Hostname)
 		sum := sha256.Sum256([]byte(fallback))
-		return fmt.Sprintf("%x", sum)
+		return hex.EncodeToString(sum[:])
 	}
 	sum := sha256.Sum256(encoded)
-	return fmt.Sprintf("%x", sum)
+	return hex.EncodeToString(sum[:])
 }
 
 // naturalKeySep is the unit-separator byte used between fields of the
@@ -164,7 +165,7 @@ func (a *Machine) ComputeNaturalKey() {
 		raw = a.Hostname + naturalKeySep + string(a.MachineType)
 	}
 	hash := sha256.Sum256([]byte(raw))
-	a.NaturalKey = fmt.Sprintf("%x", hash)
+	a.NaturalKey = hex.EncodeToString(hash[:])
 }
 
 // LegacyNaturalKey returns the pre-migration natural-key form (pipe
@@ -179,7 +180,7 @@ func (a *Machine) LegacyNaturalKey() string {
 		raw = fmt.Sprintf("%s|%s", a.Hostname, a.MachineType)
 	}
 	hash := sha256.Sum256([]byte(raw))
-	return fmt.Sprintf("%x", hash)
+	return hex.EncodeToString(hash[:])
 }
 
 // NetworkInterface captures a single network interface attached to an machine.

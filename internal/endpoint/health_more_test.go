@@ -101,7 +101,7 @@ func TestRecordFailure_TerminalStatesHold(t *testing.T) {
 	m := &Manager{logger: testLogger()}
 
 	unreachable := &Endpoint{Config: config.EndpointConfig{Name: "u"}, State: StateUnreachable}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		m.recordFailure(unreachable)
 	}
 	assert.Equal(t, StateUnreachable, unreachable.State, "unreachable is terminal for failures")
@@ -117,7 +117,7 @@ func TestRecordFailure_BelowThresholdStaysHealthy(t *testing.T) {
 	m := &Manager{logger: testLogger()}
 	ep := &Endpoint{Config: config.EndpointConfig{Name: "h"}, State: StateHealthy}
 
-	for i := 0; i < failuresToDegrade-1; i++ {
+	for range failuresToDegrade - 1 {
 		m.recordFailure(ep)
 	}
 	assert.Equal(t, StateHealthy, ep.State,
@@ -131,7 +131,7 @@ func TestRecordSuccess_UntrustedNeverAutoRecovers(t *testing.T) {
 	m := &Manager{logger: testLogger()}
 	ep := &Endpoint{Config: config.EndpointConfig{Name: "t"}, State: StateUntrusted}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		m.recordSuccess(ep)
 	}
 	assert.Equal(t, StateUntrusted, ep.State,
@@ -144,7 +144,7 @@ func TestRecordSuccess_DegradedBelowThresholdHolds(t *testing.T) {
 	m := &Manager{logger: testLogger()}
 	ep := &Endpoint{Config: config.EndpointConfig{Name: "d"}, State: StateDegraded}
 
-	for i := 0; i < successesToHealthy-1; i++ {
+	for range successesToHealthy - 1 {
 		m.recordSuccess(ep)
 	}
 	assert.Equal(t, StateDegraded, ep.State)

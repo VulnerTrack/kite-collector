@@ -114,7 +114,7 @@ func splitKV(line string) (string, string, bool) {
 // stripInlineComment removes `#`/`;` tails outside double quotes.
 func stripInlineComment(s string) string {
 	inQ := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c == '"' {
 			inQ = !inQ

@@ -1,6 +1,7 @@
 package ldap
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -105,13 +106,13 @@ func (c *ldapConfig) validate() error {
 	}
 	if c.enabled {
 		if c.baseDN == "" {
-			return fmt.Errorf("base_dn is required when enabled=true")
+			return errors.New("base_dn is required when enabled=true")
 		}
 		if c.bindDN == "" {
-			return fmt.Errorf("bind_dn is required when enabled=true")
+			return errors.New("bind_dn is required when enabled=true")
 		}
 		if len(c.domainControllers) == 0 {
-			return fmt.Errorf("at least one domain_controllers entry is required")
+			return errors.New("at least one domain_controllers entry is required")
 		}
 	}
 	if c.pageSize == 0 || c.pageSize > maxAllowedPageSize {
@@ -171,7 +172,7 @@ func parseDCs(raw any, tlsMode string) ([]dcEndpoint, error) {
 func splitHostPort(s string, defaultPort int) (string, int, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return "", 0, fmt.Errorf("empty endpoint")
+		return "", 0, errors.New("empty endpoint")
 	}
 	if !strings.Contains(s, ":") {
 		return s, defaultPort, nil

@@ -101,7 +101,7 @@ func (r realInstaller) Install(ctx context.Context, opts installer.Options) erro
 	// Retry loop for copying and renaming the binary, since Windows might take a moment
 	// to release the file lock on the running executable after stopping/killing the process.
 	var binErr error
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		binErr = installer.InstallBinary(src, dst)
 		if binErr == nil {
 			break

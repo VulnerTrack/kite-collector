@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -246,7 +248,7 @@ func (az *Azure) acquireToken(ctx context.Context, creds azureCredentials) (stri
 	}
 
 	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("empty access_token in response")
+		return "", errors.New("empty access_token in response")
 	}
 
 	return tokenResp.AccessToken, nil

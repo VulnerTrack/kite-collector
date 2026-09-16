@@ -2,6 +2,7 @@ package apifingerprint
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -25,7 +26,7 @@ type Target struct {
 // passing into Detector.Probe.
 func (t Target) URL() (*url.URL, error) {
 	if t.Host == "" {
-		return nil, fmt.Errorf("apifingerprint: empty host")
+		return nil, errors.New("apifingerprint: empty host")
 	}
 	if t.Port <= 0 || t.Port > 65535 {
 		return nil, fmt.Errorf("apifingerprint: invalid port %d", t.Port)
@@ -61,7 +62,7 @@ type ScanOptions struct {
 // remaining queue; the partial result slice is still returned.
 func ScanTargets(ctx context.Context, d *Detector, targets []Target, opts ScanOptions) ([]Result, error) {
 	if d == nil {
-		return nil, fmt.Errorf("apifingerprint: nil detector")
+		return nil, errors.New("apifingerprint: nil detector")
 	}
 	if len(targets) == 0 {
 		return nil, nil

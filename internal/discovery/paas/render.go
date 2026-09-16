@@ -2,6 +2,7 @@ package paas
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -34,7 +36,7 @@ func (r *Render) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 	token := os.Getenv("KITE_RENDER_TOKEN")
 	if token == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("render: KITE_RENDER_TOKEN not set")
+			return nil, errors.New("render: KITE_RENDER_TOKEN not set")
 		}
 		return nil, nil
 	}

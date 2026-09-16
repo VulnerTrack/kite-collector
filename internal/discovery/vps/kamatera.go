@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -33,7 +35,7 @@ func (k *Kamatera) Discover(ctx context.Context, cfg map[string]any) ([]model.Ma
 
 	if clientID == "" || secret == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("kamatera: KITE_KAMATERA_CLIENT_ID and KITE_KAMATERA_SECRET are required")
+			return nil, errors.New("kamatera: KITE_KAMATERA_CLIENT_ID and KITE_KAMATERA_SECRET are required")
 		}
 		return nil, nil
 	}

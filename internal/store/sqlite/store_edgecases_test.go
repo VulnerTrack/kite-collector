@@ -1271,12 +1271,12 @@ func TestUpsertMachines_ParallelBatches(t *testing.T) {
 	var wg sync.WaitGroup
 	insertCounts := make([]int, workers)
 	insertErrs := make([]error, workers)
-	for w := 0; w < workers; w++ {
+	for w := range workers {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
 			batch := make([]model.Machine, 0, perWorker)
-			for i := 0; i < perWorker; i++ {
+			for i := range perWorker {
 				m := makeMachine(
 					fmt.Sprintf("par-%02d-%02d", w, i),
 					model.MachineTypeServer)
@@ -1292,7 +1292,7 @@ func TestUpsertMachines_ParallelBatches(t *testing.T) {
 	}
 	wg.Wait()
 	totalInserted := 0
-	for w := 0; w < workers; w++ {
+	for w := range workers {
 		require.NoError(t, insertErrs[w], "worker %d", w)
 		totalInserted += insertCounts[w]
 	}
@@ -1306,14 +1306,14 @@ func TestUpsertMachines_ParallelBatches(t *testing.T) {
 	// Rows already exist, so each transaction must count them all as updates —
 	// exercising the withTransientRetry path under real write contention.
 	shared := make([]model.Machine, 0, perWorker)
-	for i := 0; i < perWorker; i++ {
+	for i := range perWorker {
 		m := all[i]
 		m.OSFamily = "linux"
 		shared = append(shared, m)
 	}
 	updateErrs := make([]error, updateRounds)
 	updateCounts := make([]int, updateRounds)
-	for w := 0; w < updateRounds; w++ {
+	for w := range updateRounds {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
@@ -1328,7 +1328,7 @@ func TestUpsertMachines_ParallelBatches(t *testing.T) {
 		}(w)
 	}
 	wg.Wait()
-	for w := 0; w < updateRounds; w++ {
+	for w := range updateRounds {
 		require.NoError(t, updateErrs[w], "update worker %d", w)
 		assert.Equal(t, perWorker, updateCounts[w], "update worker %d must update the full batch", w)
 	}

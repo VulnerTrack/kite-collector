@@ -102,7 +102,7 @@ func ParseAPKOutput(raw string) *Result {
 // splitNameVersion splits a "name-version" string at the first hyphen
 // followed by a digit. Returns (s, "") if no such boundary exists.
 func splitNameVersion(s string) (string, string) {
-	for i := 0; i < len(s)-1; i++ {
+	for i := range len(s) - 1 {
 		if s[i] == '-' && s[i+1] >= '0' && s[i+1] <= '9' {
 			return s[:i], s[i+1:]
 		}

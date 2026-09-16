@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -129,12 +130,10 @@ func (c *cloudClient) get(ctx context.Context, path string) ([]byte, error) {
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf(
-			"HTTP 401 — invalid API key. Generate one at unifi.ui.com → Settings → API Keys",
-		)
+		return nil, errors.New("HTTP 401 — invalid API key. Generate one at unifi.ui.com → Settings → API Keys")
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("HTTP 429 — rate limited. Try again later")
+		return nil, errors.New("HTTP 429 — rate limited. Try again later")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
@@ -417,7 +416,7 @@ func (c *localClient) login(ctx context.Context, username, password string) erro
 		// endpoint/port is wrong. Surface the catalogued KITE-E005 remediation.
 		return kiteerrors.FromCatalog(kiteerrors.CodeUniFiUnreachable, nil)
 	}
-	return fmt.Errorf("login failed — check credentials, endpoint, " +
+	return errors.New("login failed — check credentials, endpoint, " +
 		"and ensure the account is a local admin (not a UI.com cloud account)")
 }
 

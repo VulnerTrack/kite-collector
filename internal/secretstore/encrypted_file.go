@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,7 +23,7 @@ type EncryptedFileStore struct {
 
 func NewEncryptedFile(path string, key []byte) (*EncryptedFileStore, error) {
 	if len(key) != 32 {
-		return nil, fmt.Errorf("secret encryption key must be 32 bytes")
+		return nil, errors.New("secret encryption key must be 32 bytes")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -39,7 +40,7 @@ func (s *EncryptedFileStore) Backend() string { return "encrypted-file-aes256-gc
 
 func (s *EncryptedFileStore) Put(name string, value []byte) error {
 	if name == "" || len(value) == 0 {
-		return fmt.Errorf("secret name and value are required")
+		return errors.New("secret name and value are required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -88,7 +89,7 @@ func (s *EncryptedFileStore) load() (map[string][]byte, error) {
 		return nil, fmt.Errorf("read connector secret store: %w", err)
 	}
 	if len(data) < len(encryptedFileMagic)+s.aead.NonceSize() || string(data[:len(encryptedFileMagic)]) != string(encryptedFileMagic) {
-		return nil, fmt.Errorf("invalid connector secret store")
+		return nil, errors.New("invalid connector secret store")
 	}
 	nonce := data[len(encryptedFileMagic) : len(encryptedFileMagic)+s.aead.NonceSize()]
 	plaintext, err := s.aead.Open(nil, nonce, data[len(encryptedFileMagic)+s.aead.NonceSize():], encryptedFileMagic)

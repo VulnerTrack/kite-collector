@@ -273,11 +273,11 @@ func TestWriteWorkload_1000Goroutines(t *testing.T) {
 		failure atomic.Pointer[error]
 	)
 	start := time.Now()
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			for i := 0; i < perGoroutine; i++ {
+			for i := range perGoroutine {
 				err := s.RecordHeartbeat(ctx, model.ProbeHeartbeat{
 					ID:        uuid.Must(uuid.NewV7()),
 					ScanRunID: run.ID,

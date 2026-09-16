@@ -256,7 +256,7 @@ AllowedIPs = 10.0.0.2/32
 
 func TestParseHonoursMaxRows(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxRows+50; i++ {
+	for range MaxRows + 50 {
 		sb.WriteString("[Peer]\nAllowedIPs = 10.0.0.0/32\n")
 	}
 	got := Parse([]byte(sb.String()), "x.conf")

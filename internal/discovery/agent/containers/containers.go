@@ -190,7 +190,7 @@ func NormalizeState(raw string) State {
 // (and the unicode tables it pulls).
 func toLowerASCII(s string) string {
 	b := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c >= 'A' && c <= 'Z' {
 			c += 'a' - 'A'

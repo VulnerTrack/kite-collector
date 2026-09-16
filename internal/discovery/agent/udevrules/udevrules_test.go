@@ -261,7 +261,7 @@ func TestParseRuleQuotedCommaNotASplitter(t *testing.T) {
 
 func TestParseRuleMaxCeiling(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxRules+50; i++ {
+	for range MaxRules + 50 {
 		sb.WriteString(`SUBSYSTEM=="net", ACTION=="add"` + "\n")
 	}
 	got := Parse([]byte(sb.String()), "x.rules", ScopeAdmin)

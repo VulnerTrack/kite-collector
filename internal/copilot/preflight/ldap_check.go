@@ -2,9 +2,11 @@ package preflight
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -48,7 +50,7 @@ func (c *LDAPDCConnectChecker) Check(ctx context.Context, nodeID string, value a
 			}
 		}
 		dialCtx, cancel := context.WithTimeout(ctx, ldapDialTimeout)
-		conn, err := dialer.DialContext(dialCtx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
+		conn, err := dialer.DialContext(dialCtx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 		cancel()
 		if err != nil {
 			return CheckResult{
@@ -91,7 +93,7 @@ func (c *LDAPBindEnvChecker) Check(_ context.Context, nodeID string, value any, 
 			Hint:    fmt.Sprintf("export %s=<bind-password>", envVar),
 		}
 	}
-	return CheckResult{NodeID: nodeID, Check: "ldap:bind:env", Passed: true, Message: fmt.Sprintf("%s is set", envVar)}
+	return CheckResult{NodeID: nodeID, Check: "ldap:bind:env", Passed: true, Message: envVar + " is set"}
 }
 
 // LDAPBaseDNChecker validates the syntactic shape of an AD base DN. The
@@ -159,7 +161,7 @@ func (c *LDAPTLSModeChecker) Check(_ context.Context, nodeID string, value any, 
 			NodeID:  nodeID,
 			Check:   "ldap:tls_mode:valid",
 			Passed:  true,
-			Message: fmt.Sprintf("tls_mode=%s", mode),
+			Message: "tls_mode=" + mode,
 		}
 	default:
 		return CheckResult{
@@ -240,7 +242,7 @@ func defaultLDAPPort(resolved map[string]any) int {
 func parseHostPort(s string, defaultPort int) (string, int, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return "", 0, fmt.Errorf("empty entry")
+		return "", 0, errors.New("empty entry")
 	}
 	if !strings.Contains(s, ":") {
 		return s, defaultPort, nil

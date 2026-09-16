@@ -276,7 +276,7 @@ func (s *Source) processGitRepo(ctx context.Context, gitDirPath string, now time
 			CheckID:     "git:stale_repo",
 			Title:       fmt.Sprintf("Stale repository: %s (no commits in %s)", info.RepoName, plural.Count(sc.gitStaleDays, "day")),
 			Severity:    model.SeverityMedium,
-			Evidence:    fmt.Sprintf("Last commit: %s", info.LastCommitDate.Format(time.RFC3339)),
+			Evidence:    "Last commit: " + info.LastCommitDate.Format(time.RFC3339),
 			Remediation: "Review repository for relevance; update or archive.",
 		}
 		s.mu.Lock()

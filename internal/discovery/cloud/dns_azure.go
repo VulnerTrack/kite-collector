@@ -7,6 +7,7 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -370,7 +371,7 @@ func (a *AzureDNS) bearerGet(ctx context.Context, token, apiURL string) ([]byte,
 func sanitizeAzureResourceID(id string) error {
 	trimmed := strings.Trim(id, "/")
 	if trimmed == "" {
-		return fmt.Errorf("empty resource id")
+		return errors.New("empty resource id")
 	}
 	for _, seg := range strings.Split(trimmed, "/") {
 		if seg == "" {

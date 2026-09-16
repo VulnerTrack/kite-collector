@@ -3,6 +3,7 @@ package vpn
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -228,7 +229,7 @@ func (e *tailscaleEnumerator) enumerateAPI(ctx context.Context, apiKey, tailnet 
 		return nil, fmt.Errorf("tailscale: read api body: %w", err)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("tailscale: HTTP 401 — invalid API key")
+		return nil, errors.New("tailscale: HTTP 401 — invalid API key")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("tailscale: HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))

@@ -72,7 +72,7 @@ type rawExec struct {
 // C:\Windows\System32\Tasks\.
 func ParseTaskXML(body []byte, filePath, taskPath string) (Task, error) {
 	if len(bytes.TrimSpace(body)) == 0 {
-		return Task{}, fmt.Errorf("empty task XML")
+		return Task{}, errors.New("empty task XML")
 	}
 	utf8Body, err := decodeToUTF8(body)
 	if err != nil {

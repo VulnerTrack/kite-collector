@@ -238,7 +238,7 @@ func subnetBroadcast(ip net.IP, mask net.IPMask) net.IP {
 		return net.IPv4bcast
 	}
 	out := make(net.IP, net.IPv4len)
-	for i := 0; i < net.IPv4len; i++ {
+	for i := range net.IPv4len {
 		out[i] = v4[i] | ^mask[i]
 	}
 	return out
@@ -356,7 +356,7 @@ func decodeNetBIOSName(raw []byte, off int) ([16]byte, int, error) {
 		return out, 0, fmt.Errorf("unexpected name length byte 0x%02x", raw[off])
 	}
 	body := raw[off+1 : off+33]
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		hi := body[2*i]
 		lo := body[2*i+1]
 		if hi < 0x41 || hi > 0x50 || lo < 0x41 || lo > 0x50 {
@@ -389,7 +389,7 @@ func parseNBSTAT(raw []byte, src net.IP) (responder, error) {
 	// echo the question.
 	off := 12
 	qdCount := binary.BigEndian.Uint16(raw[4:6])
-	for i := uint16(0); i < qdCount; i++ {
+	for range qdCount {
 		_, n, err := decodeNetBIOSName(raw, off)
 		if err != nil {
 			return responder{}, err
@@ -437,7 +437,7 @@ func parseNBSTATRData(r *responder, rdata []byte) error {
 	if off+need+6 > len(rdata) {
 		return errors.New("rdata truncated")
 	}
-	for i := 0; i < numNames; i++ {
+	for range numNames {
 		nameBytes := rdata[off : off+16]
 		flags := binary.BigEndian.Uint16(rdata[off+16 : off+18])
 		off += 18

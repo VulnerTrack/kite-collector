@@ -115,6 +115,6 @@ func (c *EntraSecretEnvChecker) Check(_ context.Context, nodeID string, value an
 		NodeID:  nodeID,
 		Check:   "entra:secret:env",
 		Passed:  true,
-		Message: fmt.Sprintf("%s is set", envVar),
+		Message: envVar + " is set",
 	}
 }

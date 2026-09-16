@@ -121,7 +121,7 @@ func NormalizeState(raw string) State {
 // toLowerASCII keeps NormalizeState dependency-free (no unicode tables).
 func toLowerASCII(s string) string {
 	b := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c >= 'A' && c <= 'Z' {
 			c += 'a' - 'A'

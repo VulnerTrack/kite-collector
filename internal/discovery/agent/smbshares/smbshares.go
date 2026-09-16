@@ -125,7 +125,7 @@ func ParseBool(s string) bool {
 // "READ ONLY" / "readonly" all normalise to "readonly".
 func CanonicalKey(s string) string {
 	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c == ' ' || c == '\t' {
 			continue

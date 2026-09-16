@@ -286,7 +286,7 @@ func TestParseSkipsCommentsAndBlanks(t *testing.T) {
 
 func TestParseMaxSettingsCeiling(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxSettings+50; i++ {
+	for range MaxSettings + 50 {
 		sb.WriteString("AllowUsers alice\n")
 	}
 	got := Parse([]byte(sb.String()), "x")

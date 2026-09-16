@@ -132,7 +132,7 @@ func splitKeyOpValue(tok string) (string, string, string, bool) {
 	// embedded in the key.
 	idx := -1
 	depth := 0
-	for i := 0; i < len(tok); i++ {
+	for i := range len(tok) {
 		c := tok[i]
 		switch c {
 		case '{':
@@ -196,7 +196,7 @@ func splitOnTopLevelComma(line string) []string {
 		out = append(out, cur.String())
 		cur.Reset()
 	}
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := line[i]
 		switch {
 		case c == '"':

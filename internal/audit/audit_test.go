@@ -2,11 +2,12 @@ package audit
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"io/fs"
 	"testing"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -100,9 +101,9 @@ func TestEvaluateSSHSettings_EmptySettings(t *testing.T) {
 
 func TestEvaluateFirewall_NoFirewall(t *testing.T) {
 	findings := EvaluateFirewall(
-		"", fmt.Errorf("not found"),
-		"", fmt.Errorf("not found"),
-		"", fmt.Errorf("not found"),
+		"", errors.New("not found"),
+		"", errors.New("not found"),
+		"", errors.New("not found"),
 		testMachine(),
 	)
 	if len(findings) != 1 {
@@ -126,8 +127,8 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0`
 
 	findings := EvaluateFirewall(
 		iptables, nil,
-		"", fmt.Errorf("not found"),
-		"", fmt.Errorf("not found"),
+		"", errors.New("not found"),
+		"", errors.New("not found"),
 		testMachine(),
 	)
 
@@ -155,8 +156,8 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0`
 
 	findings := EvaluateFirewall(
 		iptables, nil,
-		"", fmt.Errorf("not found"),
-		"", fmt.Errorf("not found"),
+		"", errors.New("not found"),
+		"", errors.New("not found"),
 		testMachine(),
 	)
 
@@ -184,8 +185,8 @@ target     prot opt source               destination`
 
 	findings := EvaluateFirewall(
 		iptables, nil,
-		"", fmt.Errorf("not found"),
-		"", fmt.Errorf("not found"),
+		"", errors.New("not found"),
+		"", errors.New("not found"),
 		testMachine(),
 	)
 
@@ -214,8 +215,8 @@ target     prot opt source               destination`
 
 	findings := EvaluateFirewall(
 		iptables, nil,
-		"", fmt.Errorf("not found"),
-		"", fmt.Errorf("not found"),
+		"", errors.New("not found"),
+		"", errors.New("not found"),
 		testMachine(),
 	)
 
@@ -243,8 +244,8 @@ target     prot opt source               destination`
 
 	findings := EvaluateFirewall(
 		iptables, nil,
-		"", fmt.Errorf("not found"),
-		"", fmt.Errorf("not found"),
+		"", errors.New("not found"),
+		"", errors.New("not found"),
 		testMachine(),
 	)
 	if len(findings) != 0 {
@@ -254,8 +255,8 @@ target     prot opt source               destination`
 
 func TestEvaluateFirewall_UfwActive(t *testing.T) {
 	findings := EvaluateFirewall(
-		"", fmt.Errorf("not found"),
-		"", fmt.Errorf("not found"),
+		"", errors.New("not found"),
+		"", errors.New("not found"),
 		"Status: active", nil,
 		testMachine(),
 	)

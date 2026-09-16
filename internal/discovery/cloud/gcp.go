@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -52,7 +54,7 @@ func (g *GCP) Discover(ctx context.Context, cfg map[string]any) ([]model.Machine
 
 	if project == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("gcp_compute: source enabled but project not specified in config")
+			return nil, errors.New("gcp_compute: source enabled but project not specified in config")
 		}
 		slog.Warn("GCP Compute project_id missing from config; skipping discovery",
 			"code", string(LogCodeGCPComputeProjectMissing))
@@ -175,7 +177,7 @@ func obtainGCPToken(ctx context.Context) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no GCP credentials available (tried metadata server and credentials file)")
+	return "", errors.New("no GCP credentials available (tried metadata server and credentials file)")
 }
 
 // tokenFromMetadata queries the GCE metadata server for a default service
@@ -235,7 +237,7 @@ func tokenFromCredentialsFile(ctx context.Context, path string) (string, error) 
 	}
 
 	if cred.RefreshToken == "" || cred.ClientID == "" || cred.ClientSecret == "" {
-		return "", fmt.Errorf("incomplete authorized_user credentials (missing refresh_token, client_id, or client_secret)")
+		return "", errors.New("incomplete authorized_user credentials (missing refresh_token, client_id, or client_secret)")
 	}
 
 	form := url.Values{

@@ -3,7 +3,7 @@ package vpn
 import (
 	"context"
 	"errors"
-	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,8 +24,8 @@ func wgDump(rows ...[]string) string {
 }
 
 func TestParseWGDump_HappyAndEdges(t *testing.T) {
-	recent := fmt.Sprintf("%d", fixedNow.Add(-time.Minute).Unix())
-	stale := fmt.Sprintf("%d", fixedNow.Add(-time.Hour).Unix())
+	recent := strconv.FormatInt(fixedNow.Add(-time.Minute).Unix(), 10)
+	stale := strconv.FormatInt(fixedNow.Add(-time.Hour).Unix(), 10)
 
 	dump := wgDump(
 		// interface (self) line — 5 cols, skipped.

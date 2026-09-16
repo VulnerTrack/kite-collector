@@ -2,12 +2,14 @@ package vps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -31,7 +33,7 @@ func (l *Linode) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 	token := os.Getenv("KITE_LINODE_TOKEN")
 	if token == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("linode: KITE_LINODE_TOKEN not set")
+			return nil, errors.New("linode: KITE_LINODE_TOKEN not set")
 		}
 		return nil, nil
 	}

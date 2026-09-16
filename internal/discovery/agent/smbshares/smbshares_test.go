@@ -352,7 +352,7 @@ func TestParseContinuationLine(t *testing.T) {
 
 func TestParseHonoursMaxShares(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxShares+50; i++ {
+	for i := range MaxShares + 50 {
 		sb.WriteString("[s")
 		sb.WriteString(string(rune('a' + (i % 26))))
 		sb.WriteString("]\n   path = /srv\n")

@@ -141,7 +141,7 @@ func TestCloudInstanceFingerprinter_Avalanche(t *testing.T) {
 func TestCloudInstanceFingerprinter_NoCollisionsAcrossTenants(t *testing.T) {
 	fp := CloudInstanceFingerprinter{}
 	seen := make(map[[32]byte]string, 1000)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		rec := baseCloudRecord()
 		rec.TenantID = randomTenant(i)
 		rec.InstanceID = randomInstance(i)

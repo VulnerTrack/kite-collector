@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"time"
 
@@ -96,7 +97,7 @@ func (s *Sealer) SignDetached(payload []byte, contentType string) (Detached, err
 // what a receiver checks against its clock skew window and replay cache.
 func VerifyDetached(compact string, payload []byte, signerPub crypto.PublicKey) (Opened, error) {
 	if compact == "" {
-		return Opened{}, fmt.Errorf("verify: signature is empty")
+		return Opened{}, errors.New("verify: signature is empty")
 	}
 	if len(compact) > maxSignatureHeaderBytes {
 		return Opened{}, fmt.Errorf("verify: signature exceeds %d bytes", maxSignatureHeaderBytes)
@@ -115,7 +116,7 @@ func VerifyDetached(compact string, payload []byte, signerPub crypto.PublicKey) 
 	}
 	if signerPub == nil {
 		if len(out.Certificates) == 0 {
-			return Opened{}, fmt.Errorf("verify: no verification key supplied and signature carries no x5c chain")
+			return Opened{}, errors.New("verify: no verification key supplied and signature carries no x5c chain")
 		}
 		signerPub = out.Certificates[0].PublicKey
 	}

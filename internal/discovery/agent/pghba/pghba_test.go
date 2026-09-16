@@ -308,7 +308,7 @@ func TestParseInternetExposedWeakMethod(t *testing.T) {
 
 func TestParseHonoursMaxRowsCeiling(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxRows+50; i++ {
+	for range MaxRows + 50 {
 		sb.WriteString("host all all 10.0.0.0/24 md5\n")
 	}
 	got := Parse([]byte(sb.String()), "x.conf")

@@ -67,7 +67,7 @@ func (c *activeCollector) Collect(ctx context.Context) ([]Endpoint, error) {
 		if ctx.Err() != nil {
 			break
 		}
-		t := t // capture loop var (Go 1.22+ no-ops but keeps the intent obvious)
+		// capture loop var (Go 1.22+ no-ops but keeps the intent obvious)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

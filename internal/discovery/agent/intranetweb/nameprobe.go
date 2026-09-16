@@ -428,7 +428,7 @@ func ParseNBSTATResponse(b []byte) string {
 	}
 	count := int(b[off])
 	off++
-	for i := 0; i < count; i++ {
+	for range count {
 		if off+18 > len(b) {
 			return ""
 		}
@@ -584,7 +584,7 @@ func (m MultiSourceNameResolver) Resolve(ctx context.Context, ip string) (string
 	var bestSignal HostSignal
 	bestTier := SignalTier('Z') // worse than any valid tier
 	var errs []error
-	for i := 0; i < len(m.Probes); i++ {
+	for range len(m.Probes) {
 		select {
 		case r := <-results:
 			if r.Err != nil {

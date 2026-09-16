@@ -65,7 +65,7 @@ type OTLPMetricsEmitter struct {
 // same OTLPConfig value — same endpoint, same client certificate, same CA.
 func NewOTLPMetrics(cfg OTLPConfig) (*OTLPMetricsEmitter, error) {
 	if cfg.Endpoint == "" {
-		return nil, fmt.Errorf("otlp metrics: endpoint must not be empty")
+		return nil, errors.New("otlp metrics: endpoint must not be empty")
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -146,7 +146,7 @@ func (o *OTLPMetricsEmitter) emit(
 	o.mu.Unlock()
 
 	if closed {
-		return fmt.Errorf("otlp metrics: emitter is shut down")
+		return errors.New("otlp metrics: emitter is shut down")
 	}
 	if len(samples) == 0 {
 		return nil
@@ -384,7 +384,7 @@ func instrumentDescription(name string) string {
 func (o *OTLPMetricsEmitter) sendWithRetry(ctx context.Context, wire wirePayload) error {
 	var lastErr error
 
-	for attempt := 0; attempt < o.retry.maxAttempts; attempt++ {
+	for attempt := range o.retry.maxAttempts {
 		if attempt > 0 {
 			delay := backoffDelay(attempt, o.retry.baseDelay, o.retry.maxDelay)
 			select {

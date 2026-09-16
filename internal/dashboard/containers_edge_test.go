@@ -620,7 +620,7 @@ func TestTick_BoundedParallelismHandlesManyContainers(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1.43/containers/json", func(w http.ResponseWriter, _ *http.Request) {
 		rows := make([]string, 0, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			rows = append(rows, fmt.Sprintf(
 				`{"Id": "c%02d111222333444555666777", "Names": ["/c%02d"], "Image": "a:1", "ImageID": "sha256:aa", "State": "running", "Status": "Up 1 hour", "Created": 1700000000, "Labels": {}}`, i, i))
 		}

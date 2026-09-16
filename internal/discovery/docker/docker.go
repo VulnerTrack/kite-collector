@@ -6,6 +6,7 @@ package docker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -62,7 +63,7 @@ func (d *Docker) ListContainerEnvs(ctx context.Context, cfg map[string]any) ([]C
 		host = detectSocket()
 	}
 	if host == "" {
-		return nil, fmt.Errorf("docker: no socket found; set KITE_DOCKER_HOST or ensure Docker/Podman is running")
+		return nil, errors.New("docker: no socket found; set KITE_DOCKER_HOST or ensure Docker/Podman is running")
 	}
 
 	client := newClient(host)
@@ -114,7 +115,7 @@ func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		host = detectSocket()
 	}
 	if host == "" {
-		return nil, fmt.Errorf("docker: no socket found; set KITE_DOCKER_HOST or ensure Docker/Podman is running")
+		return nil, errors.New("docker: no socket found; set KITE_DOCKER_HOST or ensure Docker/Podman is running")
 	}
 
 	slog.Info("docker: starting discovery", "host", host) //#nosec G706 -- structured slog key-value, not interpolated

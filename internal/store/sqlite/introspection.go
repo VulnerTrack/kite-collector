@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -99,7 +100,7 @@ func (s *SQLiteStore) listViaPragmaTableList(ctx context.Context) ([]string, err
 		}
 	}
 	if nameIdx < 0 || typeIdx < 0 {
-		return nil, fmt.Errorf("PRAGMA table_list missing required columns")
+		return nil, errors.New("PRAGMA table_list missing required columns")
 	}
 
 	var names []string
@@ -820,7 +821,7 @@ func (s *SQLiteStore) ListJoinedRows(ctx context.Context, filter store.JoinFilte
 		return nil, fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, filter.Join, filter.OnJoin)
 	}
 	if len(filter.Columns) == 0 {
-		return nil, fmt.Errorf("join requires at least one output column")
+		return nil, errors.New("join requires at least one output column")
 	}
 
 	selects := make([]string, 0, len(filter.Columns))

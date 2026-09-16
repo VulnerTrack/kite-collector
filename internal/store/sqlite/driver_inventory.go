@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,7 +25,7 @@ func (s *SQLiteStore) WriteLoadedDrivers(
 	ctx context.Context, machineID uuid.UUID, drivers []driver.LoadedDriver,
 ) ([]uuid.UUID, error) {
 	if machineID == uuid.Nil {
-		return nil, fmt.Errorf("loaded drivers: machine_id is required")
+		return nil, errors.New("loaded drivers: machine_id is required")
 	}
 	if len(drivers) == 0 {
 		return nil, nil
@@ -139,7 +140,7 @@ func (s *SQLiteStore) WriteDeviceBindings(
 	ctx context.Context, machineID uuid.UUID, bindings []driver.DeviceBinding,
 ) error {
 	if machineID == uuid.Nil {
-		return fmt.Errorf("device bindings: machine_id is required")
+		return errors.New("device bindings: machine_id is required")
 	}
 	if len(bindings) == 0 {
 		return nil

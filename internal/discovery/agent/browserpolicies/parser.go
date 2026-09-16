@@ -3,6 +3,7 @@ package browserpolicies
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -19,7 +20,7 @@ import (
 func ParseChromeFamilyPolicy(body []byte, filePath string, browser BrowserKind) ([]Policy, error) {
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
-		return nil, fmt.Errorf("empty policy file")
+		return nil, errors.New("empty policy file")
 	}
 	body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
 
@@ -61,7 +62,7 @@ func ParseChromeFamilyPolicy(body []byte, filePath string, browser BrowserKind) 
 func ParseFirefoxPolicy(body []byte, filePath string) ([]Policy, error) {
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
-		return nil, fmt.Errorf("empty policy file")
+		return nil, errors.New("empty policy file")
 	}
 	body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
 

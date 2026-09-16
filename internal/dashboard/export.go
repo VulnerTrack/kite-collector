@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"encoding/csv"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"time"
@@ -175,7 +176,7 @@ func stringifyCSV(v any) string {
 	case string:
 		return x
 	case []byte:
-		return fmt.Sprintf("%x", x)
+		return hex.EncodeToString(x)
 	case time.Time:
 		return x.Format("2006-01-02T15:04:05Z")
 	case bool:

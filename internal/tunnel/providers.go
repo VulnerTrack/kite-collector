@@ -3,6 +3,7 @@ package tunnel
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -44,14 +45,14 @@ func BuildCommand(provider ProviderName, target string, localPort uint16, authTo
 func ngrokCmd(target string, localPort uint16, authTokenEnv string) []string {
 	args := []string{
 		"ngrok", "tcp",
-		fmt.Sprintf("%d", localPort),
-		fmt.Sprintf("--remote-addr=%s", target),
+		strconv.FormatUint(uint64(localPort), 10),
+		"--remote-addr=" + target,
 		"--log=stdout",
 		"--log-format=json",
 	}
 
 	if token := envToken(authTokenEnv); token != "" {
-		args = append(args, fmt.Sprintf("--authtoken=%s", token))
+		args = append(args, "--authtoken="+token)
 	}
 
 	return args
@@ -74,7 +75,7 @@ func boreCmd(target string, localPort uint16) []string {
 	}
 	return []string{
 		"bore", "local",
-		fmt.Sprintf("%d", localPort),
+		strconv.FormatUint(uint64(localPort), 10),
 		"--to", host,
 		"--port", port,
 	}
@@ -85,7 +86,7 @@ func tailscaleCmd(localPort uint16) []string {
 	return []string{
 		"tailscale", "funnel",
 		"--bg",
-		fmt.Sprintf("%d", localPort),
+		strconv.FormatUint(uint64(localPort), 10),
 	}
 }
 
@@ -93,12 +94,12 @@ func tailscaleCmd(localPort uint16) []string {
 func frpCmd(target string, localPort uint16, authTokenEnv string) []string {
 	args := []string{
 		"frpc", "tcp",
-		fmt.Sprintf("--server_addr=%s", target),
+		"--server_addr=" + target,
 		fmt.Sprintf("--local_port=%d", localPort),
 	}
 
 	if token := envToken(authTokenEnv); token != "" {
-		args = append(args, fmt.Sprintf("--token=%s", token))
+		args = append(args, "--token="+token)
 	}
 
 	return args
@@ -109,7 +110,7 @@ func ratholeCmd(target string, localPort uint16) []string {
 	return []string{
 		"rathole", "client",
 		"--server", target,
-		"--local", fmt.Sprintf("%d", localPort),
+		"--local", strconv.FormatUint(uint64(localPort), 10),
 	}
 }
 

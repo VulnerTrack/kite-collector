@@ -77,7 +77,7 @@ func extractSources(chain string) []string {
 		}
 		cur.Reset()
 	}
-	for i := 0; i < len(chain); i++ {
+	for i := range len(chain) {
 		c := chain[i]
 		switch {
 		case c == '[':

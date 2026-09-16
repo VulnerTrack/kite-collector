@@ -535,7 +535,6 @@ func TestProbe_DetectsJSWebFrameworks(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.product, func(t *testing.T) {
 			d, base, stop := newDetectorAgainst(t, func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != tc.path {

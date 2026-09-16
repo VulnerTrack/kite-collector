@@ -106,7 +106,7 @@ func TestAuthenticodeHash_DifferentChecksumSameDigest(t *testing.T) {
 	const peOffset = 64
 	const optHeaderOffset = peOffset + 4 + 20
 	const checksumOff = optHeaderOffset + 64
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		mutated[checksumOff+i] = byte(0xFF - i)
 	}
 	require.NoError(t, os.WriteFile(pathB, mutated, 0o600))

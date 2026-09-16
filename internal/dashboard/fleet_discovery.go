@@ -663,7 +663,7 @@ func fleetScanPrefix(ip netip.Addr, interfaceBits int) netip.Prefix {
 
 func selectFleetLocalNetwork(candidates []fleetLocalNetwork) (fleetLocalNetwork, error) {
 	if len(candidates) == 0 {
-		return fleetLocalNetwork{}, fmt.Errorf("no active private IPv4 network was detected")
+		return fleetLocalNetwork{}, errors.New("no active private IPv4 network was detected")
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		if candidates[i].score != candidates[j].score {

@@ -386,7 +386,7 @@ func TestCoordinator_SlowSubscriberDoesNotBlockPublisher(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < flood; i++ {
+		for range flood {
 			c.publish(Event{
 				ScanRunID: uuid.Must(uuid.NewV7()),
 				Type:      EventProgress,
@@ -422,7 +422,7 @@ func TestCoordinator_SubscribeReplaysRingBuffer(t *testing.T) {
 	defer unsub()
 
 	received := make([]Event, 0, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		select {
 		case ev := <-ch:
 			received = append(received, ev)

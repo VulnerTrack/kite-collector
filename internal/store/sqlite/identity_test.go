@@ -128,7 +128,7 @@ func TestInsertProbeResult_CapsAt100(t *testing.T) {
 
 	// Insert 120 rows; the AFTER INSERT trigger should cap the table at 100.
 	now := time.Now().UTC()
-	for i := 0; i < 120; i++ {
+	for i := range 120 {
 		require.NoError(t, st.InsertProbeResult(ctx, ProbeResultRecord{
 			ProbeName: "dns",
 			Result:    "pass",

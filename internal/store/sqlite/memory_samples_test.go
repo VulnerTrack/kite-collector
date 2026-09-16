@@ -72,7 +72,7 @@ func TestMemorySamples_PruneRetention(t *testing.T) {
 
 	now := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 	// One sample per day going back 100 days.
-	for d := 0; d < 100; d++ {
+	for d := range 100 {
 		require.NoError(t, st.InsertMemorySample(ctx, model.MemorySample{
 			MachineID: machineID, SampledAt: now.AddDate(0, 0, -d),
 			TotalBytes: 1, UsedBytes: 1, UsedPercent: 1,

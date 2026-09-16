@@ -66,7 +66,7 @@ func TestQueue_EnqueueUnderCapDoesNotEvict(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = q.Close() })
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		require.NoError(t, q.Enqueue(ctx, "events", []byte{byte(i)}))
 	}
 	depth, err := q.Depth(ctx)

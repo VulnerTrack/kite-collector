@@ -231,7 +231,7 @@ func TestParseMultipleClientsOnOneLine(t *testing.T) {
 
 func TestParseHonoursMaxRows(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxRows+50; i++ {
+	for range MaxRows + 50 {
 		sb.WriteString("/srv 10.0.0.0/24(ro)\n")
 	}
 	got := Parse([]byte(sb.String()), "x")

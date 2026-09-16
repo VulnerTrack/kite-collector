@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -872,10 +873,10 @@ func kiteOAuthCallbackCodeAndState(r *http.Request) (string, string) {
 
 func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions, accessToken string) error {
 	if enrollment.Store == nil {
-		return fmt.Errorf("local enrollment store is unavailable")
+		return errors.New("local enrollment store is unavailable")
 	}
 	if len(enrollment.WrapKey) != 32 {
-		return fmt.Errorf("local enrollment wrap key is unavailable")
+		return errors.New("local enrollment wrap key is unavailable")
 	}
 
 	if strings.TrimSpace(enrollment.CertsDir) != "" && !reuseFleetPKICredentials(r, enrollment.CertsDir) {
@@ -916,7 +917,7 @@ func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions
 				"request_path", r.URL.Path,
 				"endpoint", enrollment.PlatformEndpoint)
 		}
-		return fmt.Errorf("failed to wrap OAuth token")
+		return errors.New("failed to wrap OAuth token")
 	}
 
 	now := time.Now().UTC()
@@ -933,7 +934,7 @@ func enrollKiteOAuthToken(r *http.Request, enrollment kiteOAuthEnrollmentOptions
 				"endpoint", enrollment.PlatformEndpoint,
 				"request_path", r.URL.Path)
 		}
-		return fmt.Errorf("failed to persist local enrollment")
+		return errors.New("failed to persist local enrollment")
 	}
 
 	if enrollment.Logger != nil {
@@ -997,7 +998,7 @@ func buildKiteOAuthAuthorizationURL(oauth OAuthOptions, collectorURL string) (st
 
 	endpoint, err := url.Parse(resolveKiteOAuthAuthorizeURL(oauth))
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
-		return "", "", "", fmt.Errorf("invalid Kite OAuth authorize URL")
+		return "", "", "", errors.New("invalid Kite OAuth authorize URL")
 	}
 
 	q := endpoint.Query()
@@ -1024,11 +1025,11 @@ func resolveKiteOAuthTokenURL(oauth OAuthOptions) (string, error) {
 	authorizeURL := resolveKiteOAuthAuthorizeURL(oauth)
 	endpoint, err := url.Parse(authorizeURL)
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
-		return "", fmt.Errorf("invalid Kite OAuth authorize URL")
+		return "", errors.New("invalid Kite OAuth authorize URL")
 	}
 	path := strings.TrimRight(endpoint.Path, "/")
 	if !strings.HasSuffix(path, "/authorize") {
-		return "", fmt.Errorf("kite OAuth authorize URL must end in /authorize")
+		return "", errors.New("kite OAuth authorize URL must end in /authorize")
 	}
 	endpoint.Path = strings.TrimSuffix(path, "/authorize") + "/token"
 	endpoint.RawQuery = ""
@@ -1110,10 +1111,10 @@ func formatKiteOAuthTokenError(status int, body []byte) error {
 func buildKiteOAuthRedirectURI(collectorURL, redirectPath string) (string, error) {
 	base, err := url.Parse(collectorURL)
 	if err != nil || base.Scheme == "" || base.Host == "" {
-		return "", fmt.Errorf("invalid collector URL")
+		return "", errors.New("invalid collector URL")
 	}
 	if base.Scheme != "http" && base.Scheme != "https" {
-		return "", fmt.Errorf("collector URL must use http or https")
+		return "", errors.New("collector URL must use http or https")
 	}
 	path := strings.TrimSpace(redirectPath)
 	if path == "" {

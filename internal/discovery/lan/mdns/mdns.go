@@ -215,7 +215,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 	}
 
 	// Send the query bursts on every interface we have.
-	for i := 0; i < parsed.QueryRepeat; i++ {
+	for range parsed.QueryRepeat {
 		if ctx.Err() != nil {
 			break
 		}

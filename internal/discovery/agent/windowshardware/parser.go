@@ -2,6 +2,7 @@ package windowshardware
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -91,7 +92,7 @@ func ParsePowerShellOutput(data []byte) (Hardware, error) {
 	trimmed := trimUTF8BOM(data)
 	trimmed = []byte(strings.TrimSpace(string(trimmed)))
 	if len(trimmed) == 0 {
-		return Hardware{}, fmt.Errorf("empty PowerShell output")
+		return Hardware{}, errors.New("empty PowerShell output")
 	}
 	var raw rawPayload
 	dec := json.NewDecoder(strings.NewReader(string(trimmed)))

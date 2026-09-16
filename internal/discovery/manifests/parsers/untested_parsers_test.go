@@ -278,7 +278,7 @@ func TestCleanVersion(t *testing.T) {
 // Stress: a large synthetic yarn.lock parses linearly and completely.
 func TestYarnLockParser_StressManyPackages(t *testing.T) {
 	var b strings.Builder
-	for i := 0; i < 3000; i++ {
+	for i := range 3000 {
 		fmt.Fprintf(&b, "pkg-%04d@^1.0.0:\n  version \"1.0.%d\"\n\n", i, i%100)
 	}
 	result, err := (&YarnLockParser{}).Parse(context.Background(), "big", []byte(b.String()))

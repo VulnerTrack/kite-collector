@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,7 +22,7 @@ var _ network.EventSink = (*SQLiteStore)(nil)
 // not silently drop persistence failures.
 func (s *SQLiteStore) WriteScanEvent(ctx context.Context, ev network.ScanEvent) error {
 	if ev.ScanID == "" {
-		return fmt.Errorf("network scan event: scan_id is required")
+		return errors.New("network scan event: scan_id is required")
 	}
 	completed := nullTimePtr(ev.CompletedAt)
 	_, err := s.db.ExecContext(
@@ -65,7 +66,7 @@ func (s *SQLiteStore) WriteOpenPorts(
 	ctx context.Context, scanID string, ports []network.OpenPort,
 ) error {
 	if scanID == "" {
-		return fmt.Errorf("network open ports: scan_id is required")
+		return errors.New("network open ports: scan_id is required")
 	}
 	if len(ports) == 0 {
 		return nil

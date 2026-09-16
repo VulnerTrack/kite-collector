@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -134,7 +135,7 @@ func Open(jweCompact string, serverKey jose.JSONWebKey, agentPub crypto.PublicKe
 
 	if agentPub == nil {
 		if len(out.Certificates) == 0 {
-			return Opened{}, fmt.Errorf("verify: no verification key supplied and envelope carries no x5c chain")
+			return Opened{}, errors.New("verify: no verification key supplied and envelope carries no x5c chain")
 		}
 		agentPub = out.Certificates[0].PublicKey
 	}
@@ -187,7 +188,7 @@ type jwsProtectedHeader struct {
 func protectedHeader(compact string) (jwsProtectedHeader, error) {
 	dot := strings.IndexByte(compact, '.')
 	if dot <= 0 {
-		return jwsProtectedHeader{}, fmt.Errorf("malformed compact JWS")
+		return jwsProtectedHeader{}, errors.New("malformed compact JWS")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(compact[:dot])
 	if err != nil {

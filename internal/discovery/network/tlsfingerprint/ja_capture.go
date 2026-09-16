@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -197,7 +198,7 @@ func JA3SString(sh *serverHello) string {
 	}
 	exts := make([]string, 0, len(sh.Extensions))
 	for _, e := range sh.Extensions {
-		exts = append(exts, fmt.Sprintf("%d", e))
+		exts = append(exts, strconv.FormatUint(uint64(e), 10))
 	}
 	return fmt.Sprintf("%d,%d,%s",
 		sh.SelectedVersion, sh.SelectedCipher, strings.Join(exts, "-"))

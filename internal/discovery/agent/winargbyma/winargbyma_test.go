@@ -576,7 +576,7 @@ func TestParseBYMABlotterEmptyAndBOM(t *testing.T) {
 
 func TestParseBYMABlotterStress(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < 5000; i++ {
+	for i := range 5000 {
 		fmt.Fprintf(&sb, "2025-03-10 12:%02d:00 AL30 Importe=100,00\n", i%60)
 	}
 	f := ParseBYMABlotter([]byte(sb.String()))

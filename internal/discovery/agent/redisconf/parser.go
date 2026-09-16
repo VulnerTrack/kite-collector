@@ -81,7 +81,7 @@ func Parse(raw []byte, filePath string) Config {
 // splitFirstToken splits a line into its first whitespace-token and
 // the trailing remainder.
 func splitFirstToken(line string) (string, string) {
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		if line[i] == ' ' || line[i] == '\t' {
 			return line[:i], strings.TrimLeft(line[i:], " \t")
 		}
@@ -135,7 +135,7 @@ func tokenize(value string) []string {
 	out := make([]string, 0, 4)
 	var sb strings.Builder
 	inQuotes := false
-	for i := 0; i < len(value); i++ {
+	for i := range len(value) {
 		c := value[i]
 		switch {
 		case c == '"':

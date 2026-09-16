@@ -117,7 +117,7 @@ func (l *LDAP) checkStaleAccount(machine model.Machine, tags map[string]any, now
 		Title:       "Stale Active Directory computer account",
 		Severity:    model.SeverityMedium,
 		Evidence:    fmt.Sprintf("last_logon=%s (%s ago)", time.Unix(last, 0).UTC().Format(time.RFC3339), plural.Count(ageDays, "day")),
-		Expected:    fmt.Sprintf("last logon within %s", plural.Count(l.cfg.StaleThresholdDays, "day")),
+		Expected:    "last logon within " + plural.Count(l.cfg.StaleThresholdDays, "day"),
 		Remediation: "Disable or remove the computer account if the host is decommissioned; otherwise verify the host is reporting in.",
 		CISControl:  "5.3",
 		Timestamp:   now,

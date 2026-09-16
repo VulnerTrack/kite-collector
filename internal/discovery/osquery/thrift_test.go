@@ -295,7 +295,7 @@ func TestThriftSkip_RecursionDepthCapped(t *testing.T) {
 	// A chain of nested struct fields deeper than maxSkipDepth must error,
 	// not blow the stack.
 	e := &enc{}
-	for i := 0; i < maxSkipDepth+2; i++ {
+	for range maxSkipDepth + 2 {
 		e.byte1(tSTRUCT).i16(1)
 	}
 	err := e.reader().skip(tSTRUCT, 0)

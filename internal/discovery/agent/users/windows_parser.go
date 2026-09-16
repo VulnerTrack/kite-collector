@@ -2,6 +2,7 @@ package users
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -77,7 +78,7 @@ func ParseWindowsPowerShellOutput(data []byte) ([]User, error) {
 	trimmed := trimUTF8BOM(data)
 	trimmed = []byte(strings.TrimSpace(string(trimmed)))
 	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("empty PowerShell output")
+		return nil, errors.New("empty PowerShell output")
 	}
 	// Singleton-object unwrap: a single-user host can emit one object.
 	if trimmed[0] == '{' {

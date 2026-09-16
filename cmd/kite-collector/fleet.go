@@ -185,7 +185,7 @@ func fleetEndpoint(dashboardURL, path string) (string, error) {
 		return "", fmt.Errorf("invalid dashboard URL %q", dashboardURL)
 	}
 	if base.Scheme != "http" && base.Scheme != "https" {
-		return "", fmt.Errorf("dashboard URL must use http or https")
+		return "", errors.New("dashboard URL must use http or https")
 	}
 	base.Path = strings.TrimRight(base.Path, "/") + path
 	base.RawQuery = ""
@@ -244,7 +244,7 @@ func runFleetDeploy(cmd *cobra.Command, dashboardURL string, timeout time.Durati
 	if strings.TrimSpace(requested) == "" {
 		targets = fleetEnrollmentComputers(result.Computers)
 		if len(targets) == 0 {
-			return fmt.Errorf("no computer is currently available for deployment; run `kite-collector fleet discover` and verify the discovery result")
+			return errors.New("no computer is currently available for deployment; run `kite-collector fleet discover` and verify the discovery result")
 		}
 	} else {
 		target, selectErr := selectFleetComputer(result.Computers, requested)
@@ -315,7 +315,7 @@ func completeFleetSignIn(ctx context.Context, out io.Writer, loginURL string) er
 	}
 	waitID := strings.TrimSpace(parsed.Query().Get("wait_id"))
 	if waitID == "" {
-		return fmt.Errorf("dashboard sign-in URL is missing its wait identifier")
+		return errors.New("dashboard sign-in URL is missing its wait identifier")
 	}
 	baseURL := parsed.Scheme + "://" + parsed.Host
 	_, _ = fmt.Fprintf(out, "VulnerTrack sign-in required. Opening your browser:\n%s\n", loginURL)
@@ -465,7 +465,7 @@ func requestFleetPackage(ctx context.Context, dashboardURL string, targets []str
 		}
 		login, loginErr := url.Parse(location)
 		if baseErr != nil || loginErr != nil || login.Scheme != dashboardBase.Scheme || login.Host != dashboardBase.Host || login.Path != "/kite-login" {
-			return nil, fmt.Errorf("dashboard returned an invalid sign-in redirect")
+			return nil, errors.New("dashboard returned an invalid sign-in redirect")
 		}
 		return nil, &fleetSignInRequiredError{URL: login.String()}
 	}
@@ -482,7 +482,7 @@ func requestFleetPackage(ctx context.Context, dashboardURL string, targets []str
 		return nil, fmt.Errorf("read fleet deployment package: %w", err)
 	}
 	if len(bundle) == 0 {
-		return nil, fmt.Errorf("dashboard returned an empty deployment package")
+		return nil, errors.New("dashboard returned an empty deployment package")
 	}
 	return bundle, nil
 }

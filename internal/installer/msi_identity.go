@@ -129,7 +129,7 @@ func normalizeGUIDHex(guid string) (string, error) {
 	if len(h) != 32 {
 		return "", fmt.Errorf("guid %q: want 32 hex digits, got %d", guid, len(h))
 	}
-	for i := 0; i < len(h); i++ {
+	for i := range len(h) {
 		c := h[i]
 		isDigit := c >= '0' && c <= '9'
 		isHexUpper := c >= 'A' && c <= 'F'

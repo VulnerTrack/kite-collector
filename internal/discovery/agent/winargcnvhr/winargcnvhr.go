@@ -377,7 +377,7 @@ func isFilenamePrefixToken(s string) bool {
 }
 
 func isAllUpper(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c < 'A' || c > 'Z' {
 			return false

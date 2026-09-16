@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
 	"net/url"
@@ -768,12 +769,12 @@ func (c *Config) validate() error {
 		case "ngrok", "cloudflared", "bore", "tailscale", "frp", "rathole":
 			// ok
 		case "":
-			return fmt.Errorf("connectivity.tunnel.provider is required when tunnel is enabled")
+			return errors.New("connectivity.tunnel.provider is required when tunnel is enabled")
 		default:
 			return fmt.Errorf("invalid connectivity.tunnel.provider %q: expected ngrok, cloudflared, bore, tailscale, frp, or rathole", t.Provider)
 		}
 		if t.Target == "" {
-			return fmt.Errorf("connectivity.tunnel.target is required when tunnel is enabled")
+			return errors.New("connectivity.tunnel.target is required when tunnel is enabled")
 		}
 		if t.LocalPort < 1 || t.LocalPort > 65535 {
 			return fmt.Errorf("connectivity.tunnel.local_port must be 1-65535, got %d", t.LocalPort)

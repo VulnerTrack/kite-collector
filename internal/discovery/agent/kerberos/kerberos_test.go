@@ -309,7 +309,7 @@ func TestParseCommentVariants(t *testing.T) {
 func TestParseMaxSettingsCeiling(t *testing.T) {
 	body := make([]byte, 0, 256*40)
 	body = append(body, []byte("[libdefaults]\n")...)
-	for i := 0; i < MaxSettings+50; i++ {
+	for range MaxSettings + 50 {
 		body = append(body, []byte("a = b\n")...)
 	}
 	got := Parse(body, "x")

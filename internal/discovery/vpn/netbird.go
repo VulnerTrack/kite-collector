@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -180,7 +181,7 @@ func netbirdGet(ctx context.Context, client *http.Client, url, token string) ([]
 		return nil, fmt.Errorf("netbird: read response: %w", err)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("HTTP 401 — invalid NetBird API token")
+		return nil, errors.New("HTTP 401 — invalid NetBird API token")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))

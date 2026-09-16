@@ -153,7 +153,7 @@ func maskToPrefix(mask string) string {
 
 func atoiSimple(s string) int {
 	n := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c < '0' || c > '9' {
 			return 0

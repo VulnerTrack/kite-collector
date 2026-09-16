@@ -2,6 +2,7 @@ package vms
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -63,7 +64,7 @@ func ParseHyperVPowerShellOutput(data []byte) ([]VM, error) {
 	trimmed := trimUTF8BOMHV(data)
 	trimmed = []byte(strings.TrimSpace(string(trimmed)))
 	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("empty PowerShell output")
+		return nil, errors.New("empty PowerShell output")
 	}
 	if trimmed[0] == '{' {
 		trimmed = append(append([]byte{'['}, trimmed...), ']')

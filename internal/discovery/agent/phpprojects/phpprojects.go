@@ -369,7 +369,7 @@ func majorFromVersion(v string) int {
 		return 0
 	}
 	n := 0
-	for i := 0; i < end; i++ {
+	for i := range end {
 		n = n*10 + int(t[i]-'0')
 	}
 	return n

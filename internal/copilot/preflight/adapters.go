@@ -25,11 +25,11 @@ func (c *DockerSocketChecker) Check(_ context.Context, nodeID string, value any,
 			NodeID:  nodeID,
 			Check:   "docker:socket:probe",
 			Passed:  false,
-			Message: fmt.Sprintf("Docker socket not found at %s", sock),
+			Message: "Docker socket not found at " + sock,
 			Hint:    "Install Docker or set discovery.docker.host to a custom socket path",
 		}
 	}
-	return CheckResult{NodeID: nodeID, Check: "docker:socket:probe", Passed: true, Message: fmt.Sprintf("%s accessible", sock)}
+	return CheckResult{NodeID: nodeID, Check: "docker:socket:probe", Passed: true, Message: sock + " accessible"}
 }
 
 // CIDRChecker validates that CIDR scopes parse correctly.
@@ -52,7 +52,7 @@ func (c *CIDRChecker) Check(_ context.Context, nodeID string, value any, _ map[s
 				NodeID:  nodeID,
 				Check:   "network:cidr:parse",
 				Passed:  false,
-				Message: fmt.Sprintf("invalid CIDR: %s", cidr),
+				Message: "invalid CIDR: " + cidr,
 				Hint:    "Use notation like 192.168.1.0/24 or 10.0.0.0/8",
 			}
 		}
@@ -94,7 +94,7 @@ func (c *VPSEnvChecker) Check(_ context.Context, nodeID string, value any, _ map
 			NodeID:  nodeID,
 			Check:   "vps:env:check",
 			Passed:  false,
-			Message: fmt.Sprintf("missing env vars: %s", strings.Join(missing, ", ")),
+			Message: "missing env vars: " + strings.Join(missing, ", "),
 			Hint:    fmt.Sprintf("export %s=<your-token>", missing[0]),
 		}
 	}
@@ -129,11 +129,11 @@ func (c *MDMEnvChecker) Check(_ context.Context, nodeID string, value any, _ map
 			NodeID:  nodeID,
 			Check:   "mdm:env:check",
 			Passed:  false,
-			Message: fmt.Sprintf("missing env vars: %s", strings.Join(missing, ", ")),
+			Message: "missing env vars: " + strings.Join(missing, ", "),
 			Hint:    fmt.Sprintf("export %s=<value>", missing[0]),
 		}
 	}
-	return CheckResult{NodeID: nodeID, Check: "mdm:env:check", Passed: true, Message: fmt.Sprintf("%s credentials set", provider)}
+	return CheckResult{NodeID: nodeID, Check: "mdm:env:check", Passed: true, Message: provider + " credentials set"}
 }
 
 // CMDBEnvChecker verifies CMDB provider environment variables.
@@ -163,11 +163,11 @@ func (c *CMDBEnvChecker) Check(_ context.Context, nodeID string, value any, _ ma
 			NodeID:  nodeID,
 			Check:   "cmdb:env:check",
 			Passed:  false,
-			Message: fmt.Sprintf("missing env vars: %s", strings.Join(missing, ", ")),
+			Message: "missing env vars: " + strings.Join(missing, ", "),
 			Hint:    fmt.Sprintf("export %s=<value>", missing[0]),
 		}
 	}
-	return CheckResult{NodeID: nodeID, Check: "cmdb:env:check", Passed: true, Message: fmt.Sprintf("%s credentials set", provider)}
+	return CheckResult{NodeID: nodeID, Check: "cmdb:env:check", Passed: true, Message: provider + " credentials set"}
 }
 
 // FileExistsChecker verifies that a referenced file path exists.
@@ -184,11 +184,11 @@ func (c *FileExistsChecker) Check(_ context.Context, nodeID string, value any, _
 			NodeID:  nodeID,
 			Check:   "file:exists",
 			Passed:  false,
-			Message: fmt.Sprintf("file not found: %s", path),
+			Message: "file not found: " + path,
 			Hint:    "Check the path and ensure the file exists",
 		}
 	}
-	return CheckResult{NodeID: nodeID, Check: "file:exists", Passed: true, Message: fmt.Sprintf("%s exists", path)}
+	return CheckResult{NodeID: nodeID, Check: "file:exists", Passed: true, Message: path + " exists"}
 }
 
 // TLSConnectChecker attempts a TCP connection to the endpoint.
@@ -292,7 +292,7 @@ func (c *TunnelBinaryChecker) Check(_ context.Context, nodeID string, value any,
 			NodeID:  nodeID,
 			Check:   "tunnel:binary:available",
 			Passed:  false,
-			Message: fmt.Sprintf("%s not found in PATH", binary),
+			Message: binary + " not found in PATH",
 			Hint:    fmt.Sprintf("Install %s or add it to your PATH", provider),
 		}
 	}
@@ -324,7 +324,7 @@ func (c *TunnelAuthChecker) Check(_ context.Context, nodeID string, value any, r
 			Hint:    fmt.Sprintf("export %s=<your-token>", envVar),
 		}
 	}
-	return CheckResult{NodeID: nodeID, Check: "tunnel:auth:valid", Passed: true, Message: fmt.Sprintf("%s is set", envVar)}
+	return CheckResult{NodeID: nodeID, Check: "tunnel:auth:valid", Passed: true, Message: envVar + " is set"}
 }
 
 // TunnelPortChecker verifies that the local tunnel port is available.

@@ -100,7 +100,7 @@ func TestParseNBSTATResponse(t *testing.T) {
 	resp = append(resp, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00)
 	// Encoded name (34 bytes): length=32, 32 ASCII bytes, null term.
 	resp = append(resp, 0x20)
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		resp = append(resp, 'A')
 	}
 	resp = append(resp, 0x00)
@@ -132,7 +132,7 @@ func TestParseNBSTATResponseGroupOnly(t *testing.T) {
 	resp = append(resp, 0x12, 0x34, 0x84, 0x00,
 		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00)
 	resp = append(resp, 0x20)
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		resp = append(resp, 'A')
 	}
 	resp = append(resp, 0x00)

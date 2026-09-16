@@ -262,7 +262,7 @@ func (t *thriftReader) skip(ftype byte, depth int) error {
 		if n < 0 || n > maxThriftContainer {
 			return fmt.Errorf("thrift: map size %d out of range", n)
 		}
-		for i := int32(0); i < n; i++ {
+		for range n {
 			if err := t.skip(kt, depth+1); err != nil {
 				return err
 			}
@@ -283,7 +283,7 @@ func (t *thriftReader) skip(ftype byte, depth int) error {
 		if n < 0 || n > maxThriftContainer {
 			return fmt.Errorf("thrift: list size %d out of range", n)
 		}
-		for i := int32(0); i < n; i++ {
+		for range n {
 			if err := t.skip(et, depth+1); err != nil {
 				return err
 			}
@@ -349,7 +349,7 @@ func (t *thriftReader) readRows() ([]map[string]string, error) {
 		return nil, fmt.Errorf("thrift: row count %d out of range", n)
 	}
 	rows := make([]map[string]string, 0, min(int(n), 4096))
-	for i := int32(0); i < n; i++ {
+	for range n {
 		kt, err := t.readByte()
 		if err != nil {
 			return nil, err
@@ -374,7 +374,7 @@ func (t *thriftReader) readRows() ([]map[string]string, error) {
 			return nil, fmt.Errorf("thrift: row map types (%d,%d), want (string,string)", kt, vt)
 		}
 		row := make(map[string]string, pairs)
-		for j := int32(0); j < pairs; j++ {
+		for range pairs {
 			k, err := t.readString()
 			if err != nil {
 				return nil, err

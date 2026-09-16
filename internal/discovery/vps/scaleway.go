@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -33,7 +35,7 @@ func (s *Scaleway) Discover(ctx context.Context, cfg map[string]any) ([]model.Ma
 	token := os.Getenv("KITE_SCALEWAY_SECRET_KEY")
 	if token == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("scaleway: KITE_SCALEWAY_SECRET_KEY not set")
+			return nil, errors.New("scaleway: KITE_SCALEWAY_SECRET_KEY not set")
 		}
 		return nil, nil
 	}

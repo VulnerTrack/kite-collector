@@ -311,7 +311,7 @@ func stripComment(line string) string {
 // commentIndex returns the first position where `c` starts a comment
 // — either at byte 0, or preceded by whitespace. Returns -1 otherwise.
 func commentIndex(line string, c byte) int {
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		if line[i] != c {
 			continue
 		}

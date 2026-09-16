@@ -20,7 +20,7 @@ import (
 func ParsePlist(body []byte) (Service, error) {
 	body = bytes.TrimPrefix(bytes.TrimSpace(body), []byte{0xEF, 0xBB, 0xBF})
 	if len(body) == 0 {
-		return Service{}, fmt.Errorf("empty plist")
+		return Service{}, errors.New("empty plist")
 	}
 
 	dec := xml.NewDecoder(bytes.NewReader(body))

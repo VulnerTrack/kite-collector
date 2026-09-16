@@ -275,7 +275,7 @@ func TestParseCommentAndBlankLinesIgnored(t *testing.T) {
 func TestParseHonoursMaxDirectivesCeiling(t *testing.T) {
 	// Synthesise body > MaxDirectives lines.
 	var sb strings.Builder
-	for i := 0; i < MaxDirectives+50; i++ {
+	for range MaxDirectives + 50 {
 		sb.WriteString("auth required pam_unix.so\n")
 	}
 	got := Parse([]byte(sb.String()), "x", "/etc/pam.d/x")

@@ -9,6 +9,7 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -76,7 +77,7 @@ func (g *GCPDNS) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 	projectID := toString(cfg["project_id"])
 	if projectID == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("cloud_dns_gcp: source enabled but project_id not specified in config")
+			return nil, errors.New("cloud_dns_gcp: source enabled but project_id not specified in config")
 		}
 		slog.Warn("GCP DNS project_id missing from config; skipping discovery",
 			"code", string(LogCodeGCPDNSProjectMissing))

@@ -178,11 +178,11 @@ func TestDurable_ConcurrentEmitWhileDown(t *testing.T) {
 	t.Cleanup(func() { _ = de.Shutdown(context.Background()) })
 
 	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
+	for range goroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < perGoroutine; i++ {
+			for range perGoroutine {
 				assert.NoError(t, de.EmitBatch(ctx, []model.MachineEvent{newEvent()}))
 			}
 		}()

@@ -217,7 +217,7 @@ func TestParseConfigCommentVariants(t *testing.T) {
 
 func TestParseConfigMaxRemotes(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxRemotesPerRepo+10; i++ {
+	for i := range MaxRemotesPerRepo + 10 {
 		sb.WriteString(`[remote "r`)
 		sb.WriteString(string(rune('A' + (i % 26))))
 		sb.WriteString(`"]
@@ -447,7 +447,7 @@ func TestFileCollectorRespectsMaxRepos(t *testing.T) {
 	tmp := t.TempDir()
 	// Build MaxRepos+5 distinct repos.
 	want := MaxRepos + 5
-	for i := 0; i < want; i++ {
+	for i := range want {
 		d := filepath.Join(tmp, "r", padInt(i))
 		must(t, os.MkdirAll(filepath.Join(d, ".git"), 0o755))
 		mustWrite(t, filepath.Join(d, ".git", "config"), "[core]\n  bare = false\n")

@@ -179,7 +179,7 @@ func hexToIP(hex string) string {
 		return ""
 	}
 	var ip [4]byte
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		b := hexByte(hex[i*2], hex[i*2+1])
 		ip[3-i] = b
 	}

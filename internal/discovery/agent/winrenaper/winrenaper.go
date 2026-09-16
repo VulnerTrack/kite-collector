@@ -294,7 +294,7 @@ func bytesToLower(b []byte, maxBytes int) []byte {
 		n = maxBytes
 	}
 	out := make([]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c := b[i]
 		if c >= 'A' && c <= 'Z' {
 			c += 'a' - 'A'

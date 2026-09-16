@@ -112,7 +112,7 @@ func splitFields(s string) []string {
 
 func keepDigits(s string) string {
 	b := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c >= '0' && c <= '9' {
 			b = append(b, c)

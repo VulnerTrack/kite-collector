@@ -369,18 +369,18 @@ func handleFleetPackage(
 
 func validateFleetBundleRequest(req fleetBundleRequest) ([]fleetTarget, error) {
 	if !fleetVersionPattern.MatchString(req.Version) {
-		return nil, fmt.Errorf("version must use numeric major.minor.patch format")
+		return nil, errors.New("version must use numeric major.minor.patch format")
 	}
 	pkiURL, err := url.Parse(req.PKIEndpoint)
 	if err != nil || pkiURL.Host == "" || (pkiURL.Scheme != "https" && pkiURL.Scheme != "http") {
-		return nil, fmt.Errorf("PKI endpoint must be a valid HTTP or HTTPS URL")
+		return nil, errors.New("PKI endpoint must be a valid HTTP or HTTPS URL")
 	}
 	targets, err := parseFleetTargets(req.TargetsCSV)
 	if err != nil {
 		return nil, err
 	}
 	if len(targets) == 0 {
-		return nil, fmt.Errorf("at least one target computer is required")
+		return nil, errors.New("at least one target computer is required")
 	}
 	return targets, nil
 }
@@ -389,13 +389,13 @@ func resolveFleetReleaseVersion(opts Options) (string, error) {
 	if override := strings.TrimSpace(os.Getenv("KITE_FLEET_RELEASE_VERSION")); override != "" {
 		version := strings.TrimPrefix(override, "v")
 		if !fleetVersionPattern.MatchString(version) {
-			return "", fmt.Errorf("KITE_FLEET_RELEASE_VERSION must use numeric major.minor.patch format")
+			return "", errors.New("KITE_FLEET_RELEASE_VERSION must use numeric major.minor.patch format")
 		}
 		return version, nil
 	}
 	version := strings.TrimPrefix(strings.TrimSpace(opts.AppVersion), "v")
 	if !fleetVersionPattern.MatchString(version) {
-		return "", fmt.Errorf("fleet deployment requires a released kite-collector build")
+		return "", errors.New("fleet deployment requires a released kite-collector build")
 	}
 	return version, nil
 }

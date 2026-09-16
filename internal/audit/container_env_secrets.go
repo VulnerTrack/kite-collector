@@ -200,7 +200,7 @@ func scanContainerEnv(machine model.Machine, env dockerdisc.ContainerEnv, denyPr
 				MachineID:   machine.ID,
 				Auditor:     containerEnvSecretsAuditorName,
 				CheckID:     pat.ID,
-				Title:       fmt.Sprintf("Container env secret: %s", pat.Name),
+				Title:       "Container env secret: " + pat.Name,
 				Severity:    pat.Severity,
 				Evidence:    evidence,
 				Expected:    containerEnvSecretsExpected,

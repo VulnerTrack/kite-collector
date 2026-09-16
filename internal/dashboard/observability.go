@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1018,10 +1019,10 @@ func humanizeBytes(n int64) string {
 // "1234567" reads as "1,234,567" — easier to compare at a glance.
 func humanizeCount(n int64) string {
 	if n < 1000 {
-		return fmt.Sprintf("%d", n)
+		return strconv.FormatInt(n, 10)
 	}
 	// Manual thousands separator (avoiding x/text dep for a 10-line helper).
-	s := fmt.Sprintf("%d", n)
+	s := strconv.FormatInt(n, 10)
 	out := make([]byte, 0, len(s)+len(s)/3)
 	for i, c := range []byte(s) {
 		if i > 0 && (len(s)-i)%3 == 0 {
@@ -1469,7 +1470,7 @@ func uptimeStripSVG(results []string, probeName string) template.HTML {
 
 	// Render oldest-first so the visual position matches the reading
 	// direction. results[0] is newest, results[n-1] is oldest → invert.
-	for visualPos := 0; visualPos < n; visualPos++ {
+	for visualPos := range n {
 		sliceIdx := n - 1 - visualPos
 		x := visualPos * (sqW + gap)
 		color := "#9ca3af" // gray default
@@ -2202,7 +2203,7 @@ func handleObservabilitySnapshot(w http.ResponseWriter, r *http.Request, deps on
 	stamp := time.Now().UTC().Format("20060102T150405Z")
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="kite-observability-%s.json"`, stamp))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	_, _ = w.Write(body)
 }
 
@@ -2219,7 +2220,7 @@ func handleObservabilitySnapshotMarkdown(w http.ResponseWriter, r *http.Request,
 	stamp := time.Now().UTC().Format("20060102T150405Z")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="kite-observability-%s.md"`, stamp))
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	_, _ = io.WriteString(w, body)
 }
 

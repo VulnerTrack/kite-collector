@@ -419,7 +419,7 @@ func TestCollectSkipsUnparseableAndMissingFiles(t *testing.T) {
 func TestCollectCapsAtMaxProfiles(t *testing.T) {
 	base := t.TempDir()
 	var sb strings.Builder
-	for i := 0; i < MaxProfiles+50; i++ {
+	for i := range MaxProfiles + 50 {
 		sb.WriteString("[p")
 		sb.WriteString(strconv.Itoa(i))
 		sb.WriteString("]\nregion = us-east-1\n")

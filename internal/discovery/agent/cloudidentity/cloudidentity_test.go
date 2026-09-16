@@ -3,6 +3,7 @@ package cloudidentity
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -464,7 +465,7 @@ func TestCollectGCPWinsWhenAWSAndAzureFail(t *testing.T) {
 func TestCollectOnPremReturnsCloudNone(t *testing.T) {
 	fh := newFakeHTTP(t)
 	fh.default_ = func(req *http.Request) (*http.Response, error) {
-		return nil, fmt.Errorf("connect timeout")
+		return nil, errors.New("connect timeout")
 	}
 	c := newProbeCollectorWith(fh)
 	got, err := c.Collect(context.Background())

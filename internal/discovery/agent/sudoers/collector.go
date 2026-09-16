@@ -94,7 +94,7 @@ func sudoIncludesFile(name string) bool {
 	if name[len(name)-1] == '~' {
 		return false
 	}
-	for i := 0; i < len(name); i++ {
+	for i := range len(name) {
 		if name[i] == '.' {
 			return false
 		}

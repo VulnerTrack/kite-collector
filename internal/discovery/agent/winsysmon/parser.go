@@ -22,7 +22,7 @@ import (
 func ParseConfigXML(body []byte) (State, error) {
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
-		return State{}, fmt.Errorf("empty sysmon config")
+		return State{}, errors.New("empty sysmon config")
 	}
 	body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
 

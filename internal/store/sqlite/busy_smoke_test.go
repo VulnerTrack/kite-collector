@@ -127,7 +127,7 @@ func TestHeavyWriteWorkload_NoBusy(t *testing.T) {
 		}
 	}
 
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
@@ -144,7 +144,7 @@ func TestHeavyWriteWorkload_NoBusy(t *testing.T) {
 				Status:    model.HeartbeatOK,
 				CreatedAt: time.Now().UTC(),
 			}))
-			for i := 0; i < iterations; i++ {
+			for i := range iterations {
 				if i%2 == 0 {
 					record(s.PersistSourceHealth(safety.SourceHealth{
 						SourceName:       source,
@@ -209,7 +209,7 @@ func TestHeavyWriteWorkload_MemoryBounded(t *testing.T) {
 	require.NoError(t, s.CreateScanRun(ctx, scanRun))
 
 	var wg sync.WaitGroup
-	for g := 0; g < 40; g++ {
+	for g := range 40 {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
@@ -222,7 +222,7 @@ func TestHeavyWriteWorkload_MemoryBounded(t *testing.T) {
 				Status:    model.HeartbeatOK,
 				CreatedAt: time.Now().UTC(),
 			})
-			for i := 0; i < 25; i++ {
+			for i := range 25 {
 				_, _, _ = s.UpsertMachines(ctx, []model.Machine{
 					makeMachine(fmt.Sprintf("mem-host-%s-%d", source, i), model.MachineTypeServer),
 				})

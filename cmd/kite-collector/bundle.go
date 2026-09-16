@@ -63,7 +63,7 @@ func resolveBundleInstallDir(
 		"upgrading the existing installation in place",
 		"from", opts.BinaryDir,
 		"to", resolved)
-	writeLine(out, fmt.Sprintf("  ›  upgrading it in place at %s", resolved))
+	writeLine(out, "  ›  upgrading it in place at "+resolved)
 	opts.BinaryDir = resolved
 	return opts
 }
@@ -210,16 +210,14 @@ func installHostOsquery(
 		"started", res.Started)
 	writeLine(out, fmt.Sprintf("  ✓  service %q registered against %s",
 		installer.OsquerySvcName, res.DaemonPath))
-	writeLine(out, fmt.Sprintf("  ✓  osquery extensions socket %s", res.SocketPath))
+	writeLine(out, "  ✓  osquery extensions socket "+res.SocketPath)
 	if res.ConfigPreserved {
 		logEvent(log, installer.LogCodeHostOsqueryConfigKept,
 			"existing osquery configuration left untouched",
 			"config", installer.OsqueryConfigPath(opts))
-		writeLine(out, fmt.Sprintf("  ›  kept your existing %s",
-			installer.OsqueryConfigPath(opts)))
+		writeLine(out, "  ›  kept your existing "+installer.OsqueryConfigPath(opts))
 	} else {
-		writeLine(out, fmt.Sprintf("  ✓  osquery configuration written to %s",
-			installer.OsqueryConfigPath(opts)))
+		writeLine(out, "  ✓  osquery configuration written to "+installer.OsqueryConfigPath(opts))
 	}
 	return nil
 }
@@ -290,7 +288,7 @@ func printOsqueryPlan(out io.Writer, opts installer.Options, requested bool) {
 	}
 	writeLine(out, fmt.Sprintf("  register service %q against %s (%s)",
 		installer.OsquerySvcName, host.Path, host.Origin))
-	writeLine(out, fmt.Sprintf("    config:     %s", installer.OsqueryConfigPath(opts)))
-	writeLine(out, fmt.Sprintf("    flagfile:   %s", installer.OsqueryFlagsPath(opts)))
-	writeLine(out, fmt.Sprintf("    socket:     %s", installer.OsqueryExtensionsEndpoint()))
+	writeLine(out, "    config:     "+installer.OsqueryConfigPath(opts))
+	writeLine(out, "    flagfile:   "+installer.OsqueryFlagsPath(opts))
+	writeLine(out, "    socket:     "+installer.OsqueryExtensionsEndpoint())
 }

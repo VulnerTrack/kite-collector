@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -312,7 +313,7 @@ func checkPackageCount(set *findingSet, obs Observation, managed []Package) {
 		FindingCountMismatch, SeverityMedium, "",
 		fmt.Sprintf(">= %d %s packages", obs.Expectation.MinPackageCount,
 			obs.Expectation.PackageManager),
-		fmt.Sprintf("%d", len(managed)),
+		strconv.Itoa(len(managed)),
 	)
 }
 
@@ -323,7 +324,7 @@ func checkParseErrors(set *findingSet, obs Observation) {
 	set.add(
 		FindingEncodingError, SeverityMedium, "",
 		fmt.Sprintf("<= %d per-line parse errors", obs.Expectation.MaxParseErrors),
-		fmt.Sprintf("%d", obs.ParseErrors),
+		strconv.Itoa(obs.ParseErrors),
 	)
 }
 

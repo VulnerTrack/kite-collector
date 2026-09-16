@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -47,7 +48,7 @@ func runDeviceEnrollmentWithDeps(out io.Writer, agentCode, dbPath, certsDir stri
 	}
 	identities, ok := st.Store.(*sqlite.SQLiteStore)
 	if !ok {
-		return fmt.Errorf("device enrollment requires SQLite")
+		return errors.New("device enrollment requires SQLite")
 	}
 	result, err := enroll(ctx, agentCode, func(auth enrollment.DeviceAuthorization) error {
 		_, displayErr := fmt.Fprintf(out, "\nOn your computer, open: %s\nCollector: %s\nWaiting for approval (expires in %s). Press Ctrl+C to cancel.\n", auth.VerificationURIComplete, agentCode, plural.Count(auth.ExpiresIn, "second"))

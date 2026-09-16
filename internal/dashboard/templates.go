@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"io"
@@ -70,7 +71,7 @@ func renderCell(v any) string {
 		if len(x) > 64 {
 			return fmt.Sprintf("<%d bytes>", len(x))
 		}
-		return fmt.Sprintf("%x", x)
+		return hex.EncodeToString(x)
 	case time.Time:
 		return x.Local().Format("2006-01-02 15:04:05 MST")
 	case bool:

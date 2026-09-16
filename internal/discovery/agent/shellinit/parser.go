@@ -174,7 +174,7 @@ func extractPathPrepends(rhs string) []string {
 // taken as a comment).
 func stripComment(line string) string {
 	inSingle, inDouble := false, false
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := line[i]
 		switch c {
 		case '\'':

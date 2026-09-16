@@ -3,6 +3,7 @@ package wazuh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -140,7 +141,7 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Machi
 			continue
 		}
 
-		safenet.SafeGo(&wg, slog.Default(), fmt.Sprintf("wazuh-enrich-%s", ag.ID), func() {
+		safenet.SafeGo(&wg, slog.Default(), "wazuh-enrich-"+ag.ID, func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
@@ -276,7 +277,7 @@ func (c *wazuhClient) doGet(ctx context.Context, path string) ([]byte, error) {
 		return body, nil
 	}
 
-	return nil, fmt.Errorf("wazuh: authentication failed after token refresh")
+	return nil, errors.New("wazuh: authentication failed after token refresh")
 }
 
 // -------------------------------------------------------------------------
@@ -434,7 +435,7 @@ func (c *wazuhClient) listAllVulnerabilities(ctx context.Context, agentID string
 	if err != nil {
 		return nil, fmt.Errorf("wazuh: unsafe agent ID: %w", err)
 	}
-	items, err := c.listPaginated(ctx, fmt.Sprintf("/vulnerability/%s", safeID))
+	items, err := c.listPaginated(ctx, "/vulnerability/"+safeID)
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +484,7 @@ func (c *wazuhClient) listSCAPolicies(ctx context.Context, agentID string) ([]wa
 	if err != nil {
 		return nil, fmt.Errorf("wazuh: unsafe agent ID: %w", err)
 	}
-	items, err := c.listPaginated(ctx, fmt.Sprintf("/sca/%s", safeID))
+	items, err := c.listPaginated(ctx, "/sca/"+safeID)
 	if err != nil {
 		return nil, err
 	}

@@ -314,7 +314,7 @@ func TestParseProcMountsOctalUnescape(t *testing.T) {
 
 func TestParseProcMountsMaxCeiling(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxMounts+50; i++ {
+	for range MaxMounts + 50 {
 		sb.WriteString("tmpfs /tmp tmpfs rw 0 0\n")
 	}
 	got := ParseProcMounts([]byte(sb.String()), "/proc/mounts")

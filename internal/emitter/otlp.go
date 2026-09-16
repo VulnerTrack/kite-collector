@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/envelope"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
@@ -93,7 +94,7 @@ type OTLPEmitter struct {
 // attribute on every exported log record.
 func NewOTLP(cfg OTLPConfig, serviceVersion string) (*OTLPEmitter, error) {
 	if cfg.Endpoint == "" {
-		return nil, fmt.Errorf("otlp: endpoint must not be empty")
+		return nil, errors.New("otlp: endpoint must not be empty")
 	}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -187,7 +188,7 @@ func (o *OTLPEmitter) EmitBatch(ctx context.Context, events []model.MachineEvent
 	o.mu.Lock()
 	if o.closed {
 		o.mu.Unlock()
-		return fmt.Errorf("otlp: emitter is shut down")
+		return errors.New("otlp: emitter is shut down")
 	}
 	o.mu.Unlock()
 
@@ -567,7 +568,7 @@ func orUnknown(v string) string {
 func (o *OTLPEmitter) sendWithRetry(ctx context.Context, wire wirePayload) error {
 	var lastErr error
 
-	for attempt := 0; attempt < o.retry.maxAttempts; attempt++ {
+	for attempt := range o.retry.maxAttempts {
 		if attempt > 0 {
 			delay := backoffDelay(attempt, o.retry.baseDelay, o.retry.maxDelay)
 			select {
@@ -681,7 +682,7 @@ func buildTLSConfig(cfg TLSConfig) (*tls.Config, error) {
 		MinVersion: tls.VersionTLS12,
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 {
-				return fmt.Errorf("server presented no certificate")
+				return errors.New("server presented no certificate")
 			}
 			intermediates := x509.NewCertPool()
 			for _, c := range cs.PeerCertificates[1:] {

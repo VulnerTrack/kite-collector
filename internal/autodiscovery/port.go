@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,7 +50,7 @@ func probePorts(ctx context.Context, targets []string, ports []int, timeoutMs in
 					return
 				}
 
-				addr := net.JoinHostPort(target, fmt.Sprintf("%d", port))
+				addr := net.JoinHostPort(target, strconv.Itoa(port))
 				d := net.Dialer{Timeout: timeout}
 				conn, err := d.DialContext(ctx, "tcp", addr)
 				if err != nil {

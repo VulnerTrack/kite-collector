@@ -54,7 +54,7 @@ func (c *Client) enrollDevice(ctx context.Context, agentCode string, display fun
 	base := pkiBaseURL()
 	u, err := url.Parse(base)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return nil, fmt.Errorf("device enrollment requires an HTTPS KITE_PKI_ENDPOINT")
+		return nil, errors.New("device enrollment requires an HTTPS KITE_PKI_ENDPOINT")
 	}
 	// Do not forward a grant or JWT through an HTTP redirect.
 	client := *c
@@ -81,12 +81,12 @@ func (c *Client) enrollDevice(ctx context.Context, agentCode string, display fun
 		ticket = completeResponse.Query().Get("authorization")
 	}
 	if err != nil || completeErr != nil || verify.Scheme != "https" || verify.Host == "" || verify.User != nil || completeResponse.Scheme != "https" || completeResponse.Host != verify.Host || completeResponse.Path != verify.Path || completeResponse.User != nil || len(ticket) < 32 || len(ticket) > 1024 || !deviceAuthorizationTicketPattern.MatchString(ticket) || !deviceUserCodePattern.MatchString(authorization.UserCode) || authorization.DeviceCode == "" || authorization.ExpiresIn <= 0 || authorization.ExpiresIn > 3600 || authorization.Interval < 0 || authorization.Interval > 3600 {
-		return nil, fmt.Errorf("invalid device authorization response")
+		return nil, errors.New("invalid device authorization response")
 	}
 	authorization.VerificationURI = deviceVerificationURI
 	complete, err := url.Parse(deviceVerificationURI)
 	if err != nil {
-		return nil, fmt.Errorf("invalid device verification URL")
+		return nil, errors.New("invalid device verification URL")
 	}
 	query := complete.Query()
 	query.Set("authorization", ticket)
@@ -123,14 +123,14 @@ func (c *Client) enrollDevice(ctx context.Context, agentCode string, display fun
 		}
 		if status == http.StatusOK {
 			if response.AccessToken == "" || !strings.EqualFold(response.TokenType, "Bearer") {
-				return nil, fmt.Errorf("invalid device access token response")
+				return nil, errors.New("invalid device access token response")
 			}
 			result, err := client.enrollAt(ctx, agentCode, response.AccessToken, base+"/pki/enroll/device")
 			if err != nil {
 				return nil, err
 			}
 			if result.Status != "enrolled" {
-				return nil, fmt.Errorf("device certificate was not issued")
+				return nil, errors.New("device certificate was not issued")
 			}
 			return result, nil
 		}
@@ -142,9 +142,9 @@ func (c *Client) enrollDevice(ctx context.Context, agentCode string, display fun
 		case "slow_down":
 			interval += 5 * time.Second
 		case "access_denied":
-			return nil, fmt.Errorf("device authorization was denied")
+			return nil, errors.New("device authorization was denied")
 		case "expired_token":
-			return nil, fmt.Errorf("device authorization expired; run enroll again")
+			return nil, errors.New("device authorization expired; run enroll again")
 		default:
 			return nil, fmt.Errorf("device authorization failed (HTTP %d)", status)
 		}

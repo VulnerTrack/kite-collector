@@ -133,7 +133,7 @@ func TaintingLetters() string {
 // IsTaintingFlag reports whether the taint letter belongs to the
 // integrity-affecting subset.
 func IsTaintingFlag(c byte) bool {
-	for i := 0; i < len(TaintingLetters()); i++ {
+	for i := range len(TaintingLetters()) {
 		if TaintingLetters()[i] == c {
 			return true
 		}
@@ -144,7 +144,7 @@ func IsTaintingFlag(c byte) bool {
 // HasTaintingFlag reports whether any of the letters in `taints`
 // affects kernel integrity (as opposed to just licensing).
 func HasTaintingFlag(taints string) bool {
-	for i := 0; i < len(taints); i++ {
+	for i := range len(taints) {
 		if IsTaintingFlag(taints[i]) {
 			return true
 		}

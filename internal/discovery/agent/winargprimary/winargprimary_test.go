@@ -490,7 +490,7 @@ func TestCollectorWalksInstallTree(t *testing.T) {
 
 	// Orders audit with > 100 orders in one minute → high-frequency.
 	var ord strings.Builder
-	for i := 0; i < 150; i++ {
+	for range 150 {
 		ord.WriteString("2025-03-10 11:30 new_order notional=100,00\n")
 	}
 	ordPath := filepath.Join(root, "orders_202503.log")
@@ -646,7 +646,7 @@ func TestPeakOrdersPerMinuteStress(t *testing.T) {
 	var sb strings.Builder
 	// 3000 orders spread across three minutes, 1000 each.
 	for m := 30; m < 33; m++ {
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			fmt.Fprintf(&sb, "2025-03-10 11:%02d new_order\n", m)
 		}
 	}

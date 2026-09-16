@@ -274,7 +274,6 @@ func TestProbe_DetectsJSRuntimesAndNextAuth(t *testing.T) {
 		},
 	}
 	for i, tc := range cases {
-		tc := tc
 		t.Run(tc.product, func(t *testing.T) {
 			d, base, stop := newDetectorAgainst(t, func(w http.ResponseWriter, r *http.Request) {
 				tc.setup(w)

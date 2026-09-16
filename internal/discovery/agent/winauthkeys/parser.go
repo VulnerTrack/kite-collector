@@ -138,7 +138,7 @@ func extractKeyBlob(line string) string {
 // prefix up to (but not including) the first whitespace, and
 // tail is the trimmed remainder.
 func splitOnFirstSpace(s string) (string, string) {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == ' ' || s[i] == '\t' {
 			return s[:i], strings.TrimSpace(s[i+1:])
 		}

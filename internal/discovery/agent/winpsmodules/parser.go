@@ -3,7 +3,7 @@ package winpsmodules
 import (
 	"bufio"
 	"bytes"
-	"fmt"
+	"errors"
 	"strings"
 )
 
@@ -21,7 +21,7 @@ import (
 // from the parent directory.
 func ParsePSD1(body []byte, filePath string) (Module, error) {
 	if len(bytes.TrimSpace(body)) == 0 {
-		return Module{}, fmt.Errorf("empty psd1")
+		return Module{}, errors.New("empty psd1")
 	}
 	body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
 
@@ -123,7 +123,7 @@ func assignScalar(m *Module, key, value string) bool {
 func splitTopLevelAssignment(line string) (string, string, bool) {
 	inSingle := false
 	inDouble := false
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := line[i]
 		switch c {
 		case '\'':
@@ -175,7 +175,7 @@ func unquoteScalar(v string) string {
 func stripLineComment(line string) (string, string) {
 	inSingle := false
 	inDouble := false
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := line[i]
 		switch c {
 		case '\'':
@@ -206,7 +206,7 @@ func splitStatements(line string) []string {
 	inDouble := false
 	parenDepth := 0
 	start := 0
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := line[i]
 		switch c {
 		case '\'':

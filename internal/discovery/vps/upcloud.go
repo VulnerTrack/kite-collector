@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -33,7 +35,7 @@ func (u *UpCloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 
 	if user == "" || pass == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("upcloud: KITE_UPCLOUD_USERNAME and KITE_UPCLOUD_PASSWORD are required")
+			return nil, errors.New("upcloud: KITE_UPCLOUD_USERNAME and KITE_UPCLOUD_PASSWORD are required")
 		}
 		return nil, nil
 	}

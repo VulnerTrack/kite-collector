@@ -189,7 +189,7 @@ func tokenize(s string) []string {
 	out := make([]string, 0, 4)
 	var sb strings.Builder
 	inQ := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		switch {
 		case c == '"':
@@ -213,7 +213,7 @@ func tokenize(s string) []string {
 // splitFirstField returns the first whitespace-delimited token and
 // the remaining trimmed string.
 func splitFirstField(s string) (string, string) {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == ' ' || s[i] == '\t' {
 			return s[:i], strings.TrimLeft(s[i:], " \t")
 		}
@@ -262,7 +262,7 @@ func parsePortString(s string) int {
 // inside double-quoted content. Returns -1 if not found.
 func indexUnquoted(s string, c byte) int {
 	inQ := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == '"' {
 			inQ = !inQ
 			continue

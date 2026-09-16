@@ -310,7 +310,7 @@ func parseYear(s string) (int, bool) {
 		return 0, false
 	}
 	year := 0
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		c := s[i]
 		if c < '0' || c > '9' {
 			return 0, false
@@ -369,7 +369,7 @@ func bytesToLower(b []byte, maxBytes int) []byte {
 		n = maxBytes
 	}
 	out := make([]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c := b[i]
 		if c >= 'A' && c <= 'Z' {
 			c += 'a' - 'A'

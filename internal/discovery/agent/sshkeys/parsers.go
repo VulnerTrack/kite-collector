@@ -256,7 +256,7 @@ func firstToken(s string) string {
 // whitespace OUTSIDE a double-quoted region. Returns [options, rest].
 func splitOptionsAndRest(line string) [2]string {
 	inQuote := false
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := line[i]
 		if c == '"' {
 			inQuote = !inQuote

@@ -3,6 +3,7 @@ package winvscode
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -30,7 +31,7 @@ type rawManifest struct {
 func ParseManifest(body []byte) (Extension, error) {
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
-		return Extension{}, fmt.Errorf("empty manifest")
+		return Extension{}, errors.New("empty manifest")
 	}
 	body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
 

@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -67,7 +68,7 @@ func NewState() (string, error) {
 // AuthorizeURL builds the browser sign-in URL the operator opens.
 func (c OAuthConfig) AuthorizeURL(challenge, state string) (string, error) {
 	if c.Issuer == "" || c.ClientID == "" || c.RedirectURI == "" {
-		return "", fmt.Errorf("issuer, client_id, and redirect_uri are required")
+		return "", errors.New("issuer, client_id, and redirect_uri are required")
 	}
 	u, err := url.Parse(strings.TrimRight(c.Issuer, "/") + "/oauth/authorize")
 	if err != nil {
@@ -112,7 +113,7 @@ func NewOAuthClient() *OAuthClient {
 // secret is sent.
 func (o *OAuthClient) ExchangeCode(ctx context.Context, cfg OAuthConfig, code, verifier string) (*Token, error) {
 	if code == "" {
-		return nil, fmt.Errorf("authorization code is empty")
+		return nil, errors.New("authorization code is empty")
 	}
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
@@ -153,7 +154,7 @@ func (o *OAuthClient) ExchangeCode(ctx context.Context, cfg OAuthConfig, code, v
 		return nil, fmt.Errorf("decode token response: %w", err)
 	}
 	if tok.AccessToken == "" {
-		return nil, fmt.Errorf("token response contained no access_token")
+		return nil, errors.New("token response contained no access_token")
 	}
 	return &tok, nil
 }

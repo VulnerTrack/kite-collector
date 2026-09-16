@@ -3,6 +3,7 @@ package ldap
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -60,7 +61,7 @@ type computerEntry struct {
 // hard requirement.
 func extractComputer(e *ldapv3.Entry, baseDN string) (*computerEntry, error) {
 	if e == nil || e.DN == "" {
-		return nil, fmt.Errorf("entry has no DN")
+		return nil, errors.New("entry has no DN")
 	}
 
 	c := &computerEntry{
@@ -305,7 +306,7 @@ func parseObjectSID(b []byte) string {
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "S-%d-%d", revision, auth)
-	for i := 0; i < subCount; i++ {
+	for i := range subCount {
 		off := 8 + i*4
 		sub := binary.LittleEndian.Uint32(b[off : off+4])
 		fmt.Fprintf(&sb, "-%d", sub)

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -330,7 +331,7 @@ func TestEncryptedStore_ConcurrentInstancesDoNotCollide(t *testing.T) {
 			return
 		}
 		// A few writes to exercise WAL/SHM activity concurrently.
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			a := makeTestMachine(hostname, model.MachineTypeServer)
 			if _, _, err := es.UpsertMachines(ctx, []model.Machine{a}); err != nil {
 				errCh <- err

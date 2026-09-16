@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -176,7 +177,7 @@ func VerifyChannelBinding(ctx context.Context) error {
 
 	expected := base64.StdEncoding.EncodeToString(serverBinding)
 	if bindings[0] != expected {
-		return fmt.Errorf("channel binding mismatch: client and server TLS sessions differ (possible TLS-terminating proxy)")
+		return errors.New("channel binding mismatch: client and server TLS sessions differ (possible TLS-terminating proxy)")
 	}
 
 	return nil

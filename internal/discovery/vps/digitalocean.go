@@ -2,12 +2,14 @@ package vps
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -31,7 +33,7 @@ func (d *DigitalOcean) Discover(ctx context.Context, cfg map[string]any) ([]mode
 	token := os.Getenv("KITE_DIGITALOCEAN_TOKEN")
 	if token == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("digitalocean: KITE_DIGITALOCEAN_TOKEN not set")
+			return nil, errors.New("digitalocean: KITE_DIGITALOCEAN_TOKEN not set")
 		}
 		return nil, nil
 	}

@@ -2,6 +2,7 @@ package safenet
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -83,7 +84,7 @@ func ValidateEndpoint(raw string, opts ...Option) (*url.URL, error) {
 // Only allows [a-zA-Z0-9._-].
 func SanitizePathSegment(id string) (string, error) {
 	if id == "" {
-		return "", fmt.Errorf("empty path segment")
+		return "", errors.New("empty path segment")
 	}
 
 	decoded, err := url.PathUnescape(id)

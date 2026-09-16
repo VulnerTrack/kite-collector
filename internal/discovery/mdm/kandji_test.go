@@ -106,7 +106,7 @@ func TestKandji_Discover_Pagination(t *testing.T) {
 		if offset == "0" {
 			// A full page (kandjiPageSize) forces a second fetch.
 			devices := make([]map[string]any, 0, kandjiPageSize)
-			for n := 0; n < kandjiPageSize; n++ {
+			for range kandjiPageSize {
 				devices = append(devices, map[string]any{
 					"device_id":   "p0",
 					"device_name": "p0-host",

@@ -323,7 +323,7 @@ func splitKV(s string) (string, string) {
 // firstCSV returns the part of s before the first unquoted comma.
 func firstCSV(s string) string {
 	inQuote := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c == '"' {
 			inQuote = !inQuote
@@ -342,7 +342,7 @@ func splitCommaTrim(s string) []string {
 	var out []string
 	var cur strings.Builder
 	inQuote := false
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if c == '"' {
 			inQuote = !inQuote

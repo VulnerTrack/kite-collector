@@ -41,7 +41,7 @@ func (e *authError) Error() string {
 func doWithRetry(ctx context.Context, name string, fn func() (*http.Response, error)) (*http.Response, error) {
 	var lastErr error
 
-	for attempt := 0; attempt < defaultMaxAttempts; attempt++ {
+	for attempt := range defaultMaxAttempts {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("%s cancelled: %w", name, err)
 		}

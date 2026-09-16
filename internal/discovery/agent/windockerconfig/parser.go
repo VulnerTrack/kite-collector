@@ -3,6 +3,7 @@ package windockerconfig
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -45,7 +46,7 @@ type rawProxyEntry struct {
 func ParseConfig(body []byte) ([]Entry, error) {
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
-		return nil, fmt.Errorf("empty docker config")
+		return nil, errors.New("empty docker config")
 	}
 	body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
 

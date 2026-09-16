@@ -43,7 +43,7 @@ func FixEncoding(s string) string {
 		return s
 	}
 	runes := make([]rune, 0, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		runes = append(runes, rune(s[i]))
 	}
 	return string(runes)

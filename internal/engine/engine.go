@@ -1167,7 +1167,7 @@ func logSoftwareParseErrors(errs []software.CollectError) {
 	if limit > maxParseErrorLogs {
 		limit = maxParseErrorLogs
 	}
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		e := errs[i]
 		raw := e.RawLine
 		if len(raw) > maxRawLineLog {

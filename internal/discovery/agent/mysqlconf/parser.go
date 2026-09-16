@@ -195,7 +195,7 @@ func isComment(line string) bool {
 // the line carries no comment.
 func indexOfInlineComment(line string) int {
 	inQuote := false
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := line[i]
 		if c == '"' {
 			inQuote = !inQuote

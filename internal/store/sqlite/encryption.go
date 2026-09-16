@@ -137,7 +137,7 @@ func DecryptFile(srcPath, dstPath string, key []byte) error {
 
 	nonceSize := gcm.NonceSize()
 	if len(ciphertext) < nonceSize {
-		return fmt.Errorf("decrypt: ciphertext too short")
+		return errors.New("decrypt: ciphertext too short")
 	}
 
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]

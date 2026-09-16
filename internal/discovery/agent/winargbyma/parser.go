@@ -334,7 +334,7 @@ func finalize(out *BYMAFields) {
 				tickers = append(tickers, t)
 			}
 		}
-		for i := 0; i < len(tickers); i++ {
+		for i := range len(tickers) {
 			for j := i + 1; j < len(tickers); j++ {
 				if IsMEPCCLPair(tickers[i], tickers[j]) {
 					out.HasMEPCCLArbitrage = true

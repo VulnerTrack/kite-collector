@@ -5,6 +5,7 @@ package identity
 import (
 	"crypto"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -188,5 +189,5 @@ func openTPMDevice() (transport.TPMCloser, error) {
 			return tpm, nil
 		}
 	}
-	return nil, fmt.Errorf("no accessible TPM device found")
+	return nil, errors.New("no accessible TPM device found")
 }

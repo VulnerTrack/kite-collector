@@ -1,6 +1,7 @@
 package safenet
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -61,7 +62,7 @@ func NewNetworkScopeGuard() *NetworkScopeGuard {
 // during validation.
 func (g *NetworkScopeGuard) Validate(cidrs []string) (int, error) {
 	if len(cidrs) == 0 {
-		return 0, fmt.Errorf("scope is required: at least one CIDR must be provided")
+		return 0, errors.New("scope is required: at least one CIDR must be provided")
 	}
 
 	total := 0
@@ -129,7 +130,7 @@ func cidrIPCount(prefix netip.Prefix) int {
 // does not exceed maxPorts. Pass maxPorts <= 0 to use DefaultMaxPortsPerScan.
 func ValidatePorts(ports []int, maxPorts int) error {
 	if len(ports) == 0 {
-		return fmt.Errorf("port list is empty: at least one port must be configured")
+		return errors.New("port list is empty: at least one port must be configured")
 	}
 	if maxPorts <= 0 {
 		maxPorts = DefaultMaxPortsPerScan

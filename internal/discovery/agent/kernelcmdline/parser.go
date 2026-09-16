@@ -104,7 +104,7 @@ func tokenize(line string) []string {
 			cur.Reset()
 		}
 	}
-	for i := 0; i < len(line); i++ {
+	for i := range len(line) {
 		c := line[i]
 		switch {
 		case c == '"':

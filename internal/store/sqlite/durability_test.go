@@ -144,7 +144,7 @@ func snapshotChildMain() {
 		`CREATE TABLE snap_rows (id INTEGER PRIMARY KEY, v TEXT)`); err != nil {
 		panic(err)
 	}
-	for i := 0; i < snapshotRowCount; i++ {
+	for range snapshotRowCount {
 		if _, err := inner.RawDB().ExecContext(ctx,
 			`INSERT INTO snap_rows(v) VALUES (?)`, strings.Repeat("x", 32)); err != nil {
 			panic(err)

@@ -241,7 +241,7 @@ func (s *Secrets) scanFile(machine model.Machine, filePath string, now time.Time
 				MachineID:   machine.ID,
 				Auditor:     secretsAuditorName,
 				CheckID:     pat.ID,
-				Title:       fmt.Sprintf("Hard-coded secret: %s", pat.Name),
+				Title:       "Hard-coded secret: " + pat.Name,
 				Severity:    pat.Severity,
 				Evidence:    evidence,
 				Expected:    "No credentials in source code",

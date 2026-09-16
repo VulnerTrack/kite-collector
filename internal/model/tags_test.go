@@ -14,7 +14,7 @@ func TestMarshalTags_DeterministicAcrossPermutations(t *testing.T) {
 	}
 	want := MarshalTags(base)
 	// Build many permutations of the same logical map.
-	for trial := 0; trial < 1000; trial++ {
+	for range 1000 {
 		perm := make(map[string]string, len(base))
 		keys := []string{"role", "env", "team", "owner"}
 		rand.Shuffle(len(keys), func(i, j int) { keys[i], keys[j] = keys[j], keys[i] }) //nolint:gosec // test-only shuffle of map insertion order; not security-sensitive.

@@ -3,6 +3,7 @@ package chocolatey
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -61,7 +62,7 @@ type rawDependency struct {
 // columns; it doesn't need to exist on disk.
 func ParseNuspec(body []byte, filePath string) (Package, error) {
 	if len(bytes.TrimSpace(body)) == 0 {
-		return Package{}, fmt.Errorf("empty nuspec")
+		return Package{}, errors.New("empty nuspec")
 	}
 	body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
 

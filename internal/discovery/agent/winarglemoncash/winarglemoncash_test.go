@@ -743,7 +743,7 @@ func TestCollectorStress(t *testing.T) {
 	root := filepath.Join(tmp, "Lemon")
 	must(t, os.MkdirAll(root, 0o755))
 	var sb strings.Builder
-	for i := 0; i < 4000; i++ {
+	for i := range 4000 {
 		fmt.Fprintf(&sb, "trade_id=%d\n", i)
 	}
 	must(t, os.WriteFile(filepath.Join(root, "lemon_trade_log.csv"),

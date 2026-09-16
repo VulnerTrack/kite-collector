@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -319,7 +320,7 @@ func listMigrationFiles() ([]string, error) {
 
 	// R10: startup guard — binary must contain at least one migration.
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no migrations embedded in binary — build may be broken")
+		return nil, errors.New("no migrations embedded in binary — build may be broken")
 	}
 
 	return files, nil

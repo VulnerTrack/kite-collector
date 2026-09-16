@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -591,7 +592,7 @@ func discoverDomainController(ctx context.Context, bindDN, baseDN string) string
 	for _, name := range []string{"dc._msdcs." + domain, domain} {
 		_, records, err := net.DefaultResolver.LookupSRV(ctx, "ldap", "tcp", name)
 		if err == nil && len(records) > 0 {
-			return net.JoinHostPort(strings.TrimSuffix(records[0].Target, "."), fmt.Sprint(records[0].Port))
+			return net.JoinHostPort(strings.TrimSuffix(records[0].Target, "."), strconv.FormatUint(uint64(records[0].Port), 10))
 		}
 	}
 	return ""

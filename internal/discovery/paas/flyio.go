@@ -2,6 +2,7 @@ package paas
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -33,7 +35,7 @@ func (f *FlyIO) Discover(ctx context.Context, cfg map[string]any) ([]model.Machi
 	token := os.Getenv("KITE_FLY_TOKEN")
 	if token == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("flyio: KITE_FLY_TOKEN not set")
+			return nil, errors.New("flyio: KITE_FLY_TOKEN not set")
 		}
 		return nil, nil
 	}
@@ -151,7 +153,7 @@ func flyMachineToMachine(appName string, m flyMachine, now time.Time) model.Mach
 		tags["memory_mb"] = m.Config.Guest.MemoryMB
 	}
 	if m.State != "started" {
-		tags["warning"] = fmt.Sprintf("machine state: %s", m.State)
+		tags["warning"] = "machine state: " + m.State
 	}
 
 	firstSeen := now

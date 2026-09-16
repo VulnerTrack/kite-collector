@@ -137,7 +137,7 @@ func convertListVal(v ref.Val) any {
 	}
 	allStrings := true
 	items := make([]any, size)
-	for i := int64(0); i < size; i++ {
+	for i := range size {
 		elem := lister.Get(types.Int(i))
 		items[i] = toNative(elem)
 		if _, isStr := items[i].(string); !isStr {

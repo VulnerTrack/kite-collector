@@ -30,7 +30,7 @@ func TestMachinePage_ShowsHumanReadableMemoryWithSparkline(t *testing.T) {
 
 	ms, ok := st.(store.MemorySampleStore)
 	require.True(t, ok)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		require.NoError(t, ms.InsertMemorySample(ctx, model.MemorySample{
 			MachineID:   id,
 			SampledAt:   now.Add(-time.Duration(5-i) * time.Minute),

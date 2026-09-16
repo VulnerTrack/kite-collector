@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -103,7 +104,7 @@ func TestListRows_MachinesPagination(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		a := makeMachine("paging-"+string(rune('a'+i)), model.MachineTypeServer)
 		require.NoError(t, s.UpsertMachine(ctx, a))
 	}
@@ -136,7 +137,7 @@ func TestListRows_ClampsToIntrospectionRowLimit(t *testing.T) {
 
 	// Insert 3 rows, but request a pathological limit to ensure the Store caps
 	// it at IntrospectionRowLimit rather than honoring it literally.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		require.NoError(t, s.UpsertMachine(ctx, makeMachine("clamp-"+string(rune('a'+i)), model.MachineTypeServer)))
 	}
 
@@ -232,7 +233,7 @@ func TestFacetTable_MachinesOSFamily(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		m := makeMachine("facet-l-"+string(rune('a'+i)), model.MachineTypeServer)
 		m.OSFamily = "linux"
 		require.NoError(t, s.UpsertMachine(ctx, m))

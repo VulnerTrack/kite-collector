@@ -3,6 +3,7 @@ package schema
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/vulnertrack/kite-collector/internal/copilot/dag"
@@ -59,16 +60,16 @@ func BuildDAG(s *Schema) (*dag.Graph, []string, error) {
 // validate checks the schema for structural correctness.
 func (s *Schema) validate() error {
 	if s.SchemaVersion == "" {
-		return fmt.Errorf("schema: missing schema_version")
+		return errors.New("schema: missing schema_version")
 	}
 	if len(s.Groups) == 0 {
-		return fmt.Errorf("schema: no groups defined")
+		return errors.New("schema: no groups defined")
 	}
 
 	seen := make(map[string]bool)
 	for _, g := range s.Groups {
 		if g.ID == "" {
-			return fmt.Errorf("schema: group has empty ID")
+			return errors.New("schema: group has empty ID")
 		}
 		for _, n := range g.Nodes {
 			if n.ID == "" {
@@ -104,7 +105,7 @@ func (s *Schema) validate() error {
 	presetIDs := make(map[string]bool)
 	for _, p := range s.Presets {
 		if p.ID == "" {
-			return fmt.Errorf("schema: preset has empty ID")
+			return errors.New("schema: preset has empty ID")
 		}
 		if presetIDs[p.ID] {
 			return fmt.Errorf("schema: duplicate preset ID %q", p.ID)

@@ -231,7 +231,7 @@ func TestParseContinuationLineMerged(t *testing.T) {
 
 func TestParseHonoursMaxRulesCeiling(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxRules+50; i++ {
+	for range MaxRules + 50 {
 		sb.WriteString("-w /etc/passwd -p wa -k identity\n")
 	}
 	got := Parse([]byte(sb.String()), "x.rules")

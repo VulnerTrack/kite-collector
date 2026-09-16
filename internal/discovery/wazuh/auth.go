@@ -6,6 +6,7 @@ package wazuh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -96,7 +97,7 @@ func (a *wazuhAuth) getToken(ctx context.Context) (string, error) {
 	}
 
 	if result.Data.Token == "" {
-		return "", fmt.Errorf("wazuh auth: empty token in response")
+		return "", errors.New("wazuh auth: empty token in response")
 	}
 
 	a.token = result.Data.Token

@@ -100,7 +100,7 @@ func TestCircuitBreaker_HalfOpenToHealthyOnSuccess(t *testing.T) {
 
 func TestCircuitBreaker_HalfOpenToOpenOnFailure(t *testing.T) {
 	cb := testCB()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		cb.RecordFailure("docker", "err")
 	}
 
@@ -170,7 +170,7 @@ func TestCircuitBreaker_TotalTripsIncrement(t *testing.T) {
 	cb := testCB()
 
 	// Trip once
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		cb.RecordFailure("docker", "err")
 	}
 	h, _ := cb.GetSourceHealth("docker")
@@ -181,7 +181,7 @@ func TestCircuitBreaker_TotalTripsIncrement(t *testing.T) {
 	cb.ShouldSkip("docker") // half-open
 	cb.RecordSuccess("docker")
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		cb.RecordFailure("docker", "err again")
 	}
 	h, _ = cb.GetSourceHealth("docker")
@@ -192,7 +192,7 @@ func TestCircuitBreaker_IndependentSources(t *testing.T) {
 	cb := testCB()
 
 	// Trip docker but not proxmox
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		cb.RecordFailure("docker", "err")
 	}
 	cb.RecordSuccess("proxmox")

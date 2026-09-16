@@ -45,7 +45,7 @@ func TestRecover_NilRetErr(t *testing.T) {
 }
 
 func TestRecover_RepeatedPanics(t *testing.T) {
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		var err error
 		func() {
 			defer Recover("multi.source", &err)

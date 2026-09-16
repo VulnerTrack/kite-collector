@@ -169,7 +169,7 @@ func (e *Entra) checkStaleUser(u entra.SnapshotUser, now time.Time) *model.Confi
 		Title:       "Stale Entra ID user account",
 		Severity:    model.SeverityLow,
 		Evidence:    fmt.Sprintf("upn=%s last_sign_in=%s (%s ago)", u.UserPrincipalName, u.LastSignInAt.Format(time.RFC3339), plural.Count(ageDays, "day")),
-		Expected:    fmt.Sprintf("last sign-in within %s", plural.Count(e.cfg.StaleAccountDays, "day")),
+		Expected:    "last sign-in within " + plural.Count(e.cfg.StaleAccountDays, "day"),
 		Remediation: "Disable or remove the user account if the human is no longer active; otherwise verify the account is still required and document the exception.",
 		CISControl:  "5.3",
 		Timestamp:   now,

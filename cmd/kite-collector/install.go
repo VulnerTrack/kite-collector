@@ -233,7 +233,7 @@ One-shot usage (recommended):
 			// A token without an agent code is a flag mistake, not a
 			// partial install.
 			if token != "" && agentCode == "" {
-				return fmt.Errorf("--token requires --agent-code")
+				return errors.New("--token requires --agent-code")
 			}
 			return runInstall(cmd, installArgs{
 				certsDir:  certsDir,

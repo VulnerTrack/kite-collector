@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -288,7 +289,7 @@ func confRank(c string) int {
 // reverse proxy only serves under the right SNI, while still contacting the
 // exact in-scope IP the scan is targeting (no scope escape).
 func pinnedDialClient(ip netip.Addr, port int, sni string, timeout time.Duration) *http.Client {
-	target := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
+	target := net.JoinHostPort(ip.String(), strconv.Itoa(port))
 	dialer := &net.Dialer{Timeout: timeout}
 	tr := &http.Transport{
 		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {

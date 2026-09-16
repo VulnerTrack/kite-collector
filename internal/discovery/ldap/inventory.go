@@ -2,12 +2,14 @@ package ldap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	ldapv3 "github.com/go-ldap/ldap/v3"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -137,7 +139,7 @@ func netBIOSNamesByNC(conn directoryConn, conf *ldapConfig) (map[string]string, 
 		configNC = rootDSE.Entries[0].GetAttributeValue("configurationNamingContext")
 	}
 	if configNC == "" {
-		return nil, fmt.Errorf("rootDSE has no configurationNamingContext")
+		return nil, errors.New("rootDSE has no configurationNamingContext")
 	}
 	result, err := conn.Search(ldapv3.NewSearchRequest("CN=Partitions,"+configNC, ldapv3.ScopeSingleLevel, ldapv3.NeverDerefAliases, 0, conf.timeoutSeconds, false, crossRefSearchFilter, []string{"nCName", "nETBIOSName"}, nil))
 	if err != nil {

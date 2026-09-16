@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -91,7 +92,7 @@ func canonicalRenewalProofMessage(fingerprint, agentCode, signedAt, csrPEM strin
 func parsePrivateSigner(keyPEM []byte) (crypto.Signer, error) {
 	block, _ := pem.Decode(keyPEM)
 	if block == nil {
-		return nil, fmt.Errorf("private key contains no PEM block")
+		return nil, errors.New("private key contains no PEM block")
 	}
 	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
 		if signer, ok := key.(crypto.Signer); ok {
@@ -104,7 +105,7 @@ func parsePrivateSigner(keyPEM []byte) (crypto.Signer, error) {
 	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
 		return key, nil
 	}
-	return nil, fmt.Errorf("unsupported agent private key format")
+	return nil, errors.New("unsupported agent private key format")
 }
 
 func loadAgentMaterial(certsDir string) (*agentMaterial, error) {
@@ -118,14 +119,14 @@ func loadAgentMaterial(certsDir string) (*agentMaterial, error) {
 	}
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
-		return nil, fmt.Errorf("agent certificate contains no PEM block")
+		return nil, errors.New("agent certificate contains no PEM block")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("parse agent certificate: %w", err)
 	}
 	if cert.Subject.CommonName == "" {
-		return nil, fmt.Errorf("agent certificate has no common name")
+		return nil, errors.New("agent certificate has no common name")
 	}
 	signer, err := parsePrivateSigner(keyPEM)
 	if err != nil {
@@ -140,7 +141,7 @@ func loadAgentMaterial(certsDir string) (*agentMaterial, error) {
 		return nil, fmt.Errorf("marshal private-key public key: %w", err)
 	}
 	if !bytes.Equal(certPublic, keyPublic) {
-		return nil, fmt.Errorf("agent certificate and private key do not match")
+		return nil, errors.New("agent certificate and private key do not match")
 	}
 	return &agentMaterial{
 		certificatePEM: certPEM,
@@ -273,7 +274,7 @@ func (c *Client) RenewHTTPS(ctx context.Context, certsDir string) error {
 		return err
 	}
 	fingerprintDigest := sha256.Sum256(material.certificate.Raw)
-	fingerprint := fmt.Sprintf("%x", fingerprintDigest)
+	fingerprint := hex.EncodeToString(fingerprintDigest[:])
 	signedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	proofMessage := canonicalRenewalProofMessage(
 		fingerprint,
@@ -301,7 +302,7 @@ func (c *Client) RenewHTTPS(ctx context.Context, certsDir string) error {
 		return err
 	}
 	if response.Status != "renewed" || response.ClientCertificate == "" || response.CACertificate == "" {
-		return fmt.Errorf("PKI returned incomplete renewal response")
+		return errors.New("PKI returned incomplete renewal response")
 	}
 	if err := validateRenewalResponse(material, response); err != nil {
 		return fmt.Errorf("validate renewed certificate: %w", err)
@@ -330,7 +331,7 @@ func validateRenewalResponse(
 
 	block, _ := pem.Decode([]byte(response.ClientCertificate))
 	if block == nil {
-		return fmt.Errorf("response contains no renewed certificate")
+		return errors.New("response contains no renewed certificate")
 	}
 	renewed, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
@@ -340,13 +341,13 @@ func validateRenewalResponse(
 		renewed.Subject.Organization,
 		current.certificate.Subject.Organization,
 	) {
-		return fmt.Errorf("renewed certificate organization does not match current identity")
+		return errors.New("renewed certificate organization does not match current identity")
 	}
 	if bytes.Equal(renewed.Raw, current.certificate.Raw) {
-		return fmt.Errorf("PKI returned the current certificate instead of a replacement")
+		return errors.New("PKI returned the current certificate instead of a replacement")
 	}
 	if !renewed.NotAfter.After(current.certificate.NotAfter) {
-		return fmt.Errorf("renewed certificate does not extend certificate lifetime")
+		return errors.New("renewed certificate does not extend certificate lifetime")
 	}
 	return nil
 }

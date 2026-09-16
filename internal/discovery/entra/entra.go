@@ -12,6 +12,7 @@ package entra
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -513,7 +514,7 @@ func (e *EntraID) acquireToken(ctx context.Context, conf *entraConfig, clientSec
 		return "", fmt.Errorf("decoding token response: %w", jErr)
 	}
 	if tr.AccessToken == "" {
-		return "", fmt.Errorf("empty access_token in response")
+		return "", errors.New("empty access_token in response")
 	}
 	return tr.AccessToken, nil
 }
@@ -672,7 +673,7 @@ func (e *EntraID) listMfaRegistrations(ctx context.Context, token string, conf *
 // are activated; un-assigned role templates are not returned, which is
 // fine for ENTRA-003 (we only care about roles with members).
 func (e *EntraID) listDirectoryRoles(ctx context.Context, token string) ([]entraDirectoryRole, error) {
-	apiURL := fmt.Sprintf("%s/v1.0/directoryRoles", e.graphBaseURL)
+	apiURL := e.graphBaseURL + "/v1.0/directoryRoles"
 	return fetchAllPages[entraDirectoryRole](ctx, e.httpClient, apiURL, token, 0)
 }
 

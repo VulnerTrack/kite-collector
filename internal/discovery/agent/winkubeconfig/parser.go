@@ -2,6 +2,7 @@ package winkubeconfig
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -83,7 +84,7 @@ type rawContextSpec struct {
 func ParseKubeconfig(body []byte) ([]Entry, error) {
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 {
-		return nil, fmt.Errorf("empty kubeconfig")
+		return nil, errors.New("empty kubeconfig")
 	}
 	body = bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
 

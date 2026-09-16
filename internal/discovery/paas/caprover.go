@@ -2,12 +2,14 @@ package paas
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -47,9 +49,9 @@ func (cr *CapRover) Discover(ctx context.Context, cfg map[string]any) ([]model.M
 	if token == "" || endpoint == "" {
 		if cfg != nil {
 			if token == "" {
-				return nil, fmt.Errorf("caprover: KITE_CAPROVER_TOKEN not set")
+				return nil, errors.New("caprover: KITE_CAPROVER_TOKEN not set")
 			}
-			return nil, fmt.Errorf("caprover: endpoint not configured (set KITE_CAPROVER_ENDPOINT or config)")
+			return nil, errors.New("caprover: endpoint not configured (set KITE_CAPROVER_ENDPOINT or config)")
 		}
 		return nil, nil
 	}

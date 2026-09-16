@@ -322,7 +322,7 @@ func trimYear(s string) string {
 	t := strings.TrimSpace(s)
 	if len(t) >= 4 {
 		// Take first 4 chars if they're digits.
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			c := t[i]
 			if c < '0' || c > '9' {
 				return ""

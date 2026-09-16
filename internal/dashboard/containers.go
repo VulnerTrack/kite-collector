@@ -23,6 +23,7 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -500,7 +501,7 @@ func flattenNumericPaths(raw map[string]any) []statPathValue {
 func validateStatPath(p string) (string, error) {
 	p = strings.TrimSpace(p)
 	if p == "" {
-		return "", fmt.Errorf("empty stat path")
+		return "", errors.New("empty stat path")
 	}
 	if len(p) > maxStatPathLen {
 		return "", fmt.Errorf("stat path longer than %d characters", maxStatPathLen)
@@ -1045,7 +1046,7 @@ func buildMetricCell(series *containerSeries, col graphColumnView) containerMetr
 func (cc *containersController) buildContainerDetailView(ctx context.Context, id string, customPaths []string, paused bool) (containerDetailView, error) {
 	client, _ := cc.client()
 	if client == nil {
-		return containerDetailView{}, fmt.Errorf("no Docker/Podman engine found")
+		return containerDetailView{}, errors.New("no Docker/Podman engine found")
 	}
 	live, err := client.ListLive(ctx)
 	if err != nil {

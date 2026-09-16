@@ -2,6 +2,7 @@ package windowssoftware
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -125,7 +126,7 @@ func ParsePowerShellOutput(data []byte) (Inventory, error) {
 	trimmed := trimUTF8BOM(data)
 	trimmed = []byte(strings.TrimSpace(string(trimmed)))
 	if len(trimmed) == 0 {
-		return Inventory{}, fmt.Errorf("empty PowerShell output")
+		return Inventory{}, errors.New("empty PowerShell output")
 	}
 	normalised := unwrapSingletonArrays(trimmed)
 
@@ -225,7 +226,7 @@ func normaliseInstallDate(s string) string {
 }
 
 func isAllDigits(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] < '0' || s[i] > '9' {
 			return false
 		}

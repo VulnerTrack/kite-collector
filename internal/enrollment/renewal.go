@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -134,7 +135,7 @@ func parseCertPEM(certPEM []byte) (*x509.Certificate, error) {
 	// Try PEM-encoded DER.
 	block, _ := decodePEM(certPEM)
 	if block == nil {
-		return nil, fmt.Errorf("no PEM block found in certificate data")
+		return nil, errors.New("no PEM block found in certificate data")
 	}
 	cert, err = x509.ParseCertificate(block)
 	if err != nil {

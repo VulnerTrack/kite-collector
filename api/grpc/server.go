@@ -101,7 +101,7 @@ func (s *Server) SetPrivacyMode(mode PrivacyMode) {
 // provided CA.
 func (s *Server) ConfigureMTLS(tlsCfg config.TLSConfig) error {
 	if tlsCfg.CertFile == "" || tlsCfg.KeyFile == "" {
-		return fmt.Errorf("mTLS requires both cert_file and key_file")
+		return errors.New("mTLS requires both cert_file and key_file")
 	}
 
 	cert, err := tls.LoadX509KeyPair(tlsCfg.CertFile, tlsCfg.KeyFile)
@@ -122,7 +122,7 @@ func (s *Server) ConfigureMTLS(tlsCfg config.TLSConfig) error {
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(caPEM) {
-			return fmt.Errorf("CA file contains no valid certificates")
+			return errors.New("CA file contains no valid certificates")
 		}
 		tc.ClientCAs = pool
 	}

@@ -90,7 +90,7 @@ func AEADUnwrap(key, wrapped []byte) ([]byte, error) {
 	}
 	nonceSize := gcm.NonceSize()
 	if len(wrapped) < nonceSize {
-		return nil, fmt.Errorf("aead unwrap: ciphertext too short")
+		return nil, errors.New("aead unwrap: ciphertext too short")
 	}
 	nonce, ct := wrapped[:nonceSize], wrapped[nonceSize:]
 	pt, err := gcm.Open(nil, nonce, ct, nil)

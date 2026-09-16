@@ -567,7 +567,7 @@ func loginToSupabase(ctx context.Context, supabaseURL, anonKey, email, password,
 		return "", errors.New("supabase anon key is not configured")
 	}
 
-	loginURL := fmt.Sprintf("%s/auth/v1/token?grant_type=password", strings.TrimRight(supabaseURL, "/"))
+	loginURL := strings.TrimRight(supabaseURL, "/") + "/auth/v1/token?grant_type=password"
 
 	type securityMeta struct {
 		CaptchaToken string `json:"captcha_token"`
@@ -1620,7 +1620,7 @@ func buildTLSConfig(cfg config.TLSConfig) (*tls.Config, error) {
 				return nil
 			}
 			if len(cs.PeerCertificates) == 0 {
-				return fmt.Errorf("server presented no certificate")
+				return errors.New("server presented no certificate")
 			}
 			intermediates := x509.NewCertPool()
 			for _, c := range cs.PeerCertificates[1:] {

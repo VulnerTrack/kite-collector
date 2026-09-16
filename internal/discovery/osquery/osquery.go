@@ -20,6 +20,7 @@ package osquery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -93,7 +94,7 @@ func (s *Source) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		return nil, fmt.Errorf("osquery: osquery_info: %w", err)
 	}
 	if len(info) == 0 {
-		return nil, fmt.Errorf("osquery: daemon answered but returned no osquery_info row")
+		return nil, errors.New("osquery: daemon answered but returned no osquery_info row")
 	}
 
 	slog.Info("osquery: connected", "socket", socket, "version", info[0]["version"]) //#nosec G706 -- structured slog
@@ -374,7 +375,7 @@ func (s *Source) proveRulesCompile(ctx context.Context, client querier, rules st
 func (s *Source) FileEvents(ctx context.Context, cfg map[string]any, sinceUnix int64) ([]FileEvent, error) {
 	socket := resolveSocket(cfg)
 	if socket == "" {
-		return nil, fmt.Errorf("osquery: no extensions socket found")
+		return nil, errors.New("osquery: no extensions socket found")
 	}
 	return fileEventsWith(ctx, s.newClient(socket), sinceUnix)
 }

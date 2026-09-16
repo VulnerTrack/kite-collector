@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
@@ -792,7 +794,7 @@ func (s *PostgresStore) ListJoinedRows(ctx context.Context, filter store.JoinFil
 			return fmt.Errorf("%w: %s.%s", store.ErrUnknownColumn, filter.Join, filter.OnJoin)
 		}
 		if len(filter.Columns) == 0 {
-			return fmt.Errorf("join requires at least one output column")
+			return errors.New("join requires at least one output column")
 		}
 
 		selects := make([]string, 0, len(filter.Columns))

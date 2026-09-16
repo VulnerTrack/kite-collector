@@ -119,7 +119,7 @@ func TestWorkspaceOne_Discover_Pagination(t *testing.T) {
 		if page == "0" {
 			// A full page (wsonePageSize devices) forces a second fetch.
 			devices := make([]map[string]any, 0, wsonePageSize)
-			for n := 0; n < wsonePageSize; n++ {
+			for range wsonePageSize {
 				devices = append(devices, map[string]any{
 					"DeviceFriendlyName": "dev-p0",
 					"Platform":           "Apple",

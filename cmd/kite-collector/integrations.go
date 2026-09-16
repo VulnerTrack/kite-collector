@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -193,7 +194,7 @@ func readIntegrationPassword(cmd *cobra.Command, fromStdin bool) (string, error)
 		}
 		value = strings.TrimSpace(value)
 		if value == "" {
-			return "", fmt.Errorf("password cannot be empty")
+			return "", errors.New("password cannot be empty")
 		}
 		return value, nil
 	}
@@ -207,7 +208,7 @@ func readIntegrationPassword(cmd *cobra.Command, fromStdin bool) (string, error)
 	if value := os.Getenv("KITE_LDAP_BIND_PASSWORD"); value != "" {
 		return value, nil
 	}
-	return "", fmt.Errorf("no interactive terminal; use --password-stdin or KITE_LDAP_BIND_PASSWORD")
+	return "", errors.New("no interactive terminal; use --password-stdin or KITE_LDAP_BIND_PASSWORD")
 }
 
 func stripHTML(value string) string {

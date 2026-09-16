@@ -2,6 +2,7 @@ package windowsbitlocker
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -71,7 +72,7 @@ func ParsePowerShellOutput(data []byte) ([]Volume, error) {
 	trimmed := trimUTF8BOM(data)
 	trimmed = []byte(strings.TrimSpace(string(trimmed)))
 	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("empty PowerShell output")
+		return nil, errors.New("empty PowerShell output")
 	}
 	var raw rawPayload
 	dec := json.NewDecoder(strings.NewReader(string(trimmed)))

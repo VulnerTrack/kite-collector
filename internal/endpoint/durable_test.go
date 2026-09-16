@@ -85,7 +85,7 @@ func TestDurable_SpoolsWhenDownDeliversWhenUp(t *testing.T) {
 	t.Cleanup(func() { _ = de.Shutdown(context.Background()) })
 
 	// Endpoint down: three emits must be accepted (nil) and spooled.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		require.NoError(t, de.EmitBatch(ctx, []model.MachineEvent{newEvent()}),
 			"emit while down must succeed by spooling, not error")
 	}
@@ -204,7 +204,7 @@ func TestQueue_MaxRowsEvictsOldest(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = q.Close() })
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		require.NoError(t, q.Enqueue(ctx, "events", []byte{byte(i)}))
 	}
 	depth, err := q.Depth(ctx)

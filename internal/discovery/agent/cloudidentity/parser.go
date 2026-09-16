@@ -2,7 +2,9 @@ package cloudidentity
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -15,7 +17,7 @@ import (
 // on which path produced the bytes; we never override that here.
 func ParseAWSIdentityDocument(data []byte) (Info, error) {
 	if len(data) == 0 {
-		return Info{}, fmt.Errorf("empty AWS identity document")
+		return Info{}, errors.New("empty AWS identity document")
 	}
 	var doc awsIdentityDoc
 	if err := json.Unmarshal(data, &doc); err != nil {
@@ -51,7 +53,7 @@ type awsIdentityDoc struct {
 // we flatten the security-relevant subset.
 func ParseAzureIMDS(data []byte) (Info, error) {
 	if len(data) == 0 {
-		return Info{}, fmt.Errorf("empty Azure IMDS payload")
+		return Info{}, errors.New("empty Azure IMDS payload")
 	}
 	var payload azureIMDS
 	if err := json.Unmarshal(data, &payload); err != nil {
@@ -180,7 +182,7 @@ func azureTags(in []azureTagPair) []string {
 // parser stays HTTP-free.
 func ParseGCPMetadata(instanceJSON []byte, projectID string) (Info, error) {
 	if len(instanceJSON) == 0 {
-		return Info{}, fmt.Errorf("empty GCP metadata payload")
+		return Info{}, errors.New("empty GCP metadata payload")
 	}
 	var doc gcpInstance
 	if err := json.Unmarshal(instanceJSON, &doc); err != nil {
@@ -189,7 +191,7 @@ func ParseGCPMetadata(instanceJSON []byte, projectID string) (Info, error) {
 	info := Info{
 		CloudProvider:    CloudGCP,
 		Source:           SourceGCPMetadata,
-		InstanceID:       fmt.Sprintf("%d", doc.ID),
+		InstanceID:       strconv.FormatUint(doc.ID, 10),
 		AccountID:        strings.TrimSpace(projectID),
 		Region:           gcpRegionFromZone(doc.Zone),
 		AvailabilityZone: gcpShortName(doc.Zone),

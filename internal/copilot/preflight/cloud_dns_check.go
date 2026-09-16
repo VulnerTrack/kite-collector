@@ -77,7 +77,7 @@ func cloudDNSEnvCheck(
 			NodeID:  nodeID,
 			Check:   checkTag,
 			Passed:  true,
-			Message: fmt.Sprintf("%s disabled, skipping", checkTag),
+			Message: checkTag + " disabled, skipping",
 		}
 	}
 	missing := make([]string, 0, len(requiredEnv))
@@ -91,7 +91,7 @@ func cloudDNSEnvCheck(
 			NodeID:  nodeID,
 			Check:   checkTag,
 			Passed:  false,
-			Message: fmt.Sprintf("missing env: %s", strings.Join(missing, ", ")),
+			Message: "missing env: " + strings.Join(missing, ", "),
 			Hint:    fmt.Sprintf(hintFmt, strings.Join(missing, " ")),
 		}
 	}
@@ -99,7 +99,7 @@ func cloudDNSEnvCheck(
 		NodeID:  nodeID,
 		Check:   checkTag,
 		Passed:  true,
-		Message: fmt.Sprintf("all required env vars set: %s", strings.Join(requiredEnv, ", ")),
+		Message: "all required env vars set: " + strings.Join(requiredEnv, ", "),
 	}
 }
 

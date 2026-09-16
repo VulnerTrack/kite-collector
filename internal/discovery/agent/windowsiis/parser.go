@@ -2,6 +2,7 @@ package windowsiis
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -199,7 +200,7 @@ func ParsePowerShellOutput(data []byte) (Inventory, error) {
 	trimmed := trimUTF8BOM(data)
 	trimmed = []byte(strings.TrimSpace(string(trimmed)))
 	if len(trimmed) == 0 {
-		return Inventory{}, fmt.Errorf("empty PowerShell output")
+		return Inventory{}, errors.New("empty PowerShell output")
 	}
 	normalised := unwrapSingletonArrays(trimmed)
 	var raw rawPayload

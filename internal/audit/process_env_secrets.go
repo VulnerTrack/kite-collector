@@ -299,7 +299,7 @@ func scanProcessEnv(
 				MachineID:   machine.ID,
 				Auditor:     processEnvSecretsAuditorName,
 				CheckID:     pat.ID,
-				Title:       fmt.Sprintf("Process env secret: %s", pat.Name),
+				Title:       "Process env secret: " + pat.Name,
 				Severity:    pat.Severity,
 				Evidence:    evidence,
 				Expected:    processEnvSecretsExpected,

@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -167,7 +169,7 @@ func TestListMachines_LimitAndOffset(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		a := makeMachine("host-"+string(rune('a'+i)), model.MachineTypeServer)
 		// Stagger last_seen_at so ORDER BY is predictable
 		a.LastSeenAt = a.LastSeenAt.Add(time.Duration(i) * time.Minute)
@@ -505,14 +507,16 @@ func TestScanRun_TriggerSourceIndex(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = rows.Close() }()
 
+	var planSb508 strings.Builder
 	for rows.Next() {
 		var a, b, c int
 		var detail string
 		if scanErr := rows.Scan(&a, &b, &c, &detail); scanErr != nil {
 			t.Fatalf("scan EXPLAIN row: %v", scanErr)
 		}
-		plan += detail + "\n"
+		planSb508.WriteString(detail + "\n")
 	}
+	plan += planSb508.String()
 	require.NoError(t, rows.Err())
 	assert.Contains(t, plan, "idx_scan_runs_trigger_source",
 		"planner must use the trigger_source index for filtered latest-scan lookups")
@@ -719,7 +723,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 	// Insert machines sequentially to avoid SQLite BUSY contention.
 	const numMachines = 10
-	for i := 0; i < numMachines; i++ {
+	for i := range numMachines {
 		hostname := fmt.Sprintf("concurrent-host-%d", i)
 		machine := makeMachine(hostname, model.MachineTypeServer)
 		require.NoError(t, s.UpsertMachine(ctx, machine))
@@ -729,14 +733,14 @@ func TestConcurrentAccess(t *testing.T) {
 	const numReaders = 10
 	errs := make(chan error, numReaders)
 
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		go func() {
 			_, err := s.ListMachines(ctx, store.MachineFilter{})
 			errs <- err
 		}()
 	}
 
-	for i := 0; i < numReaders; i++ {
+	for range numReaders {
 		err := <-errs
 		assert.NoError(t, err, "concurrent ListMachines should not error")
 	}

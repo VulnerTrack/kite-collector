@@ -158,7 +158,7 @@ func IsValidCuitEntityPrefix(p string) bool {
 func CuitFingerprint(raw string) (prefix, suffix4 string) {
 	t := strings.TrimSpace(raw)
 	digits := make([]byte, 0, len(t))
-	for i := 0; i < len(t); i++ {
+	for i := range len(t) {
 		if c := t[i]; c >= '0' && c <= '9' {
 			digits = append(digits, c)
 		}

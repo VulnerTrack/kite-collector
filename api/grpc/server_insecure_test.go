@@ -115,7 +115,7 @@ func TestServeInsecure_ReportFindingsStream(t *testing.T) {
 
 	stream, err := client.ReportFindings(ctx)
 	require.NoError(t, err)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		require.NoError(t, stream.Send(&kitev1.ConfigFinding{RuleId: "ssh-001"}))
 	}
 	resp, err := stream.CloseAndRecv()

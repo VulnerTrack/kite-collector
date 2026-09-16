@@ -7,10 +7,12 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -127,7 +129,7 @@ func probeHost(ctx context.Context, addr, community string, timeout time.Duratio
 		return nil, err
 	}
 	if sysName == "" {
-		return nil, fmt.Errorf("empty sysName")
+		return nil, errors.New("empty sysName")
 	}
 
 	// Fetch remaining system info (best-effort).
@@ -368,12 +370,12 @@ func parseGetResponse(data []byte) (string, error) {
 	case tagOctetString:
 		return string(valData), nil
 	case tagInteger:
-		return fmt.Sprintf("%d", berDecodeInteger(valData)), nil
+		return strconv.FormatInt(berDecodeInteger(valData), 10), nil
 	case tagTimeTicks:
 		ticks := berDecodeUnsigned(valData)
-		return fmt.Sprintf("%d", ticks), nil
+		return strconv.FormatUint(ticks, 10), nil
 	case tagNoSuchObject, tagNoSuchInst, tagEndOfMIBView:
-		return "", fmt.Errorf("no such object")
+		return "", errors.New("no such object")
 	default:
 		return fmt.Sprintf("0x%x", valData), nil
 	}
@@ -485,7 +487,7 @@ func encodeOIDComponent(n uint32) []byte {
 // berParse extracts the tag, content bytes, and returns them.
 func berParse(data []byte) (byte, []byte, error) {
 	if len(data) < 2 {
-		return 0, nil, fmt.Errorf("BER: data too short")
+		return 0, nil, errors.New("BER: data too short")
 	}
 
 	tag := data[0]
@@ -498,9 +500,9 @@ func berParse(data []byte) (byte, []byte, error) {
 	} else {
 		numLenBytes := int(lenByte & 0x7f)
 		if offset+numLenBytes > len(data) {
-			return 0, nil, fmt.Errorf("BER: length bytes overflow")
+			return 0, nil, errors.New("BER: length bytes overflow")
 		}
-		for i := 0; i < numLenBytes; i++ {
+		for i := range numLenBytes {
 			length = length<<8 | int(data[offset+i])
 		}
 		offset += numLenBytes
@@ -517,7 +519,7 @@ func berParse(data []byte) (byte, []byte, error) {
 // and the remaining data.
 func berParseNext(data []byte) ([]byte, []byte, error) {
 	if len(data) < 2 {
-		return nil, nil, fmt.Errorf("BER: data too short")
+		return nil, nil, errors.New("BER: data too short")
 	}
 
 	lenByte := data[1]
@@ -529,9 +531,9 @@ func berParseNext(data []byte) ([]byte, []byte, error) {
 	} else {
 		numLenBytes := int(lenByte & 0x7f)
 		if offset+numLenBytes > len(data) {
-			return nil, nil, fmt.Errorf("BER: length overflow")
+			return nil, nil, errors.New("BER: length overflow")
 		}
-		for i := 0; i < numLenBytes; i++ {
+		for i := range numLenBytes {
 			length = length<<8 | int(data[offset+i])
 		}
 		offset += numLenBytes
@@ -539,7 +541,7 @@ func berParseNext(data []byte) ([]byte, []byte, error) {
 
 	total := offset + length
 	if total > len(data) {
-		return nil, nil, fmt.Errorf("BER: element overflow")
+		return nil, nil, errors.New("BER: element overflow")
 	}
 
 	return data[:total], data[total:], nil

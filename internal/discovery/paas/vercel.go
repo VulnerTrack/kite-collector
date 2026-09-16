@@ -2,12 +2,15 @@ package paas
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -33,7 +36,7 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 	token := os.Getenv("KITE_VERCEL_TOKEN")
 	if token == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("vercel: KITE_VERCEL_TOKEN not set")
+			return nil, errors.New("vercel: KITE_VERCEL_TOKEN not set")
 		}
 		return nil, nil
 	}
@@ -73,7 +76,7 @@ func (v *Vercel) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		if resp.Pagination.Next == nil {
 			break
 		}
-		until = fmt.Sprintf("%d", *resp.Pagination.Next)
+		until = strconv.FormatInt(*resp.Pagination.Next, 10)
 	}
 
 	slog.Info("Vercel PaaS discovery complete",

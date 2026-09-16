@@ -23,7 +23,7 @@ func retry(ctx context.Context, maxAttempts int, baseDelay time.Duration, fn fun
 	}
 
 	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		lastErr = fn()
 		if lastErr == nil {
 			return nil

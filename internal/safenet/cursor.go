@@ -1,6 +1,7 @@
 package safenet
 
 import (
+	"errors"
 	"fmt"
 	"unicode/utf8"
 )
@@ -52,16 +53,16 @@ func SanitizeCursorWithSource(source, raw string) (string, error) {
 
 func sanitizeCursor(raw string) (string, error) {
 	if raw == "" {
-		return "", fmt.Errorf("cursor is empty")
+		return "", errors.New("cursor is empty")
 	}
 	if len(raw) > MaxCursorLength {
 		return "", fmt.Errorf("cursor length %d exceeds maximum %d",
 			len(raw), MaxCursorLength)
 	}
 	if !utf8.ValidString(raw) {
-		return "", fmt.Errorf("cursor contains invalid UTF-8")
+		return "", errors.New("cursor contains invalid UTF-8")
 	}
-	for i := 0; i < len(raw); i++ {
+	for i := range len(raw) {
 		c := raw[i]
 		if !isCursorByte(c) {
 			return "", fmt.Errorf(

@@ -120,7 +120,7 @@ func TestRegistry_AuditAllEmptyRegistry(t *testing.T) {
 // this is the test that keeps that claim honest under `go test -race`.
 func TestRegistry_ConcurrentAuditAndRegisterStress(t *testing.T) {
 	r := NewRegistry()
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		r.Register(&fakeAuditor{
 			name:     fmt.Sprintf("aud-%02d", i),
 			findings: []model.ConfigFinding{finding(fmt.Sprintf("c-%02d", i))},
@@ -128,11 +128,11 @@ func TestRegistry_ConcurrentAuditAndRegisterStress(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for w := 0; w < 8; w++ {
+	for w := range 8 {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				got, err := r.AuditAll(context.Background(), model.Machine{})
 				assert.NoError(t, err)
 				assert.Len(t, got, 50)

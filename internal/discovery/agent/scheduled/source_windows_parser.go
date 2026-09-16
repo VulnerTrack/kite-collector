@@ -2,6 +2,7 @@ package scheduled
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -74,7 +75,7 @@ func ParseWindowsPowerShellOutput(data []byte) ([]Job, error) {
 	trimmed := trimUTF8BOM(data)
 	trimmed = []byte(strings.TrimSpace(string(trimmed)))
 	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("empty PowerShell output")
+		return nil, errors.New("empty PowerShell output")
 	}
 	if trimmed[0] == '{' {
 		trimmed = append(append([]byte{'['}, trimmed...), ']')

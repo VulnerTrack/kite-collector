@@ -197,7 +197,7 @@ func TestParseProcModulesMalformedLineSkipped(t *testing.T) {
 
 func TestParseProcModulesHonoursMaxModules(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < MaxModules+50; i++ {
+	for range MaxModules + 50 {
 		sb.WriteString("mod_x 1024 0 - Live 0x0\n")
 	}
 	got := ParseProcModules([]byte(sb.String()))

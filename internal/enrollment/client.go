@@ -13,6 +13,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -252,7 +253,7 @@ func (c *Client) EnrollWithToken(ctx context.Context, agentCode, enrollmentToken
 
 func generateEnrollmentCSR(agentCode string) ([]byte, []byte, crypto.Signer, error) {
 	if agentCode == "" {
-		return nil, nil, nil, fmt.Errorf("agent code is required")
+		return nil, nil, nil, errors.New("agent code is required")
 	}
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -275,7 +276,7 @@ func generateEnrollmentCSR(agentCode string) ([]byte, []byte, crypto.Signer, err
 	csrPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 	if len(csrPEM) == 0 || len(keyPEM) == 0 {
-		return nil, nil, nil, fmt.Errorf("encode enrollment material")
+		return nil, nil, nil, errors.New("encode enrollment material")
 	}
 	return csrPEM, keyPEM, key, nil
 }
@@ -291,7 +292,7 @@ func validateEnrollmentCertificate(
 ) error {
 	certBlock, _ := pem.Decode(certPEM)
 	if certBlock == nil || certBlock.Type != "CERTIFICATE" {
-		return fmt.Errorf("response contains no client certificate")
+		return errors.New("response contains no client certificate")
 	}
 	cert, err := x509.ParseCertificate(certBlock.Bytes)
 	if err != nil {
@@ -314,12 +315,12 @@ func validateEnrollmentCertificate(
 		return fmt.Errorf("marshal local public key: %w", err)
 	}
 	if !bytes.Equal(certPublicKey, localPublicKey) {
-		return fmt.Errorf("certificate public key does not match generated private key")
+		return errors.New("certificate public key does not match generated private key")
 	}
 
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(caPEM) {
-		return fmt.Errorf("response contains no valid CA certificate")
+		return errors.New("response contains no valid CA certificate")
 	}
 	if _, err := cert.Verify(x509.VerifyOptions{
 		Roots:     roots,

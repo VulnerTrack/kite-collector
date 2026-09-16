@@ -36,13 +36,13 @@ func TestEndpointStateTransitions(t *testing.T) {
 	}
 
 	// 3 failures → degraded.
-	for i := 0; i < failuresToDegrade; i++ {
+	for range failuresToDegrade {
 		m.recordFailure(ep)
 	}
 	assert.Equal(t, StateDegraded, ep.State)
 
 	// 3 more failures → unreachable.
-	for i := 0; i < failuresToUnreachable; i++ {
+	for range failuresToUnreachable {
 		m.recordFailure(ep)
 	}
 	assert.Equal(t, StateUnreachable, ep.State)

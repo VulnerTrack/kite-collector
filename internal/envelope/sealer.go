@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 
@@ -70,7 +71,7 @@ func SigningKeyFromPEM(certPEM, keyPEM []byte) (SigningKey, error) {
 		chain = append(chain, cert)
 	}
 	if len(chain) == 0 {
-		return SigningKey{}, fmt.Errorf("certificate PEM contains no CERTIFICATE block")
+		return SigningKey{}, errors.New("certificate PEM contains no CERTIFICATE block")
 	}
 
 	signer, err := parsePrivateSigner(keyPEM)
@@ -87,7 +88,7 @@ func SigningKeyFromPEM(certPEM, keyPEM []byte) (SigningKey, error) {
 		return SigningKey{}, fmt.Errorf("marshal private-key public key: %w", err)
 	}
 	if !bytes.Equal(certPub, keyPub) {
-		return SigningKey{}, fmt.Errorf("certificate and private key do not match")
+		return SigningKey{}, errors.New("certificate and private key do not match")
 	}
 
 	return SigningKey{
@@ -104,7 +105,7 @@ func SigningKeyFromEd25519(key ed25519.PrivateKey, keyID string) (SigningKey, er
 		return SigningKey{}, fmt.Errorf("invalid Ed25519 private key length %d", len(key))
 	}
 	if keyID == "" {
-		return SigningKey{}, fmt.Errorf("key id is required for an identity signing key")
+		return SigningKey{}, errors.New("key id is required for an identity signing key")
 	}
 	return SigningKey{Key: key, KeyID: keyID}, nil
 }
@@ -120,7 +121,7 @@ func CertificateKeyID(cert *x509.Certificate) string {
 func parsePrivateSigner(keyPEM []byte) (crypto.Signer, error) {
 	block, _ := pem.Decode(keyPEM)
 	if block == nil {
-		return nil, fmt.Errorf("private key contains no PEM block")
+		return nil, errors.New("private key contains no PEM block")
 	}
 	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
 		if signer, ok := key.(crypto.Signer); ok {
@@ -134,7 +135,7 @@ func parsePrivateSigner(keyPEM []byte) (crypto.Signer, error) {
 	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
 		return key, nil
 	}
-	return nil, fmt.Errorf("unsupported private key format")
+	return nil, errors.New("unsupported private key format")
 }
 
 // KeyProvider hands out the receiver's current encryption JWK. JWKSClient
@@ -196,7 +197,7 @@ func WithoutCertificateChain() Option {
 // SignDetached) and encrypts (Seal).
 func NewSealer(key SigningKey, provider KeyProvider, opts ...Option) (*Sealer, error) {
 	if provider == nil {
-		return nil, fmt.Errorf("key provider is nil")
+		return nil, errors.New("key provider is nil")
 	}
 	return newSealer(key, provider, opts)
 }
@@ -212,7 +213,7 @@ func NewSigner(key SigningKey, opts ...Option) (*Sealer, error) {
 
 func newSealer(key SigningKey, provider KeyProvider, opts []Option) (*Sealer, error) {
 	if key.Key == nil {
-		return nil, fmt.Errorf("signing key is nil")
+		return nil, errors.New("signing key is nil")
 	}
 	alg, err := algorithmFor(key.Key)
 	if err != nil {
@@ -253,7 +254,7 @@ func (s *Sealer) SignsWithCertificate() bool { return len(s.x5c) > 0 }
 // "application/json" for OTLP/JSON); empty omits the header.
 func (s *Sealer) Seal(ctx context.Context, plaintext []byte, contentType string) (Sealed, error) {
 	if s.provider == nil {
-		return Sealed{}, fmt.Errorf("sealer has no receiver key provider: it can sign but not encrypt")
+		return Sealed{}, errors.New("sealer has no receiver key provider: it can sign but not encrypt")
 	}
 	serverKey, err := s.provider.GetEncryptionKey(ctx)
 	if err != nil {
@@ -265,7 +266,7 @@ func (s *Sealer) Seal(ctx context.Context, plaintext []byte, contentType string)
 // SealWithKey is Seal with an explicit receiver key, bypassing the provider.
 func (s *Sealer) SealWithKey(plaintext []byte, contentType string, serverKey jose.JSONWebKey) (Sealed, error) {
 	if serverKey.Key == nil {
-		return Sealed{}, fmt.Errorf("receiver key is empty")
+		return Sealed{}, errors.New("receiver key is empty")
 	}
 	if !serverKey.IsPublic() {
 		// Encrypting to a private JWK works but means the agent was handed

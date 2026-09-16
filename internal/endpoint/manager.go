@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -185,7 +186,7 @@ func buildMTLSConfig(tlsCfg config.TLSConfig) (*tls.Config, error) {
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(caPEM) {
-			return nil, fmt.Errorf("CA file contains no valid certificates")
+			return nil, errors.New("CA file contains no valid certificates")
 		}
 		tc.RootCAs = pool
 	}

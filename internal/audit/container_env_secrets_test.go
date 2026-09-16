@@ -135,7 +135,7 @@ func TestContainerEnvSecrets_CachesSingleListCall(t *testing.T) {
 	aud := NewContainerEnvSecrets(lister, nil, nil)
 	m := containerMachine(testFullID[:12])
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err := aud.Audit(context.Background(), m)
 		require.NoError(t, err)
 	}
@@ -226,7 +226,7 @@ func TestScanContainerEnv_EmptyEnvAndValuelessVars(t *testing.T) {
 func TestScanContainerEnv_StressLargeEnvironment(t *testing.T) {
 	m := containerMachine(testFullID[:12])
 	env := dockerdisc.ContainerEnv{ID: testFullID, Name: "big"}
-	for i := 0; i < 5000; i++ {
+	for i := range 5000 {
 		// Every var carries the same AWS-shaped value; only 100 distinct names.
 		env.Env = append(env.Env,
 			fmt.Sprintf("VAR_%03d=AKIAIOSFODNN7EXAMPLE", i%100))

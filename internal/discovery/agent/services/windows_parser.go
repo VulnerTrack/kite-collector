@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -64,7 +65,7 @@ func ParseWindowsPowerShellOutput(data []byte) ([]Service, error) {
 	trimmed := trimWindowsBOM(data)
 	trimmed = []byte(strings.TrimSpace(string(trimmed)))
 	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("empty PowerShell output")
+		return nil, errors.New("empty PowerShell output")
 	}
 	// Singleton-object unwrap: a single-service host can emit one
 	// object instead of an array.

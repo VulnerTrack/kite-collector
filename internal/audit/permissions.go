@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -129,9 +130,9 @@ func NewPermissions(additionalPaths []string) *Permissions {
 		checks = append(checks, permCheck{
 			ID:          fmt.Sprintf("perm-extra-%d", i+1),
 			Path:        p,
-			Title:       fmt.Sprintf("%s has excessive permissions", p),
+			Title:       p + " has excessive permissions",
 			Severity:    model.SeverityMedium,
-			Remediation: fmt.Sprintf("Review and restrict permissions on %s", p),
+			Remediation: "Review and restrict permissions on " + p,
 			CISControl:  "",
 			Expected:    "Not world-writable",
 			IsInsecure: func(m fs.FileMode) bool {

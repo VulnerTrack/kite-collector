@@ -124,7 +124,7 @@ func (i *fleetHTTPTokenIssuer) MintBatch(
 	issued := make(map[string]FleetEnrollmentToken, len(result.Tokens))
 	for _, token := range result.Tokens {
 		if len(strings.TrimSpace(token.Token)) < 20 || strings.TrimSpace(token.TokenID) == "" || token.AgentCode == "" {
-			return nil, fmt.Errorf("PKI returned an incomplete enrollment token")
+			return nil, errors.New("PKI returned an incomplete enrollment token")
 		}
 		issued[token.AgentCode] = FleetEnrollmentToken{
 			Token: strings.TrimSpace(token.Token), TokenID: token.TokenID, ExpiresAt: token.ExpiresAt,

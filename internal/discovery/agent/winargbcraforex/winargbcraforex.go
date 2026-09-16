@@ -332,7 +332,7 @@ func CountryCodeFromText(s string) string {
 	if len(t) != 3 {
 		return ""
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		c := t[i]
 		if c < 'A' || c > 'Z' {
 			return ""

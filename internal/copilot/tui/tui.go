@@ -5,6 +5,7 @@ package tui
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,7 +39,7 @@ func (p *LinePrompter) PromptGoal(presets []schema.Preset) (string, error) {
 
 	scanner := bufio.NewScanner(p.In)
 	if !scanner.Scan() {
-		return "", fmt.Errorf("no input")
+		return "", errors.New("no input")
 	}
 	text := strings.TrimSpace(scanner.Text())
 	idx, err := strconv.Atoi(text)

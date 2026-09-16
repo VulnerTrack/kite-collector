@@ -173,7 +173,7 @@ func matchProbe(p Probe, status int, body string, headers http.Header) (bool, []
 	}
 	if p.BodyRegex != nil {
 		if p.BodyRegex.MatchString(body) {
-			ev = append(ev, fmt.Sprintf("body matches regex at %s", p.Path))
+			ev = append(ev, "body matches regex at "+p.Path)
 			matchedAny = true
 		} else {
 			matched = false

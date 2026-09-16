@@ -10,14 +10,14 @@ import (
 func TestPaginationGuard(t *testing.T) {
 	t.Run("allows up to max iterations", func(t *testing.T) {
 		g := NewPaginationGuard()
-		for i := 0; i < MaxPaginationIterations; i++ {
+		for i := range MaxPaginationIterations {
 			require.NoError(t, g.Next(), "iteration %d should succeed", i+1)
 		}
 	})
 
 	t.Run("rejects beyond max", func(t *testing.T) {
 		g := NewPaginationGuard()
-		for i := 0; i < MaxPaginationIterations; i++ {
+		for range MaxPaginationIterations {
 			require.NoError(t, g.Next())
 		}
 		err := g.Next()

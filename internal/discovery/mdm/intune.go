@@ -3,6 +3,7 @@ package mdm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -186,7 +187,7 @@ func (i *Intune) acquireToken(ctx context.Context, client *http.Client, tenantID
 	}
 
 	if tokenResp.AccessToken == "" {
-		return "", fmt.Errorf("intune: empty access_token in response")
+		return "", errors.New("intune: empty access_token in response")
 	}
 
 	return tokenResp.AccessToken, nil

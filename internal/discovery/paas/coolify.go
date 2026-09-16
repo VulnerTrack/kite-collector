@@ -2,12 +2,14 @@ package paas
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -47,9 +49,9 @@ func (c *Coolify) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 	if token == "" || endpoint == "" {
 		if cfg != nil {
 			if token == "" {
-				return nil, fmt.Errorf("coolify: KITE_COOLIFY_TOKEN not set")
+				return nil, errors.New("coolify: KITE_COOLIFY_TOKEN not set")
 			}
-			return nil, fmt.Errorf("coolify: endpoint not configured (set KITE_COOLIFY_ENDPOINT or config)")
+			return nil, errors.New("coolify: endpoint not configured (set KITE_COOLIFY_ENDPOINT or config)")
 		}
 		return nil, nil
 	}

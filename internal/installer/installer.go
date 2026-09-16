@@ -403,7 +403,7 @@ func InstallBinary(src, dst string) error {
 	// install flow stops the service before swapping, but SCM stops are
 	// asynchronous — retry briefly instead of failing the upgrade.
 	var renameErr error
-	for attempt := 0; attempt < 10; attempt++ {
+	for range 10 {
 		if renameErr = os.Rename(tmp, dst); renameErr == nil {
 			return nil
 		}

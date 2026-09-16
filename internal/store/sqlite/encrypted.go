@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -51,7 +52,7 @@ var ramdiskCandidates = ramdiskCandidatesForOS()
 func ramdiskCandidatesForOS() []string {
 	switch runtime.GOOS {
 	case "linux":
-		return []string{"/dev/shm", "/run/user/" + fmt.Sprint(os.Getuid())}
+		return []string{"/dev/shm", "/run/user/" + strconv.Itoa(os.Getuid())}
 	case "darwin":
 		// macOS users can create a RAM disk with:
 		//   diskutil erasevolume HFS+ RAMDisk $(hdiutil attach -nomount ram://2097152)
@@ -283,7 +284,7 @@ func (es *EncryptedStore) Close() error {
 func (es *EncryptedStore) Snapshot(ctx context.Context) error {
 	inner, ok := es.Store.(*SQLiteStore)
 	if !ok {
-		return fmt.Errorf("encrypted store: snapshot requires an inner *SQLiteStore")
+		return errors.New("encrypted store: snapshot requires an inner *SQLiteStore")
 	}
 
 	// VACUUM INTO refuses to overwrite, so clear any leftover from a prior

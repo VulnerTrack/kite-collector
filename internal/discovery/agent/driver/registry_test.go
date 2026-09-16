@@ -119,9 +119,9 @@ func TestRegistry_Collect_ConcurrentMergeIsRaceFree(t *testing.T) {
 	const driversEach = 8
 
 	r := &Registry{}
-	for i := 0; i < collectors; i++ {
+	for i := range collectors {
 		res := &Result{}
-		for j := 0; j < driversEach; j++ {
+		for j := range driversEach {
 			res.Drivers = append(res.Drivers, LoadedDriver{
 				Name: fmt.Sprintf("mod-%03d-%02d", i, j),
 			})

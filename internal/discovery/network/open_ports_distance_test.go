@@ -35,7 +35,7 @@ func TestProbeIP_OpenPortsDistanceIsZero(t *testing.T) {
 	// Real open ports: held-open loopback listeners (closed at test end).
 	realOpen := map[int]struct{}{}
 	openList := make([]int, 0, 5)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		ln, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = ln.Close() })
@@ -47,7 +47,7 @@ func TestProbeIP_OpenPortsDistanceIsZero(t *testing.T) {
 	// Definitely-closed ports: bind then release so the number is free but
 	// nothing is listening on it during the scan.
 	closedList := make([]int, 0, 4)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		ln, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 		require.NoError(t, err)
 		p := parsePortForDistanceTest(t, ln.Addr())

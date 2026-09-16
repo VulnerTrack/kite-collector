@@ -170,7 +170,7 @@ func TestParseSourceConfig_DefaultsAndOverrides(t *testing.T) {
 // stays interactive.
 func TestSourceDiscover_StressManyProjects(t *testing.T) {
 	root := t.TempDir()
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		dir := filepath.Join(root, "proj", string(rune('a'+i%26))+string(rune('a'+(i/26)%26)))
 		require.NoError(t, os.MkdirAll(dir, 0o750))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"),
