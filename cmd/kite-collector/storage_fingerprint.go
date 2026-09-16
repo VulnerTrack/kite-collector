@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/cloud/storage"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 )
 
 // newStorageFingerprintCmd builds the `kite-collector storage-fingerprint`
@@ -292,7 +293,7 @@ func writeStorageBatchTable(results []batchResult) {
 			truncateSnippet(r.Target, 60), status, len(r.Matches), truncateSnippet(providers, 60))
 	}
 	_ = w.Flush()
-	fmt.Printf("\n  %d target(s); %d with matches, %d error(s).\n", len(results), matched, errored)
+	fmt.Printf("\n  %s; %d with matches, %s.\n", plural.Count(len(results), "target"), matched, plural.Count(errored, "error"))
 }
 
 // uniqueProviders returns the sorted set of providers seen in matches.

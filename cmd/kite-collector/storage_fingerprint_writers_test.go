@@ -68,10 +68,10 @@ func TestWriteStorageBatchTable_StatusRowsAndTotals(t *testing.T) {
 	assert.Contains(t, out, "clean")
 	assert.Contains(t, out, "error")
 	assert.Contains(t, out, "connect: refused")
-	assert.Contains(t, out, "3 target(s); 1 with matches, 1 error(s).")
+	assert.Contains(t, out, "3 targets; 1 with matches, 1 error.")
 }
 
 func TestWriteStorageBatchTable_EmptyInput(t *testing.T) {
 	out := captureStdout(t, func() { writeStorageBatchTable(nil) })
-	assert.Contains(t, out, "0 target(s); 0 with matches, 0 error(s).")
+	assert.Contains(t, out, "0 targets; 0 with matches, 0 errors.")
 }
