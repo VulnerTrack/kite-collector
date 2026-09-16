@@ -25,6 +25,7 @@ import (
 
 	entra "github.com/vulnertrack/kite-collector/internal/discovery/entra"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 )
 
 // defaultEntraStaleAccountDays mirrors RFC-0121 §6 — 90 days of inactivity
@@ -167,8 +168,8 @@ func (e *Entra) checkStaleUser(u entra.SnapshotUser, now time.Time) *model.Confi
 		CheckID:     "entra-001",
 		Title:       "Stale Entra ID user account",
 		Severity:    model.SeverityLow,
-		Evidence:    fmt.Sprintf("upn=%s last_sign_in=%s (%d days ago)", u.UserPrincipalName, u.LastSignInAt.Format(time.RFC3339), ageDays),
-		Expected:    fmt.Sprintf("last sign-in within %d days", e.cfg.StaleAccountDays),
+		Evidence:    fmt.Sprintf("upn=%s last_sign_in=%s (%s ago)", u.UserPrincipalName, u.LastSignInAt.Format(time.RFC3339), plural.Count(ageDays, "day")),
+		Expected:    fmt.Sprintf("last sign-in within %s", plural.Count(e.cfg.StaleAccountDays, "day")),
 		Remediation: "Disable or remove the user account if the human is no longer active; otherwise verify the account is still required and document the exception.",
 		CISControl:  "5.3",
 		Timestamp:   now,
