@@ -15,6 +15,7 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/vulnertrack/kite-collector/internal/enrollment"
 	"github.com/vulnertrack/kite-collector/internal/installer"
@@ -165,6 +166,7 @@ func newInstallCmd() *cobra.Command {
 		dryRun      bool
 		verbose     bool
 		noStart     bool
+		noEnroll    bool
 		forceCopy   bool
 		repair      bool
 		withOsquery bool
@@ -194,9 +196,14 @@ What it does:
   2. Creates {certs-dir}/   (certificate store)
   3. Registers the "kite-collector" service with the OS service manager
   4. Configures it to run "kite-collector service run --certs-dir {certs-dir}"
-  5. If --agent-code is provided, enrolls the agent inline:
-       - sign-in flow (default): prints a URL to open in any browser; sign
-         in, approve the collector, and paste the code back — the code is
+  5. Enrolls the agent:
+       - no flags (default, on a terminal): the same sign-in as
+         "kite-collector enroll" — the local browser when one can be
+         opened, otherwise a URL and temporary code to approve from any
+         other computer. Skipped with --no-enroll, --no-start, when the
+         host is already enrolled, or when no terminal is attached.
+       - --agent-code: prints a URL to open in any browser; sign in,
+         approve the collector, and paste the code back — the code is
          single-use and expires in minutes, no durable secret is pasted
        - legacy token flow: pass --token pki_enroll_v1_... to skip sign-in
   6. If enrollment succeeds (or certs are already present), starts the service
@@ -211,8 +218,7 @@ rather than to kite. On Linux and Windows the kite-collector-osquery package
 ships this daemon instead, so the flag is refused there.
 
 One-shot usage (recommended):
-  kite-collector install
-  kite-collector enroll`,
+  kite-collector install`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if certsDir == "" {
 				certsDir = defaultCertsDir(userMode)
@@ -247,6 +253,7 @@ One-shot usage (recommended):
 				dryRun:            dryRun,
 				verbose:           verbose,
 				noStart:           noStart,
+				noEnroll:          noEnroll,
 				binaryDirExplicit: binaryDirExplicit,
 				forceCopy:         forceCopy,
 				repair:            repair,
@@ -285,6 +292,8 @@ One-shot usage (recommended):
 		"print what would be done without making any changes")
 	cmd.Flags().BoolVar(&noStart, "no-start", false,
 		"register the service but do not start it (useful for CI / Ansible)")
+	cmd.Flags().BoolVar(&noEnroll, "no-enroll", false,
+		"register the service without signing in (the one-line installer and CI use this)")
 	cmd.Flags().BoolVar(&forceCopy, "copy", false,
 		"copy the binary to --binary-dir even when a package manager owns it")
 	cmd.Flags().BoolVar(&repair, "repair", false,
@@ -558,6 +567,9 @@ type installArgs struct {
 	dryRun    bool
 	verbose   bool
 	noStart   bool
+	// noEnroll (--no-enroll) skips the sign-in that otherwise runs when no
+	// --agent-code was given and the host is not enrolled yet.
+	noEnroll bool
 	// binaryDirExplicit records that --binary-dir was passed, so the R7
 	// pre-flight upgrade adoption leaves the operator's choice alone.
 	binaryDirExplicit bool
@@ -664,6 +676,8 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 			}
 			_, _ = fmt.Fprintf(out, "  enroll agent_code=%s via %s → %s\n",
 				a.agentCode, method, a.certsDir)
+		} else if signInDuringInstallWanted(a, enrollmentPresent(a.certsDir), installSessionInteractive()) {
+			_, _ = fmt.Fprintf(out, "  sign in (browser, or a code approved from another computer) → %s\n", a.certsDir)
 		}
 		_, _ = fmt.Fprintf(out, "  enable boot persistence (%s)\n", runtime.GOOS)
 		if !a.noStart {
@@ -834,6 +848,9 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	// `install --agent-code` later) — the defer'd post-install report
 	// will explain the state either way.
 	enrolled := enrollDuringInstall(cmd, a)
+	if !enrolled && signInDuringInstallWanted(a, enrollmentPresent(a.certsDir), installSessionInteractive()) {
+		enrolled = signInDuringInstall(cmd, a)
+	}
 
 	// Auto-start when the service has something to do — i.e. enrollment
 	// just succeeded OR certs were already present from a prior install.
@@ -931,6 +948,64 @@ func enrollDuringInstall(cmd *cobra.Command, a installArgs) bool {
 	}
 	_, _ = fmt.Fprintf(out, "  ✓  enrolled agent %q\n", a.agentCode)
 	return true
+}
+
+// installSessionInteractive reports whether a person is at the keyboard:
+// stdin and stdout are both terminals. The one-line installer, CI, and
+// configuration management run install with output captured, and must not
+// block on a sign-in nobody can complete.
+var installSessionInteractive = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd())) && //#nosec G115 -- *os.File.Fd() is a kernel fd, fits in int on every supported platform
+		term.IsTerminal(int(os.Stdout.Fd())) //#nosec G115 -- same as above
+}
+
+// installSignIn is a seam over the shared flag-less sign-in so tests can
+// stand in a fake flow.
+var installSignIn = func(cmd *cobra.Command, a installArgs, dbPath string) error {
+	out := cmd.OutOrStdout()
+	deviceFlow := func() error {
+		return runDeviceEnrollment(out, "", dbPath, a.certsDir, a.userMode)
+	}
+	browserFlow := func() error {
+		return runPlatformLoginEnroll(installer.DefaultDashboardAddr, dbPath, a.cfgFile, false, a.userMode)
+	}
+	return runAutoEnroll(out, deviceFlow, browserFlow, false)
+}
+
+// signInDuringInstallWanted decides whether a flag-less install signs the
+// host in itself. It does when there is nothing else to enroll with (no
+// --agent-code), the operator did not opt out (--no-enroll, --no-start), the
+// host is not enrolled already, and a person is present to complete it.
+func signInDuringInstallWanted(a installArgs, certsPresent, interactive bool) bool {
+	return a.agentCode == "" && !a.noEnroll && !a.noStart && !certsPresent && interactive
+}
+
+// signInDuringInstall runs the shared sign-in after service registration,
+// so one `kite-collector install` registers, enrolls, and starts. A failure
+// leaves the service registered and is explained by the post-install
+// report; the operator re-runs `kite-collector enroll` later.
+func signInDuringInstall(cmd *cobra.Command, a installArgs) bool {
+	out := cmd.OutOrStdout()
+	dbPath := a.dbPath
+	if dbPath == "" {
+		dbPath = filepath.Join(a.certsDir, "kite.db")
+	}
+	// Same quiet logger `enroll` uses: the JSON enrollment log only gets in
+	// the way of the URL and code the operator has to read.
+	previousLogger := slog.Default()
+	logOutput := io.Writer(io.Discard)
+	if a.verbose {
+		logOutput = cmd.ErrOrStderr()
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(logOutput, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(previousLogger)
+
+	_, _ = fmt.Fprintln(out, "  ▸  signing in to VulnerTrack (Ctrl+C to skip; run `kite-collector enroll` later)")
+	if err := installSignIn(cmd, a, dbPath); err != nil {
+		_, _ = fmt.Fprintf(out, "  ✗  sign-in failed: %v\n", err)
+		return false
+	}
+	return enrollmentPresent(a.certsDir)
 }
 
 func enrollmentPresent(certsDir string) bool {
