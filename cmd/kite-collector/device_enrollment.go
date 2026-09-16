@@ -13,6 +13,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/enrollment"
 	"github.com/vulnertrack/kite-collector/internal/identity"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -49,7 +50,7 @@ func runDeviceEnrollmentWithDeps(out io.Writer, agentCode, dbPath, certsDir stri
 		return fmt.Errorf("device enrollment requires SQLite")
 	}
 	result, err := enroll(ctx, agentCode, func(auth enrollment.DeviceAuthorization) error {
-		_, displayErr := fmt.Fprintf(out, "\nOn your computer, open: %s\nCollector: %s\nWaiting for approval (expires in %d seconds). Press Ctrl+C to cancel.\n", auth.VerificationURIComplete, agentCode, auth.ExpiresIn)
+		_, displayErr := fmt.Fprintf(out, "\nOn your computer, open: %s\nCollector: %s\nWaiting for approval (expires in %s). Press Ctrl+C to cancel.\n", auth.VerificationURIComplete, agentCode, plural.Count(auth.ExpiresIn, "second"))
 		if displayErr != nil {
 			return fmt.Errorf("display device code: %w", displayErr)
 		}

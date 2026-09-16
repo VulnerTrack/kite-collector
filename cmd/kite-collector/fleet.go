@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vulnertrack/kite-collector/internal/dashboard"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 )
 
 type fleetDiscoverResponse struct {
@@ -303,7 +304,7 @@ func runFleetDeploy(cmd *cobra.Command, dashboardURL string, timeout time.Durati
 		return fmt.Errorf("deployment failed; retry files retained in %s: %w", workDir, err)
 	}
 	removeWorkDir = true
-	_, _ = fmt.Fprintf(out, "Deployment completed for %d computer(s). Temporary credentials removed.\n", len(targets))
+	_, _ = fmt.Fprintf(out, "Deployment completed for %s. Temporary credentials removed.\n", plural.Count(len(targets), "computer"))
 	return nil
 }
 

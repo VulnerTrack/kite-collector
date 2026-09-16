@@ -77,6 +77,7 @@ import (
 	memoryseries "github.com/vulnertrack/kite-collector/internal/memoryseries"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/osutil"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/policy"
 	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/scan"
@@ -391,8 +392,8 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 			cfg.Discovery.Sources[svc.Name] = src
 			readyCount++
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "Auto-discovery: %d services found, %d ready and enabled\n",
-			len(discovered), readyCount)
+		_, _ = fmt.Fprintf(os.Stderr, "Auto-discovery: %s found, %d ready and enabled\n",
+			plural.Count(len(discovered), "service"), readyCount)
 	}
 
 	// Override scope from flag if provided.
@@ -559,10 +560,10 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	}
 
 	// Print scan summary to stderr.
-	_, _ = fmt.Fprintf(os.Stderr, "\nScan complete: %d total, %d new, %d updated, %d stale, %d events, %d software (%d errors)\n",
+	_, _ = fmt.Fprintf(os.Stderr, "\nScan complete: %d total, %d new, %d updated, %d stale, %s, %d software (%s)\n",
 		result.TotalMachines, result.NewMachines, result.UpdatedMachines,
-		result.StaleMachines, result.EventsEmitted,
-		result.SoftwareCount, result.SoftwareErrors)
+		result.StaleMachines, plural.Count(result.EventsEmitted, "event"),
+		result.SoftwareCount, plural.Count(result.SoftwareErrors, "error"))
 
 	// Output machine list with software.
 	machines, err := st.ListMachines(ctx, store.MachineFilter{})
@@ -2066,7 +2067,7 @@ func runQuery(target, dbPath string, limit int, severity string) error {
 	}
 
 	_ = w.Flush()
-	_, _ = fmt.Fprintf(os.Stderr, "\n%d rows\n", count)
+	_, _ = fmt.Fprintf(os.Stderr, "\n%s\n", plural.Count(count, "row"))
 
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate query rows: %w", err)
@@ -2223,7 +2224,7 @@ func newVersionCmd() *cobra.Command {
 			fmt.Printf("  go:      %s\n", runtime.Version())
 			fmt.Printf("  os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 			n := sqlite.EmbeddedMigrationCount()
-			fmt.Printf("  schema:  v%d (%d migrations embedded)\n", n, n)
+			fmt.Printf("  schema:  v%d (%s embedded)\n", n, plural.Count(n, "migration"))
 		},
 	}
 }
@@ -2346,7 +2347,7 @@ func showPendingMigrations(ctx context.Context, st *sqlite.SQLiteStore) error {
 	if pending == 0 {
 		fmt.Println("  all migrations already applied")
 	} else {
-		fmt.Printf("\n  %d migration(s) would be applied\n", pending)
+		fmt.Printf("\n  %s would be applied\n", plural.Count(pending, "migration"))
 	}
 	return nil
 }
@@ -3312,21 +3313,10 @@ Examples:
 				}
 				return runEnrollWithTokenUsingLogger(agentCode, enrollmentToken, certsDir, enrollLogger)
 			}
-			if !hasToken && noBrowser {
-				return runDeviceFlow()
-			}
 			if !hasToken {
-				if !canOpenLocalBrowser() {
-					return runDeviceFlow()
-				}
-				if err := browserEnroll(addr, dbPath, cfgFile, false, userMode); err != nil {
-					if !errors.Is(err, errEnrollmentDashboardUnavailable) {
-						return err
-					}
-					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Local dashboard is unavailable; using remote browser sign-in instead.")
-					return runDeviceFlow()
-				}
-				return nil
+				return runAutoEnroll(cmd.OutOrStdout(), runDeviceFlow, func() error {
+					return browserEnroll(addr, dbPath, cfgFile, false, userMode)
+				}, noBrowser)
 			}
 			// Non-interactive operator-JWT path.
 			if hasAgentCode || hasToken {
@@ -3362,6 +3352,25 @@ Examples:
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "show enrollment logs, including debug messages")
 
 	return cmd
+}
+
+// runAutoEnroll is the flag-less sign-in `kite-collector enroll` and
+// `kite-collector install` share: the local browser flow when this session
+// can open one, otherwise (or on --no-browser, or when the local dashboard
+// is not reachable) the remote device-code flow, which prints a URL and a
+// temporary code to approve from any other computer.
+func runAutoEnroll(out io.Writer, deviceFlow, browserFlow func() error, noBrowser bool) error {
+	if noBrowser || !canOpenLocalBrowser() {
+		return deviceFlow()
+	}
+	if err := browserFlow(); err != nil {
+		if !errors.Is(err, errEnrollmentDashboardUnavailable) {
+			return err
+		}
+		_, _ = fmt.Fprintln(out, "Local dashboard is unavailable; using remote browser sign-in instead.")
+		return deviceFlow()
+	}
+	return nil
 }
 
 type platformEnrollDeps struct {

@@ -32,6 +32,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/config"
 	osquerydisc "github.com/vulnertrack/kite-collector/internal/discovery/osquery"
 	"github.com/vulnertrack/kite-collector/internal/installer"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
@@ -106,7 +107,7 @@ to skip the network stages.`,
 				renderDoctorChecks(cmd, checks)
 			}
 			if n := countDoctorFailures(checks); n > 0 {
-				return fmt.Errorf("doctor: %d check(s) failed", n)
+				return fmt.Errorf("doctor: %s failed", plural.Count(n, "check"))
 			}
 			return nil
 		},
@@ -404,12 +405,12 @@ func doctorDatabaseCheck(ctx context.Context, dbPath string) doctorCheck {
 	}
 	if pending > 0 {
 		c.Status = doctorWarn
-		c.Detail = fmt.Sprintf("%s · %d migration(s) pending", fmtByteSize(fi.Size()), pending)
+		c.Detail = fmt.Sprintf("%s · %s pending", fmtByteSize(fi.Size()), plural.Count(pending, "migration"))
 		c.Hint = "applied automatically on the next run; force now with: kite-collector migrate"
 		return c
 	}
 	c.Status = doctorPass
-	c.Detail = fmt.Sprintf("%s · %d migrations applied", fmtByteSize(fi.Size()), len(infos))
+	c.Detail = fmt.Sprintf("%s · %s applied", fmtByteSize(fi.Size()), plural.Count(len(infos), "migration"))
 	return c
 }
 

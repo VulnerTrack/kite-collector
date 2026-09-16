@@ -77,7 +77,7 @@ func TestDoctorDatabaseCheck_MissingHealthyPendingCorrupt(t *testing.T) {
 
 	pending := doctorDatabaseCheck(ctx, healthyPath)
 	assert.Equal(t, doctorWarn, pending.Status)
-	assert.Contains(t, pending.Detail, "1 migration(s) pending")
+	assert.Contains(t, pending.Detail, "1 migration pending")
 	assert.Contains(t, pending.Hint, "kite-collector migrate")
 
 	corruptPath := filepath.Join(t.TempDir(), "kite.db")

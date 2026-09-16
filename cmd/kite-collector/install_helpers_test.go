@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -266,6 +267,58 @@ func TestRunInstall_DryRunSignInFlowAnnouncesStart(t *testing.T) {
 	assert.Contains(t, out, `start service "kite-collector"`)
 }
 
+func TestSignInDuringInstallWanted(t *testing.T) {
+	base := installArgs{}
+	assert.True(t, signInDuringInstallWanted(base, false, true), "flag-less install on a terminal signs in")
+	assert.False(t, signInDuringInstallWanted(base, true, true), "already enrolled: nothing to sign in for")
+	assert.False(t, signInDuringInstallWanted(base, false, false), "no terminal: never block on a sign-in")
+	assert.False(t, signInDuringInstallWanted(installArgs{noEnroll: true}, false, true), "--no-enroll opts out")
+	assert.False(t, signInDuringInstallWanted(installArgs{noStart: true}, false, true), "--no-start is the CI escape hatch")
+	assert.False(t, signInDuringInstallWanted(installArgs{agentCode: "AG-1"}, false, true), "--agent-code takes the inline enrollment path instead")
+}
+
+func TestRunInstall_DryRunFlaglessAnnouncesSignIn(t *testing.T) {
+	prev := installSessionInteractive
+	installSessionInteractive = func() bool { return true }
+	t.Cleanup(func() { installSessionInteractive = prev })
+
+	certsDir := filepath.Join(t.TempDir(), "certs")
+	run := func(a installArgs) string {
+		cmd := &cobra.Command{}
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		a.certsDir = certsDir
+		a.binaryDir = t.TempDir()
+		a.dryRun = true
+		a.binaryDirExplicit = true
+		require.NoError(t, runInstall(cmd, a))
+		return buf.String()
+	}
+
+	assert.Contains(t, run(installArgs{}), "sign in (browser, or a code approved from another computer) → "+certsDir)
+	assert.NotContains(t, run(installArgs{noEnroll: true}), "sign in (browser", "--no-enroll must drop the sign-in step")
+}
+
+func TestSignInDuringInstall_ReportsFailureAndDefaultsDBBesideCerts(t *testing.T) {
+	prev := installSignIn
+	t.Cleanup(func() { installSignIn = prev })
+
+	certsDir := t.TempDir()
+	var gotDB string
+	installSignIn = func(_ *cobra.Command, _ installArgs, dbPath string) error {
+		gotDB = dbPath
+		return errors.New("approval expired")
+	}
+	cmd := &cobra.Command{}
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	assert.False(t, signInDuringInstall(cmd, installArgs{certsDir: certsDir}))
+	assert.Equal(t, filepath.Join(certsDir, "kite.db"), gotDB)
+	assert.Contains(t, buf.String(), "signing in to VulnerTrack")
+	assert.Contains(t, buf.String(), "sign-in failed: approval expired")
+}
+
 func TestNewInstallCmd_FlagSurface(t *testing.T) {
 	cmd := newInstallCmd()
 	assert.Equal(t, "install", cmd.Use)
@@ -273,7 +326,7 @@ func TestNewInstallCmd_FlagSurface(t *testing.T) {
 	for _, name := range []string{
 		"user", "certs-dir", "binary-dir", "config", "db", "endpoint",
 		"agent-code", "token", "issuer", "client-id", "redirect-uri",
-		"scope", "verbose", "dry-run", "no-start", "copy", "repair",
+		"scope", "verbose", "dry-run", "no-start", "no-enroll", "copy", "repair",
 	} {
 		assert.NotNil(t, cmd.Flags().Lookup(name), "missing flag --%s", name)
 	}

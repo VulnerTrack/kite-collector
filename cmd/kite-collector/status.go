@@ -27,6 +27,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
+	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
 	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
@@ -570,9 +571,9 @@ func renderStatusReport(cmd *cobra.Command, r statusReport) {
 	}
 
 	if r.LastScan != nil {
-		_, _ = fmt.Fprintf(w, "  Last scan\t%s (%s) · %s · %d machines, %d new\n",
+		_, _ = fmt.Fprintf(w, "  Last scan\t%s (%s) · %s · %s, %d new\n",
 			r.LastScan.StartedAt, r.LastScan.Ago, r.LastScan.Status,
-			r.LastScan.TotalMachines, r.LastScan.NewMachines)
+			plural.Count(r.LastScan.TotalMachines, "machine"), r.LastScan.NewMachines)
 	} else {
 		_, _ = fmt.Fprintf(w, "  Last scan\tnone yet\n")
 	}
