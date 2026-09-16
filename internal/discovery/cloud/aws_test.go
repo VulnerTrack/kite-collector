@@ -173,7 +173,7 @@ func TestSigV4_Deterministic(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
 
-	require.NoError(t, signV4(req, body, creds, "us-east-1", "ec2"))
+	signV4(req, body, creds, "us-east-1", "ec2")
 
 	auth := req.Header.Get("Authorization")
 	assert.Contains(t, auth, "AWS4-HMAC-SHA256")
@@ -193,7 +193,7 @@ func TestSigV4_WithSessionToken(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	require.NoError(t, signV4(req, body, creds, "us-west-2", "ec2"))
+	signV4(req, body, creds, "us-west-2", "ec2")
 
 	assert.Equal(t, "SESSION", req.Header.Get("X-Amz-Security-Token"))
 	assert.NotEmpty(t, req.Header.Get("Authorization"))

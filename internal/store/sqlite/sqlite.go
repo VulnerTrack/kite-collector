@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safety"
 	"github.com/vulnertrack/kite-collector/internal/store"
@@ -86,10 +87,8 @@ var connectionPragmas = []string{
 // instead of failing mid-transaction when a deferred read lock cannot be
 // upgraded.
 func New(dbPath string) (*SQLiteStore, error) {
-	dsn := dbPath + "?_txlock=immediate"
-	for _, p := range connectionPragmas {
-		dsn += "&_pragma=" + p
-	}
+	dsn := dbPath + "?_txlock=immediate&_pragma=" +
+		strings.Join(connectionPragmas, "&_pragma=")
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite open %s: %w", dbPath, err)

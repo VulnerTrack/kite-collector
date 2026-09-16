@@ -176,8 +176,8 @@ func TestRollupHealth_AnyFailIsDown(t *testing.T) {
 func TestAggregateProbeMetrics_CanonicalOrderAndStats(t *testing.T) {
 	// Build a synthetic probe-result history: 10 dns runs (8 pass, 2 fail),
 	// 5 auth runs (4 pass, 1 fail), with deterministic latencies.
-	var rows []sqlite.ProbeResultRecord
-	for i := 0; i < 10; i++ {
+	rows := make([]sqlite.ProbeResultRecord, 0, 10)
+	for i := range 10 {
 		r := "pass"
 		if i >= 8 {
 			r = "fail"
@@ -186,7 +186,7 @@ func TestAggregateProbeMetrics_CanonicalOrderAndStats(t *testing.T) {
 			ProbeName: "dns", Result: r, LatencyMS: int64(10 * (i + 1)),
 		})
 	}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		r := "pass"
 		if i == 0 {
 			r = "fail"
@@ -312,7 +312,7 @@ func TestObservabilityRoute_PopulatedFromRealProbeRuns(t *testing.T) {
 	ctx := context.Background()
 
 	// Seed real probe rows.
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		require.NoError(t, h.store.InsertProbeResult(ctx, sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "pass", LatencyMS: 25, CheckedAt: time.Now().UTC(),
 		}))
@@ -403,7 +403,7 @@ func TestObservability_ProbeMetricsTableIncludesTrendColumn(t *testing.T) {
 	h := newInstallHarness(t, nil)
 	ctx := context.Background()
 	// Seed varied latencies so the sparkline is meaningful.
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		require.NoError(t, h.store.InsertProbeResult(ctx, sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "pass", LatencyMS: int64(20 + i*10), CheckedAt: time.Now().UTC(),
 		}))
@@ -589,7 +589,7 @@ func TestObservability_RuntimeCardRendersDataTableRows(t *testing.T) {
 func TestProcessHistory_RingBufferAppendsAndCaps(t *testing.T) {
 	resetProcessHistoryForTest()
 	// Sample twice the cap; only the last processHistoryCap samples must remain.
-	for i := 0; i < processHistoryCap*2; i++ {
+	for range processHistoryCap * 2 {
 		recordProcessSample()
 	}
 	samples := processHistorySamples()
@@ -602,7 +602,7 @@ func TestProcessHistory_OrderIsOldestToNewest(t *testing.T) {
 	// Take a few samples spaced out — At timestamps must be strictly
 	// increasing in the returned slice (oldest first, newest last) so the
 	// sparkline reads left-to-right chronologically.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		recordProcessSample()
 		time.Sleep(2 * time.Millisecond)
 	}
@@ -619,7 +619,7 @@ func TestProcessHistory_SnapshotIsolatedFromBuffer(t *testing.T) {
 	// Mutating the returned snapshot must NOT affect future reads — the
 	// helper must return a copy, not the underlying slice.
 	resetProcessHistoryForTest()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		recordProcessSample()
 	}
 	snap1 := processHistorySamples()
@@ -661,7 +661,7 @@ func TestCollectRuntimeStats_PopulatesTrendSVGs(t *testing.T) {
 
 	// Each collectRuntimeStats call records one sample. Call several times
 	// so the trend sparklines have multiple points to render.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_ = collectRuntimeStats(context.Background(), onboardingDeps{Store: st})
 	}
 	stats := collectRuntimeStats(context.Background(), onboardingDeps{Store: st})
@@ -1152,14 +1152,14 @@ func TestAggregateProbeMetrics_AttachesSeverityClass(t *testing.T) {
 	// 5 fails + 5 passes in the last 10 — must end up critical.
 	// Rows arrive newest-first; the first 10 in the slice form the
 	// recent-results window the severity classifier reads.
-	rows := []sqlite.ProbeResultRecord{}
-	for i := 0; i < 5; i++ {
+	rows := make([]sqlite.ProbeResultRecord, 0, 5)
+	for range 5 {
 		rows = append(rows, sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "fail", LatencyMS: 5000,
 			CheckedAt: time.Now(),
 		})
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		rows = append(rows, sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "pass", LatencyMS: 50,
 			CheckedAt: time.Now(),
@@ -1176,7 +1176,7 @@ func TestAggregateProbeMetrics_AttachesSeverityClass(t *testing.T) {
 func TestObservability_ProbeTableAppliesSeverityRowClass(t *testing.T) {
 	h := newInstallHarness(t, nil)
 	// Seed 5 recent failures so the row earns the critical class.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		require.NoError(t, h.store.InsertProbeResult(context.Background(), sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "fail", LatencyMS: 5000, CheckedAt: time.Now().Add(-time.Duration(i) * time.Second),
 		}))
@@ -1239,8 +1239,8 @@ func TestAggregateRecentActivity_InterleavesProbesAndScans(t *testing.T) {
 
 func TestAggregateRecentActivity_RespectsLimit(t *testing.T) {
 	now := time.Now()
-	var probes []sqlite.ProbeResultRecord
-	for i := 0; i < 50; i++ {
+	probes := make([]sqlite.ProbeResultRecord, 0, 50)
+	for i := range 50 {
 		probes = append(probes, sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "pass", LatencyMS: 10,
 			CheckedAt: now.Add(-time.Duration(i) * time.Second),
@@ -1404,7 +1404,7 @@ func TestUptimeStripSVG_EscapesProbeNameInAria(t *testing.T) {
 func TestObservability_ProbeTableRendersUptimeStripColumn(t *testing.T) {
 	h := newInstallHarness(t, nil)
 	// Seed a mix so the strip has both passes and fails.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		require.NoError(t, h.store.InsertProbeResult(context.Background(), sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "pass", LatencyMS: 12,
 			CheckedAt: time.Now().Add(-time.Duration(i) * time.Minute),
@@ -1603,7 +1603,7 @@ func TestObservability_RecentFailuresEmptyStateIsPositive(t *testing.T) {
 	// alarming. Operators on a healthy agent shouldn't see "no data" as
 	// if the card is broken.
 	h := newInstallHarness(t, nil)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		require.NoError(t, h.store.InsertProbeResult(context.Background(), sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "pass", LatencyMS: 12, CheckedAt: time.Now().Add(-time.Duration(i) * time.Minute),
 		}))

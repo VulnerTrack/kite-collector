@@ -33,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
+
 	"github.com/vulnertrack/kite-collector/api/rest"
 	"github.com/vulnertrack/kite-collector/internal/autodiscovery"
 	"github.com/vulnertrack/kite-collector/internal/classifier"
@@ -396,6 +397,24 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 			plural.Count(len(discovered), "service"), readyCount)
 	}
 
+	// --source: enable the named discovery sources on top of the config,
+	// the same way --auto enables the ones it detects. The flag used to be
+	// parsed and then silently ignored.
+	if len(sources) > 0 {
+		if cfg.Discovery.Sources == nil {
+			cfg.Discovery.Sources = make(map[string]config.SourceConfig)
+		}
+		for _, name := range sources {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			src := cfg.Discovery.Sources[name]
+			src.Enabled = true
+			cfg.Discovery.Sources[name] = src
+		}
+	}
+
 	// Override scope from flag if provided.
 	if len(scope) > 0 {
 		if cfg.Discovery.Sources == nil {
@@ -490,6 +509,14 @@ func runScan(cfgFile string, scope []string, output, dbPath string, sources []st
 	registry.Register(paas.NewCoolify())
 	registry.Register(paas.NewCapRover())
 	registry.Register(codedisc.New())
+
+	// A mistyped --source name would otherwise enable nothing and say
+	// nothing; the registry is the authority on what can be enabled.
+	for _, name := range sources {
+		if name = strings.TrimSpace(name); name != "" && registry.Get(name) == nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: --source %q is not a registered discovery source\n", name)
+		}
+	}
 
 	// Attach the circuit breaker to the registry, metrics, and (for SQLite) the
 	// source_health writer — the production instantiation RFC-0062 shipped but
@@ -2018,7 +2045,7 @@ func runQuery(target, dbPath string, limit int, severity string) error {
 
 	innerStore, ok := encStore.Store.(*sqlite.SQLiteStore)
 	if !ok {
-		return fmt.Errorf("query requires SQLite backend")
+		return errors.New("query requires SQLite backend")
 	}
 	db := innerStore.RawDB()
 
@@ -2281,7 +2308,7 @@ func runMigrate(dbPath string, status bool, repair string, dryRun bool) error {
 	defer func() { _ = encStore.Close() }()
 	st, ok := encStore.Store.(*sqlite.SQLiteStore)
 	if !ok {
-		return fmt.Errorf("migrate requires SQLite backend")
+		return errors.New("migrate requires SQLite backend")
 	}
 
 	switch {
@@ -3191,7 +3218,7 @@ Example:
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !acceptFP {
-				return fmt.Errorf("use --accept-new-fingerprint to confirm")
+				return errors.New("use --accept-new-fingerprint to confirm")
 			}
 			return runTrust(args[0], cfgFile, dataDir)
 		},
@@ -3309,7 +3336,7 @@ Examples:
 			// POST /pki/enroll/token with the token in the body.
 			if hasEnrollToken {
 				if !hasAgentCode {
-					return fmt.Errorf("--enrollment-token requires --agent-code")
+					return errors.New("--enrollment-token requires --agent-code")
 				}
 				return runEnrollWithTokenUsingLogger(agentCode, enrollmentToken, certsDir, enrollLogger)
 			}
@@ -3321,7 +3348,7 @@ Examples:
 			// Non-interactive operator-JWT path.
 			if hasAgentCode || hasToken {
 				if !hasAgentCode || !hasToken {
-					return fmt.Errorf("--agent-code and --token must be provided together for PKI enrollment")
+					return errors.New("--agent-code and --token must be provided together for PKI enrollment")
 				}
 				return runEnrollUsingLogger(agentCode, token, certsDir, enrollLogger)
 			}
@@ -3330,7 +3357,7 @@ Examples:
 					dbPath = filepath.Join(certsDir, "kite.db")
 				}
 				if filepath.Clean(filepath.Dir(dbPath)) != filepath.Clean(certsDir) {
-					return fmt.Errorf("browser enrollment requires --db to be inside --certs-dir")
+					return errors.New("browser enrollment requires --db to be inside --certs-dir")
 				}
 			}
 			return browserEnroll(addr, dbPath, cfgFile, false, userMode)
@@ -3646,7 +3673,7 @@ func waitForDashboardEnrollment(ctx context.Context, baseURL, waitID string) err
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("enrollment wait canceled")
+			return errors.New("enrollment wait canceled")
 		case <-ticker.C:
 		}
 	}
@@ -3723,7 +3750,7 @@ func runPlatformUnenroll(dbPath, identityDir string) error {
 	}
 	sqliteStore, ok := st.(*sqlite.SQLiteStore)
 	if !ok {
-		return fmt.Errorf("unenroll requires sqlite store")
+		return errors.New("unenroll requires sqlite store")
 	}
 	if err := sqliteStore.DeleteEnrolledIdentity(ctx); err != nil {
 		return fmt.Errorf("delete enrolled identity: %w", err)
@@ -3895,7 +3922,7 @@ func browserFromEnvAvailable(value string) bool {
 // holds, so nothing durable or secret ever crosses the clipboard.
 func oauthSignIn(cmd *cobra.Command, cfg enrollment.OAuthConfig) (string, error) {
 	if cfg.Issuer == "" || cfg.ClientID == "" {
-		return "", fmt.Errorf("--issuer and --client-id are required for sign-in (or set KITE_OAUTH_ISSUER / KITE_OAUTH_CLIENT_ID)")
+		return "", errors.New("--issuer and --client-id are required for sign-in (or set KITE_OAUTH_ISSUER / KITE_OAUTH_CLIENT_ID)")
 	}
 
 	pkce, err := enrollment.NewPKCE()
@@ -3923,12 +3950,12 @@ func oauthSignIn(cmd *cobra.Command, cfg enrollment.OAuthConfig) (string, error)
 	// Forgiving paste: accept the full redirect URL as well as the bare code.
 	if parsed, perr := url.Parse(code); perr == nil && parsed.Query().Get("code") != "" {
 		if s := parsed.Query().Get("state"); s != "" && s != state {
-			return "", fmt.Errorf("state mismatch — the pasted URL belongs to a different sign-in attempt; run install again")
+			return "", errors.New("state mismatch — the pasted URL belongs to a different sign-in attempt; run install again")
 		}
 		code = parsed.Query().Get("code")
 	}
 	if code == "" {
-		return "", fmt.Errorf("no code entered")
+		return "", errors.New("no code entered")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -4340,7 +4367,7 @@ func otlpBuildTLSConfig(certFile, keyFile, caFile string) (*tls.Config, error) {
 		MinVersion: tls.VersionTLS12,
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 {
-				return fmt.Errorf("server presented no certificate")
+				return errors.New("server presented no certificate")
 			}
 			intermediates := x509.NewCertPool()
 			for _, c := range cs.PeerCertificates[1:] {
@@ -4415,7 +4442,7 @@ func printOTLPResults(stages []otlpCheckStage, jsonOut bool) error {
 	}
 
 	if !allOK {
-		return fmt.Errorf("one or more connectivity checks failed")
+		return errors.New("one or more connectivity checks failed")
 	}
 	return nil
 }

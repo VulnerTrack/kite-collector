@@ -1,6 +1,7 @@
 package windsc
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -237,10 +238,7 @@ instance of Foo
 }
 
 func TestParseMOFHonoursMaxResources(t *testing.T) {
-	var body []byte
-	for i := 0; i < MaxResources+10; i++ {
-		body = append(body, []byte("instance of Foo\n{\n ResourceID = \"[X]y\";\n};\n")...)
-	}
+	body := bytes.Repeat([]byte("instance of Foo\n{\n ResourceID = \"[X]y\";\n};\n"), MaxResources+10)
 	got := ParseMOF(body, "x", MOFCurrent)
 	if len(got) > MaxResources {
 		t.Fatalf("got %d > MaxResources %d", len(got), MaxResources)

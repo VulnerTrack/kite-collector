@@ -64,7 +64,7 @@ func (d *Detector) Scan(ctx context.Context, pageURL *url.URL) (Result, error) {
 	}
 	result := Result{Endpoint: trimURL(pageURL)}
 
-	pageBody, _, _, err := d.fetch(ctx, pageURL.String())
+	pageBody, _, err := d.fetch(ctx, pageURL.String())
 	if err != nil {
 		return result, fmt.Errorf("fetch page: %w", err)
 	}
@@ -98,7 +98,7 @@ func (d *Detector) Scan(ctx context.Context, pageURL *url.URL) (Result, error) {
 		if err != nil {
 			continue
 		}
-		body, _, _, ferr := d.fetch(ctx, abs)
+		body, _, ferr := d.fetch(ctx, abs)
 		if ferr != nil {
 			continue
 		}
@@ -156,23 +156,23 @@ func matchSignature(sig Signature, body, endpoint string) (Fingerprint, bool) {
 // fetch issues an HTTP GET with a browser-ish Accept header (it asks
 // for HTML and JS but identifies as the scanner so server logs are
 // honest). Body is truncated at MaxBodyBytes.
-func (d *Detector) fetch(ctx context.Context, target string) (string, int, http.Header, error) {
+func (d *Detector) fetch(ctx context.Context, target string) (string, http.Header, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return "", 0, nil, fmt.Errorf("build request: %w", err)
+		return "", nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("User-Agent", "kite-collector/jsfingerprint")
 	req.Header.Set("Accept", "text/html,application/javascript,application/json,*/*;q=0.1")
 	resp, err := d.client.Do(req)
 	if err != nil {
-		return "", 0, nil, fmt.Errorf("do request: %w", err)
+		return "", nil, fmt.Errorf("do request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBodyBytes))
 	if err != nil {
-		return "", resp.StatusCode, resp.Header, fmt.Errorf("read body: %w", err)
+		return "", resp.Header, fmt.Errorf("read body: %w", err)
 	}
-	return string(body), resp.StatusCode, resp.Header, nil
+	return string(body), resp.Header, nil
 }
 
 // resolveURL turns a script-src reference into an absolute URL,

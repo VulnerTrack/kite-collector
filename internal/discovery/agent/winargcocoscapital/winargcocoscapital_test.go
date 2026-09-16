@@ -1,6 +1,7 @@
 package winargcocoscapital
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -366,10 +367,7 @@ func TestCollectorWalksUserTree(t *testing.T) {
 
 	// Orders cache with MEP/CCL pattern + HFP.
 	ordersPath := filepath.Join(dir, "cache", "orders_202506.json")
-	var hfpBody []byte
-	for i := 0; i < 120; i++ {
-		hfpBody = append(hfpBody, []byte("2026-06-15 10:00:00 GET / poll \"symbol\":\"AL30\"\n")...)
-	}
+	hfpBody := bytes.Repeat([]byte("2026-06-15 10:00:00 GET / poll \"symbol\":\"AL30\"\n"), 120)
 	hfpBody = append(hfpBody, []byte("2026-06-15 10:01:00 GET / poll \"symbol\":\"AL30D\"\n")...)
 	must(t, os.WriteFile(ordersPath, hfpBody, 0o600))
 

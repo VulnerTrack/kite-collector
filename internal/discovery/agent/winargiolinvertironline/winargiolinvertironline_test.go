@@ -1,6 +1,7 @@
 package winargiolinvertironline
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -260,10 +261,7 @@ func TestParseIOLOrdersCache(t *testing.T) {
 }
 
 func TestParseIOLOrdersCacheHFT(t *testing.T) {
-	var body []byte
-	for i := 0; i < 120; i++ {
-		body = append(body, []byte("2026-06-15 10:00:00 GET / poll \"order_id\":\"X\"\n")...)
-	}
+	body := bytes.Repeat([]byte("2026-06-15 10:00:00 GET / poll \"order_id\":\"X\"\n"), 120)
 	f := ParseIOLOrdersCache(body)
 	if f.PollsPerMinMax != 120 {
 		t.Fatalf("peak=%d want 120", f.PollsPerMinMax)
@@ -329,10 +327,7 @@ func TestCollectorWalksUserTree(t *testing.T) {
 
 	// Orders cache with HFP + MEP/CCL pattern.
 	ordersPath := filepath.Join(dir, "cache", "orders_202506.json")
-	var hfpBody []byte
-	for i := 0; i < 120; i++ {
-		hfpBody = append(hfpBody, []byte("2026-06-15 10:00:00 GET / poll \"order_id\":\"X\" \"simbolo\":\"AL30\"\n")...)
-	}
+	hfpBody := bytes.Repeat([]byte("2026-06-15 10:00:00 GET / poll \"order_id\":\"X\" \"simbolo\":\"AL30\"\n"), 120)
 	hfpBody = append(hfpBody, []byte("2026-06-15 10:01:00 GET / poll \"order_id\":\"Y\" \"simbolo\":\"AL30D\"\n")...)
 	must(t, os.WriteFile(ordersPath, hfpBody, 0o600))
 

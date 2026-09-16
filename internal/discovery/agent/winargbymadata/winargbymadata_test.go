@@ -1,6 +1,7 @@
 package winargbymadata
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -395,16 +396,13 @@ func TestCollectorWalksUserTree(t *testing.T) {
 }`), 0o644))
 
 	fixPath := filepath.Join(dir, "sessions", "bymadata_fix_fast_202506.log")
-	var fixBody []byte
-	fixBody = append(fixBody, []byte(`2026-06-15 09:30:01 8=FIXT.1.1|9=120|35=W|49=BYMADATA|56=ADCAP|55=GGAL`+"\n")...)
-	for i := 0; i < 1500; i++ {
-		fixBody = append(fixBody, []byte(`2026-06-15 09:30:02 8=FIXT.1.1|35=W|49=BYMADATA|56=ADCAP|55=GGAL`+"\n")...)
-	}
+	fixBody := []byte(`2026-06-15 09:30:01 8=FIXT.1.1|9=120|35=W|49=BYMADATA|56=ADCAP|55=GGAL` + "\n")
+	fixBody = append(fixBody, bytes.Repeat([]byte(`2026-06-15 09:30:02 8=FIXT.1.1|35=W|49=BYMADATA|56=ADCAP|55=GGAL`+"\n"), 1500)...)
 	must(t, os.WriteFile(fixPath, fixBody, 0o644))
 
 	histPath := filepath.Join(dir, "bymadata_historical_GGAL.csv")
 	histBody := []byte("symbol,date,close\n")
-	for i := 0; i < 1500; i++ {
+	for range 1500 {
 		histBody = append(histBody, []byte("GGAL,2026-06-15,1005.0\n")...)
 	}
 	must(t, os.WriteFile(histPath, histBody, 0o644))

@@ -115,8 +115,8 @@ func TestMergeServices_FoldsBareIntoPorted(t *testing.T) {
 }
 
 func TestMergeServices_Cap(t *testing.T) {
-	var many []MachineService
-	for i := 0; i < maxServicesPerMachine+10; i++ {
+	many := make([]MachineService, 0, maxServicesPerMachine+10)
+	for i := range maxServicesPerMachine + 10 {
 		many = append(many, MachineService{Name: "svc", Category: ServiceCategoryOther, Port: 1000 + i})
 	}
 	assert.Len(t, MergeServices(many), maxServicesPerMachine)

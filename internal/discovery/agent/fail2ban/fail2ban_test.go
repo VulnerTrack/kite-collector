@@ -314,8 +314,8 @@ enabled = true
 }
 
 func TestParseHonoursMaxRows(t *testing.T) {
-	var sb []byte
-	for i := 0; i < MaxRows+10; i++ {
+	sb := make([]byte, 0, 24*(MaxRows+10))
+	for i := range MaxRows + 10 {
 		sb = append(sb, []byte("[sshd-")...)
 		sb = append(sb, byte('a'+(i%26)))
 		sb = append(sb, []byte("]\nenabled = true\n")...)

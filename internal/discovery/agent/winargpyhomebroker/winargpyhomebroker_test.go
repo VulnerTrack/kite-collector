@@ -1,6 +1,7 @@
 package winargpyhomebroker
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -333,10 +334,7 @@ func TestParsePHBOrdersCache(t *testing.T) {
 }
 
 func TestParsePHBOrdersCacheHighFreq(t *testing.T) {
-	var body []byte
-	for i := 0; i < 120; i++ {
-		body = append(body, []byte("2026-06-15 10:00:00 GET / poll order_id=\"X\" symbol=\"GGAL\"\n")...)
-	}
+	body := bytes.Repeat([]byte("2026-06-15 10:00:00 GET / poll order_id=\"X\" symbol=\"GGAL\"\n"), 120)
 	f := ParsePHBOrdersCache(body)
 	if f.PollsPerMinMax != 120 {
 		t.Fatalf("peak=%d want 120", f.PollsPerMinMax)
@@ -416,10 +414,7 @@ func TestCollectorWalksUserTree(t *testing.T) {
 
 	// Orders cache with HFP signature.
 	ordersPath := filepath.Join(dir, "cache", "orders_202506.json")
-	var hfpBody []byte
-	for i := 0; i < 120; i++ {
-		hfpBody = append(hfpBody, []byte("2026-06-15 10:00:00 GET / poll order_id=\"X\" symbol=\"GGAL\"\n")...)
-	}
+	hfpBody := bytes.Repeat([]byte("2026-06-15 10:00:00 GET / poll order_id=\"X\" symbol=\"GGAL\"\n"), 120)
 	must(t, os.WriteFile(ordersPath, hfpBody, 0o600))
 
 	// Strategy script.

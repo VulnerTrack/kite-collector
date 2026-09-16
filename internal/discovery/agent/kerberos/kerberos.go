@@ -36,6 +36,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -150,15 +151,17 @@ func ParseTicketLifetime(s string) (time.Duration, bool) {
 		if len(parts) < 2 || len(parts) > 3 {
 			return 0, false
 		}
-		var h, m, sec int
-		if _, err := scan(parts[0], &h); err != nil {
+		h, err := strconv.Atoi(parts[0])
+		if err != nil {
 			return 0, false
 		}
-		if _, err := scan(parts[1], &m); err != nil {
+		m, err := strconv.Atoi(parts[1])
+		if err != nil {
 			return 0, false
 		}
+		var sec int
 		if len(parts) == 3 {
-			if _, err := scan(parts[2], &sec); err != nil {
+			if sec, err = strconv.Atoi(parts[2]); err != nil {
 				return 0, false
 			}
 		}
@@ -181,44 +184,18 @@ func ParseTicketLifetime(s string) (time.Duration, bool) {
 			mult = 24 * time.Hour
 		}
 		if mult != 0 {
-			var n int
-			if _, err := scan(v[:len(v)-1], &n); err == nil {
+			if n, err := strconv.Atoi(v[:len(v)-1]); err == nil {
 				return time.Duration(n) * mult, true
 			}
 			return 0, false
 		}
 	}
 	// Bare integer seconds.
-	var n int
-	if _, err := scan(v, &n); err == nil {
+	if n, err := strconv.Atoi(v); err == nil {
 		return time.Duration(n) * time.Second, true
 	}
 	return 0, false
 }
-
-// scan is a tiny strconv shim so the parser doesn't need a dependency
-// import for one numeric conversion.
-func scan(s string, out *int) (int, error) {
-	var n, sign int
-	sign = 1
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if i == 0 && c == '-' {
-			sign = -1
-			continue
-		}
-		if c < '0' || c > '9' {
-			return 0, errBadNumber{}
-		}
-		n = n*10 + int(c-'0')
-	}
-	*out = sign * n
-	return n, nil
-}
-
-type errBadNumber struct{}
-
-func (errBadNumber) Error() string { return "not a number" }
 
 // IsLongTicketLifetimeValue reports whether the lifetime exceeds
 // MaxRecommendedTicketLifetime. Used for ticket_lifetime + renew_lifetime.

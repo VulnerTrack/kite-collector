@@ -293,8 +293,8 @@ bind-address = 127.0.0.1
 
 func TestParseHonoursMaxRows(t *testing.T) {
 	// Build a body with more sections than MaxRows.
-	var sb []byte
-	for i := 0; i < MaxRows+10; i++ {
+	sb := make([]byte, 0, 11*(MaxRows+10))
+	for i := range MaxRows + 10 {
 		sb = append(sb, []byte("[mysqld-")...)
 		sb = append(sb, byte('a'+(i%26)))
 		sb = append(sb, []byte("]\n")...)

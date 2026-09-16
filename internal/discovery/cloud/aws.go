@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
@@ -220,9 +222,7 @@ func (a *AWS) describeInstances(ctx context.Context, creds awsCredentials, regio
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
 
-		if signErr := signV4(req, []byte(body), creds, region, "ec2"); signErr != nil {
-			return nil, fmt.Errorf("signing request: %w", signErr)
-		}
+		signV4(req, []byte(body), creds, region, "ec2")
 		return http.DefaultClient.Do(req)
 	})
 	if err != nil {
@@ -275,9 +275,7 @@ func (a *AWS) assumeRole(ctx context.Context, creds awsCredentials, region, role
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
 
-		if signErr := signV4(req, []byte(body), creds, region, "sts"); signErr != nil {
-			return nil, fmt.Errorf("signing request: %w", signErr)
-		}
+		signV4(req, []byte(body), creds, region, "sts")
 		return http.DefaultClient.Do(req)
 	})
 	if err != nil {
@@ -296,7 +294,7 @@ func (a *AWS) assumeRole(ctx context.Context, creds awsCredentials, region, role
 	}
 
 	if stsResp.Credentials.AccessKeyID == "" {
-		return awsCredentials{}, fmt.Errorf("STS AssumeRole returned empty credentials")
+		return awsCredentials{}, errors.New("STS AssumeRole returned empty credentials")
 	}
 
 	return awsCredentials{
@@ -371,7 +369,7 @@ func parseDescribeInstancesResponse(data []byte) ([]ec2Instance, error) {
 // signV4 computes the AWS Signature Version 4 for an HTTP request and sets
 // the Authorization header. This is a minimal implementation that supports
 // the POST-based EC2 Query API.
-func signV4(req *http.Request, payload []byte, creds awsCredentials, region, service string) error {
+func signV4(req *http.Request, payload []byte, creds awsCredentials, region, service string) {
 	now := time.Now().UTC()
 	amzDate := now.Format("20060102T150405Z")
 	dateStamp := now.Format("20060102")
@@ -422,8 +420,6 @@ func signV4(req *http.Request, payload []byte, creds awsCredentials, region, ser
 		signature,
 	)
 	req.Header.Set("Authorization", authHeader)
-
-	return nil
 }
 
 // buildCanonicalHeaders produces the canonical headers string and the

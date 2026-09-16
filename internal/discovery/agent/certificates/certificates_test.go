@@ -250,8 +250,8 @@ func TestPEMCollectorRespectsMaxCertificates(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Pre-generate enough unique certs once; bundle them.
-	var bundle []byte
-	for i := 0; i < MaxCertificates+5; i++ {
+	bundle := make([]byte, 0, 1024*(MaxCertificates+5)) // ~1 KiB per PEM cert
+	for i := range MaxCertificates + 5 {
 		c := mintSelfSignedRSA(t, 1024, "cap-fixture-"+itoa(i)) // 1024 for speed
 		bundle = append(bundle, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.Raw})...)
 	}

@@ -1,6 +1,7 @@
 package rsyslog
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -232,10 +233,7 @@ module(load="omrelp")
 }
 
 func TestParseHonoursMaxRows(t *testing.T) {
-	var body []byte
-	for i := 0; i < MaxRows+10; i++ {
-		body = append(body, []byte("*.* @host.example.com:514\n")...)
-	}
+	body := bytes.Repeat([]byte("*.* @host.example.com:514\n"), MaxRows+10)
 	got := Parse(body, "x")
 	if len(got) > MaxRows {
 		t.Fatalf("rows=%d > MaxRows=%d", len(got), MaxRows)

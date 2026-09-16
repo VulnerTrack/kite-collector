@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/netip"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -195,7 +196,7 @@ func parseScannerConfig(cfg map[string]any) ScannerConfig {
 // validateAndClamp enforces R1–R4. It returns the validated config and the
 // total IP count (R1) on success. Guard events for clamping/rejection are
 // emitted via sink when one is configured.
-func (s *Scanner) validateAndClamp(ctx context.Context, c *ScannerConfig) (int, []safenet.GuardEvent, error) {
+func (s *Scanner) validateAndClamp(c *ScannerConfig) (int, []safenet.GuardEvent, error) {
 	var events []safenet.GuardEvent
 
 	if err := safenet.ValidatePorts(c.TCPPorts, 0); err != nil {
@@ -276,7 +277,7 @@ func (s *Scanner) Discover(ctx context.Context, cfg map[string]any) ([]model.Mac
 			discovery.ErrNotConfigured)
 	}
 
-	totalIPs, guardEvents, err := s.validateAndClamp(ctx, &parsed)
+	totalIPs, guardEvents, err := s.validateAndClamp(&parsed)
 	for _, ge := range guardEvents {
 		s.recordGuardEvent(ctx, scanID, ge)
 	}
@@ -618,7 +619,7 @@ func (s *Scanner) probeIP(ctx context.Context, ip netip.Addr, ports []int, timeo
 		if ctx.Err() != nil {
 			return open, banners
 		}
-		addr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
+		addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
 		conn, err := (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", addr)
 		if err != nil {
 			continue

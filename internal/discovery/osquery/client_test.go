@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -174,10 +175,10 @@ func TestClient_Query_SingleRow(t *testing.T) {
 }
 
 func TestClient_Query_ManyRows(t *testing.T) {
-	var rows []map[string]string
-	var order [][]string
-	for i := 0; i < 500; i++ {
-		rows = append(rows, map[string]string{"n": fmt.Sprintf("%d", i)})
+	rows := make([]map[string]string, 0, 500)
+	order := make([][]string, 0, 500)
+	for i := range 500 {
+		rows = append(rows, map[string]string{"n": strconv.Itoa(i)})
 		order = append(order, []string{"n"})
 	}
 	f := newFakeOsqueryd(t, okRows(rows, order))
@@ -383,7 +384,7 @@ func TestClient_ConcurrentQueries_AllAnswer(t *testing.T) {
 	client := NewClient(f.socket)
 	var wg sync.WaitGroup
 	errs := make([]error, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
@@ -401,7 +402,7 @@ func TestClient_SequentialCallsReuseNothing(t *testing.T) {
 	// the first conn is gone.
 	f := newFakeOsqueryd(t, okRows(nil, nil))
 	c := NewClient(f.socket)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := c.Query(context.Background(), "SELECT 1;")
 		require.NoError(t, err, "call %d", i)
 	}

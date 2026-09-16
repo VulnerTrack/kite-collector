@@ -4,13 +4,16 @@ import (
 	"context"
 	"crypto/sha1" //#nosec G505 -- OVHcloud API requires SHA-1 signatures
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
 )
@@ -40,7 +43,7 @@ func (o *OVHcloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Ma
 
 	if appKey == "" || appSecret == "" || consumerKey == "" {
 		if cfg != nil {
-			return nil, fmt.Errorf("ovhcloud: KITE_OVHCLOUD_APP_KEY, KITE_OVHCLOUD_APP_SECRET, and KITE_OVHCLOUD_CONSUMER_KEY are required")
+			return nil, errors.New("ovhcloud: KITE_OVHCLOUD_APP_KEY, KITE_OVHCLOUD_APP_SECRET, and KITE_OVHCLOUD_CONSUMER_KEY are required")
 		}
 		return nil, nil
 	}
@@ -70,7 +73,7 @@ func (o *OVHcloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Ma
 	var machines []model.Machine
 
 	// Discover dedicated servers.
-	dedicated, err := o.discoverDedicated(ctx, client, base, auth)
+	dedicated, err := o.discoverDedicated(ctx, client, auth)
 	if err != nil {
 		slog.Warn("OVHcloud dedicated-server discovery failed; continuing with VPS scan",
 			"code", string(LogCodeOVHCloudDedicatedDiscoverFailed),
@@ -80,7 +83,7 @@ func (o *OVHcloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Ma
 	}
 
 	// Discover VPS instances.
-	vpsMachines, err := o.discoverVPS(ctx, client, base, auth)
+	vpsMachines, err := o.discoverVPS(ctx, client, auth)
 	if err != nil {
 		slog.Warn("OVHcloud VPS-instance discovery failed; returning partial results",
 			"code", string(LogCodeOVHCloudVPSDiscoverFailed),
@@ -97,7 +100,7 @@ func (o *OVHcloud) Discover(ctx context.Context, cfg map[string]any) ([]model.Ma
 	return machines, nil
 }
 
-func (o *OVHcloud) discoverDedicated(ctx context.Context, client *apiClient, base string, auth authFunc) ([]model.Machine, error) {
+func (o *OVHcloud) discoverDedicated(ctx context.Context, client *apiClient, auth authFunc) ([]model.Machine, error) {
 	var names []string
 	if err := client.get(ctx, "/dedicated/server", &names); err != nil {
 		return nil, fmt.Errorf("list dedicated servers: %w", err)
@@ -134,7 +137,7 @@ func (o *OVHcloud) discoverDedicated(ctx context.Context, client *apiClient, bas
 	return machines, nil
 }
 
-func (o *OVHcloud) discoverVPS(ctx context.Context, client *apiClient, base string, auth authFunc) ([]model.Machine, error) {
+func (o *OVHcloud) discoverVPS(ctx context.Context, client *apiClient, auth authFunc) ([]model.Machine, error) {
 	var names []string
 	if err := client.get(ctx, "/vps", &names); err != nil {
 		return nil, fmt.Errorf("list VPS: %w", err)
@@ -176,7 +179,7 @@ func (o *OVHcloud) discoverVPS(ctx context.Context, client *apiClient, base stri
 // ovhAuth returns an authFunc implementing OVH's triple-auth signature.
 func ovhAuth(appKey, appSecret, consumerKey string) authFunc {
 	return func(req *http.Request) {
-		ts := fmt.Sprintf("%d", time.Now().Unix())
+		ts := strconv.FormatInt(time.Now().Unix(), 10)
 		body := ""
 		url := req.URL.String()
 

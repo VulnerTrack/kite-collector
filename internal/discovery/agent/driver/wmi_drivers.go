@@ -213,13 +213,10 @@ func applyPnPSignedAttrs(drivers []LoadedDriver, signed []pnpSignedDriverRow) {
 //	2               File System Driver
 //	4               Adapter
 //	8               Recognizer Driver
-func classifyServiceType(s string) string {
-	switch strings.TrimSpace(s) {
-	case "1", "Kernel Driver":
-		return FrameworkWDM
-	case "2", "File System Driver":
-		return FrameworkWDM
-	default:
-		return FrameworkWDM
-	}
+//
+// Kernel and file-system drivers are both WDM, and Win32_SystemDriver never
+// reports the other types, so every input maps to FrameworkWDM. The parameter
+// stays so the call site documents which WMI field drives the answer.
+func classifyServiceType(_ string) string {
+	return FrameworkWDM
 }

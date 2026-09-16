@@ -422,9 +422,7 @@ func (r *Route53DNS) signedGet(ctx context.Context, creds awsCredentials, path, 
 		if reqErr != nil {
 			return nil, fmt.Errorf("creating request: %w", reqErr)
 		}
-		if signErr := signV4(req, nil, creds, route53Region, route53Service); signErr != nil {
-			return nil, fmt.Errorf("signing request: %w", signErr)
-		}
+		signV4(req, nil, creds, route53Region, route53Service)
 		return r.httpClient.Do(req)
 	})
 	if err != nil {

@@ -52,7 +52,7 @@ func (c *CompositeTableSource) ListContentTables(ctx context.Context) ([]TableSc
 // route finds the first source that knows the table and runs fn against it.
 // A source signals "not mine" with ErrUnknownTable; any other error is that
 // source's authoritative answer.
-func (c *CompositeTableSource) route(ctx context.Context, table string, fn func(TableSource) error) error {
+func (c *CompositeTableSource) route(table string, fn func(TableSource) error) error {
 	for _, src := range c.sources {
 		err := fn(src)
 		if err == nil || !errors.Is(err, ErrUnknownTable) {
@@ -65,7 +65,7 @@ func (c *CompositeTableSource) route(ctx context.Context, table string, fn func(
 // DescribeTable returns the schema from the first source that knows the table.
 func (c *CompositeTableSource) DescribeTable(ctx context.Context, table string) (*TableSchema, error) {
 	var schema *TableSchema
-	err := c.route(ctx, table, func(src TableSource) error {
+	err := c.route(table, func(src TableSource) error {
 		s, err := src.DescribeTable(ctx, table)
 		if err != nil {
 			return fmt.Errorf("describe %s: %w", table, err)
@@ -82,7 +82,7 @@ func (c *CompositeTableSource) ListRows(ctx context.Context, filter RowsFilter) 
 		rows  []Row
 		total int64
 	)
-	err := c.route(ctx, filter.Table, func(src TableSource) error {
+	err := c.route(filter.Table, func(src TableSource) error {
 		r, t, err := src.ListRows(ctx, filter)
 		if err != nil {
 			return fmt.Errorf("list rows %s: %w", filter.Table, err)
@@ -96,7 +96,7 @@ func (c *CompositeTableSource) ListRows(ctx context.Context, filter RowsFilter) 
 // FacetTable computes facets via the first source that knows the table.
 func (c *CompositeTableSource) FacetTable(ctx context.Context, table string, maxDistinct, topValues int) ([]ColumnFacet, error) {
 	var facets []ColumnFacet
-	err := c.route(ctx, table, func(src TableSource) error {
+	err := c.route(table, func(src TableSource) error {
 		f, err := src.FacetTable(ctx, table, maxDistinct, topValues)
 		if err != nil {
 			return fmt.Errorf("facet %s: %w", table, err)

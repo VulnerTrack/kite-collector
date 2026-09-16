@@ -1,6 +1,7 @@
 package winhosts
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -274,10 +275,7 @@ func TestParseInvalidIPStillEmitsRow(t *testing.T) {
 func TestParseHonoursMaxEntries(t *testing.T) {
 	// Stuff a tiny ceiling for the test would need re-export; just
 	// trust the implementation handles a large input.
-	var body []byte
-	for i := 0; i < 50; i++ {
-		body = append(body, []byte("10.0.0.1 corp.local\n")...)
-	}
+	body := bytes.Repeat([]byte("10.0.0.1 corp.local\n"), 50)
 	if got := Parse(body, "x"); len(got) != 50 {
 		t.Fatalf("rows=%d, want 50", len(got))
 	}

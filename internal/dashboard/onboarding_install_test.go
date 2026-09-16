@@ -940,8 +940,8 @@ func TestSummarizeProbeHistory_GroupsByCheckedAtAndReversesChronology(t *testing
 
 func TestSummarizeProbeHistory_RespectsLimit(t *testing.T) {
 	now := time.Now().UTC()
-	var rows []sqlite.ProbeResultRecord
-	for i := 0; i < 25; i++ {
+	rows := make([]sqlite.ProbeResultRecord, 0, 25)
+	for i := range 25 {
 		rows = append(rows, sqlite.ProbeResultRecord{
 			ProbeName: "dns", Result: "pass",
 			CheckedAt: now.Add(-time.Duration(i) * time.Hour),

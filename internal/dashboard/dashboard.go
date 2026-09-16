@@ -344,22 +344,21 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		render := func(buf io.Writer, ctx context.Context) error {
 			return renderViewFragment(buf, ctx, st, slug, limit, offset)
 		}
-		writeResult := func(renderErr error, buf *bytes.Buffer) bool {
+		writeResult := func(renderErr error, buf *bytes.Buffer) {
 			if renderErr == nil {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				_, _ = w.Write(buf.Bytes())
-				return true
+				return
 			}
 			if errors.Is(renderErr, store.ErrNotFound) {
 				http.NotFound(w, r)
-				return true
+				return
 			}
 			logger.Error("dashboard: render view page",
 				"code", string(LogCodeServeTabPageRender),
 				"view_slug", slug,
 				"error", renderErr)
 			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
-			return true
 		}
 		var buf bytes.Buffer
 		if r.Header.Get("HX-Request") == "true" {
@@ -685,15 +684,15 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				operatorToken = func(ctx context.Context) (string, error) {
 					identity, identityErr := sqliteStore.GetEnrolledIdentity(ctx)
 					if identityErr != nil {
-						return "", fmt.Errorf("sign in to VulnerTrack before loading PKI data")
+						return "", errors.New("sign in to VulnerTrack before loading PKI data")
 					}
 					plaintext, unwrapErr := sqlite.AEADUnwrap(wrapKey, identity.ApiKeyWrapped)
 					if unwrapErr != nil {
-						return "", fmt.Errorf("VulnerTrack session is unavailable; sign in again")
+						return "", errors.New("VulnerTrack session is unavailable; sign in again")
 					}
 					token := strings.TrimSpace(string(plaintext))
 					if token == "" {
-						return "", fmt.Errorf("VulnerTrack session is unavailable; sign in again")
+						return "", errors.New("VulnerTrack session is unavailable; sign in again")
 					}
 					return token, nil
 				}

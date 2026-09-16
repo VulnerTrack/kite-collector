@@ -62,24 +62,24 @@ func IsQueryError(err error) bool {
 // target all return rc=0 with an empty set. Callers must never read "no rows"
 // as proof a scan ran.
 func (c *Client) Query(ctx context.Context, sql string) ([]map[string]string, error) {
-	rows, _, err := c.call(ctx, "query", sql)
+	rows, err := c.call(ctx, "query", sql)
 	return rows, err
 }
 
 // Ping checks daemon liveness over the socket.
 func (c *Client) Ping(ctx context.Context) error {
-	_, _, err := c.call(ctx, "ping", "")
+	_, err := c.call(ctx, "ping", "")
 	return err
 }
 
 // call performs one Thrift RPC. For "query" the sql is sent as field 1; for
 // "ping" the args struct is empty.
-func (c *Client) call(ctx context.Context, method, sql string) ([]map[string]string, extensionStatus, error) {
+func (c *Client) call(ctx context.Context, method, sql string) ([]map[string]string, error) {
 	var status extensionStatus
 
 	conn, err := dialSocket(ctx, c.socket, c.timeout)
 	if err != nil {
-		return nil, status, fmt.Errorf("osquery: dial %s: %w", c.socket, err)
+		return nil, fmt.Errorf("osquery: dial %s: %w", c.socket, err)
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -111,26 +111,26 @@ func (c *Client) call(ctx context.Context, method, sql string) ([]map[string]str
 	}
 	w.writeFieldStop()
 	if ferr := w.flush(); ferr != nil {
-		return nil, status, fmt.Errorf("osquery: send %s: %w", method, ferr)
+		return nil, fmt.Errorf("osquery: send %s: %w", method, ferr)
 	}
 
 	r := newThriftReader(conn)
 	mtype, gotSeq, err := r.readMessageBegin()
 	if err != nil {
-		return nil, status, fmt.Errorf("osquery: read %s reply: %w", method, err)
+		return nil, fmt.Errorf("osquery: read %s reply: %w", method, err)
 	}
 	if mtype == mEXCEPTION {
-		return nil, status, fmt.Errorf("osquery: %s: %w", method, r.readApplicationException())
+		return nil, fmt.Errorf("osquery: %s: %w", method, r.readApplicationException())
 	}
 	if mtype != mREPLY {
-		return nil, status, fmt.Errorf("osquery: unexpected message type %d", mtype)
+		return nil, fmt.Errorf("osquery: unexpected message type %d", mtype)
 	}
 	// One fresh connection per call means the first reply must answer THIS
 	// call. A mismatched sequence id is protocol desync — decoding the rest
 	// as if it were our answer would silently attribute another call's rows
 	// (or errors) to this query.
 	if gotSeq != seq {
-		return nil, status, fmt.Errorf("osquery: reply sequence id %d does not match call %d", gotSeq, seq)
+		return nil, fmt.Errorf("osquery: reply sequence id %d does not match call %d", gotSeq, seq)
 	}
 
 	// The reply is a result struct whose field 0 is the return value.
@@ -138,14 +138,14 @@ func (c *Client) call(ctx context.Context, method, sql string) ([]map[string]str
 	for {
 		ftype, id, err := r.readFieldBegin()
 		if err != nil {
-			return nil, status, fmt.Errorf("osquery: decode %s result: %w", method, err)
+			return nil, fmt.Errorf("osquery: decode %s result: %w", method, err)
 		}
 		if ftype == tSTOP {
 			break
 		}
 		if id != 0 || ftype != tSTRUCT {
 			if serr := r.skip(ftype, 0); serr != nil {
-				return nil, status, fmt.Errorf("osquery: skip result field: %w", serr)
+				return nil, fmt.Errorf("osquery: skip result field: %w", serr)
 			}
 			continue
 		}
@@ -158,14 +158,14 @@ func (c *Client) call(ctx context.Context, method, sql string) ([]map[string]str
 			rows, status, err = readExtensionResponse(r)
 		}
 		if err != nil {
-			return nil, status, fmt.Errorf("osquery: decode %s payload: %w", method, err)
+			return nil, fmt.Errorf("osquery: decode %s payload: %w", method, err)
 		}
 	}
 
 	if status.Code != 0 {
-		return nil, status, &queryError{method: method, code: status.Code, message: status.Message}
+		return nil, &queryError{method: method, code: status.Code, message: status.Message}
 	}
-	return rows, status, nil
+	return rows, nil
 }
 
 // readExtensionResponse decodes ExtensionResponse{1: ExtensionStatus, 2: rows}.

@@ -192,8 +192,8 @@ func TestScanTargets_BoundsConcurrency(t *testing.T) {
 		Probes: []Probe{{Path: "/", ExpectedStatus: []int{200}, BodyContains: "x"}},
 	}})
 
-	var targets []Target
-	for i := 0; i < 4; i++ {
+	targets := make([]Target, 0, 4)
+	for range 4 {
 		targets = append(targets, Target{Host: host, Port: port, Scheme: "http"})
 	}
 

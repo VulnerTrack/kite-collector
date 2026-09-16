@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -100,7 +101,7 @@ func (c *PullClient) Pull(ctx context.Context) (*PolicyContent, error) {
 	}
 
 	// Verify signature.
-	if err := c.verify(&cfg, body); err != nil {
+	if err := c.verify(&cfg); err != nil {
 		return nil, err
 	}
 
@@ -116,9 +117,9 @@ func (c *PullClient) Pull(ctx context.Context) (*PolicyContent, error) {
 }
 
 // verify checks the Ed25519 signature of the policy config.
-func (c *PullClient) verify(cfg *SignedConfig, rawYAML []byte) error {
+func (c *PullClient) verify(cfg *SignedConfig) error {
 	if cfg.Signature == "" {
-		return fmt.Errorf("policy pull: missing signature")
+		return errors.New("policy pull: missing signature")
 	}
 
 	sig, err := base64.StdEncoding.DecodeString(cfg.Signature)
@@ -126,12 +127,13 @@ func (c *PullClient) verify(cfg *SignedConfig, rawYAML []byte) error {
 		return fmt.Errorf("policy pull: decode signature: %w", err)
 	}
 
-	// Reconstruct the signed content (everything except the signature line).
-	// We sign the raw bytes for simplicity — the SaaS must produce the
-	// signature over the same canonical form.
+	// Reconstruct the signed content: the config re-serialised with the
+	// signature field zeroed. The SaaS must produce the signature over the
+	// same canonical form, so the raw response bytes are deliberately not
+	// what gets verified.
 	signable := signableContent(cfg)
 	if !ed25519.Verify(c.verifyKey, signable, sig) {
-		return fmt.Errorf("policy pull: signature verification failed")
+		return errors.New("policy pull: signature verification failed")
 	}
 	return nil
 }
