@@ -24,11 +24,14 @@ Results are stored in a local SQLite database. No servers, no dependencies, full
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VulnerTrack/kite-collector/main/installers/installer.sh | sh
-sudo kite-collector install   # register the service (enabled at boot)
 sudo kite-collector enroll    # sign in; the service starts once enrolled
 ```
 
-The script picks the native channel: the APT repository below on
+The script installs the collector and registers its background service
+(enabled at boot; it starts once the host is enrolled), so signing in is the
+only step left. On a host where the script could not register the service,
+`sudo kite-collector install` alone registers it, signs in, and starts it.
+It picks the native channel: the APT repository below on
 Debian/Ubuntu, the release `.rpm` on Fedora/RHEL/SUSE, and the static binary in
 `/usr/local/bin` elsewhere. Downloaded artifacts are SHA256-checked against the
 release's `checksums.txt`. On Debian/Ubuntu amd64 it installs
@@ -40,12 +43,13 @@ Set these on the `sh` side of the pipe:
 | variable | effect |
 |----------|--------|
 | `KITE_VERSION=1.2.3` | pin a release |
-| `KITE_OSQUERY=no` | plain collector, even where the bundle exists (`yes` requires the bundle) |
+| `KITE_OSQUERY=no` | plain collector, and keep it on re-runs, even where the bundle exists (`yes` requires the bundle) |
 | `KITE_INSTALL_METHOD=binary` | force `apt`, `rpm` or `binary` |
 | `KITE_INSTALL_DIR=$HOME/.local/bin` | binary target; a directory you can write needs no root |
 
-For example, `curl -fsSL …/installer.sh | KITE_OSQUERY=no sh`. Re-running the
-one-liner upgrades whichever flavor is already installed.
+For example, `curl -fsSL …/installer.sh | KITE_OSQUERY=no sh`. The bundle is
+preferred wherever it is published: re-running the one-liner with the default
+replaces a plain install with `kite-collector-osquery`.
 
 ### Ubuntu / Debian (APT Repository)
 

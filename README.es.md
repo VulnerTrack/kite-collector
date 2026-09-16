@@ -10,16 +10,21 @@ Un solo binario que escanea tu red, inventaria el software instalado, audita la 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VulnerTrack/kite-collector/main/installers/installer.sh | sh
-sudo kite-collector install   # registra el servicio (habilitado al arranque)
 sudo kite-collector enroll    # inicia sesion; el servicio arranca al enrolarse
 ```
 
-El script elige el canal nativo: el repositorio APT en Debian/Ubuntu, el `.rpm`
+El script instala el collector y registra su servicio en segundo plano
+(habilitado al arranque; arranca al enrolarse), asi que iniciar sesion es el
+unico paso restante. Si el script no pudo registrar el servicio,
+`sudo kite-collector install` por si solo lo registra, inicia sesion y lo
+arranca. Elige el canal nativo: el repositorio APT en Debian/Ubuntu, el `.rpm`
 del release en Fedora/RHEL/SUSE, y el binario estatico en `/usr/local/bin` en
 los demas. Cada descarga se verifica con SHA256 contra el `checksums.txt` del
 release. En Debian/Ubuntu amd64 instala por defecto `kite-collector-osquery`
-(el agente con osqueryd incluido). En los demas sistemas instala el agente
-simple e indica como agregar osquery. Variables (del lado `sh` del pipe):
+(el agente con osqueryd incluido) y lo prefiere: volver a ejecutar el
+instalador reemplaza un agente simple por el paquete con osquery, salvo con
+`KITE_OSQUERY=no`. En los demas sistemas instala el agente simple e indica
+como agregar osquery. Variables (del lado `sh` del pipe):
 `KITE_VERSION=1.2.3`, `KITE_OSQUERY=no|yes`,
 `KITE_INSTALL_METHOD=apt|rpm|binary` y `KITE_INSTALL_DIR`.
 

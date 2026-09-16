@@ -11,15 +11,20 @@
 #   everything else (Alpine, Arch,    the static release binary,
 #   macOS, FreeBSD, OpenBSD, ...)     SHA256-verified, into /usr/local/bin
 #
+# It then runs `kite-collector install --no-enroll` to register the
+# background service (enabled at boot, started once the host is enrolled),
+# leaving one step: `sudo kite-collector enroll`.
+#
 # Environment variables:
 #   KITE_VERSION         pin a release, e.g. "0.60.5" (default: latest)
 #   KITE_OSQUERY         "auto" (default) installs kite-collector-osquery, the
 #                        collector plus a bundled osqueryd running as the
 #                        kite-osqueryd service, where it is published
 #                        (Debian/Ubuntu amd64) and the plain collector
-#                        elsewhere. A re-run keeps whichever of the two is
-#                        already installed. "yes" requires the bundle, "no"
-#                        installs the plain collector.
+#                        elsewhere. The bundle is preferred: a re-run
+#                        replaces a plain install with it where published.
+#                        "yes" requires the bundle, "no" installs (and
+#                        keeps) the plain collector.
 #   KITE_INSTALL_METHOD  "auto" (default), "apt", "rpm" or "binary"
 #   KITE_INSTALL_DIR     binary method target (default: /usr/local/bin). A
 #                        directory you can already write needs no root.
@@ -31,9 +36,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/VulnerTrack/kite-collector/main/installers/installer.sh | KITE_VERSION=0.60.5 sh
 #   wget -qO- https://raw.githubusercontent.com/VulnerTrack/kite-collector/main/installers/installer.sh | sh
 #
-# The detect -> privilege -> install shape follows Tailscale's install.sh
-# (BSD-3-Clause). tests/e2e/installer pipes this file into `sh` inside real
-# distro containers; `make test-installer` runs it.
+# tests/e2e/installer pipes this file into `sh` inside real distro
+# containers; `make test-installer` runs it.
 
 set -eu
 
@@ -228,6 +232,33 @@ install_binary() {
     fi
 }
 
+# register_service runs `kite-collector install --no-enroll`, which
+# registers the service with the OS service manager (or adopts the unit a
+# deb/rpm shipped) and enables it at boot. --no-enroll keeps it from signing
+# in here, where nobody could complete that. The service only starts once
+# the host is enrolled, so a fresh install stays idle and an upgrade over a
+# running, enrolled service is restarted onto the new binary. Its own report
+# is kept out of the way — this script prints the single step that remains —
+# and shown in full only when registration fails. Returns non-zero when it
+# could not run (no root available) or failed, so main prints the one
+# command that does everything instead.
+register_service() {
+    if [ "$(id -u)" != 0 ] && [ -z "$SUDO" ]; then
+        # Binary method into a user-writable directory, no sudo/doas
+        # requested: registering a system service needs root.
+        return 1
+    fi
+    printf '+ %s%s install --no-enroll\n' "${SUDO:+$SUDO }" "$INSTALLED_BIN" >&2
+    if [ -n "$SUDO" ]; then
+        "$SUDO" "$INSTALLED_BIN" install --no-enroll >"$TMP_DIR/install.log" 2>&1 && return 0
+    else
+        "$INSTALLED_BIN" install --no-enroll >"$TMP_DIR/install.log" 2>&1 && return 0
+    fi
+    warn "service registration failed:"
+    cat "$TMP_DIR/install.log" >&2
+    return 1
+}
+
 # Everything runs from main, called on the last line, so a download cut off
 # mid-script is a syntax error instead of half an install.
 main() {
@@ -352,14 +383,14 @@ main() {
             PACKAGE=kite-collector-osquery
             ;;
         auto)
+            # The bundle is preferred wherever it is published, including
+            # over a plain install from an earlier run: osquery-backed
+            # discovery is the default, and KITE_OSQUERY=no is the opt-out.
             if [ "$BUNDLE_PUBLISHED" = true ]; then
-                # Upgrade whichever flavor is installed, instead of swapping
-                # a deliberately plain install for the bundle on a re-run.
                 if deb_installed kite-collector && ! deb_installed kite-collector-osquery; then
-                    say "Note: keeping the installed plain kite-collector; set KITE_OSQUERY=yes to switch to the osquery bundle."
-                else
-                    PACKAGE=kite-collector-osquery
+                    say "Note: replacing the plain kite-collector with the osquery bundle; set KITE_OSQUERY=no to keep the plain collector."
                 fi
+                PACKAGE=kite-collector-osquery
             fi
             ;;
     esac
@@ -434,12 +465,23 @@ main() {
     esac
     root_prefix=""
     [ "$(id -u)" = 0 ] || root_prefix="${SUDO:-sudo} "
-    say ""
-    say "Next, register the background service, then enroll this host (the"
-    say "service starts once enrollment succeeds):"
-    say ""
-    say "  ${root_prefix}kite-collector install"
-    say "  ${root_prefix}kite-collector enroll"
+
+    # Step 6: register the background service. Signing in is the one step
+    # left for the operator. When the service could not be registered here,
+    # `kite-collector install` on a terminal registers it, signs in, and
+    # starts it — still one command.
+    if register_service; then
+        say ""
+        say "Installation complete! Log in to start using VulnerTrack by running:"
+        say ""
+        say "  ${root_prefix}kite-collector enroll"
+    else
+        say ""
+        say "Installation complete! Register the service and log in to start"
+        say "using VulnerTrack by running:"
+        say ""
+        say "  ${root_prefix}kite-collector install"
+    fi
 
     if [ "$KITE_OSQUERY" = auto ] && [ "$PACKAGE" = kite-collector ] && [ "$BUNDLE_PUBLISHED" = false ]; then
         osquery_hint=""
