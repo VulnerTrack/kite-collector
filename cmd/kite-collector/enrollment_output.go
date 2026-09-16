@@ -44,7 +44,7 @@ func printEnrollmentSuccessStyled(out io.Writer, details enrollmentSuccessDetail
 		)
 	}
 
-	w.printf("\n%s\n", style(enrollANSIBold+enrollANSIGreen, "✅  Enrollment complete."))
+	w.printf("\n%s\n", style(enrollANSIBold+enrollANSIGreen, "✅ Enrollment complete."))
 	w.printf("   %s\n\n", style(enrollANSIBold, "Welcome to Kite! Your collector is connected to VulnerTrack."))
 	row("Collector", details.agentCode)
 	row("Certificates", details.certsDir)
