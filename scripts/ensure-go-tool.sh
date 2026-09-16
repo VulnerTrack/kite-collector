@@ -29,9 +29,12 @@
 # older toolchain pinned by the tool's own go.mod.
 #
 # Only tools that load and type-check Go source get this treatment. gocyclo,
-# gocognit, dupl and osv-scanner work on the AST or on go.mod/go.sum and are
-# unaffected, so they keep the cheaper `command -v || go install` check in the
-# Makefile rather than paying for rebuilds they do not need.
+# gocognit and dupl work on the AST and are unaffected, so they keep the
+# cheaper `command -v || go install` check in the Makefile rather than paying
+# for rebuilds they do not need. osv-scanner is unaffected only because
+# `make osv-scan` passes --no-call-analysis=go: its default Go call analysis
+# embeds govulncheck and would hit the same ceiling (v1.x pins an x/tools too
+# old for go1.27 even after a rebuild), so it is kept manifest-only instead.
 #
 # Comparison is at major.minor granularity: the language version is what the
 # loader gates on, so a patch-level difference is not a mismatch and must not

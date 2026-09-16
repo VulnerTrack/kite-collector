@@ -371,11 +371,20 @@ vulncheck:
 	@$(ENSURE_TOOL) govulncheck golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	govulncheck ./...
 
-# osv-scanner reads go.mod/go.sum, never Go source, so it needs no toolchain
-# guard — presence is the only requirement.
+# osv-scanner is kept manifest-only (go.mod/go.sum) so it needs no toolchain
+# guard — presence is the only requirement. That is NOT its default: for Go
+# modules it runs call analysis (--call-analysis=go) unless told otherwise,
+# which embeds govulncheck as a library and type-checks the source with the
+# x/tools compiled into the osv-scanner binary. v1.x pins an x/tools too old
+# for a go1.27 toolchain, so on such hosts it dies with "Failed to run code
+# analysis (govulncheck) ... Loading packages failed, possibly due to a
+# mismatch between the Go version used to build govulncheck and the Go
+# version on PATH" (or a "panic: unexpected expr: *ast.KeyValueExpr" in
+# go/ssa after a rebuild). Reachability is govulncheck's job in this chain,
+# so disable the redundant pass instead of guarding it.
 osv-scan:
 	@command -v osv-scanner >/dev/null 2>&1 || go install github.com/google/osv-scanner/cmd/osv-scanner@latest
-	osv-scanner -r --skip-git .
+	osv-scanner -r --skip-git --no-call-analysis=go .
 
 security: vulncheck osv-scan
 	@$(ENSURE_TOOL) gosec github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION)
