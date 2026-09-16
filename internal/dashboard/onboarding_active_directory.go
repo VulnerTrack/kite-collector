@@ -215,8 +215,10 @@ func serveIntegrationsPage(w http.ResponseWriter, r *http.Request, deps onboardi
 
 	var buf strings.Builder
 	if err := renderIndexPage(&buf, "integrations", func(fragBuf io.Writer) error {
-		_, err := io.WriteString(fragBuf, integrationsBody)
-		return err
+		if _, err := io.WriteString(fragBuf, integrationsBody); err != nil {
+			return fmt.Errorf("write integrations body: %w", err)
+		}
+		return nil
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

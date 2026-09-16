@@ -1670,8 +1670,8 @@ func TestEnroll_SetsRefreshTriggerHeader(t *testing.T) {
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"})
 
 	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "refresh-agent-state", rec.Header().Get("HX-Trigger"),
-		"successful enroll must trigger the header refresh so the stepper advances immediately")
+	assert.JSONEq(t, `{"refresh-agent-state":{},"show-optional-integrations":{}}`, rec.Header().Get("HX-Trigger"),
+		"successful enroll must refresh the header and offer optional integrations")
 }
 
 func TestAgentInstall_HXRequest_AdvisoryMode503HTML(t *testing.T) {
