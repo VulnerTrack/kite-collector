@@ -119,10 +119,11 @@ case "$LEG" in
 esac
 
 # The default flavor (KITE_OSQUERY=auto) is the osquery bundle wherever it is
-# published, Debian/Ubuntu amd64. The ubuntu leg starts from a deliberately
-# plain install instead, to prove default re-runs do not swap it.
+# published, Debian/Ubuntu amd64, and it is preferred: the ubuntu leg starts
+# from a deliberately plain install to prove a default re-run swaps the
+# bundle in.
 EXPECT_PKG=kite-collector
-if [ "$METHOD" = apt ] && [ "$LEG" != ubuntu ] && [ "$(dpkg --print-architecture)" = amd64 ]; then
+if [ "$METHOD" = apt ] && [ "$(dpkg --print-architecture)" = amd64 ]; then
     EXPECT_PKG=kite-collector-osquery
 fi
 
@@ -155,14 +156,17 @@ fi
 if [ "$LEG" = ubuntu ]; then
     expect_ok "pinned plain install (KITE_VERSION=$OLD_VERSION KITE_OSQUERY=no)" \
         KITE_VERSION="$OLD_VERSION" KITE_OSQUERY=no
+    expect_log "picked the plain collector on KITE_OSQUERY=no" "Installing kite-collector "
+    expect_owner kite-collector
 else
     expect_ok "pinned install, default flavor (KITE_VERSION=$OLD_VERSION)" KITE_VERSION="$OLD_VERSION"
+    expect_log "picked $EXPECT_PKG" "Installing $EXPECT_PKG "
 fi
 expect_log "picked the $METHOD method" "using $METHOD"
-expect_log "picked $EXPECT_PKG" "Installing $EXPECT_PKG "
 expect_version "$BIN" "$OLD_VERSION" "binary reports the pinned version"
-expect_log "prints the install step" "kite-collector install"
-expect_log "prints the enroll step" "kite-collector enroll"
+expect_log "ran kite-collector install" "^+ .*kite-collector install --no-enroll"
+expect_log "says installation is complete" "Installation complete!"
+expect_log "prints the sign-in step" "kite-collector enroll"
 if [ -n "$RUN_AS" ]; then
     expect_log "privileged commands went through sudo" "^+ sudo "
 fi
@@ -179,10 +183,10 @@ esac
 expect_ok "unpinned re-run upgrades"
 expect_version "$BIN" "$NEW_VERSION" "binary reports the latest version"
 [ "$METHOD" = binary ] || expect_owner "$EXPECT_PKG"
+[ "$LEG" != ubuntu ] || expect_log "default re-run replaces the plain install with the bundle" "replacing the plain kite-collector with the osquery bundle"
 
 expect_ok "second unpinned re-run succeeds"
 expect_version "$BIN" "$NEW_VERSION" "version unchanged by the re-run"
-[ "$LEG" != ubuntu ] || expect_log "default re-run keeps the plain install" "keeping the installed plain kite-collector"
 
 if [ -n "$(find /tmp -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null)" ]; then
     fail "installer cleans up its temp directory" "$(find /tmp -maxdepth 1 -type d -name 'tmp.*')"
