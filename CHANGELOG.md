@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `kite-collector doctor` (alias `check`) now records its connectivity outcome on the enrolled identity, so `kite-collector status` stops reporting "no connection check has run yet" after a check from the CLI. Previously only the dashboard's "Run check" button set that stamp.
+- Packages and the one-line installer keep `/usr/local/bin/kite-collector` valid as a symlink to `/usr/bin/kite-collector` on every install, so a shell that cached the old path keeps working instead of failing with "No such file or directory". A binary-method copy left there by an earlier run of the installer is replaced so it no longer shadows the package.
+- The deb/rpm packages now enable the `kite-collector` systemd unit on install (started once the host is enrolled), so apt/dnf alone registers the service. The one-line installer only passes `--no-enroll` to releases that know the flag, so a newer script against an older release no longer fails registration.
 - Timestamps the CLI prints (`status`, `doctor`, `scan` tables, the HTML report) and the dashboard renders now name the host's IANA time zone, for example `2026-09-16 11:52:03 America/Los_Angeles`, instead of UTC or a `PDT`/`MST` abbreviation. JSON, CSV, and export files keep RFC 3339.
 - `kite-collector scan --source <name>` now enables the named discovery sources; the flag was parsed and then ignored. A name that is not a registered source prints a warning.
 - The one-line installer prefers `kite-collector-osquery` wherever it is published: a default re-run now replaces a plain `kite-collector` with the bundle (`KITE_OSQUERY=no` keeps the plain collector).
