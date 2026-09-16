@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/installer"
+	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
 
 func checkByName(t *testing.T, checks []doctorCheck, name string) doctorCheck {
@@ -175,4 +177,80 @@ func TestDoctorBinaryDriftCheck(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	c = doctorBinaryDriftCheck(opts)
 	assert.Equal(t, doctorSkip, c.Status)
+}
+
+func TestRecordDoctorCheckStamp(t *testing.T) {
+	ctx := context.Background()
+	pass := []doctorCheck{{Name: "tcp-dial", Status: doctorPass}, {Name: "tls-handshake", Status: doctorPass}, {Name: "otlp-ping", Status: doctorPass}}
+	fail := []doctorCheck{{Name: "tcp-dial", Status: doctorFail}, {Name: "tls-handshake", Status: doctorSkip}, {Name: "otlp-ping", Status: doctorSkip}}
+	skipped := []doctorCheck{{Name: "tcp-dial", Status: doctorPass}, {Name: "tls-handshake", Status: doctorSkip}, {Name: "otlp-ping", Status: doctorSkip}}
+
+	t.Run("missing database is left alone", func(t *testing.T) {
+		dbPath := filepath.Join(t.TempDir(), "kite.db")
+		c := recordDoctorCheckStamp(ctx, dbPath, pass)
+		assert.Equal(t, doctorSkip, c.Status)
+		_, err := os.Stat(dbPath)
+		assert.True(t, os.IsNotExist(err), "doctor must never create the DB")
+	})
+
+	// The encrypted store writes its at-rest file on Close, so every step
+	// opens, acts, and closes — the way doctor and the service do.
+	dbPath := filepath.Join(t.TempDir(), "kite.db")
+	withStore := func(fn func(st *sqlite.SQLiteStore)) {
+		encStore, err := openSQLiteStore(dbPath, config.IdentityConfig{})
+		require.NoError(t, err)
+		require.NoError(t, encStore.Migrate(ctx))
+		st, ok := encStore.Store.(*sqlite.SQLiteStore)
+		require.True(t, ok)
+		fn(st)
+		require.NoError(t, encStore.Close())
+	}
+	identity := func() *sqlite.EnrolledIdentity {
+		var id *sqlite.EnrolledIdentity
+		withStore(func(st *sqlite.SQLiteStore) {
+			got, err := st.GetEnrolledIdentity(ctx)
+			require.NoError(t, err)
+			id = got
+		})
+		return id
+	}
+	withStore(func(*sqlite.SQLiteStore) {})
+
+	t.Run("no identity is not stamped", func(t *testing.T) {
+		c := recordDoctorCheckStamp(ctx, dbPath, pass)
+		assert.Equal(t, doctorSkip, c.Status)
+		assert.Contains(t, c.Detail, "no enrolled identity")
+	})
+
+	withStore(func(st *sqlite.SQLiteStore) {
+		require.NoError(t, st.UpsertEnrolledIdentity(ctx, sqlite.EnrolledIdentity{
+			ApiKeyFingerprint: "fp-doctor",
+			ApiKeyWrapped:     []byte("wrapped"),
+			LastEnrolledAt:    time.Now().UTC(),
+		}))
+	})
+
+	t.Run("otlp-ping skipped is not stamped", func(t *testing.T) {
+		c := recordDoctorCheckStamp(ctx, dbPath, skipped)
+		assert.Equal(t, doctorSkip, c.Status)
+		id := identity()
+		assert.Nil(t, id.LastCheckPassedAt)
+		assert.Nil(t, id.LastCheckFailedAt)
+	})
+
+	t.Run("pass stamps last_check_passed_at", func(t *testing.T) {
+		c := recordDoctorCheckStamp(ctx, dbPath, pass)
+		assert.Equal(t, doctorPass, c.Status)
+		id := identity()
+		require.NotNil(t, id.LastCheckPassedAt)
+		assert.Nil(t, id.LastCheckFailedAt)
+	})
+
+	t.Run("fail stamps last_check_failed_at", func(t *testing.T) {
+		c := recordDoctorCheckStamp(ctx, dbPath, fail)
+		assert.Equal(t, doctorPass, c.Status)
+		assert.Contains(t, c.Detail, "(failed)")
+		id := identity()
+		require.NotNil(t, id.LastCheckFailedAt)
+	})
 }

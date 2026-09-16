@@ -162,8 +162,69 @@ func runDoctorChecks(ctx context.Context, o doctorOptions) []doctorCheck {
 	if endpoint == "" {
 		endpoint = "https://otel.vulnertrack.io"
 	}
-	checks = append(checks, doctorConnectivityChecks(endpoint, opts.CertsDir, o.Timeout)...)
+	connectivity := doctorConnectivityChecks(endpoint, opts.CertsDir, o.Timeout)
+	checks = append(checks, connectivity...)
+	checks = append(checks, recordDoctorCheckStamp(ctx, opts.DbPath, connectivity))
 	return checks
+}
+
+// recordDoctorCheckStamp writes the connectivity outcome onto the enrolled
+// identity, the same last_check_passed_at / last_check_failed_at stamp the
+// dashboard's "Run check" sets. Without it, `kite-collector status` keeps
+// reporting "no connection check has run yet" no matter how many times the
+// operator runs doctor. Read-only where it must be: a missing database or
+// identity is left alone, and the stamp is skipped when the otlp-ping stage
+// did not actually run (no certs, so nothing was verified).
+func recordDoctorCheckStamp(ctx context.Context, dbPath string, connectivity []doctorCheck) doctorCheck {
+	c := doctorCheck{Name: "last check", Status: doctorSkip}
+	var pinged, failed bool
+	for _, check := range connectivity {
+		switch {
+		case check.Status == doctorFail:
+			failed = true
+		case check.Name == "otlp-ping" && check.Status == doctorPass:
+			pinged = true
+		}
+	}
+	if !pinged && !failed {
+		c.Detail = "not recorded (otlp-ping did not run)"
+		return c
+	}
+	if fi, err := os.Stat(dbPath); err != nil || fi.IsDir() {
+		c.Detail = "not recorded (database not created yet)"
+		return c
+	}
+	encStore, err := openSQLiteStore(dbPath, config.IdentityConfig{})
+	if err != nil {
+		c.Detail = "not recorded: " + err.Error()
+		return c
+	}
+	defer func() { _ = encStore.Close() }()
+	st, ok := encStore.Store.(*sqlite.SQLiteStore)
+	if !ok {
+		c.Detail = "not recorded (store is not SQLite)"
+		return c
+	}
+	if _, idErr := st.GetEnrolledIdentity(ctx); idErr != nil {
+		c.Detail = "not recorded (no enrolled identity)"
+		return c
+	}
+	now := time.Now().UTC()
+	if failed {
+		err = st.UpdateIdentityCheckStamp(ctx, nil, &now)
+	} else {
+		err = st.UpdateIdentityCheckStamp(ctx, &now, nil)
+	}
+	if err != nil {
+		c.Detail = "not recorded: " + err.Error()
+		return c
+	}
+	c.Status = doctorPass
+	c.Detail = "recorded " + timefmt.Format(now)
+	if failed {
+		c.Detail += " (failed)"
+	}
+	return c
 }
 
 func doctorServiceCheck(state installer.State) doctorCheck {
