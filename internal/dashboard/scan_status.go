@@ -11,6 +11,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // recentCompletionWindow is how long a finished scan reads as "Completed"
@@ -83,7 +84,7 @@ func (v *scanStatusView) fillLines(now time.Time) {
 	case v.Running:
 		v.Line1 = "Scanning"
 		v.Line2 = "started " + humanizeRelativeTime(now.Sub(v.ActiveSince)) + " · id " + shortScanID(v.ActiveID)
-		v.Line2Title = v.ActiveSince.Local().Format("2006-01-02 15:04:05 MST")
+		v.Line2Title = timefmt.Format(v.ActiveSince)
 		v.ToneClass = "scan-meta-running"
 	case v.Latest == nil:
 		v.Line1 = "Idle"
@@ -97,7 +98,7 @@ func (v *scanStatusView) fillLines(now time.Time) {
 func (v *scanStatusView) fillFromLatest(now time.Time) {
 	run := v.Latest
 	ago := humanizeRelativeTime(now.Sub(run.StartedAt))
-	v.Line2Title = run.StartedAt.Local().Format("2006-01-02 15:04:05 MST")
+	v.Line2Title = timefmt.Format(run.StartedAt)
 
 	switch run.Status {
 	case model.ScanStatusCompleted:

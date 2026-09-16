@@ -31,6 +31,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/secretstore"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // onboardingDeps bundles everything the onboarding handlers need.
@@ -332,7 +333,7 @@ type enrollView struct {
 	Endpoint              string
 	FingerprintShort      string
 	FingerprintFull       string
-	FirstEnrolledAt       string // RFC3339 — preserved for the hover tooltip / machine-readable use
+	FirstEnrolledAt       string // absolute, zone-named — the hover tooltip behind the relative text
 	LastEnrolledAt        string
 	FirstEnrolledRelative string // "2h ago" — primary display for human-glance reading
 	LastEnrolledRelative  string
@@ -384,8 +385,8 @@ func renderEnrollFragment(w io.Writer, ctx context.Context, deps onboardingDeps)
 			view.Enrolled = true
 			view.FingerprintFull = id.ApiKeyFingerprint
 			view.FingerprintShort = shortFingerprint(id.ApiKeyFingerprint)
-			view.FirstEnrolledAt = id.FirstEnrolledAt.Format(time.RFC3339)
-			view.LastEnrolledAt = id.LastEnrolledAt.Format(time.RFC3339)
+			view.FirstEnrolledAt = timefmt.Format(id.FirstEnrolledAt)
+			view.LastEnrolledAt = timefmt.Format(id.LastEnrolledAt)
 			view.FirstEnrolledRelative = humanizeRelativeTime(time.Since(id.FirstEnrolledAt))
 			view.LastEnrolledRelative = humanizeRelativeTime(time.Since(id.LastEnrolledAt))
 		}
@@ -519,8 +520,8 @@ func handleEnroll(w http.ResponseWriter, r *http.Request, deps onboardingDeps) {
 		Endpoint:              deps.PlatformEndpoint,
 		FingerprintFull:       id.ApiKeyFingerprint,
 		FingerprintShort:      shortFingerprint(id.ApiKeyFingerprint),
-		FirstEnrolledAt:       id.FirstEnrolledAt.Format(time.RFC3339),
-		LastEnrolledAt:        id.LastEnrolledAt.Format(time.RFC3339),
+		FirstEnrolledAt:       timefmt.Format(id.FirstEnrolledAt),
+		LastEnrolledAt:        timefmt.Format(id.LastEnrolledAt),
 		FirstEnrolledRelative: humanizeRelativeTime(time.Since(id.FirstEnrolledAt)),
 		LastEnrolledRelative:  humanizeRelativeTime(time.Since(id.LastEnrolledAt)),
 	}
@@ -1327,7 +1328,7 @@ func renderConnectionCheckFragment(w io.Writer, r *http.Request, deps onboarding
 	if run {
 		view.Probes = runAllProbes(r.Context(), deps)
 		view.HasRun = true
-		view.CheckedAt = time.Now().UTC().Format(time.RFC3339)
+		view.CheckedAt = timefmt.Format(time.Now())
 	} else if deps.Store != nil {
 		// Load the last probe batch (one full run = 6 rows) and render it.
 		history, listErr := deps.Store.ListProbeResults(r.Context(), 6)
@@ -1336,7 +1337,7 @@ func renderConnectionCheckFragment(w io.Writer, r *http.Request, deps onboarding
 		}
 		if len(history) > 0 {
 			view.HasRun = true
-			view.CheckedAt = history[0].CheckedAt.Format(time.RFC3339)
+			view.CheckedAt = timefmt.Format(history[0].CheckedAt)
 			for _, h := range history {
 				pr := probeResult{
 					Name:       probeName(h.ProbeName),
@@ -1425,7 +1426,7 @@ func renderStreamStatusFragment(w io.Writer, deps onboardingDeps) error {
 		view.LastErrorText = s.LastErrorText
 		view.Running = view.State == "running" || view.State == "degraded"
 		if !s.LastEventAt.IsZero() {
-			view.LastEventAt = s.LastEventAt.Format(time.RFC3339)
+			view.LastEventAt = timefmt.Format(s.LastEventAt)
 		}
 	}
 	if err := streamTmpl.Execute(w, view); err != nil {

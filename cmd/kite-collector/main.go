@@ -89,6 +89,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/streamctrl"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/hostmetrics"
 	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 	"github.com/vulnertrack/kite-collector/internal/tunnel"
 )
 
@@ -1968,7 +1969,7 @@ func runReport(dbPath, format, outputPath string) error {
 		if latestRun != nil {
 			fmt.Printf(
 				"Latest scan: %s (total: %d, new: %d, stale: %d)\n\n",
-				latestRun.StartedAt.Format(time.RFC3339),
+				timefmt.Format(latestRun.StartedAt),
 				latestRun.TotalMachines,
 				latestRun.NewMachines,
 				latestRun.StaleMachines,
@@ -2410,7 +2411,7 @@ func formatTable(machines []model.Machine) {
 			a.IsAuthorized,
 			a.IsManaged,
 			a.DiscoverySource,
-			a.LastSeenAt.Format("2006-01-02T15:04:05Z"),
+			timefmt.Format(a.LastSeenAt),
 		)
 	}
 	_ = w.Flush()
@@ -2573,7 +2574,7 @@ func formatHTMLReport(ctx context.Context, st store.Store, machines []model.Mach
 	}
 
 	data := htmlReportData{
-		GeneratedAt:       time.Now().UTC().Format(time.RFC3339),
+		GeneratedAt:       timefmt.Format(time.Now()),
 		Version:           version,
 		TotalMachines:     len(machines),
 		AuthorizedCount:   authCount,

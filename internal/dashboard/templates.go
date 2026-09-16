@@ -15,14 +15,13 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // templateFuncs provides helper functions for HTML templates.
 var templateFuncs = template.FuncMap{
-	"upper": strings.ToUpper,
-	"formatTime": func(t time.Time) string {
-		return t.Local().Format("2006-01-02 15:04:05 MST")
-	},
+	"upper":      strings.ToUpper,
+	"formatTime": timefmt.Format,
 	"severityClass": func(s model.Severity) string {
 		switch s {
 		case model.SeverityCritical:
@@ -73,7 +72,7 @@ func renderCell(v any) string {
 		}
 		return hex.EncodeToString(x)
 	case time.Time:
-		return x.Local().Format("2006-01-02 15:04:05 MST")
+		return timefmt.Format(x)
 	case bool:
 		if x {
 			return "true"

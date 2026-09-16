@@ -38,6 +38,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // certExpiringWindow is the "expiring soon" horizon: PKI issues 90-day
@@ -238,7 +240,7 @@ func certRelativeDays(t time.Time, now time.Time) string {
 
 func certDateOnly(s string) string {
 	if t, ok := parsePKITime(s); ok {
-		return t.UTC().Format("2006-01-02")
+		return timefmt.Date(t)
 	}
 	if len(s) >= 10 {
 		return s[:10]
@@ -351,7 +353,7 @@ func buildCertLocalIdentity(certsDir string, now time.Time) certLocalIdentity {
 	local.FingerprintFull = hex.EncodeToString(sum[:])
 	local.Fingerprint = shortCertFingerprint(local.FingerprintFull)
 	local.SubjectCN = cert.Subject.CommonName
-	local.NotAfter = cert.NotAfter.UTC().Format("2006-01-02")
+	local.NotAfter = timefmt.Date(cert.NotAfter)
 	local.DaysLeft = int(time.Until(cert.NotAfter).Hours() / 24)
 	local.Expired = now.After(cert.NotAfter)
 	total := cert.NotAfter.Sub(cert.NotBefore)
@@ -560,7 +562,7 @@ func buildCertificatesView(ctx context.Context, deps onboardingDeps, cache *cert
 		if errors.Is(err, errPKICertificateSignInRequired) {
 			if stale, at, ok := cache.last(); ok {
 				view.Mode = certModeSessionGone
-				view.StaleAt = at.Format("15:04")
+				view.StaleAt = timefmt.Clock(at)
 				view.fillInventory(stale, now, p)
 				return view
 			}

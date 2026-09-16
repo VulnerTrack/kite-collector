@@ -31,6 +31,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
 	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 type statusService struct {
@@ -528,6 +529,23 @@ func overallStatusHealth(checks []statusHealthCheck) string {
 	return overall
 }
 
+// statusDate and statusDateTime re-render the RFC 3339 strings the JSON
+// report carries for the terminal: local zone, zone named. Anything that does
+// not parse (an empty field, a build stamp in another format) passes through.
+func statusDate(rfc3339 string) string {
+	if t, ok := parseStatusTime(rfc3339); ok {
+		return timefmt.Date(t)
+	}
+	return rfc3339
+}
+
+func statusDateTime(rfc3339 string) string {
+	if t, ok := parseStatusTime(rfc3339); ok {
+		return timefmt.Format(t)
+	}
+	return rfc3339
+}
+
 func renderStatusReport(cmd *cobra.Command, r statusReport) {
 	out := cmd.OutOrStdout()
 	_, _ = fmt.Fprintln(out)
@@ -551,16 +569,16 @@ func renderStatusReport(cmd *cobra.Command, r statusReport) {
 
 	switch {
 	case r.Enrollment.Enrolled && r.Enrollment.CertNotAfter != "":
-		expiry := fmt.Sprintf("cert expires %s (%dd)", r.Enrollment.CertNotAfter[:10], r.Enrollment.CertDaysLeft)
+		expiry := fmt.Sprintf("cert expires %s (%dd)", statusDate(r.Enrollment.CertNotAfter), r.Enrollment.CertDaysLeft)
 		if r.Enrollment.CertDaysLeft < 0 {
-			expiry = "cert EXPIRED " + r.Enrollment.CertNotAfter[:10]
+			expiry = "cert EXPIRED " + statusDate(r.Enrollment.CertNotAfter)
 		}
 		_, _ = fmt.Fprintf(w, "  Enrollment\tenrolled · %s\n", expiry)
 	default:
 		_, _ = fmt.Fprintf(w, "  Enrollment\t%s\n", r.Enrollment.State)
 	}
 	if r.Enrollment.FirstEnrolled != "" {
-		_, _ = fmt.Fprintf(w, "  \tfirst enrolled %s · key %s\n", r.Enrollment.FirstEnrolled[:10], r.Enrollment.KeyFingerprint)
+		_, _ = fmt.Fprintf(w, "  \tfirst enrolled %s · key %s\n", statusDate(r.Enrollment.FirstEnrolled), r.Enrollment.KeyFingerprint)
 	}
 	if r.Enrollment.Warning != "" {
 		_, _ = fmt.Fprintf(w, "  \t⚠ %s\n", r.Enrollment.Warning)
@@ -572,7 +590,7 @@ func renderStatusReport(cmd *cobra.Command, r statusReport) {
 
 	if r.LastScan != nil {
 		_, _ = fmt.Fprintf(w, "  Last scan\t%s (%s) · %s · %s, %d new\n",
-			r.LastScan.StartedAt, r.LastScan.Ago, r.LastScan.Status,
+			statusDateTime(r.LastScan.StartedAt), r.LastScan.Ago, r.LastScan.Status,
 			plural.Count(r.LastScan.TotalMachines, "machine"), r.LastScan.NewMachines)
 	} else {
 		_, _ = fmt.Fprintf(w, "  Last scan\tnone yet\n")
@@ -598,9 +616,9 @@ func renderStatusReport(cmd *cobra.Command, r statusReport) {
 	_, _ = fmt.Fprintf(w, "    Client\t%s\n", statusValue(r.Registration.ClientName, "not available"))
 	certificate := "not available"
 	if r.Registration.ExpiresAt != "" {
-		certificate = fmt.Sprintf("valid until %s (%dd left)", r.Registration.ExpiresAt[:10], r.Enrollment.CertDaysLeft)
+		certificate = fmt.Sprintf("valid until %s (%dd left)", statusDate(r.Registration.ExpiresAt), r.Enrollment.CertDaysLeft)
 		if r.Registration.IssuedAt != "" {
-			certificate += " · issued " + r.Registration.IssuedAt[:10]
+			certificate += " · issued " + statusDate(r.Registration.IssuedAt)
 		}
 	}
 	_, _ = fmt.Fprintf(w, "    Certificate\t%s\n", certificate)
@@ -617,7 +635,7 @@ func renderStatusReport(cmd *cobra.Command, r statusReport) {
 	_, _ = fmt.Fprintf(w, "    Vendor\t%s\n", r.Software.Vendor)
 	_, _ = fmt.Fprintf(w, "    Agent type\t%s\n", r.Software.AgentType)
 	_, _ = fmt.Fprintf(w, "    Build ID\t%s\n", statusValue(r.Software.BuildID, "not available"))
-	_, _ = fmt.Fprintf(w, "    Built\t%s\n", statusValue(r.Software.BuiltAt, "not available"))
+	_, _ = fmt.Fprintf(w, "    Built\t%s\n", statusValue(statusDateTime(r.Software.BuiltAt), "not available"))
 	_, _ = fmt.Fprintf(w, "    Binary\t%s\n", statusValue(r.Software.BinaryPath, "not available"))
 	_, _ = fmt.Fprintf(w, "    Binary hash\t%s\n", statusValue(r.Software.BinaryHash, "not available"))
 	_, _ = fmt.Fprintf(w, "    Platform\t%s/%s\n", r.Software.Platform, r.Software.Architecture)

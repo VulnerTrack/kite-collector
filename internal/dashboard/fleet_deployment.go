@@ -27,6 +27,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 const (
@@ -473,7 +474,7 @@ func fleetCandidateFromMachine(machine model.Machine) fleetMachineCandidate {
 		Local:           local,
 	}
 	if !machine.LastSeenAt.IsZero() {
-		candidate.LastSeen = machine.LastSeenAt.UTC().Format("2006-01-02 15:04 UTC")
+		candidate.LastSeen = timefmt.Format(machine.LastSeenAt)
 	}
 	if candidate.MachineType == "" {
 		candidate.MachineType = "unknown type"

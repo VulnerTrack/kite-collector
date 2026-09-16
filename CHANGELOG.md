@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Timestamps the CLI prints (`status`, `doctor`, `scan` tables, the HTML report) and the dashboard renders now name the host's IANA time zone, for example `2026-09-16 11:52:03 America/Los_Angeles`, instead of UTC or a `PDT`/`MST` abbreviation. JSON, CSV, and export files keep RFC 3339.
+- `kite-collector scan --source <name>` now enables the named discovery sources; the flag was parsed and then ignored. A name that is not a registered source prints a warning.
 - The one-line installer prefers `kite-collector-osquery` wherever it is published: a default re-run now replaces a plain `kite-collector` with the bundle (`KITE_OSQUERY=no` keeps the plain collector).
 - CLI and dashboard counts read "1 machine" / "2 machines" instead of "1 machines" or "1 machine(s)".
 - The one-line installer now registers the background service itself and ends with a single next step: `sudo kite-collector enroll`. A flag-less `kite-collector install` on a terminal signs in too, so it registers, enrolls, and starts in one command; `--no-enroll` keeps the old register-only behavior for scripts.

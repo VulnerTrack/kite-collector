@@ -15,6 +15,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 func TestShortCommit(t *testing.T) {
@@ -102,16 +103,16 @@ func TestRenderStatusReport_EnrolledRunningSystem(t *testing.T) {
 
 	assert.Contains(t, out, "1.2.3 (abcdef1)")
 	assert.Contains(t, out, "running (system)")
-	assert.Contains(t, out, "enrolled · cert expires 2027-03-04 (120d)")
-	assert.Contains(t, out, "first enrolled 2026-01-15 · key fp-42")
+	assert.Contains(t, out, "enrolled · cert expires "+humanDate(t, "2027-03-04T05:06:07Z")+" (120d)")
+	assert.Contains(t, out, "first enrolled "+humanDate(t, "2026-01-15T10:00:00Z")+" · key fp-42")
 	assert.Contains(t, out, "https://otel.example")
-	assert.Contains(t, out, "2026-08-20T01:02:03Z (3h ago) · completed · 12 machines, 2 new")
+	assert.Contains(t, out, humanTime(t, "2026-08-20T01:02:03Z")+" (3h ago) · completed · 12 machines, 2 new")
 	assert.Contains(t, out, "/var/lib/kite/kite.db (1.5 KB)")
 	assert.Contains(t, out, "ready")
 	assert.Contains(t, out, "Registration")
 	assert.Contains(t, out, "operator@example.com · user-123")
 	assert.Contains(t, out, "Example Org · tenant-456")
-	assert.Contains(t, out, "valid until 2027-03-04 (120d left) · issued 2026-12-01")
+	assert.Contains(t, out, "valid until "+humanDate(t, "2027-03-04T05:06:07Z")+" (120d left) · issued "+humanDate(t, "2026-12-01T00:00:00Z"))
 	assert.Contains(t, out, "https://otel.example · mutual TLS")
 	assert.Contains(t, out, "Software")
 	assert.Contains(t, out, "sha256:1234")
@@ -140,7 +141,7 @@ func TestRenderStatusReport_ExpiredCertAndWarnings(t *testing.T) {
 	})
 
 	assert.Contains(t, out, "not installed (user)")
-	assert.Contains(t, out, "cert EXPIRED 2026-01-01")
+	assert.Contains(t, out, "cert EXPIRED "+humanDate(t, "2026-01-01T00:00:00Z"))
 	assert.NotContains(t, out, "cert expires")
 	assert.Contains(t, out, "⚠ agent.pem unreadable: permission denied")
 	assert.Contains(t, out, "none yet")
@@ -217,4 +218,20 @@ func TestFillStatusFromStore_UnopenableStoreDegradesToWarning(t *testing.T) {
 	assert.Contains(t, report.Database.Warning, "could not open: ")
 	assert.Empty(t, report.Enrollment.FirstEnrolled)
 	assert.Nil(t, report.LastScan)
+}
+
+// humanDate and humanTime mirror what the renderer does with an RFC 3339
+// field so the assertions hold in whatever zone the test host resolves.
+func humanDate(t *testing.T, rfc3339 string) string {
+	t.Helper()
+	at, err := time.Parse(time.RFC3339, rfc3339)
+	require.NoError(t, err)
+	return timefmt.Date(at)
+}
+
+func humanTime(t *testing.T, rfc3339 string) string {
+	t.Helper()
+	at, err := time.Parse(time.RFC3339, rfc3339)
+	require.NoError(t, err)
+	return timefmt.Format(at)
 }

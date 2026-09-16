@@ -25,6 +25,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/network"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 var errFleetDiscoveryRunning = errors.New("network discovery is already running")
@@ -508,7 +509,7 @@ func fleetIPv4Targets(cidr, localIP string) []string {
 func (c *fleetDiscoveryController) finish(status fleetDiscoveryStatus) {
 	status.Running = false
 	status.HasRun = true
-	status.CompletedAt = time.Now().UTC().Format("2006-01-02 15:04 UTC")
+	status.CompletedAt = timefmt.Format(time.Now())
 	c.mu.Lock()
 	c.status = status
 	c.mu.Unlock()

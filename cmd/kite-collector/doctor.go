@@ -34,6 +34,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 const (
@@ -446,15 +447,15 @@ func doctorCertificatesCheck(certsDir string, state installer.State) doctorCheck
 	switch {
 	case left <= 0:
 		c.Status = doctorFail
-		c.Detail = "client certificate EXPIRED " + notAfter.UTC().Format("2006-01-02")
+		c.Detail = "client certificate EXPIRED " + timefmt.Date(notAfter)
 		c.Hint = "re-enroll: kite-collector enroll"
 	case left < certExpiryWarnWindow:
 		c.Status = doctorWarn
-		c.Detail = fmt.Sprintf("client certificate expires in %dd (%s)", int(left.Hours()/24), notAfter.UTC().Format("2006-01-02"))
+		c.Detail = fmt.Sprintf("client certificate expires in %dd (%s)", int(left.Hours()/24), timefmt.Date(notAfter))
 		c.Hint = "renewal happens on heartbeat; if it doesn't, re-enroll"
 	default:
 		c.Status = doctorPass
-		c.Detail = fmt.Sprintf("enrolled · cert valid until %s (%dd)", notAfter.UTC().Format("2006-01-02"), int(left.Hours()/24))
+		c.Detail = fmt.Sprintf("enrolled · cert valid until %s (%dd)", timefmt.Date(notAfter), int(left.Hours()/24))
 	}
 	_ = state
 	return c

@@ -39,6 +39,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/docker"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/store"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 const (
@@ -1161,7 +1162,7 @@ func newContainersFreshness(customPaths []string, paused bool, filter containerF
 	// back to every container.
 	fr := observabilityFreshness{
 		Paused:          paused,
-		UpdatedAtUTC:    time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt:       timefmt.Format(time.Now()),
 		AutoRefreshSecs: containersRefreshSecs,
 		WrapperGetURL:   filter.apply(containersFragmentURL(customPaths, paused)),
 	}

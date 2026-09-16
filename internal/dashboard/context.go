@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vulnertrack/kite-collector/internal/store"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // ReportContext holds all metadata rendered in the dashboard header, footer,
@@ -65,7 +66,7 @@ func NewReportContext(ctx context.Context, st store.Store, dbPath, version, comm
 		DBPath:           dbPath,
 		ReportID:         uuid.Must(uuid.NewV7()).String(),
 		GeneratedAtUTC:   time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
-		GeneratedAtLocal: time.Now().Local().Format("2006-01-02 15:04:05 MST"),
+		GeneratedAtLocal: timefmt.Format(time.Now()),
 	}
 
 	// Database file size.

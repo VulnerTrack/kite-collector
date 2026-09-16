@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/installer"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // The simplified onboarding flow shows the three core steps followed by an
@@ -226,7 +227,7 @@ func loadOnboardingScanSummaries(ctx context.Context, deps onboardingDeps, limit
 			trigger = "automatic"
 		}
 		out = append(out, onboardingScanSummary{
-			StartedAt: run.StartedAt.UTC().Format(time.RFC3339), RelativeTime: humanizeRelativeTime(time.Since(run.StartedAt)),
+			StartedAt: timefmt.Format(run.StartedAt), RelativeTime: humanizeRelativeTime(time.Since(run.StartedAt)),
 			Status: status, BadgeClass: badgeClass, TriggerSource: trigger,
 			TotalMachines: run.TotalMachines, NewMachines: run.NewMachines,
 			UpdatedMachines: run.UpdatedMachines, ErrorCount: run.ErrorCount,

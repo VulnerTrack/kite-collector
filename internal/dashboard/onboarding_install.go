@@ -17,6 +17,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // Installer is the dashboard-side install interface. The default production
@@ -842,7 +843,7 @@ type onboardingHeaderView struct {
 // immediate feedback after the first scan completes — instead of staring at
 // generic exploration links wondering if the scan actually finished.
 type lastScanSummary struct {
-	StartedAt    string // RFC3339 timestamp for the title tooltip
+	StartedAt    string // absolute, zone-named timestamp for the text and title tooltip
 	RelativeTime string // pre-formatted "5m ago" / "2h ago" for inline display
 	Status       string // scan_run.status (queued | running | completed | failed | …)
 	BadgeClass   string // CSS badge class derived from Status
@@ -1007,7 +1008,7 @@ func loadLastScanSummary(ctx context.Context, deps onboardingDeps) *lastScanSumm
 		return nil
 	}
 	out := &lastScanSummary{
-		StartedAt:    run.StartedAt.UTC().Format(time.RFC3339),
+		StartedAt:    timefmt.Format(run.StartedAt),
 		RelativeTime: humanizeRelativeTime(time.Since(run.StartedAt)),
 		Status:       string(run.Status),
 		Completed:    run.CompletedAt != nil,

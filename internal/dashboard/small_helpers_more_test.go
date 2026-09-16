@@ -3,15 +3,17 @@ package dashboard
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/vulnertrack/kite-collector/internal/installer"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 func TestCertDateOnly(t *testing.T) {
-	assert.Equal(t, "2026-08-21", certDateOnly("2026-08-21T10:00:00Z"),
-		"parseable PKI times reduce to the date")
+	assert.Equal(t, timefmt.Date(time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC)), certDateOnly("2026-08-21T10:00:00Z"),
+		"parseable PKI times reduce to the zone-named date")
 	assert.Equal(t, "2026-08-21", certDateOnly("2026-08-21 something unparseable"),
 		"unparseable-but-long strings keep their first ten characters")
 	assert.Equal(t, "short", certDateOnly("short"))

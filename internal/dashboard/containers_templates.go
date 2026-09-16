@@ -40,9 +40,9 @@ var containersTmpl = template.Must(template.New("containers").Funcs(templateFunc
        aria-live="polite" role="status">
     <span class="freshness-chip-dot {{if .Freshness.Paused}}freshness-chip-dot--paused{{else}}freshness-chip-dot--live{{end}}" aria-hidden="true"></span>
     {{if .Freshness.Paused}}
-      <span>Paused &middot; last update <code>{{.Freshness.UpdatedAtUTC}}</code></span>
+      <span>Paused &middot; last update <code>{{.Freshness.UpdatedAt}}</code></span>
     {{else}}
-      <span>Live &middot; refreshes every {{.Freshness.AutoRefreshSecs}}s &middot; last update <code>{{.Freshness.UpdatedAtUTC}}</code></span>
+      <span>Live &middot; refreshes every {{.Freshness.AutoRefreshSecs}}s &middot; last update <code>{{.Freshness.UpdatedAt}}</code></span>
     {{end}}
     <a class="freshness-chip-toggle"
        href="{{.Freshness.ToggleURL}}"

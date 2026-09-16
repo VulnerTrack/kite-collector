@@ -23,6 +23,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // writeAgentCert writes a self-signed agent.pem into dir with the identity
@@ -72,7 +73,7 @@ func TestAgentProfile_RegistrationCardReadsTheCertificate(t *testing.T) {
 	require.NoError(t, observabilityTmpl.Execute(&rendered, view))
 	body := rendered.String()
 	assert.Contains(t, body, `id="section-registration"`)
-	assert.Contains(t, body, "Valid to "+now.Add(64*24*time.Hour).UTC().Format("2 Jan 2006"))
+	assert.Contains(t, body, "Valid to "+timefmt.Date(now.Add(64*24*time.Hour)))
 	assert.Contains(t, body, "64 days left, issued")
 	assert.Contains(t, body, "over mutual TLS")
 	assert.Contains(t, body, "Northwind Traders")

@@ -30,6 +30,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
 	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 // dashboardStartTime captures the timestamp of the first call into the
@@ -122,6 +123,7 @@ type observabilityView struct {
 	Stream                     *streamHealth           `json:"stream,omitempty"`
 	Host                       *hostSummary            `json:"host,omitempty"`
 	GeneratedAt                string                  `json:"generated_at"`
+	GeneratedAtLocal           string                  `json:"-"` // zone-named form shown on the page
 	Endpoint                   string                  `json:"endpoint,omitempty"`
 	EnrolledUserID             string                  `json:"enrolled_user_id,omitempty"`
 	EnrolledUserEmail          string                  `json:"enrolled_user_email,omitempty"`
@@ -169,6 +171,7 @@ type observabilityView struct {
 // renders.
 type recentFailure struct {
 	At         string         `json:"at"`          // RFC3339 — stable timestamp for the JSON snapshot
+	AtLocal    string         `json:"-"`           // zone-named form behind the hover tooltip
 	AtRel      string         `json:"at_relative"` // "2m ago"
 	ProbeName  string         `json:"probe_name"`
 	Diagnostic string         `json:"diagnostic"` // the actual error message that fired
@@ -262,6 +265,7 @@ func classifyDiagnostic(diagnostic string) diagnosticHint {
 // "everything broke at 14:23" used to be manual; the timeline does it for them.
 type activityEvent struct {
 	At       string `json:"at"`          // RFC3339 — stable for the JSON snapshot
+	AtLocal  string `json:"-"`           // zone-named form behind the hover tooltip
 	AtRel    string `json:"at_relative"` // "2m ago" — human-friendly in the UI
 	Kind     string `json:"kind"`        // probe.pass / probe.fail / probe.skip / scan.started / scan.completed / scan.failed / scan.cancelled
 	Label    string `json:"label"`       // "probe dns failed" / "scan started"
@@ -277,7 +281,7 @@ type activityEvent struct {
 // the DOM swapping out from under them. State lives in the fragment URL
 // (`?paused=1`) — no JS, no client state, no cookies.
 type observabilityFreshness struct {
-	UpdatedAtUTC    string // RFC3339 timestamp of this render
+	UpdatedAt       string // zone-named timestamp of this render
 	ToggleURL       string // /fragments/observability or /fragments/observability?paused=1
 	ToggleLabel     string // "Pause" or "Resume"
 	ToggleAriaLabel string // accessibility label on the toggle anchor
@@ -463,10 +467,10 @@ func readAgentCertificate(path string, now time.Time) agentCertificate {
 		out.SubjectCN = cert.Subject.CommonName
 		out.NotBefore = cert.NotBefore.UTC().Format(time.RFC3339)
 		out.NotAfter = cert.NotAfter.UTC().Format(time.RFC3339)
-		out.NotAfterHuman = cert.NotAfter.UTC().Format("2 Jan 2006")
+		out.NotAfterHuman = timefmt.Date(cert.NotAfter)
 		remaining := cert.NotAfter.Sub(now)
 		out.DaysLeft = int(math.Ceil(remaining.Hours() / 24))
-		issued := "issued " + cert.NotBefore.UTC().Format("2 Jan 2006")
+		issued := "issued " + timefmt.Date(cert.NotBefore)
 		switch {
 		case remaining <= 0:
 			out.Expired = true
@@ -760,13 +764,14 @@ func countHostListeners(ctx context.Context, deps onboardingDeps, machineID uuid
 // Answers the single most important post-onboarding question: "is the
 // agent actually shipping events upstream?"
 type streamHealth struct {
-	State         string `json:"state"`
-	StateBadge    string `json:"-"` // CSS class, UI-only
-	LastEventAt   string `json:"last_event_at,omitempty"`
-	LastEventAgo  string `json:"last_event_ago,omitempty"`
-	LastErrorText string `json:"last_error,omitempty"`
-	TotalSent     int64  `json:"total_sent"`
-	BacklogDepth  int    `json:"backlog_depth"`
+	State            string `json:"state"`
+	StateBadge       string `json:"-"` // CSS class, UI-only
+	LastEventAt      string `json:"last_event_at,omitempty"`
+	LastEventAtLocal string `json:"-"` // zone-named form behind the hover tooltip
+	LastEventAgo     string `json:"last_event_ago,omitempty"`
+	LastErrorText    string `json:"last_error,omitempty"`
+	TotalSent        int64  `json:"total_sent"`
+	BacklogDepth     int    `json:"backlog_depth"`
 }
 
 // healthCheck is one row in the healthchecks panel — a named subsystem
@@ -819,17 +824,19 @@ type probeMetric struct {
 // without leaving the dashboard. TrendSVG is an inline-rendered bar chart
 // of recent completed-scan durations, surfaced below the stats table.
 type scanStats struct {
-	LatestStartedAt string        `json:"latest_started_at,omitempty"`
-	LatestDuration  string        `json:"latest_duration,omitempty"`
-	LatestStatus    string        `json:"latest_status,omitempty"`
-	LatestBadge     string        `json:"-"` // CSS class, UI-only
-	AverageDuration string        `json:"average_duration,omitempty"`
-	NextDueAt       string        `json:"next_due_at,omitempty"` // RFC3339; the last start plus the configured interval
-	NextDueIn       string        `json:"next_due_in,omitempty"` // "in 4h 12m", or "due now"
-	TrendSVG        template.HTML `json:"-"`                     // SVG markup, UI-only
-	Total           int           `json:"total"`
-	LatestMachines  int           `json:"latest_machines"`     // machines the latest run saw
-	LatestNew       int           `json:"latest_new_machines"` // of which it saw for the first time
+	LatestStartedAt      string        `json:"latest_started_at,omitempty"`
+	LatestStartedAtLocal string        `json:"-"` // zone-named form behind the hover tooltip
+	LatestDuration       string        `json:"latest_duration,omitempty"`
+	LatestStatus         string        `json:"latest_status,omitempty"`
+	LatestBadge          string        `json:"-"` // CSS class, UI-only
+	AverageDuration      string        `json:"average_duration,omitempty"`
+	NextDueAt            string        `json:"next_due_at,omitempty"` // RFC3339; the last start plus the configured interval
+	NextDueAtLocal       string        `json:"-"`                     // zone-named form behind the hover tooltip
+	NextDueIn            string        `json:"next_due_in,omitempty"` // "in 4h 12m", or "due now"
+	TrendSVG             template.HTML `json:"-"`                     // SVG markup, UI-only
+	Total                int           `json:"total"`
+	LatestMachines       int           `json:"latest_machines"`     // machines the latest run saw
+	LatestNew            int           `json:"latest_new_machines"` // of which it saw for the first time
 }
 
 // nextScanDue words when the scheduler's next run is expected: the last
@@ -873,7 +880,7 @@ func renderObservabilityFragment(w io.Writer, ctx context.Context, deps onboardi
 func newFreshness(paused bool) observabilityFreshness {
 	fr := observabilityFreshness{
 		Paused:          paused,
-		UpdatedAtUTC:    time.Now().UTC().Format(time.RFC3339),
+		UpdatedAt:       timefmt.Format(time.Now()),
 		AutoRefreshSecs: 15,
 	}
 	if paused {
@@ -1692,12 +1699,13 @@ func aggregateScanStats(runs []model.ScanRun) scanStats {
 	// runs are newest-first from ListScanRuns.
 	latest := runs[0]
 	s := scanStats{
-		Total:           len(runs),
-		LatestStartedAt: latest.StartedAt.UTC().Format(time.RFC3339),
-		LatestStatus:    string(latest.Status),
-		LatestBadge:     scanStatusBadge(string(latest.Status)),
-		LatestMachines:  latest.TotalMachines,
-		LatestNew:       latest.NewMachines,
+		Total:                len(runs),
+		LatestStartedAt:      latest.StartedAt.UTC().Format(time.RFC3339),
+		LatestStartedAtLocal: timefmt.Format(latest.StartedAt),
+		LatestStatus:         string(latest.Status),
+		LatestBadge:          scanStatusBadge(string(latest.Status)),
+		LatestMachines:       latest.TotalMachines,
+		LatestNew:            latest.NewMachines,
 	}
 	if latest.CompletedAt != nil {
 		s.LatestDuration = latest.CompletedAt.Sub(latest.StartedAt).Round(time.Second).String()
@@ -1776,9 +1784,9 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     <span class="freshness-chip-dot {{if .Freshness.Paused}}freshness-chip-dot--paused{{else}}freshness-chip-dot--live{{end}}"
           aria-hidden="true"></span>
     {{if .Freshness.Paused}}
-      <span>Paused &middot; last update <code>{{.Freshness.UpdatedAtUTC}}</code> &middot; auto-refresh is off so the page won't swap while you inspect.</span>
+      <span>Paused &middot; last update <code>{{.Freshness.UpdatedAt}}</code> &middot; auto-refresh is off so the page won't swap while you inspect.</span>
     {{else}}
-      <span>Live &middot; refreshes every {{.Freshness.AutoRefreshSecs}}s &middot; last update <code>{{.Freshness.UpdatedAtUTC}}</code></span>
+      <span>Live &middot; refreshes every {{.Freshness.AutoRefreshSecs}}s &middot; last update <code>{{.Freshness.UpdatedAt}}</code></span>
     {{end}}
     <a class="freshness-chip-toggle"
        href="{{.Freshness.ToggleURL}}"
@@ -1796,7 +1804,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     {{if .HealthDetail}}
       <span class="muted small health-rollup-detail" title="The rows below say why">not passing: {{.HealthDetail}}</span>
     {{end}}
-    <span class="muted small">checked {{.GeneratedAt}}</span>
+    <span class="muted small">checked {{.GeneratedAtLocal}}</span>
     <a class="card-link" href="/onboarding" hx-get="/onboarding" hx-target="#content" hx-push-url="true">Fix agent health &rarr;</a>
   </div>
   <div class="observability-table-wrap">
@@ -1824,11 +1832,11 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
   {{if .HasScanData}}
     <div class="metric-row">
       <span class="metric">{{.ScanStats.LatestStatus}}</span>
-      <span class="muted small" title="started {{.ScanStats.LatestStartedAt}}">last run &middot; {{.ScanStats.LatestDuration}}</span>
+      <span class="muted small" title="started {{.ScanStats.LatestStartedAtLocal}}">last run &middot; {{.ScanStats.LatestDuration}}</span>
     </div>
     <div class="observability-table-wrap">
     <table class="kv observability-kv">
-      <tr><td>Next scheduled</td><td>{{if .ScanStats.NextDueIn}}<span title="{{.ScanStats.NextDueAt}}">{{.ScanStats.NextDueIn}}</span> <span class="muted small">every {{.ScanSchedule}}</span>{{else if .ScanSchedule}}<span class="muted">not while the agent is off</span> <span class="muted small">every {{.ScanSchedule}} when it runs</span>{{else}}<span class="muted">on demand</span>{{end}}</td></tr>
+      <tr><td>Next scheduled</td><td>{{if .ScanStats.NextDueIn}}<span title="{{.ScanStats.NextDueAtLocal}}">{{.ScanStats.NextDueIn}}</span> <span class="muted small">every {{.ScanSchedule}}</span>{{else if .ScanSchedule}}<span class="muted">not while the agent is off</span> <span class="muted small">every {{.ScanSchedule}} when it runs</span>{{else}}<span class="muted">on demand</span>{{end}}</td></tr>
       <tr><td>Machines seen</td><td>{{.ScanStats.LatestMachines}} <span class="muted small">{{.ScanStats.LatestNew}} new this run</span></td></tr>
       <tr><td>Findings opened</td><td>{{if .Runtime.HasDataRowCounts}}{{.Runtime.FindingRows}}{{else}}0{{end}} <span class="muted small">{{.FindingsHigh}} high</span></td></tr>
       <tr><td>Recent durations</td><td class="spark-cell">{{.ScanStats.TrendSVG}} <span class="muted small">{{.ScanStats.Total}} runs, {{.ScanStats.AverageDuration}} on average</span></td></tr>
@@ -1853,7 +1861,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
     <table class="kv observability-kv">
       <tr><td>Endpoint</td><td>{{if .Endpoint}}<code>{{.Endpoint}}</code>{{else}}<span class="muted">not configured</span>{{end}}</td></tr>
       <tr><td>Last export</td><td>
-        {{if .Stream.LastEventAgo}}<span title="{{.Stream.LastEventAt}}">{{.Stream.LastEventAgo}}</span>{{else}}<span class="muted">no events yet</span>{{end}}
+        {{if .Stream.LastEventAgo}}<span title="{{.Stream.LastEventAtLocal}}">{{.Stream.LastEventAgo}}</span>{{else}}<span class="muted">no events yet</span>{{end}}
         {{if .Stream.LastErrorText}}<span class="badge badge-red">{{.Stream.LastErrorText}}</span>{{else}}<span class="muted small">no errors</span>{{end}}
       </td></tr>
       <tr><td>Spool depth</td><td>{{.Stream.BacklogDepth}} <span class="muted small">{{if .Stream.BacklogDepth}}waiting to send{{else}}nothing queued{{end}}</span></td></tr>
@@ -2035,7 +2043,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       {{range .RecentFailures}}
         <li class="failure-item">
           <div class="failure-row">
-            <span class="failure-time" title="{{.At}}">{{.AtRel}}</span>
+            <span class="failure-time" title="{{.AtLocal}}">{{.AtRel}}</span>
             <code class="failure-probe">{{.ProbeName}}</code>
             {{if .LatencyMS}}<span class="muted small">&middot; {{.LatencyMS}} ms before failure</span>{{end}}
           </div>
@@ -2072,7 +2080,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       {{range .RecentActivity}}
         <li class="activity-item {{.Class}}" data-kind="{{.Kind}}" data-severity="{{.Severity}}">
           <span class="activity-dot" aria-hidden="true"></span>
-          <span class="activity-time" title="{{.At}}">{{.AtRel}}</span>
+          <span class="activity-time" title="{{.AtLocal}}">{{.AtRel}}</span>
           <span class="activity-label">{{.Label}}</span>
           {{if .Detail}}<span class="activity-detail muted small">&middot; {{.Detail}}</span>{{end}}
         </li>
@@ -2360,10 +2368,12 @@ func mdEscapePipe(s string) string {
 // observabilityView from the same helpers. Without this extraction the
 // two surfaces could drift over time as new fields are added.
 func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabilityView {
+	now := time.Now()
 	view := observabilityView{
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		Endpoint:    deps.PlatformEndpoint,
-		Agent:       collectAgentState(deps),
+		GeneratedAt:      now.UTC().Format(time.RFC3339),
+		GeneratedAtLocal: timefmt.Format(now),
+		Endpoint:         deps.PlatformEndpoint,
+		Agent:            collectAgentState(deps),
 	}
 	if certsDir := strings.TrimSpace(deps.CertsDir); certsDir != "" {
 		agentCert := filepath.Join(certsDir, "agent.pem")
@@ -2404,7 +2414,11 @@ func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabil
 			// The scheduler lives in the agent process: only a dashboard
 			// wired with a coordinator and a config has a next run to name.
 			if deps.ScanEnabled && deps.BaseConfig != nil {
-				view.ScanStats.NextDueAt, view.ScanStats.NextDueIn = nextScanDue(runs[0], deps.BaseConfig.StreamingInterval(), time.Now())
+				interval := deps.BaseConfig.StreamingInterval()
+				view.ScanStats.NextDueAt, view.ScanStats.NextDueIn = nextScanDue(runs[0], interval, time.Now())
+				if view.ScanStats.NextDueAt != "" {
+					view.ScanStats.NextDueAtLocal = timefmt.Format(runs[0].StartedAt.Add(interval))
+				}
 			}
 		}
 		view.FindingsHigh = countRowsWhere(ctx, deps, "config_findings", "severity", string(model.SeverityHigh)) +
@@ -2443,6 +2457,7 @@ func buildObservabilityView(ctx context.Context, deps onboardingDeps) observabil
 		sh.StateBadge = streamStateBadge(sh.State)
 		if !s.LastEventAt.IsZero() {
 			sh.LastEventAt = s.LastEventAt.UTC().Format(time.RFC3339)
+			sh.LastEventAtLocal = timefmt.Format(s.LastEventAt)
 			sh.LastEventAgo = humanizeRelativeTime(time.Since(s.LastEventAt))
 		}
 		view.Stream = sh

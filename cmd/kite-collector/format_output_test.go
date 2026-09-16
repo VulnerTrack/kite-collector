@@ -21,6 +21,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/config"
 	"github.com/vulnertrack/kite-collector/internal/dashboard"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/timefmt"
 )
 
 func TestFormatJSON_IndentedObject(t *testing.T) {
@@ -45,7 +46,7 @@ func TestFormatTable_PrefersOSVersionOverFamily(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	require.Len(t, lines, 3, "header + one row per machine")
 	assert.Contains(t, lines[2], "linux", "OSFamily used when OSVersion empty")
-	assert.Contains(t, lines[1], "2026-08-01T12:00:00Z")
+	assert.Contains(t, lines[1], timefmt.Format(time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)))
 }
 
 func TestFormatCSV_ExactColumns(t *testing.T) {
