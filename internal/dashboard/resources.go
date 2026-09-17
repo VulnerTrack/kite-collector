@@ -31,6 +31,11 @@ type sidebarEntry struct {
 	// Table names the backing content table for the count badge. Entries
 	// without one (Agent profile, Docs, Settings pages) render no badge.
 	Table string
+	// LiveKey names a live count provider for entries whose number does not
+	// live in the store — the Containers page reads the Docker engine
+	// directly, so its badge cannot come from a table. Checked before
+	// Table; an entry with neither renders no badge.
+	LiveKey string
 	// Count is the row count of Table; -1 renders no badge (static variant
 	// or unknown). Entries without a Table must set it to -1 explicitly,
 	// otherwise the zero value renders as a "0" badge.
@@ -38,6 +43,29 @@ type sidebarEntry struct {
 	// Warn tints the count badge red — used for Findings, where a non-zero
 	// count is a call to action rather than inventory size.
 	Warn bool
+}
+
+// liveCounter answers a sidebar badge from a live source instead of a store
+// table. ok is false when the source is unreachable, which renders no badge
+// — better than a confident zero.
+type liveCounter func(context.Context) (int64, bool)
+
+// sidebarLiveContainers keys the Containers entry's live provider.
+const sidebarLiveContainers = "containers"
+
+// sidebarLiveCounts maps every sidebar entry whose number lives outside the
+// store onto its provider. A nil controller yields no providers, and those
+// entries simply render without a badge.
+func sidebarLiveCounts(cc *containersController) map[string]liveCounter {
+	if cc == nil {
+		return nil
+	}
+	return map[string]liveCounter{
+		sidebarLiveContainers: func(ctx context.Context) (int64, bool) {
+			_, total, ok := cc.LiveContainerCounts(ctx)
+			return int64(total), ok
+		},
+	}
 }
 
 // sidebarGroup is a titled section of the resource tree.
@@ -63,7 +91,7 @@ func sidebarGroups() []sidebarGroup {
 			{Label: "Software", Href: "/software", Tab: "software", Table: "installed_software", Count: -1},
 			{Label: "Processes", Href: "/tables/host_processes", Table: "host_processes", Count: -1},
 			{Label: "Listeners", Href: "/listeners", Tab: "listeners", Table: "host_listeners", Count: -1},
-			{Label: "Containers", Href: "/containers", Tab: "containers", Table: "host_containers", Count: -1},
+			{Label: "Containers", Href: "/containers", Tab: "containers", LiveKey: sidebarLiveContainers, Count: -1},
 			{Label: "Volumes", Href: "/volumes", Tab: "volumes", Table: "host_volumes", Count: -1},
 		}},
 		{Title: "Security", Entries: []sidebarEntry{
@@ -195,7 +223,7 @@ func renderSidebarTreeStatic(activeTab string) template.HTML {
 // resource counts from the introspection catalog plus the full table list.
 // ts is the source-agnostic catalog (durable store plus any extra backends);
 // st is still needed for saved views.
-func renderSidebarTreeFragment(w io.Writer, ctx context.Context, st store.Store, ts store.TableSource, activeTab string) error {
+func renderSidebarTreeFragment(w io.Writer, ctx context.Context, st store.Store, ts store.TableSource, activeTab string, live map[string]liveCounter) error {
 	tables, err := ts.ListContentTables(ctx)
 	if err != nil {
 		return fmt.Errorf("list content tables: %w", err)
@@ -208,6 +236,14 @@ func renderSidebarTreeFragment(w io.Writer, ctx context.Context, st store.Store,
 	for gi := range groups {
 		for ei := range groups[gi].Entries {
 			e := &groups[gi].Entries[ei]
+			if e.LiveKey != "" {
+				if count, ok := live[e.LiveKey]; ok {
+					if n, counted := count(ctx); counted {
+						e.Count = n
+					}
+				}
+				continue
+			}
 			if e.Table == "" {
 				continue
 			}

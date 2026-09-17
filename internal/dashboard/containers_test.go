@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/store"
 )
 
 // -------------------------------------------------------------------------
@@ -462,4 +463,80 @@ func TestRoute_GET_ContainersPage_FullShellWithActiveNav(t *testing.T) {
 	assert.True(t, strings.Contains(body,
 		`href="/containers" hx-get="/containers" hx-target="#content" hx-push-url="true" class="active`),
 		"Containers nav link should be active")
+}
+
+// -------------------------------------------------------------------------
+// The container number on other surfaces
+// -------------------------------------------------------------------------
+
+// Nothing writes host_containers, so every surface that used to count its
+// rows showed 0 next to a page listing live containers. The tally now comes
+// from the engine, and stays in step with the page's own chips.
+
+func TestLiveContainerCounts_MatchThePageTotals(t *testing.T) {
+	cc := newTestContainersController(t)
+
+	running, total, ok := cc.LiveContainerCounts(context.Background())
+	require.True(t, ok, "the mock engine answers, so the tally must be usable")
+
+	view := cc.buildContainersView(context.Background(), nil, false, containerFilter{})
+	assert.Equal(t, view.Total, total, "the badge total must be the page's total")
+	assert.Equal(t, view.RunningCount, running, "the running count must be the page's")
+	assert.Equal(t, 3, total, "two running plus one exited container")
+	assert.Equal(t, 2, running)
+}
+
+func TestLiveContainerCounts_NoEngineReportsNoNumber(t *testing.T) {
+	cc := newContainersController("tcp://127.0.0.1:1", nil)
+	cc.disableMonitor = true
+
+	running, total, ok := cc.LiveContainerCounts(context.Background())
+	assert.False(t, ok, "an unreachable engine must not answer a count")
+	assert.Zero(t, total)
+	assert.Zero(t, running)
+}
+
+func TestLiveContainerCounts_CachedWithinTTL(t *testing.T) {
+	cc := newTestContainersController(t)
+	_, total, ok := cc.LiveContainerCounts(context.Background())
+	require.True(t, ok)
+	require.Equal(t, 3, total)
+
+	// Within the TTL the cached tally answers, so a burst of shell renders
+	// costs one engine call rather than one each.
+	cc.configuredHost = "tcp://127.0.0.1:1"
+	_, total, ok = cc.LiveContainerCounts(context.Background())
+	assert.True(t, ok)
+	assert.Equal(t, 3, total)
+
+	// Past the TTL the stale number is dropped instead of shown.
+	cc.mu.Lock()
+	cc.liveCountAt = cc.liveCountAt.Add(-2 * containersCountTTL)
+	cc.mu.Unlock()
+	_, _, ok = cc.LiveContainerCounts(context.Background())
+	assert.False(t, ok, "a stale tally must not outlive the TTL when the engine is gone")
+}
+
+func TestSidebarTree_ContainersBadgeComesFromTheEngine(t *testing.T) {
+	ts := &fakeTableSource{tables: []store.TableSchema{{Name: "host_containers", RowCount: 0}}}
+	live := func(n int64, ok bool) map[string]liveCounter {
+		return map[string]liveCounter{
+			sidebarLiveContainers: func(context.Context) (int64, bool) { return n, ok },
+		}
+	}
+
+	var buf strings.Builder
+	require.NoError(t, renderSidebarTreeFragment(&buf, context.Background(), nil, ts, "containers", live(3, true)))
+	assert.Contains(t, buf.String(),
+		`<span class="sidenav-label">Containers</span><span class="badge sidenav-count">3</span>`,
+		"the badge must carry the engine's count, not the empty table's 0")
+
+	// No engine reachable: no badge at all, rather than a confident zero.
+	buf.Reset()
+	require.NoError(t, renderSidebarTreeFragment(&buf, context.Background(), nil, ts, "containers", live(0, false)))
+	tree := buf.String()
+	i := strings.Index(tree, ">Containers</span>")
+	require.Greater(t, i, -1, "sidebar must list Containers")
+	assert.NotContains(t, tree[i:i+60], "sidenav-count",
+		"an unreachable engine must render no badge")
 }

@@ -193,8 +193,8 @@ func TestAgentProfile_ThisHostCardLinksToTheMachine(t *testing.T) {
 		"the network-scan row for the same name must not win over the agent's row")
 	assert.Contains(t, body, `>2 <span class="muted small">packages</span>`,
 		"the software count comes from the introspection total for this machine")
-	assert.Contains(t, body, `>0 running <span class="muted small">0 recorded</span>`,
-		"the containers row renders even when nothing is recorded")
+	assert.Contains(t, body, `>0 running <span class="muted small">0 total</span>`,
+		"the containers row renders even when no engine answers")
 	assert.Contains(t, body, `>0 <span class="muted small">0 reachable off-host</span>`,
 		"the listeners row renders even when nothing is recorded")
 	assert.Contains(t, body, ">Hardware<")

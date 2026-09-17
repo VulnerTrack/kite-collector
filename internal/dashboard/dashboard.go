@@ -626,7 +626,8 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 	mux.HandleFunc("GET /fragments/sidebar-tree", func(w http.ResponseWriter, r *http.Request) {
 		active := r.URL.Query().Get("active")
 		renderFragment(w, "sidebar-tree", func(buf io.Writer) error {
-			return renderSidebarTreeFragment(buf, r.Context(), st, tableSources, active)
+			return renderSidebarTreeFragment(buf, r.Context(), st, tableSources, active,
+				sidebarLiveCounts(containersCtl))
 		})
 	})
 
@@ -722,6 +723,7 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 				Coordinator:      opts.Coordinator,
 				BaseConfig:       opts.BaseConfig,
 				SecretStore:      opts.SecretStore,
+				LiveContainers:   containersCtl.LiveContainerCounts,
 				OAuth:            opts.OAuth,
 				PKIEndpoint:      resolveFleetPKIEndpoint(),
 			})

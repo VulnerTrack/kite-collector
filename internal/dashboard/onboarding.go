@@ -60,6 +60,11 @@ type onboardingDeps struct {
 	Coordinator      *scan.Coordinator
 	BaseConfig       *config.Config
 	SecretStore      secretstore.Store
+	// LiveContainers answers the host card's container row from the local
+	// Docker/Podman engine. The containers surface is live-only — nothing
+	// writes host_containers — so counting rows there always returned 0.
+	// Nil (tests, no engine wiring) falls back to the table.
+	LiveContainers func(context.Context) (running, total int, ok bool)
 	// ScanEnabled tells the post-completion launcher panel whether to surface
 	// the "Run your first scan" CTA. True when the dashboard was wired with
 	// both a scan.Coordinator and a config.Config (the same condition the

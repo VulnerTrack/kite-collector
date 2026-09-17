@@ -723,9 +723,16 @@ func rowFlag(r store.Row, column string) bool {
 	return s == "1" || strings.EqualFold(s, "true")
 }
 
-// countHostContainers counts the containers recorded for the machine and
-// how many of them are running.
+// countHostContainers counts the machine's containers and how many of them
+// are running. The local engine is the source of truth when the dashboard
+// wired a live provider: host_containers has no writer, so the row query
+// below is only a fallback for a store that does carry rows.
 func countHostContainers(ctx context.Context, deps onboardingDeps, machineID uuid.UUID) (running, total int) {
+	if deps.LiveContainers != nil {
+		if r, n, ok := deps.LiveContainers(ctx); ok {
+			return r, n
+		}
+	}
 	rows, n, err := deps.Store.ListRows(ctx, store.RowsFilter{
 		Table:       "host_containers",
 		WhereColumn: "machine_id",
@@ -1896,7 +1903,7 @@ var observabilityTmpl = template.Must(template.New("observability").Parse(`
       </table>
       <table class="kv observability-kv">
         <tr><td>Software</td><td>{{.Host.SoftwareCount}} <span class="muted small">packages</span></td></tr>
-        <tr><td>Containers</td><td>{{.Host.ContainersRunning}} running <span class="muted small">{{.Host.ContainersTotal}} recorded</span></td></tr>
+        <tr><td>Containers</td><td>{{.Host.ContainersRunning}} running <span class="muted small">{{.Host.ContainersTotal}} total</span></td></tr>
         <tr><td>Listeners</td><td>{{.Host.ListenersTotal}} <span class="muted small">{{.Host.ListenersOffHost}} reachable off-host</span></td></tr>
       </table>
     </div>

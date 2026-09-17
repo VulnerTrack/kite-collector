@@ -62,6 +62,10 @@ const (
 	containersRefreshSecs = 10
 	// statsFetchParallelism bounds concurrent one-shot stats requests per tick.
 	statsFetchParallelism = 8
+	// containersCountTTL bounds how stale the cached engine tally may be
+	// before another surface (sidebar badge, agent profile) re-lists. Short
+	// enough to feel live, long enough that a page render burst is one call.
+	containersCountTTL = 5 * time.Second
 )
 
 // derivedStatPrefix namespaces computed metrics ("derived.cpu_percent")
@@ -125,6 +129,15 @@ type containersController struct {
 	running     bool
 	stopCh      chan struct{}
 	lastTickErr string
+	// liveCount caches the engine's container tally (total and running) and
+	// when it was taken. The Containers surfaces are live-only — nothing
+	// writes the host_containers table — so every other surface that wants
+	// a container number reads it from here instead of counting rows that
+	// are never inserted. countOK stays false until a list succeeds.
+	liveTotal   int
+	liveRunning int
+	liveCountAt time.Time
+	liveCountOK bool
 	now         func() time.Time // injectable clock for tests
 	// disableMonitor keeps the background loop off so tests drive tick()
 	// deterministically.
@@ -238,6 +251,7 @@ func (cc *containersController) tick(ctx context.Context) {
 		return
 	}
 	cc.setTickErr("")
+	cc.setLiveCounts(live)
 
 	seen := map[string]bool{}
 	sem := make(chan struct{}, statsFetchParallelism)
@@ -289,6 +303,56 @@ func (cc *containersController) setTickErr(msg string) {
 
 // record derives computed metrics from a raw stats sample and appends every
 // active stat path's value to that container's ring buffers.
+// setLiveCounts caches the tally derived from an engine container list.
+func (cc *containersController) setLiveCounts(live []docker.LiveContainer) {
+	running := 0
+	for _, c := range live {
+		if strings.EqualFold(c.State, "running") {
+			running++
+		}
+	}
+	cc.mu.Lock()
+	cc.liveTotal = len(live)
+	cc.liveRunning = running
+	cc.liveCountAt = cc.now()
+	cc.liveCountOK = true
+	cc.mu.Unlock()
+}
+
+// LiveContainerCounts reports how many containers the local engine knows and
+// how many are running — the same numbers the page's "N total / N running"
+// chips show. Other surfaces need it because the Containers entry has no
+// table behind it: this page reads the engine directly and host_containers
+// has no writer, so counting its rows always answered 0. The tally is cached
+// for containersCountTTL and refreshed for free by every monitor tick and
+// page render. ok is false when no engine is reachable or the list failed —
+// callers then show no number rather than a wrong zero.
+func (cc *containersController) LiveContainerCounts(ctx context.Context) (running, total int, ok bool) {
+	cc.mu.Lock()
+	if cc.liveCountOK && cc.now().Sub(cc.liveCountAt) < containersCountTTL {
+		running, total = cc.liveRunning, cc.liveTotal
+		cc.mu.Unlock()
+		return running, total, true
+	}
+	cc.mu.Unlock()
+
+	client, _ := cc.client()
+	if client == nil {
+		return 0, 0, false
+	}
+	live, err := client.ListLive(ctx)
+	if err != nil {
+		cc.logger.Warn("dashboard: container count list failed",
+			"code", string(LogCodeContainersList), "error", err)
+		return 0, 0, false
+	}
+	cc.setLiveCounts(live)
+	cc.mu.Lock()
+	running, total = cc.liveRunning, cc.liveTotal
+	cc.mu.Unlock()
+	return running, total, true
+}
+
 func (cc *containersController) record(id string, raw map[string]any) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
@@ -873,6 +937,7 @@ func (cc *containersController) buildContainersView(ctx context.Context, customP
 		return view
 	}
 	view.Available = true
+	cc.setLiveCounts(live)
 
 	cc.mu.Lock()
 	if cc.lastTickErr != "" {
