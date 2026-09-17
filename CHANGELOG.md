@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Every OTLP log record now carries its own Ed25519 signature: `kite.record.signature`, the signing agent's `kite.record.signer.fingerprint` (the identity fingerprint), and `kite.record.signature.alg`. The signature covers the record's canonical form so a receiver can verify each record after the batch has been unwrapped, split, or stored; telemetry contract v1.3 (additive). Verifier: `internal/telemetry/recordsig`.
 - `kite-collector doctor` (alias `check`) now records its connectivity outcome on the enrolled identity, so `kite-collector status` stops reporting "no connection check has run yet" after a check from the CLI. Previously only the dashboard's "Run check" button set that stamp.
 - Packages and the one-line installer keep `/usr/local/bin/kite-collector` valid as a symlink to `/usr/bin/kite-collector` on every install, so a shell that cached the old path keeps working instead of failing with "No such file or directory". A binary-method copy left there by an earlier run of the installer is replaced so it no longer shadows the package.
 - The deb/rpm packages now enable the `kite-collector` systemd unit on install (started once the host is enrolled), so apt/dnf alone registers the service. The one-line installer only passes `--no-enroll` to releases that know the flag, so a newer script against an older release no longer fails registration.

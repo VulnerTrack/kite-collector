@@ -24,6 +24,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/envelope"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
+	"github.com/vulnertrack/kite-collector/internal/telemetry/recordsig"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/redact"
 )
 
@@ -47,9 +48,16 @@ type OTLPConfig struct {
 	// Protection selects the wire shape when Sealer is set. The zero
 	// value means ProtectionEnvelope.
 	Protection ProtectionMode
-	Endpoint   string
-	Protocol   string // "grpc" or "http"
-	TLS        TLSConfig
+	// RecordSigner, when non-nil, signs every log record individually so
+	// each one carries kite.record.signature, kite.record.signer.fingerprint
+	// and kite.record.signature.alg (contract v1.3). Independent of Sealer:
+	// the sealer authenticates one HTTP body, the record signature survives
+	// the batch being split, re-serialised and stored downstream. The
+	// production caller passes the agent identity.
+	RecordSigner recordsig.Signer
+	Endpoint     string
+	Protocol     string // "grpc" or "http"
+	TLS          TLSConfig
 }
 
 // TLSConfig specifies optional mutual-TLS parameters.
@@ -79,6 +87,7 @@ type OTLPEmitter struct {
 	client         *http.Client
 	sealer         *envelope.Sealer  // nil = plain OTLP/JSON
 	protection     ProtectionMode    // how sealer protects each body
+	recordSigner   recordsig.Signer  // nil = records carry no signature
 	resource       map[string]string // RFC-0115 §4.2 resource attributes
 	endpoint       string            // full URL including /v1/logs
 	serviceName    string
@@ -122,6 +131,7 @@ func NewOTLP(cfg OTLPConfig, serviceVersion string) (*OTLPEmitter, error) {
 		serviceVersion: serviceVersion,
 		resource:       cfg.Resource,
 		sealer:         cfg.Sealer,
+		recordSigner:   cfg.RecordSigner,
 		protection:     cfg.Protection,
 		retry: retryConfig{
 			maxAttempts: 3,
@@ -358,7 +368,7 @@ func (o *OTLPEmitter) eventToLogRecord(e *model.MachineEvent, observedNano strin
 	if spanID == "" {
 		spanID = deriveSpanID(e)
 	}
-	return otlpLogRecord{
+	rec := otlpLogRecord{
 		TimeUnixNano:         strconv.FormatInt(e.Timestamp.UnixNano(), 10),
 		ObservedTimeUnixNano: observedNano,
 		SeverityNumber:       severityToNumber(e.Severity),
@@ -368,6 +378,40 @@ func (o *OTLPEmitter) eventToLogRecord(e *model.MachineEvent, observedNano strin
 		TraceID:              traceID,
 		SpanID:               spanID,
 		Attributes:           buildAttributes(e),
+	}
+	if o.recordSigner != nil {
+		sig := recordsig.Sign(o.recordSigner, rec.canonicalView())
+		for _, kv := range sig.Attributes() {
+			rec.Attributes = append(rec.Attributes, stringKV(kv[0], kv[1]))
+		}
+	}
+	return rec
+}
+
+// canonicalView projects the record onto the transport-neutral shape the
+// signature covers. Attributes are string-valued by construction here, so
+// nothing is lost in the map.
+func (r otlpLogRecord) canonicalView() recordsig.Record {
+	attrs := make(map[string]string, len(r.Attributes))
+	for _, kv := range r.Attributes {
+		if kv.Value.StringValue != nil {
+			attrs[kv.Key] = *kv.Value.StringValue
+		}
+	}
+	body := ""
+	if r.Body.StringValue != nil {
+		body = *r.Body.StringValue
+	}
+	return recordsig.Record{
+		TimeUnixNano:         r.TimeUnixNano,
+		ObservedTimeUnixNano: r.ObservedTimeUnixNano,
+		SeverityNumber:       r.SeverityNumber,
+		SeverityText:         r.SeverityText,
+		EventName:            r.EventName,
+		TraceID:              r.TraceID,
+		SpanID:               r.SpanID,
+		Body:                 body,
+		Attributes:           attrs,
 	}
 }
 

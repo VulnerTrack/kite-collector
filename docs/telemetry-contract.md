@@ -183,6 +183,26 @@ With `streaming.otlp.signing.enabled: true` the request body is unchanged — ev
 
 A receiver verifies by base64url-encoding the body it received, splicing it into the signature's empty payload segment, checking the JWS, and validating the `x5c` chain against the PKI CA. `tenant.id` remains server-authoritative and is read off that verified certificate's Subject Organization, exactly as on the plain path. A receiver that does not verify is unaffected: the header is simply an unknown header, and the batch ingests as usual. Both `/v1/logs` and `/v1/metrics` are signed.
 
+## Record signature (v1.3, additive, always on)
+
+Independently of the two request-level protections below, every log record carries its own signature as three ordinary string attributes, so a receiver, a queue, or a database that has split a batch apart can still verify each record against the agent that produced it:
+
+| Attribute | Value |
+|-----------|-------|
+| `kite.record.signature` | base64url (unpadded) Ed25519 signature over the record's canonical form |
+| `kite.record.signer.fingerprint` | `sha256:<hex>` of the agent's Ed25519 public key; identical to the agent identity fingerprint the enrollment and heartbeat paths report |
+| `kite.record.signature.alg` | `ed25519` |
+
+The signing key is the agent identity (`identity.json`), not the client certificate, so the signature is available from first boot and stays stable across certificate renewals. A record emitted before an identity exists carries none of the three attributes; a receiver treats that as unsigned, never as verified.
+
+The canonical form is a JSON object with this exact field order, attributes sorted by key as `[key, value]` pairs, and the three signature attributes excluded:
+
+```json
+{"timeUnixNano":"…","observedTimeUnixNano":"…","severityNumber":9,"severityText":"info","eventName":"machine.discovered","traceId":"…","spanId":"…","body":"…","attributes":[["event.domain","security"],["event.name","machine.discovered"],…]}
+```
+
+A verifier rebuilds that object from the record it parsed, resolves `kite.record.signer.fingerprint` to the enrolled agent's public key, and checks the Ed25519 signature. Reference implementation, including the verifier: [`internal/telemetry/recordsig`](../internal/telemetry/recordsig/). The signature covers every attribute, the body, both timestamps, severity, event name and trace/span ids, so any edit to any of them invalidates it; it does not cover resource attributes, which the receiver already binds through the fingerprint.
+
 ## Transport envelope (optional, RFC-0072 §4.8)
 
 With `streaming.otlp.encryption.enabled: true` the agent does not change any attribute in this contract; it changes how the request body is wrapped. The OTLP/JSON body becomes the payload of a compact JWS signed with the agent's client-certificate key (`x5c` carries the certificate; `kid` is its SHA-256 fingerprint; `cty: application/json`), and that JWS becomes the plaintext of a compact JWE encrypted to the receiver's JWK (`ECDH-ES+A256KW` / `A256GCM`). The request is sent as `Content-Type: application/jose` with `X-Kite-Envelope-Key-Id` (receiver `kid`) and `X-Kite-Envelope-Signer` (inner JWS `kid`) headers. Both `/v1/logs` and `/v1/metrics` are affected.
@@ -195,6 +215,7 @@ The receiver validates the `x5c` chain against the PKI CA, verifies the JWS with
 v1.0  — this document; frozen at agent v0.5.x
 v1.1  — additive: probe.heartbeat event
 v1.2  — additive: container identity hashes + service inventory on machine events
+v1.3  — additive: per-record Ed25519 signature attributes (kite.record.*) on every log record
 v1.x  — purely additive: new MAY attributes, MAY span attributes, metric labels
 v2.0  — breaking: removal/rename of MUST attributes, enum semantic change, event removal
         Requires a 90-day dual-emit window (RFC-0115 §2.3).

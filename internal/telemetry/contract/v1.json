@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vulnertrack.io/schemas/kite-collector/telemetry-contract/v1.json",
   "title": "kite-collector → central OTel telemetry contract",
-  "description": "Closed set of resource attributes, log event names, span names, metric instruments, and per-event attribute keys the kite-collector agent is permitted to emit. RFC-0115 v1.2 (additive: probe.heartbeat; container image hashes + service inventory on machine events).",
+  "description": "Closed set of resource attributes, log event names, span names, metric instruments, and per-event attribute keys the kite-collector agent is permitted to emit. RFC-0115 v1.3 (additive: probe.heartbeat; container image hashes + service inventory on machine events; per-record Ed25519 signature attributes on every log record).",
   "type": "object",
   "properties": {
-    "version": { "const": "1.2" },
+    "version": { "const": "1.3" },
     "resource_attributes": { "$ref": "#/$defs/ResourceAttributes" },
     "events": { "$ref": "#/$defs/Events" },
     "spans": { "$ref": "#/$defs/Spans" },
@@ -62,7 +62,22 @@
       "properties": {
         "event.domain": { "type": "string", "const": "security" },
         "event.name":   { "type": "string" },
-        "security.scan.uid": { "type": "string", "format": "uuid" }
+        "security.scan.uid": { "type": "string", "format": "uuid" },
+        "kite.record.signature": {
+          "type": "string",
+          "minLength": 1,
+          "description": "v1.3: base64url (unpadded) Ed25519 signature over the record's canonical form (internal/telemetry/recordsig); present on every record"
+        },
+        "kite.record.signer.fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "v1.3: fingerprint of the agent public key that signed the record; equals the agent identity fingerprint"
+        },
+        "kite.record.signature.alg": {
+          "type": "string",
+          "enum": ["ed25519"],
+          "description": "v1.3: signature scheme"
+        }
       },
       "required": ["event.domain", "event.name", "security.scan.uid"]
     },

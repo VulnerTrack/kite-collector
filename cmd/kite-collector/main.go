@@ -1357,6 +1357,14 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 			},
 			Resource: resourceAttrs,
 		}
+		// Contract v1.3: every log record carries its own Ed25519 signature
+		// and the identity fingerprint, verifiable after the batch has been
+		// unwrapped, split and stored. Pre-enrollment (no identity yet) the
+		// records go out unsigned, which the receiver can tell from the
+		// absent attributes.
+		if agentIdentity != nil {
+			otlpCfg.RecordSigner = agentIdentity
+		}
 		// RFC-0072 §4.8 payload protection: sign with the enrolled client
 		// certificate (x5c travels with the signature so the receiver needs
 		// no key registry), falling back to the identity.json Ed25519 key

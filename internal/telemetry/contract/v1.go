@@ -22,7 +22,7 @@ package contract
 //
 // 1.1 (additive): adds EventProbeHeartbeat for synthetic per-source liveness
 // signals plus tamper detection. No prior attribute removed or renamed.
-const Version = "1.2"
+const Version = "1.3"
 
 // ResourceAttributeKey enumerates every resource attribute the agent is
 // permitted to attach to a signal. The set is closed: anything not declared
@@ -135,6 +135,25 @@ const (
 	AttrEventName   = "event.name"
 	AttrScanUID     = "security.scan.uid"
 )
+
+// Per-record signature attribute keys (v1.3, additive). Every log record
+// carries all three: an Ed25519 signature over the record's canonical form,
+// the "sha256:<hex>" fingerprint of the agent public key that produced it,
+// and the algorithm name. The canonical form and the verifier live in
+// internal/telemetry/recordsig; the values here must stay equal to that
+// package's constants (pinned by a test in internal/emitter).
+const (
+	AttrRecordSignature         = "kite.record.signature"
+	AttrRecordSignerFingerprint = "kite.record.signer.fingerprint"
+	AttrRecordSignatureAlg      = "kite.record.signature.alg"
+)
+
+// recordSignatureAttributes is folded into every event's allow-set.
+var recordSignatureAttributes = map[string]struct{}{
+	AttrRecordSignature:         {},
+	AttrRecordSignerFingerprint: {},
+	AttrRecordSignatureAlg:      {},
+}
 
 // Probe heartbeat attribute keys (§ EventProbeHeartbeat).
 const (
@@ -638,11 +657,15 @@ func IsAllowedEventName(name string) bool {
 }
 
 // IsAllowedEventAttribute reports whether key is permitted on a record with
-// the given event name.
+// the given event name. The per-record signature attributes are permitted on
+// every declared event.
 func IsAllowedEventAttribute(event EventName, key string) bool {
 	allowed, ok := EventAttributes[event]
 	if !ok {
 		return false
+	}
+	if _, found := recordSignatureAttributes[key]; found {
+		return true
 	}
 	_, found := allowed[key]
 	return found
