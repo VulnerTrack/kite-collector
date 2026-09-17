@@ -119,7 +119,7 @@ const indexPageTemplate = `<!DOCTYPE html>
 <aside id="row-drawer" class="row-drawer" aria-hidden="true"></aside>
 
 <footer class="vt-footer">
-  <div class="vt-footer-meta">kite-collector dashboard &mdash; all data from local SQLite, no external connections</div>
+  <div class="vt-footer-meta">kite-collector. All data from your local SQLite.</div>
   <div class="vt-powered">
     Powered by
     <a href="https://vulnertrack.com" target="_blank" rel="noopener" class="vt-brand">Vulnertrack</a>
