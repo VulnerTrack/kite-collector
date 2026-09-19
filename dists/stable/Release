@@ -1,0 +1,42 @@
+Architectures: amd64 arm64
+Codename: stable
+Components: main
+Date: Sat, 19 Sep 2026 08:50:46 +0000
+Description: Repositorio oficial de APT para Kite Collector
+Label: Kite Collector Repo
+Origin: VulnerTrack
+Signed-By: 88A0A4B50F3478BC0D4729FA79847F85E3FF6E43
+Suite: stable
+Valid-Until: Mon, 19 Oct 2026 08:50:46 +0000
+MD5Sum:
+ 7c285b3663c468e889e988cccb48de7d              317 Release
+ 639a80fded4ca70b86dce346fba661c9             5283 main/binary-amd64/Packages
+ 19d29d28363be71a19f70a0010f3cb4b             1669 main/binary-amd64/Packages.gz
+ 85c4879f1deb07b3052f12537d245911             1620 main/binary-amd64/Packages.xz
+ 28a4e9dbd514181298b19fe64bf2ec4a             2169 main/binary-arm64/Packages
+ ca939659749c17f587efa07dd4ba7917              892 main/binary-arm64/Packages.gz
+ 0e3a576352b52a0a7b26eba4c2c7b3a5              940 main/binary-arm64/Packages.xz
+SHA1:
+ bf1c6ea6c3944c4ea283ca645ef0166a6b0f2d74              317 Release
+ afd55020568aa4e8fffe0a2d53045e68366e96a6             5283 main/binary-amd64/Packages
+ 03117d4d1c44c8b176c8282325bd04aac0d2aed0             1669 main/binary-amd64/Packages.gz
+ fb8cbe8233000e272f5e5d094dc5ba4987a181de             1620 main/binary-amd64/Packages.xz
+ 4f4f49ba9a4b4209811fdc7f4e11b14367bdb146             2169 main/binary-arm64/Packages
+ e2086187426dd30447769bd04980ff929ce4f806              892 main/binary-arm64/Packages.gz
+ f61b0766cc736db64c17b028573ff482178f527b              940 main/binary-arm64/Packages.xz
+SHA256:
+ 27a98c514e30bd30daf68f54a03ee60c903a4b4089f32e7dbb04130b23e1deb4              317 Release
+ 82a3ceb5a74b4ae45014504cfe3157648086d8ab59d7a2230e50d2677acfe516             5283 main/binary-amd64/Packages
+ c3b66776c24759c4a8574ac3ca601854c75ebecc0dc351b47f5c84a1c7a2358a             1669 main/binary-amd64/Packages.gz
+ 37b70038932b6de378e77d5c0ca86d60863e8af242dcb44794a0ced889f34011             1620 main/binary-amd64/Packages.xz
+ bc5d83acc5d3bae5d1c4b7dab7c61e376fbd7bbb183f5d838cb416bbe5f5f0cf             2169 main/binary-arm64/Packages
+ 8dda3c90d06600b07d45db1023b0f80a7cd7ff5b0f75aaeca581816942307e98              892 main/binary-arm64/Packages.gz
+ 37acad15aa5448779323016e2c82366238c203f223ee2fd3bce125141b1ec9d5              940 main/binary-arm64/Packages.xz
+SHA512:
+ 33905f6dcac0cd7abb960dd60408fd751f0325ae53c9fd61ac210488be6dd499093e7dcdc9a42890d9f67e5dc3ed93fc8bf4583f0aa13d27cc303ca9a293facd              317 Release
+ e8d19c29f477e359585aea2aa54af9bf7562fbffc3fd46c4fa6fc8388b24186da4147fa121dbf9bbecc089d3cac422a4f50f0bf6475990f14c367c492ce106a8             5283 main/binary-amd64/Packages
+ 4f1231d5f40546ae95b551f011bdea493bc74fad63460a9bcb44927b5ffec7a29df3df1fea055691e3bc8375465a89d8a013a52bf7ae634cd6b0f5a1d4ae2ec5             1669 main/binary-amd64/Packages.gz
+ 74d7c6439ac36cf0eff62f62ede8e63f72b8618bf6a7ff9d0f06e13bc463fe3c2d02c52393182b22d7a1fb28953ce551932a4f3ec46194ba599779add4efa30e             1620 main/binary-amd64/Packages.xz
+ f78313408c8fc0c761864bd045975cc11020d3a4fc0d9eb3c5f3a5bf0e342909974b0682b7803fc7267a8456c606d50912ba3b71bbb7d9aecde38ef75a15795e             2169 main/binary-arm64/Packages
+ e8babc67c71b8f8aa636495c5e4ee3a83032764a96370cdf8c289481702d5c96d31ac761a564dc4fc319be3e96a996a85531717ad768260a001d57cc80c1d089              892 main/binary-arm64/Packages.gz
+ ac4311520b9e218c55127bdbe0e695bf40dd40e884428f93458936b13762f0c6c1c19f192594830c159179c05ea857c0945469bf2472a88e2ace4c56bb65ad28              940 main/binary-arm64/Packages.xz
