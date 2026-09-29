@@ -39,6 +39,14 @@ type kiteSuccessView struct {
 	AppVersion   string
 }
 
+type kiteOAuthErrorView struct {
+	Title       string
+	Description string
+	NextStep    string
+	ActionLabel string
+	AppVersion  string
+}
+
 type kiteOAuthTokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
@@ -450,6 +458,106 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 
 var kiteSuccessTmpl = template.Must(template.New("kiteSuccess").Parse(kiteSuccessTemplate))
 
+const kiteOAuthErrorTemplate = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>No se pudo conectar Kite Collector - Vulnertrack</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/static/img/favicon-32.png">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    margin: 0;
+    padding: 24px;
+    display: grid;
+    place-items: center;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #1c252e;
+    background: radial-gradient(circle at 50% 35%, #fff 0%, #f4f5f7 75%);
+  }
+  main {
+    width: min(100%, 480px);
+    padding: clamp(28px, 6vw, 44px);
+    border: 1px solid #e5e9ed;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 16px 48px rgba(28, 37, 46, .09);
+  }
+  .brand { display: block; width: 154px; height: auto; margin-bottom: 32px; }
+  .symbol {
+    display: grid; place-items: center;
+    width: 48px; height: 48px; margin-bottom: 20px;
+    border-radius: 14px; background: #fff1ef; color: #d92d20;
+    font-size: 28px; font-weight: 700;
+  }
+  .eyebrow { margin: 0 0 8px; color: #a52a21; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  h1 { margin: 0 0 12px; font-size: clamp(24px, 5vw, 29px); line-height: 1.2; letter-spacing: -.025em; }
+  .description { margin: 0 0 22px; color: #526273; font-size: 15px; line-height: 1.6; }
+  .next-step { margin: 0 0 24px; padding: 16px; border: 1px solid #e5e9ed; border-radius: 12px; background: #f8fafb; }
+  .next-step strong { display: block; margin-bottom: 5px; font-size: 13px; }
+  .next-step p { margin: 0; color: #526273; font-size: 14px; line-height: 1.5; }
+  .primary, .secondary { display: flex; align-items: center; justify-content: center; min-height: 46px; border-radius: 24px; font-size: 14px; font-weight: 700; text-decoration: none; }
+  .primary { background: #ff3131; color: white; box-shadow: 0 4px 12px rgba(255, 49, 49, .19); }
+  .primary:hover { background: #dc2424; }
+  .secondary { margin-top: 9px; color: #526273; }
+  .secondary:hover { background: #f4f5f7; color: #1c252e; }
+  .version { margin: 22px 0 0; text-align: center; color: #919eab; font-size: 12px; }
+  a:focus-visible { outline: 3px solid #1c252e; outline-offset: 3px; }
+</style>
+</head>
+<body>
+<main aria-labelledby="error-title">
+  <img class="brand" src="/static/img/vulnertrack_banner_dark.png" alt="Vulnertrack">
+  <div class="symbol" aria-hidden="true">!</div>
+  <p class="eyebrow">Conexión pendiente</p>
+  <h1 id="error-title">{{.Title}}</h1>
+  <p class="description">{{.Description}}</p>
+  <div class="next-step"><strong>Cómo continuar</strong><p>{{.NextStep}}</p></div>
+  <a class="primary" href="/kite-login?retry=1">{{.ActionLabel}}</a>
+  <a class="secondary" href="/onboarding">Volver a Kite Collector</a>
+  {{if .AppVersion}}<p class="version">Kite Collector v{{.AppVersion}}</p>{{end}}
+</main>
+</body>
+</html>`
+
+var kiteOAuthErrorTmpl = template.Must(template.New("kiteOAuthError").Parse(kiteOAuthErrorTemplate))
+
+func serveKiteOAuthErrorPage(w http.ResponseWriter, status int, view kiteOAuthErrorView) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+	_ = kiteOAuthErrorTmpl.Execute(w, view)
+}
+
+func kiteOAuthGeneralError(appVersion string) kiteOAuthErrorView {
+	return kiteOAuthErrorView{
+		Title:       "No se pudo completar la conexión",
+		Description: "Kite Collector todavía no terminó de conectarse con Vulnertrack.",
+		NextStep:    "Volvé a intentarlo. Se abrirá una autorización nueva para que puedas continuar.",
+		ActionLabel: "Reintentar conexión",
+		AppVersion:  appVersion,
+	}
+}
+
+func kiteOAuthEnrollmentError(err error, appVersion string) kiteOAuthErrorView {
+	view := kiteOAuthGeneralError(appVersion)
+	var structured *kiteerrors.Error
+	if errors.As(err, &structured) &&
+		structured.Context["http_status"] == http.StatusForbidden &&
+		(structured.Context["pki_detail"] == "User is not a member of this organization" ||
+			structured.Context["pki_detail"] == "Insufficient PKI role for this organization") {
+		view.Title = "No se pudo conectar esta organización"
+		view.Description = "El servidor no pudo confirmar el acceso de tu cuenta a la organización elegida. Para conectar Kite alcanza con pertenecer a ella; no necesitás un rol administrativo."
+		view.NextStep = "Volvé a elegir la organización. Si ya sos integrante y el error continúa, pedí que revisen tu acceso a esa organización."
+		view.ActionLabel = "Revisar organización"
+	}
+	return view
+}
+
 var (
 	kiteOAuthWaits      sync.Map // wait_id -> time.Time
 	kiteOAuthWaitStates sync.Map // OAuth state -> kiteOAuthWaitState
@@ -487,6 +595,11 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 			setKiteOAuthCookie(w, r, kiteOAuthDashboardCookie, dbg)
 		}
 		waitID := strings.TrimSpace(r.URL.Query().Get("wait_id"))
+		if waitID == "" && r.URL.Query().Get("retry") == "1" {
+			if cookie, err := r.Cookie(kiteOAuthWaitCookie); err == nil {
+				waitID = strings.TrimSpace(cookie.Value)
+			}
+		}
 		if waitID != "" {
 			setKiteOAuthCookie(w, r, kiteOAuthWaitCookie, waitID)
 			rememberKiteOAuthWait(state, waitID)
@@ -497,7 +610,13 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 		// carries request-derived data. Enforce the destination-host
 		// allowlist explicitly rather than relying on that invariant, then
 		// fall through to the rendered login page if it ever fails to hold.
-		launchURL := resolveKiteOAuthLaunchURL(r.Context(), authURL)
+		launchURL := ""
+		if r.URL.Query().Get("retry") == "1" {
+			launchURL = kiteOAuthRetryLaunchURL(authURL, collectorURL)
+		}
+		if launchURL == "" {
+			launchURL = resolveKiteOAuthLaunchURL(r.Context(), authURL)
+		}
 		if isAllowedKiteLaunchURL(oauth, launchURL) {
 			//#nosec G710 -- launchURL host is validated against a fixed allowlist (the configured authorize host or app.vulnertrack.com) by isAllowedKiteLaunchURL immediately above; the destination host/scheme are never request-derived.
 			http.Redirect(w, r, launchURL, http.StatusSeeOther)
@@ -516,6 +635,21 @@ func serveKiteLoginPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptio
 	if err := kiteLoginTmpl.Execute(w, view); err != nil {
 		http.Error(w, fmt.Sprintf("render kite login: %v", err), http.StatusInternalServerError)
 	}
+}
+
+// A retry must revisit the organization selector before Supabase can reuse a
+// previous first-party consent. The bridge saves the new selection before it
+// sends the user to the authorize endpoint with this fresh state and PKCE pair.
+func kiteOAuthRetryLaunchURL(authURL, collectorURL string) string {
+	authorize, err := url.Parse(authURL)
+	if err != nil || authorize.Scheme != "https" || authorize.Host != "api.vulnertrack.com" {
+		return ""
+	}
+	bridge := &url.URL{Scheme: "https", Host: "app.vulnertrack.com", Path: "/kite/signin/oauth"}
+	q := authorize.Query()
+	q.Set("collector", collectorURL)
+	bridge.RawQuery = q.Encode()
+	return bridge.String()
 }
 
 func serveKiteSuccessPage(w http.ResponseWriter, r *http.Request, oauth OAuthOptions, appVersion string) {
@@ -598,24 +732,23 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 
 	logger.Info("OAuth callback hit",
 		"request_path", r.URL.Path,
-		"request_url", r.URL.String(),
 		"r_host", r.Host,
 		"code_len", len(r.URL.Query().Get("code")),
 		"has_state", r.URL.Query().Get("state") != "",
 	)
 
 	if oauthErr := r.URL.Query().Get("error"); oauthErr != "" {
-		description := r.URL.Query().Get("error_description")
-		if description == "" {
-			description = oauthErr
-		}
-		http.Error(w, "Kite OAuth authorization failed: "+description, http.StatusBadRequest)
+		serveKiteOAuthErrorPage(w, http.StatusBadRequest, kiteOAuthErrorView{
+			Title: "No se autorizó la conexión", Description: "La autorización se canceló o no pudo completarse.",
+			NextStep:    "Iniciá la conexión de nuevo y aprobá el acceso a la organización que querés conectar.",
+			ActionLabel: "Volver a autorizar", AppVersion: appVersion,
+		})
 		return
 	}
 
 	code, state := kiteOAuthCallbackCodeAndState(r)
 	if code == "" {
-		http.Error(w, "Kite OAuth callback is missing code.", http.StatusBadRequest)
+		serveKiteOAuthErrorPage(w, http.StatusBadRequest, kiteOAuthGeneralError(appVersion))
 		return
 	}
 
@@ -627,20 +760,24 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 			"state_empty", state == "",
 			"match", cookie != nil && cookie.Value == state,
 		)
-		http.Error(w, "Kite OAuth state mismatch. Restart the authorization flow.", http.StatusBadRequest)
+		serveKiteOAuthErrorPage(w, http.StatusBadRequest, kiteOAuthErrorView{
+			Title: "La sesión de conexión venció", Description: "La autorización ya no coincide con esta sesión de Kite Collector.",
+			NextStep:    "Iniciá una autorización nueva para conectar el colector de forma segura.",
+			ActionLabel: "Empezar de nuevo", AppVersion: appVersion,
+		})
 		return
 	}
 
 	verifierCookie, err := r.Cookie(kiteOAuthVerifierCookie)
 	if err != nil || verifierCookie.Value == "" {
-		http.Error(w, "Kite OAuth PKCE verifier is missing. Restart the authorization flow.", http.StatusBadRequest)
+		serveKiteOAuthErrorPage(w, http.StatusBadRequest, kiteOAuthGeneralError(appVersion))
 		return
 	}
 
 	collectorURL := collectorBaseURL(r, "")
 	redirectURI, err := buildKiteOAuthRedirectURI(collectorURL, oauth.RedirectPath)
 	if err != nil {
-		http.Error(w, "Kite OAuth callback has an invalid redirect URI.", http.StatusBadRequest)
+		serveKiteOAuthErrorPage(w, http.StatusBadRequest, kiteOAuthGeneralError(appVersion))
 		return
 	}
 
@@ -665,7 +802,7 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 		<-shared.done
 		result := shared.result
 		if result.Err != nil {
-			http.Error(w, "Kite OAuth token exchange failed: "+result.Err.Error(), http.StatusBadGateway)
+			serveKiteOAuthErrorPage(w, http.StatusBadGateway, kiteOAuthGeneralError(appVersion))
 			return
 		}
 		if err := enrollKiteOAuthToken(r, enrollment, result.Token.AccessToken); err != nil {
@@ -675,7 +812,7 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 				"collector_url", collectorURL,
 				"error", err.Error(),
 			)
-			http.Error(w, "Kite OAuth enrollment failed: "+err.Error(), http.StatusInternalServerError)
+			serveKiteOAuthErrorPage(w, http.StatusInternalServerError, kiteOAuthEnrollmentError(err, appVersion))
 			return
 		}
 		clearKiteOAuthCookie(w, kiteOAuthStateCookie)
@@ -711,7 +848,7 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 			slog.String("collector_url", collectorURL),
 		)
 		logger.LogAttrs(r.Context(), slog.LevelError, "OAuth token exchange FAILED", attrs...)
-		http.Error(w, "Kite OAuth token exchange failed: "+exchangeErr.Error(), http.StatusBadGateway)
+		serveKiteOAuthErrorPage(w, http.StatusBadGateway, kiteOAuthGeneralError(appVersion))
 		return
 	}
 
@@ -722,7 +859,7 @@ func serveKiteOAuthCallbackPage(w http.ResponseWriter, r *http.Request, oauth OA
 			"collector_url", collectorURL,
 			"error", err.Error(),
 		)
-		http.Error(w, "Kite OAuth enrollment failed: "+err.Error(), http.StatusInternalServerError)
+		serveKiteOAuthErrorPage(w, http.StatusInternalServerError, kiteOAuthEnrollmentError(err, appVersion))
 		return
 	}
 

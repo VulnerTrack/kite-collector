@@ -349,20 +349,20 @@ func TestKiteOAuthCallback_RejectsInvalidInputsBeforeEnrollment(t *testing.T) {
 			name:       "provider denial",
 			rawURL:     "/oauth/callback?error=access_denied&error_description=operator+cancelled",
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "operator cancelled",
+			wantBody:   "No se autorizó la conexión",
 		},
 		{
 			name:       "missing code",
 			rawURL:     "/oauth/callback?state=s",
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "missing code",
+			wantBody:   "No se pudo completar la conexión",
 		},
 		{
 			name:       "state mismatch",
 			rawURL:     "/oauth/callback?code=c&state=wrong",
 			cookies:    []*http.Cookie{{Name: kiteOAuthStateCookie, Value: "expected"}},
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "state mismatch",
+			wantBody:   "La sesión de conexión venció",
 		},
 		{
 			name:   "missing PKCE verifier",
@@ -371,7 +371,7 @@ func TestKiteOAuthCallback_RejectsInvalidInputsBeforeEnrollment(t *testing.T) {
 				{Name: kiteOAuthStateCookie, Value: "s"},
 			},
 			wantStatus: http.StatusBadRequest,
-			wantBody:   "PKCE verifier is missing",
+			wantBody:   "No se pudo completar la conexión",
 		},
 	}
 
@@ -389,10 +389,141 @@ func TestKiteOAuthCallback_RejectsInvalidInputsBeforeEnrollment(t *testing.T) {
 			}, "test")
 
 			assert.Equal(t, tc.wantStatus, rec.Code)
+			assert.Contains(t, rec.Header().Get("Content-Type"), "text/html")
+			assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
 			assert.Contains(t, rec.Body.String(), tc.wantBody)
+			assert.Contains(t, rec.Body.String(), `href="/kite-login?retry=1"`)
+			assert.NotContains(t, rec.Body.String(), "operator cancelled")
 			assert.Empty(t, pki.token, "invalid callback must not reach PKI enrollment")
 		})
 	}
+}
+
+func TestKiteOAuthEnrollment_MembershipDeniedOffersFreshOrganizationSelection(t *testing.T) {
+	const (
+		state  = "role-denied-state"
+		waitID = "role-denied-wait"
+		code   = "role-denied-code"
+	)
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"secret-access-token","token_type":"Bearer"}`))
+	}))
+	t.Cleanup(tokenServer.Close)
+
+	st, err := sqlite.New(filepath.Join(t.TempDir(), "kite.db"))
+	require.NoError(t, err)
+	require.NoError(t, st.Migrate(context.Background()))
+	t.Cleanup(func() { _ = st.Close() })
+
+	oauth := OAuthOptions{AuthorizeURL: tokenServer.URL + "/authorize", ClientID: "kite-client"}
+	pki := &fakeKitePKIEnroller{err: kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
+		errors.New("PKI rejected enrollment")).With("http_status", http.StatusForbidden).
+		With("pki_detail", "User is not a member of this organization")}
+	rememberKiteOAuthWait(state, waitID)
+	t.Cleanup(func() {
+		kiteOAuthWaitStates.Delete(state)
+		kiteOAuthWaits.Delete(waitID)
+		kiteOAuthInflight.Delete(code)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:9090/oauth/callback?code="+code+"&state="+state, nil)
+	req.AddCookie(&http.Cookie{Name: kiteOAuthStateCookie, Value: state})
+	req.AddCookie(&http.Cookie{Name: kiteOAuthVerifierCookie, Value: "verifier"})
+	req.AddCookie(&http.Cookie{Name: kiteOAuthWaitCookie, Value: waitID})
+	req.AddCookie(&http.Cookie{Name: kiteOAuthDashboardCookie, Value: "/machines"})
+	rec := httptest.NewRecorder()
+	serveKiteOAuthCallbackPage(rec, req, oauth, kiteOAuthEnrollmentOptions{
+		PKIClient: pki, Store: st, CertsDir: t.TempDir(), WrapKey: []byte("01234567890123456789012345678901"),
+	}, "test")
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Contains(t, rec.Body.String(), "No se pudo conectar esta organización")
+	assert.Contains(t, rec.Body.String(), "no necesitás un rol administrativo")
+	assert.Contains(t, rec.Body.String(), "Revisar organización")
+	assert.NotContains(t, rec.Body.String(), "secret-access-token")
+	assert.NotContains(t, rec.Body.String(), code)
+	assert.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"))
+	assert.False(t, kiteOAuthWaitComplete(waitID))
+
+	retry := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:9090/kite-login?retry=1", nil)
+	retry.AddCookie(&http.Cookie{Name: kiteOAuthWaitCookie, Value: waitID})
+	retry.AddCookie(&http.Cookie{Name: kiteOAuthDashboardCookie, Value: "/machines"})
+	retryRec := httptest.NewRecorder()
+	serveKiteLoginPage(retryRec, retry, oauth, "test")
+	assert.Equal(t, http.StatusSeeOther, retryRec.Code)
+	location, err := url.Parse(retryRec.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, "http://127.0.0.1:9090/oauth/callback", location.Query().Get("redirect_uri"))
+	assert.NotEqual(t, state, location.Query().Get("state"))
+	assert.NotEmpty(t, location.Query().Get("code_challenge"))
+	for _, cookie := range retryRec.Result().Cookies() {
+		assert.NotEqual(t, kiteOAuthDashboardCookie, cookie.Name, "retry must preserve the original dashboard cookie")
+	}
+	newState := location.Query().Get("state")
+	entry, ok := kiteOAuthWaitStates.Load(newState)
+	require.True(t, ok)
+	assert.Equal(t, waitID, entry.(kiteOAuthWaitState).WaitID)
+	t.Cleanup(func() { kiteOAuthWaitStates.Delete(newState) })
+
+	var newVerifier string
+	for _, cookie := range retryRec.Result().Cookies() {
+		if cookie.Name == kiteOAuthVerifierCookie {
+			newVerifier = cookie.Value
+		}
+	}
+	require.NotEmpty(t, newVerifier)
+	pki.err = nil
+	continued := httptest.NewRequest(http.MethodGet,
+		"http://127.0.0.1:9090/oauth/callback?code=fresh-code&state="+newState, nil)
+	continued.AddCookie(&http.Cookie{Name: kiteOAuthStateCookie, Value: newState})
+	continued.AddCookie(&http.Cookie{Name: kiteOAuthVerifierCookie, Value: newVerifier})
+	continued.AddCookie(&http.Cookie{Name: kiteOAuthWaitCookie, Value: waitID})
+	continued.AddCookie(&http.Cookie{Name: kiteOAuthDashboardCookie, Value: "/machines"})
+	continuedRec := httptest.NewRecorder()
+	serveKiteOAuthCallbackPage(continuedRec, continued, oauth, kiteOAuthEnrollmentOptions{
+		PKIClient: pki, Store: st, CertsDir: t.TempDir(), WrapKey: []byte("01234567890123456789012345678901"),
+	}, "test")
+	assert.Equal(t, http.StatusOK, continuedRec.Code)
+	assert.Contains(t, continuedRec.Body.String(), "Enrollment complete")
+	assert.Contains(t, continuedRec.Body.String(), "/machines?integration_prompt=1")
+	assert.True(t, kiteOAuthWaitComplete(waitID))
+	t.Cleanup(func() { kiteOAuthInflight.Delete("fresh-code") })
+}
+
+func TestKiteOAuthRetryLaunchURL_VisitsOrganizationSelector(t *testing.T) {
+	authURL := "https://api.vulnertrack.com/auth/v1/oauth/authorize?state=new-state&code_challenge=new-challenge"
+	bridgeURL := kiteOAuthRetryLaunchURL(authURL, "http://127.0.0.1:9090")
+	parsed, err := url.Parse(bridgeURL)
+	require.NoError(t, err)
+	assert.Equal(t, "https://app.vulnertrack.com/kite/signin/oauth", parsed.Scheme+"://"+parsed.Host+parsed.Path)
+	assert.Equal(t, "new-state", parsed.Query().Get("state"))
+	assert.Equal(t, "new-challenge", parsed.Query().Get("code_challenge"))
+	assert.Equal(t, "http://127.0.0.1:9090", parsed.Query().Get("collector"))
+	assert.Empty(t, kiteOAuthRetryLaunchURL("https://untrusted.example/oauth/authorize", "http://127.0.0.1:9090"))
+}
+
+func TestKiteOAuthEnrollmentError_LegacyRoleRejectionDoesNotRequireAdmin(t *testing.T) {
+	err := kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
+		errors.New("PKI rejected enrollment")).With("http_status", http.StatusForbidden).
+		With("pki_detail", "Insufficient PKI role for this organization")
+	view := kiteOAuthEnrollmentError(err, "test")
+	assert.Equal(t, "No se pudo conectar esta organización", view.Title)
+	assert.NotContains(t, view.Description, "pki_admin")
+	assert.Equal(t, "Revisar organización", view.ActionLabel)
+}
+
+func TestKiteOAuthRetry_UsesOrganizationBridgeBeforeAuthorize(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:9090/kite-login?retry=1", nil)
+	rec := httptest.NewRecorder()
+	serveKiteLoginPage(rec, req, OAuthOptions{}, "test")
+	assert.Equal(t, http.StatusSeeOther, rec.Code)
+	location, err := url.Parse(rec.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, "app.vulnertrack.com", location.Host)
+	assert.Equal(t, "/kite/signin/oauth", location.Path)
+	assert.NotEmpty(t, location.Query().Get("state"))
+	assert.Equal(t, "http://127.0.0.1:9090", location.Query().Get("collector"))
 }
 
 func TestEnrollKiteOAuthToken_ReenrollmentRotatesCredentialsAndPreservesFirstEnrollment(t *testing.T) {
