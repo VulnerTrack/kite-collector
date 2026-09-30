@@ -399,7 +399,7 @@ func TestKiteOAuthCallback_RejectsInvalidInputsBeforeEnrollment(t *testing.T) {
 	}
 }
 
-func TestKiteOAuthEnrollment_RoleDeniedOffersFreshOrganizationSelection(t *testing.T) {
+func TestKiteOAuthEnrollment_PermissionDeniedOffersFreshOrganizationSelection(t *testing.T) {
 	const (
 		state  = "role-denied-state"
 		waitID = "role-denied-wait"
@@ -419,7 +419,7 @@ func TestKiteOAuthEnrollment_RoleDeniedOffersFreshOrganizationSelection(t *testi
 	oauth := OAuthOptions{AuthorizeURL: tokenServer.URL + "/authorize", ClientID: "kite-client"}
 	pki := &fakeKitePKIEnroller{err: kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
 		errors.New("PKI rejected enrollment")).With("http_status", http.StatusForbidden).
-		With("pki_detail", "Insufficient PKI role for this organization")}
+		With("pki_detail", "Kite enrollment is not enabled for this user")}
 	rememberKiteOAuthWait(state, waitID)
 	t.Cleanup(func() {
 		kiteOAuthWaitStates.Delete(state)
@@ -438,9 +438,9 @@ func TestKiteOAuthEnrollment_RoleDeniedOffersFreshOrganizationSelection(t *testi
 	}, "test")
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	assert.Contains(t, rec.Body.String(), "Faltan permisos en esta organización")
-	assert.Contains(t, rec.Body.String(), "owner, admin o pki_admin")
-	assert.Contains(t, rec.Body.String(), "Elegir otra organización")
+	assert.Contains(t, rec.Body.String(), "Kite no está habilitado para tu usuario")
+	assert.Contains(t, rec.Body.String(), "permiso de Kite en RR. HH.")
+	assert.Contains(t, rec.Body.String(), "Volver a intentarlo")
 	assert.NotContains(t, rec.Body.String(), "secret-access-token")
 	assert.NotContains(t, rec.Body.String(), code)
 	assert.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"))

@@ -548,6 +548,11 @@ func kiteOAuthEnrollmentError(err error, appVersion string) kiteOAuthErrorView {
 	var structured *kiteerrors.Error
 	if errors.As(err, &structured) && structured.Context["http_status"] == http.StatusForbidden {
 		switch structured.Context["pki_detail"] {
+		case "Kite enrollment is not enabled for this user":
+			view.Title = "Kite no está habilitado para tu usuario"
+			view.Description = "Tu usuario pertenece a la organización, pero no tiene habilitado el permiso de Kite en RR. HH."
+			view.NextStep = "Pedí a un administrador de la organización que active Kite para tu usuario en RR. HH. Después volvé a intentar la conexión."
+			view.ActionLabel = "Volver a intentarlo"
 		case "Insufficient PKI role for this organization":
 			view.Title = "Faltan permisos en esta organización"
 			view.Description = "La cuenta que autorizó Kite no puede emitir certificados para la organización elegida. Se necesita el rol owner, admin o pki_admin."

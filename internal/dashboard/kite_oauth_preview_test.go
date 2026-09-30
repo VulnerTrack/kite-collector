@@ -23,11 +23,11 @@ func TestKiteOAuthPreviewServer(t *testing.T) {
 	original := srv.Handler
 	srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		preview := r.URL.Query().Get("preview")
-		if r.URL.Path == "/oauth/callback" && (preview == "role" || preview == "membership") {
+		if r.URL.Path == "/oauth/callback" && (preview == "kite" || preview == "role" || preview == "membership") {
 			pkiErr := kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
 				errors.New("PKI rejected enrollment")).
 				With("http_status", http.StatusForbidden).
-				With("pki_detail", "Insufficient PKI role for this organization")
+				With("pki_detail", "Kite enrollment is not enabled for this user")
 			serveKiteOAuthErrorPage(w, http.StatusInternalServerError,
 				kiteOAuthEnrollmentError(pkiErr, "preview"))
 			return
@@ -39,7 +39,7 @@ func TestKiteOAuthPreviewServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("Kite preview: http://%s/oauth/callback?preview=role", address)
+	t.Logf("Kite preview: http://%s/oauth/callback?preview=kite", address)
 	if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		t.Fatal(err)
 	}
