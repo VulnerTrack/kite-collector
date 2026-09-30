@@ -546,14 +546,19 @@ func kiteOAuthGeneralError(appVersion string) kiteOAuthErrorView {
 func kiteOAuthEnrollmentError(err error, appVersion string) kiteOAuthErrorView {
 	view := kiteOAuthGeneralError(appVersion)
 	var structured *kiteerrors.Error
-	if errors.As(err, &structured) &&
-		structured.Context["http_status"] == http.StatusForbidden &&
-		(structured.Context["pki_detail"] == "User is not a member of this organization" ||
-			structured.Context["pki_detail"] == "Insufficient PKI role for this organization") {
-		view.Title = "No se pudo conectar esta organización"
-		view.Description = "El servidor no pudo confirmar el acceso de tu cuenta a la organización elegida. Para conectar Kite alcanza con pertenecer a ella; no necesitás un rol administrativo."
-		view.NextStep = "Volvé a elegir la organización. Si ya sos integrante y el error continúa, pedí que revisen tu acceso a esa organización."
-		view.ActionLabel = "Revisar organización"
+	if errors.As(err, &structured) && structured.Context["http_status"] == http.StatusForbidden {
+		switch structured.Context["pki_detail"] {
+		case "Insufficient PKI role for this organization":
+			view.Title = "Faltan permisos en esta organización"
+			view.Description = "La cuenta que autorizó Kite no puede emitir certificados para la organización elegida. Se necesita el rol owner, admin o pki_admin."
+			view.NextStep = "Elegí otra organización donde tengas esos permisos. Si necesitás usar esta, pedí a un administrador que te asigne uno de esos roles y después volvé a intentarlo."
+			view.ActionLabel = "Elegir otra organización"
+		case "User is not a member of this organization":
+			view.Title = "No pertenecés a esta organización"
+			view.Description = "La cuenta que autorizó Kite no figura como integrante de la organización elegida."
+			view.NextStep = "Elegí una organización a la que pertenezcas o pedí que te inviten a esta antes de volver a intentarlo."
+			view.ActionLabel = "Elegir otra organización"
+		}
 	}
 	return view
 }

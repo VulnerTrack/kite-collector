@@ -399,7 +399,7 @@ func TestKiteOAuthCallback_RejectsInvalidInputsBeforeEnrollment(t *testing.T) {
 	}
 }
 
-func TestKiteOAuthEnrollment_MembershipDeniedOffersFreshOrganizationSelection(t *testing.T) {
+func TestKiteOAuthEnrollment_RoleDeniedOffersFreshOrganizationSelection(t *testing.T) {
 	const (
 		state  = "role-denied-state"
 		waitID = "role-denied-wait"
@@ -419,7 +419,7 @@ func TestKiteOAuthEnrollment_MembershipDeniedOffersFreshOrganizationSelection(t 
 	oauth := OAuthOptions{AuthorizeURL: tokenServer.URL + "/authorize", ClientID: "kite-client"}
 	pki := &fakeKitePKIEnroller{err: kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
 		errors.New("PKI rejected enrollment")).With("http_status", http.StatusForbidden).
-		With("pki_detail", "User is not a member of this organization")}
+		With("pki_detail", "Insufficient PKI role for this organization")}
 	rememberKiteOAuthWait(state, waitID)
 	t.Cleanup(func() {
 		kiteOAuthWaitStates.Delete(state)
@@ -438,9 +438,9 @@ func TestKiteOAuthEnrollment_MembershipDeniedOffersFreshOrganizationSelection(t 
 	}, "test")
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	assert.Contains(t, rec.Body.String(), "No se pudo conectar esta organización")
-	assert.Contains(t, rec.Body.String(), "no necesitás un rol administrativo")
-	assert.Contains(t, rec.Body.String(), "Revisar organización")
+	assert.Contains(t, rec.Body.String(), "Faltan permisos en esta organización")
+	assert.Contains(t, rec.Body.String(), "owner, admin o pki_admin")
+	assert.Contains(t, rec.Body.String(), "Elegir otra organización")
 	assert.NotContains(t, rec.Body.String(), "secret-access-token")
 	assert.NotContains(t, rec.Body.String(), code)
 	assert.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"))
@@ -503,14 +503,13 @@ func TestKiteOAuthRetryLaunchURL_VisitsOrganizationSelector(t *testing.T) {
 	assert.Empty(t, kiteOAuthRetryLaunchURL("https://untrusted.example/oauth/authorize", "http://127.0.0.1:9090"))
 }
 
-func TestKiteOAuthEnrollmentError_LegacyRoleRejectionDoesNotRequireAdmin(t *testing.T) {
+func TestKiteOAuthEnrollmentError_MissingMembership(t *testing.T) {
 	err := kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
 		errors.New("PKI rejected enrollment")).With("http_status", http.StatusForbidden).
-		With("pki_detail", "Insufficient PKI role for this organization")
+		With("pki_detail", "User is not a member of this organization")
 	view := kiteOAuthEnrollmentError(err, "test")
-	assert.Equal(t, "No se pudo conectar esta organización", view.Title)
-	assert.NotContains(t, view.Description, "pki_admin")
-	assert.Equal(t, "Revisar organización", view.ActionLabel)
+	assert.Equal(t, "No pertenecés a esta organización", view.Title)
+	assert.Equal(t, "Elegir otra organización", view.ActionLabel)
 }
 
 func TestKiteOAuthRetry_UsesOrganizationBridgeBeforeAuthorize(t *testing.T) {
