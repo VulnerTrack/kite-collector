@@ -27,7 +27,8 @@ func TestKiteOAuthPreviewServer(t *testing.T) {
 			pkiErr := kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
 				errors.New("PKI rejected enrollment")).
 				With("http_status", http.StatusForbidden).
-				With("pki_detail", "Kite enrollment is not enabled for this user")
+				With("pki_detail", "Kite enrollment is not enabled for this user").
+				With("pki_user_email", "usuario@gmail.com")
 			serveKiteOAuthErrorPage(w, http.StatusInternalServerError,
 				kiteOAuthEnrollmentError(pkiErr, "preview"))
 			return

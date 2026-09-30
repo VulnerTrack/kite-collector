@@ -419,7 +419,8 @@ func TestKiteOAuthEnrollment_PermissionDeniedOffersFreshOrganizationSelection(t 
 	oauth := OAuthOptions{AuthorizeURL: tokenServer.URL + "/authorize", ClientID: "kite-client"}
 	pki := &fakeKitePKIEnroller{err: kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
 		errors.New("PKI rejected enrollment")).With("http_status", http.StatusForbidden).
-		With("pki_detail", "Kite enrollment is not enabled for this user")}
+		With("pki_detail", "Kite enrollment is not enabled for this user").
+		With("pki_user_email", "member@gmail.com")}
 	rememberKiteOAuthWait(state, waitID)
 	t.Cleanup(func() {
 		kiteOAuthWaitStates.Delete(state)
@@ -440,6 +441,8 @@ func TestKiteOAuthEnrollment_PermissionDeniedOffersFreshOrganizationSelection(t 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.Contains(t, rec.Body.String(), "Kite no está habilitado para tu usuario")
 	assert.Contains(t, rec.Body.String(), "permiso de Kite en RR. HH.")
+	assert.Contains(t, rec.Body.String(), "Correo de la cuenta:")
+	assert.Contains(t, rec.Body.String(), "member@gmail.com")
 	assert.Contains(t, rec.Body.String(), "Volver a intentarlo")
 	assert.NotContains(t, rec.Body.String(), "secret-access-token")
 	assert.NotContains(t, rec.Body.String(), code)

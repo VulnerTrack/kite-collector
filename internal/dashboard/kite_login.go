@@ -40,11 +40,12 @@ type kiteSuccessView struct {
 }
 
 type kiteOAuthErrorView struct {
-	Title       string
-	Description string
-	NextStep    string
-	ActionLabel string
-	AppVersion  string
+	Title        string
+	Description  string
+	AccountEmail string
+	NextStep     string
+	ActionLabel  string
+	AppVersion   string
 }
 
 type kiteOAuthTokenResponse struct {
@@ -495,6 +496,8 @@ const kiteOAuthErrorTemplate = `<!DOCTYPE html>
   .eyebrow { margin: 0 0 8px; color: #a52a21; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
   h1 { margin: 0 0 12px; font-size: clamp(24px, 5vw, 29px); line-height: 1.2; letter-spacing: -.025em; }
   .description { margin: 0 0 22px; color: #526273; font-size: 15px; line-height: 1.6; }
+  .account-email { margin: -8px 0 22px; color: #526273; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+  .account-email strong { color: #1c252e; font-weight: 700; }
   .next-step { margin: 0 0 24px; padding: 16px; border: 1px solid #e5e9ed; border-radius: 12px; background: #f8fafb; }
   .next-step strong { display: block; margin-bottom: 5px; font-size: 13px; }
   .next-step p { margin: 0; color: #526273; font-size: 14px; line-height: 1.5; }
@@ -514,6 +517,7 @@ const kiteOAuthErrorTemplate = `<!DOCTYPE html>
   <p class="eyebrow">Conexión pendiente</p>
   <h1 id="error-title">{{.Title}}</h1>
   <p class="description">{{.Description}}</p>
+  {{if .AccountEmail}}<p class="account-email">Correo de la cuenta: <strong>{{.AccountEmail}}</strong></p>{{end}}
   <div class="next-step"><strong>Cómo continuar</strong><p>{{.NextStep}}</p></div>
   <a class="primary" href="/kite-login?retry=1">{{.ActionLabel}}</a>
   <a class="secondary" href="/onboarding">Volver a Kite Collector</a>
@@ -551,6 +555,9 @@ func kiteOAuthEnrollmentError(err error, appVersion string) kiteOAuthErrorView {
 		case "Kite enrollment is not enabled for this user":
 			view.Title = "Kite no está habilitado para tu usuario"
 			view.Description = "Tu usuario pertenece a la organización, pero no tiene habilitado el permiso de Kite en RR. HH."
+			if email, ok := structured.Context["pki_user_email"].(string); ok {
+				view.AccountEmail = strings.TrimSpace(email)
+			}
 			view.NextStep = "Pedí a un administrador de la organización que active Kite para tu usuario en RR. HH. Después volvé a intentar la conexión."
 			view.ActionLabel = "Volver a intentarlo"
 		case "Insufficient PKI role for this organization":
