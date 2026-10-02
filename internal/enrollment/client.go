@@ -132,9 +132,22 @@ func (c *Client) enrollAt(ctx context.Context, agentCode, token, enrollURL strin
 			return nil, fmt.Errorf("device certificate issuance returned HTTP %d; run enroll again after resolving the server error", resp.StatusCode)
 		}
 		// PKI rejected the request (bad/expired token, wrong agent code, ...).
-		return nil, kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
+		pkiErr := kiteerrors.FromCatalog(kiteerrors.CodeEnrollmentFailed,
 			fmt.Errorf("PKI server returned %s: %s", resp.Status, data)).
 			With("http_status", resp.StatusCode)
+		var problem struct {
+			Detail string `json:"detail"`
+		}
+		if json.Unmarshal(data, &problem) == nil && problem.Detail != "" {
+			pkiErr.With("pki_detail", problem.Detail)
+			if resp.StatusCode == http.StatusForbidden && problem.Detail == "Kite enrollment is not enabled for this user" {
+				email := strings.TrimSpace(resp.Header.Get("X-Kite-User-Email"))
+				if len(email) <= 254 && strings.Contains(email, "@") && !strings.ContainsAny(email, "\r\n") {
+					pkiErr.With("pki_user_email", email)
+				}
+			}
+		}
+		return nil, pkiErr
 	}
 
 	var result struct {

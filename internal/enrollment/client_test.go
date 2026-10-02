@@ -150,6 +150,38 @@ func TestEnroll_PKIRejectionSurfacesStatusAndBody(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid enrollment token", "server body must be surfaced for diagnosis")
 }
 
+func TestEnroll_PKIRejectionPreservesStructuredDetailForRecovery(t *testing.T) {
+	c := NewClient(nil)
+	c.http = &stubDoer{resp: &http.Response{
+		StatusCode: http.StatusForbidden,
+		Status:     "403 Forbidden",
+		Body:       io.NopCloser(strings.NewReader(`{"detail":"Insufficient PKI role for this organization"}`)),
+	}}
+
+	_, err := c.Enroll(context.Background(), "agent-1", "operator-token")
+	require.Error(t, err)
+	var ke *kiteerrors.Error
+	require.ErrorAs(t, err, &ke)
+	assert.Equal(t, http.StatusForbidden, ke.Context["http_status"])
+	assert.Equal(t, "Insufficient PKI role for this organization", ke.Context["pki_detail"])
+}
+
+func TestEnroll_DisabledKitePermissionPreservesVerifiedAccountEmail(t *testing.T) {
+	c := NewClient(nil)
+	c.http = &stubDoer{resp: &http.Response{
+		StatusCode: http.StatusForbidden,
+		Status:     "403 Forbidden",
+		Header:     http.Header{"X-Kite-User-Email": {"member@gmail.com"}},
+		Body:       io.NopCloser(strings.NewReader(`{"detail":"Kite enrollment is not enabled for this user"}`)),
+	}}
+
+	_, err := c.Enroll(context.Background(), "agent-1", "member-token")
+	require.Error(t, err)
+	var ke *kiteerrors.Error
+	require.ErrorAs(t, err, &ke)
+	assert.Equal(t, "member@gmail.com", ke.Context["pki_user_email"])
+}
+
 func TestEnroll_UsesBearerJWTAndPKIRequestContract(t *testing.T) {
 	var requestBody map[string]string
 	doer := &callbackDoer{do: func(req *http.Request) (*http.Response, error) {
