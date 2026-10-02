@@ -428,7 +428,7 @@ func TestKiteOAuthEnrollment_PermissionDeniedOffersFreshOrganizationSelection(t 
 		kiteOAuthInflight.Delete(code)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:9090/oauth/callback?code="+code+"&state="+state, nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:9090/oauth/callback?code="+code+"&state="+state, nil)
 	req.AddCookie(&http.Cookie{Name: kiteOAuthStateCookie, Value: state})
 	req.AddCookie(&http.Cookie{Name: kiteOAuthVerifierCookie, Value: "verifier"})
 	req.AddCookie(&http.Cookie{Name: kiteOAuthWaitCookie, Value: waitID})
@@ -449,7 +449,7 @@ func TestKiteOAuthEnrollment_PermissionDeniedOffersFreshOrganizationSelection(t 
 	assert.Equal(t, "no-referrer", rec.Header().Get("Referrer-Policy"))
 	assert.False(t, kiteOAuthWaitComplete(waitID))
 
-	retry := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:9090/kite-login?retry=1", nil)
+	retry := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:9090/kite-login?retry=1", nil)
 	retry.AddCookie(&http.Cookie{Name: kiteOAuthWaitCookie, Value: waitID})
 	retry.AddCookie(&http.Cookie{Name: kiteOAuthDashboardCookie, Value: "/machines"})
 	retryRec := httptest.NewRecorder()
@@ -477,7 +477,7 @@ func TestKiteOAuthEnrollment_PermissionDeniedOffersFreshOrganizationSelection(t 
 	}
 	require.NotEmpty(t, newVerifier)
 	pki.err = nil
-	continued := httptest.NewRequest(http.MethodGet,
+	continued := httptest.NewRequestWithContext(t.Context(), http.MethodGet,
 		"http://127.0.0.1:9090/oauth/callback?code=fresh-code&state="+newState, nil)
 	continued.AddCookie(&http.Cookie{Name: kiteOAuthStateCookie, Value: newState})
 	continued.AddCookie(&http.Cookie{Name: kiteOAuthVerifierCookie, Value: newVerifier})
@@ -516,7 +516,7 @@ func TestKiteOAuthEnrollmentError_MissingMembership(t *testing.T) {
 }
 
 func TestKiteOAuthRetry_UsesOrganizationBridgeBeforeAuthorize(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:9090/kite-login?retry=1", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:9090/kite-login?retry=1", nil)
 	rec := httptest.NewRecorder()
 	serveKiteLoginPage(rec, req, OAuthOptions{}, "test")
 	assert.Equal(t, http.StatusSeeOther, rec.Code)

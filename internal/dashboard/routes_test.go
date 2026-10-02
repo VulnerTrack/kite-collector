@@ -352,7 +352,7 @@ func TestRoute_GET_RootWithOAuthParams_RejectsStateMismatch(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
-	assert.Contains(t, rec.Body.String(), "state mismatch")
+	assert.Contains(t, rec.Body.String(), "La sesión de conexión venció")
 }
 
 // TestRoute_GET_TablesByName_Plain_ReturnsFullShellWithTableContent — a

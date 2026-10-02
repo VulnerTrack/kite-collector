@@ -139,11 +139,11 @@ func (c *Client) enrollAt(ctx context.Context, agentCode, token, enrollURL strin
 			Detail string `json:"detail"`
 		}
 		if json.Unmarshal(data, &problem) == nil && problem.Detail != "" {
-			pkiErr.With("pki_detail", problem.Detail)
+			pkiErr = pkiErr.With("pki_detail", problem.Detail)
 			if resp.StatusCode == http.StatusForbidden && problem.Detail == "Kite enrollment is not enabled for this user" {
 				email := strings.TrimSpace(resp.Header.Get("X-Kite-User-Email"))
 				if len(email) <= 254 && strings.Contains(email, "@") && !strings.ContainsAny(email, "\r\n") {
-					pkiErr.With("pki_user_email", email)
+					pkiErr = pkiErr.With("pki_user_email", email)
 				}
 			}
 		}
