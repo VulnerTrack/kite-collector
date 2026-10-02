@@ -3579,6 +3579,26 @@ type enrolledServiceOps struct {
 	status  func() (service.Status, error)
 	start   func() error
 	restart func() error
+	// needsRoot is true when the installed service is a system-level
+	// launchd daemon but the CLI runs unprivileged. launchctl then fails
+	// with a cryptic "Expecting a LaunchAgents path … Load failed: 5",
+	// so the transition stops early and asks for sudo instead.
+	needsRoot bool
+}
+
+// errEnrollNeedsSudo explains why the post-enrollment service start was
+// skipped and gives the one command that finishes the job. The
+// certificate is already saved, so nothing has to be re-enrolled.
+var errEnrollNeedsSudo = errors.New(
+	"the Kite service is installed as a macOS system daemon (LaunchDaemon) " +
+		"and only root can start it — your enrollment is saved, so finish with " +
+		"`sudo kite-collector service restart`",
+)
+
+// isLaunchdUserDomainMismatch recognises launchctl refusing to load a
+// LaunchDaemons plist from a non-root shell.
+func isLaunchdUserDomainMismatch(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Expecting a LaunchAgents path")
 }
 
 func transitionEnrolledService(userMode bool) (string, error) {
@@ -3587,9 +3607,10 @@ func transitionEnrolledService(userMode bool) (string, error) {
 		return "", fmt.Errorf("create service handle: %w", err)
 	}
 	return transitionEnrolledServiceWithOps(enrolledServiceOps{
-		status:  svc.Status,
-		start:   svc.Start,
-		restart: func() error { return service.Control(svc, "restart") },
+		status:    svc.Status,
+		start:     svc.Start,
+		restart:   func() error { return service.Control(svc, "restart") },
+		needsRoot: runtime.GOOS == "darwin" && !userMode && os.Geteuid() != 0,
 	})
 }
 
@@ -3601,14 +3622,23 @@ func transitionEnrolledServiceWithOps(ops enrolledServiceOps) (string, error) {
 	if statusErr != nil {
 		return "", fmt.Errorf("query installed service: %w", statusErr)
 	}
+	if ops.needsRoot {
+		return "", errEnrollNeedsSudo
+	}
 
 	if status == service.StatusRunning {
 		if err := ops.restart(); err != nil {
+			if isLaunchdUserDomainMismatch(err) {
+				return "", fmt.Errorf("%w: %w", errEnrollNeedsSudo, err)
+			}
 			return "", fmt.Errorf("restart service: %w", err)
 		}
 		return "restarted", nil
 	}
 	if err := ops.start(); err != nil {
+		if isLaunchdUserDomainMismatch(err) {
+			return "", fmt.Errorf("%w: %w", errEnrollNeedsSudo, err)
+		}
 		return "", fmt.Errorf("start service: %w", err)
 	}
 	return "started", nil

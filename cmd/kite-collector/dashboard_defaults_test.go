@@ -324,6 +324,7 @@ func TestTransitionEnrolledServiceWithOps(t *testing.T) {
 		statusErr   error
 		startErr    error
 		restartErr  error
+		needsRoot   bool
 		wantAction  string
 		wantErrText string
 		wantStart   int
@@ -364,6 +365,21 @@ func TestTransitionEnrolledServiceWithOps(t *testing.T) {
 			wantRestart: 1,
 			wantErrText: "restart service",
 		},
+		{
+			name:        "darwin-system-daemon-needs-sudo",
+			status:      service.StatusStopped,
+			needsRoot:   true,
+			wantErrText: "sudo kite-collector service restart",
+		},
+		{
+			name:   "launchagents-mismatch-asks-for-sudo",
+			status: service.StatusStopped,
+			startErr: errors.New(`"launchctl" failed with stderr: Warning: Expecting a ` +
+				"LaunchAgents path since the command was run as user. Got LaunchDaemons instead.\n" +
+				"Load failed: 5: Input/output error"),
+			wantStart:   1,
+			wantErrText: "only root can start it",
+		},
 	}
 
 	for _, tc := range tests {
@@ -382,6 +398,7 @@ func TestTransitionEnrolledServiceWithOps(t *testing.T) {
 					restartCalls++
 					return tc.restartErr
 				},
+				needsRoot: tc.needsRoot,
 			})
 
 			if tc.wantErrText != "" {

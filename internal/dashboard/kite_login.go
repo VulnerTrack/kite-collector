@@ -431,7 +431,7 @@ const kiteSuccessTemplate = `<!DOCTYPE html>
 </head>
 <body class="kite-success-page">
 <main class="kite-success-card" aria-labelledby="kite-success-title">
-  <img class="kite-success-logo" src="/static/img/vulnertrack_banner_dark.png" alt="Vulnertrack">
+  <img class="kite-success-logo" src="/static/img/vulnertrack_banner_light.png" alt="Vulnertrack">
   <h1 class="kite-success-heading" id="kite-success-title">
     <span>Welcome to Kite!</span>
     <span class="kite-success-check" aria-hidden="true">✓</span>
