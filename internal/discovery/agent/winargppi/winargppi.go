@@ -15,7 +15,6 @@
 //
 //   - iter 151 winargiolinvertironline — IOL (Galicia).
 //   - iter 152 winargcocoscapital      — Cocos fintech.
-//   - iter 154 winargbalanz            — Balanz independent.
 //   - iter 155 winarghomebroker        — HomeBroker white-label.
 //
 // Headline finding shapes:

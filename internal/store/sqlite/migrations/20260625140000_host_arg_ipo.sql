@@ -5,7 +5,7 @@
 -- bookrunner ALYCs that lead AR equity issuances on BYMA + NYSE/
 -- NASDAQ cross-listings (Santander Investment Securities, Galicia
 -- Investments, BBVA AR, Macro Securities, BTG Pactual AR,
--- Allaria, Cohen Bursátil, BACS, Balanz Capital).
+-- Allaria, Cohen Bursátil, BACS).
 --
 -- Regulated under:
 --
@@ -78,7 +78,6 @@
 --       Allaria
 --       Cohen Bursátil (also retail)
 --       BACS Banco de Crédito y Securitización
---       Balanz Capital
 --
 --   - AR cross-listed examples (NYSE / NASDAQ ADR Level 3):
 --       YPF (1993, NYSE)
@@ -197,7 +196,7 @@ CREATE TABLE IF NOT EXISTS host_arg_ipo (
             'santander-investment','galicia-investments',
             'bbva-ar','macro-securities','btg-pactual-ar',
             'allaria','cohen-bursatil','bacs',
-            'balanz-capital','itau-ar',
+            'itau-ar',
             'custom','none','unknown'
         )),
     bookrunner_role             TEXT    NOT NULL DEFAULT ''

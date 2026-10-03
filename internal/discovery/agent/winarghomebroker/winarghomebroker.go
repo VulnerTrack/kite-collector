@@ -19,7 +19,6 @@
 //   - iter 151 winargiolinvertironline — IOL direct.
 //   - iter 152 winargcocoscapital      — Cocos fintech.
 //   - iter 153 winargecotrader         — ROFEX TraderPro.
-//   - iter 154 winargbalanz            — Balanz direct.
 //
 // Headline finding shapes:
 //

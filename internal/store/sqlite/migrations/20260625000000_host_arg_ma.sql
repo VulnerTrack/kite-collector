@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS host_arg_ma (
         CHECK (advisor_firm IN (
             'banco-galicia-ecm','cohen-ib',
             'btg-pactual-argentina','adcap-securities-ib',
-            'allaria-ledesma-ib','balanz-ib',
+            'allaria-ledesma-ib',
             'jpmorgan-argentina','morgan-stanley-argentina',
             'citi-argentina','itau-bba-argentina',
             'bbva-argentina-ib','santander-rio-ib',

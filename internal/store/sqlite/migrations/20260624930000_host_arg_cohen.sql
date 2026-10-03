@@ -13,7 +13,6 @@
 --   - vs iter 165 winargib             — IB TWS/Gateway (US).
 --
 -- And distinct from the AR-broker collectors (winargallaria,
--- winargbalanz, winargcocoscapital, winargiolinvertironline,
 -- winargmercap, winargppi, winargecotrader) because Cohen
 -- uniquely combines a Cohen NetTrader desktop terminal with a
 -- Cohen Asset Management FCI agent and a custom SAGGM Galileo-

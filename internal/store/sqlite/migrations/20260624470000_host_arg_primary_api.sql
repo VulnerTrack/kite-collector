@@ -1,13 +1,13 @@
 -- host_arg_primary_api inventories Primary REST/WebSocket API
 -- client + pyRofex Python library files cached on Argentine
--- prop-desk, retail-broker (Cocos/IOL/Balanz/PPI), and quant
+-- prop-desk, retail-broker (Cocos/IOL/PPI), and quant
 -- workstations.
 --
 -- Primary is the REST + WebSocket gateway operated by MATba-
 -- Rofex (api.primary.com.ar) that lets Python / JavaScript /
 -- C# algo traders place orders, subscribe to market data, and
 -- pull instrument metadata without speaking raw FIX. Every
--- Argentine retail broker (IOL, Cocos Capital, Balanz, PPI,
+-- Argentine retail broker (IOL, Cocos Capital, PPI,
 -- Bull Market) and most prop desks bridge to Primary.
 --
 -- The Python client library is `pyRofex`. It stores:
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS host_arg_primary_api (
         )),
     broker_route                TEXT    NOT NULL DEFAULT 'unknown'
         CHECK (broker_route IN (
-            'cocos','iol','balanz','ppi','bullmarket','allaria',
+            'cocos','iol','ppi','bullmarket','allaria',
             'comafi','direct','other','unknown'
         )),
     account_cuenta_suffix4      TEXT    NOT NULL DEFAULT '',

@@ -131,7 +131,6 @@ func TestBookrunnerALYCFromName(t *testing.T) {
 		"allaria_data.csv":              ALYCAllaria,
 		"cohen_bursatil_data.csv":       ALYCCohenBursatil,
 		"bacs_data.csv":                 ALYCBACS,
-		"balanz_capital_data.csv":       ALYCBalanzCapital,
 		"itau_ar_data.csv":              ALYCItauAR,
 		"random.txt":                    ALYCUnknown,
 	}
@@ -151,7 +150,6 @@ func TestDetectBookrunnerALYC(t *testing.T) {
 		"BTG Pactual AR":                  ALYCBTGPactualAR,
 		"Allaria":                         ALYCAllaria,
 		"Cohen Bursatil":                  ALYCCohenBursatil,
-		"Balanz Capital":                  ALYCBalanzCapital,
 		"random":                          ALYCUnknown,
 	}
 	for in, want := range cases {

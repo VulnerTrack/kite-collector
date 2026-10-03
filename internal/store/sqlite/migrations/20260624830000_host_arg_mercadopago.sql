@@ -24,7 +24,6 @@
 --
 -- **The MELI ALYC fintech layer.** Distinct from:
 --
---   - iter 154 winargbalanz       — Balanz Capital ALYC.
 --   - iter 163 winargppi          — PPI (Banco Galicia) ALYC.
 --   - iter 152 winargcocoscapital — Cocos Capital ALYC.
 --   - iter 151 winargiolinvertironline — IOL ALYC.

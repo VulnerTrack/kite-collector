@@ -16,7 +16,6 @@
 -- **The PPI broker layer.** Distinct from:
 --   - iter 151 winargiolinvertironline  IOL (also Galicia)
 --   - iter 152 winargcocoscapital       Cocos fintech
---   - iter 154 winargbalanz             Balanz independent
 --   - iter 155 winarghomebroker         HomeBroker white-label
 --   - iter 150 winargpyhomebroker       portal scrape lib
 --

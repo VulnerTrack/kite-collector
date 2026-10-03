@@ -315,7 +315,7 @@ func TestParseAllariaCustodyRecon(t *testing.T) {
 	body := []byte(`<custody_recon>
 <sociedad_depositaria>Allaria Ledesma</sociedad_depositaria>
 <recon_id>R-001</recon_id>
-<fci_id>BALANZ_AHORRO</fci_id>
+<fci_id>FONDO_AHORRO</fci_id>
 <recon_id>R-002</recon_id>
 <fci_id>COCOS_RV_AR</fci_id>
 </custody_recon>`)
@@ -387,7 +387,7 @@ func TestCollectorWalksUserTree(t *testing.T) {
 	must(t, os.WriteFile(reconPath, []byte(`<custody_recon>
 <sociedad_depositaria>Allaria Ledesma</sociedad_depositaria>
 <recon_id>R-001</recon_id>
-<fci_id>BALANZ_AHORRO</fci_id>
+<fci_id>FONDO_AHORRO</fci_id>
 </custody_recon>`), 0o644))
 
 	ansesPath := filepath.Join(dir, "books", "anses_flows_202506.csv")

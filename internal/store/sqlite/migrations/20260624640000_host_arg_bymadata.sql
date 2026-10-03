@@ -13,7 +13,6 @@
 --   - iter 155 winarghomebroker   Decsis HB terminal
 --   - iter 151 winargiolinvertironline
 --   - iter 152 winargcocoscapital
---   - iter 154 winargbalanz
 --
 -- Distribution surfaces:
 --

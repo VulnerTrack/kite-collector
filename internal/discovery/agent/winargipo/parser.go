@@ -41,7 +41,7 @@ var passwordXMLRE = regexp.MustCompile(
 
 // bookrunnerALYCRE matches a bookrunner-ALYC marker in body.
 var bookrunnerALYCRE = regexp.MustCompile(
-	`(?i)\b(santander[_\- ]?investment|galicia[_\- ]?investments|bbva[_\- ]?ar|macro[_\- ]?securities|btg[_\- ]?pactual[_\- ]?ar|btg[_\- ]?pactual|allaria|cohen[_\- ]?bursatil|bacs|balanz[_\- ]?capital|itau[_\- ]?ar)\b`,
+	`(?i)\b(santander[_\- ]?investment|galicia[_\- ]?investments|bbva[_\- ]?ar|macro[_\- ]?securities|btg[_\- ]?pactual[_\- ]?ar|btg[_\- ]?pactual|allaria|cohen[_\- ]?bursatil|bacs|itau[_\- ]?ar)\b`,
 )
 
 // bookrunnerRoleRE matches a bookrunner-role field.
@@ -205,8 +205,6 @@ func detectBookrunnerALYC(s string) BookrunnerALYC {
 		return ALYCCohenBursatil
 	case t == "bacs" || strings.Contains(t, "bacs "):
 		return ALYCBACS
-	case strings.Contains(t, "balanz"):
-		return ALYCBalanzCapital
 	case strings.Contains(t, "itau"):
 		return ALYCItauAR
 	}

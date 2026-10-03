@@ -1,6 +1,6 @@
 // Package winargprimary audits Primary REST/WebSocket API
 // client + pyRofex Python library files cached on Argentine
-// prop-desk, retail-broker (Cocos / IOL / Balanz / PPI), and
+// prop-desk, retail-broker (Cocos / IOL / PPI), and
 // quant workstations across Windows, Linux, and macOS.
 //
 // Primary is the REST + WebSocket gateway operated by MATba-
@@ -91,7 +91,6 @@ type BrokerRoute string
 const (
 	BrokerCocos      BrokerRoute = "cocos"
 	BrokerIOL        BrokerRoute = "iol"
-	BrokerBalanz     BrokerRoute = "balanz"
 	BrokerPPI        BrokerRoute = "ppi"
 	BrokerBullMarket BrokerRoute = "bullmarket"
 	BrokerAllaria    BrokerRoute = "allaria"
@@ -352,9 +351,6 @@ func BrokerRouteFromBody(body []byte) BrokerRoute {
 		strings.Contains(lower, "iol.com.ar") ||
 		strings.Contains(lower, "/iol/"):
 		return BrokerIOL
-	case strings.Contains(lower, "balanz.com") ||
-		strings.Contains(lower, "/balanz/"):
-		return BrokerBalanz
 	case strings.Contains(lower, "portfoliopersonal") ||
 		strings.Contains(lower, "ppi.com.ar") ||
 		strings.Contains(lower, "/ppi/"):

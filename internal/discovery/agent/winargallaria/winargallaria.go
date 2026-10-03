@@ -21,7 +21,6 @@
 // **The institutional-broker + custodian layer.** Distinct from:
 //
 //   - iter 151 winargiolinvertironline — IOL retail.
-//   - iter 154 winargbalanz            — Balanz retail.
 //   - iter 163 winargppi               — PPI wealth-mgmt.
 //   - iter 158 winargprismaweb         — BYMA clearing.
 //   - iter 137 winargcvsa              — CVSA CSD depository.

@@ -358,8 +358,6 @@ func detectAdvisorFirm(s string) AdvisorFirm {
 		return FirmAdcapSecuritiesIB
 	case strings.Contains(t, "allaria"):
 		return FirmAllariaLedesmaIB
-	case strings.Contains(t, "balanz"):
-		return FirmBalanzIB
 	case strings.Contains(t, "jpmorgan") || strings.Contains(t, "jp morgan"):
 		return FirmJPMorganArgentina
 	case strings.Contains(t, "morgan stanley"):

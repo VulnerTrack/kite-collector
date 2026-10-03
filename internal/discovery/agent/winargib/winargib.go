@@ -16,7 +16,6 @@
 // **The offshore-broker layer.** Distinct from:
 //
 //   - iter 151 winargiolinvertironline — IOL local retail.
-//   - iter 154 winargbalanz            — Balanz local.
 //   - iter 162 winargccxt              — crypto multi-exchange.
 //   - iter 160 winarglean              — LEAN framework.
 //

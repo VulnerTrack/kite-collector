@@ -22,7 +22,7 @@
 -- Trust certificates (VRD — Valor Representativo de Deuda, CP —
 -- Certificado de Participación) issued by Fideicomisos Financieros
 -- are held by SSN insurers, FGS, Cohen AM FCIs, and retail
--- investors via Cocos/Balanz/Allaria — all collectors I already
+-- investors via Cocos/Allaria — all collectors I already
 -- built. Leakage of the issuance-side data (collections cohort,
 -- mora cohort, investor list) feeds into:
 --

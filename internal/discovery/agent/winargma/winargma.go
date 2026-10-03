@@ -100,7 +100,6 @@ const (
 	FirmBTGPactualArgentina    AdvisorFirm = "btg-pactual-argentina"
 	FirmAdcapSecuritiesIB      AdvisorFirm = "adcap-securities-ib"
 	FirmAllariaLedesmaIB       AdvisorFirm = "allaria-ledesma-ib"
-	FirmBalanzIB               AdvisorFirm = "balanz-ib"
 	FirmJPMorganArgentina      AdvisorFirm = "jpmorgan-argentina"
 	FirmMorganStanleyArgentina AdvisorFirm = "morgan-stanley-argentina"
 	FirmCitiArgentina          AdvisorFirm = "citi-argentina"

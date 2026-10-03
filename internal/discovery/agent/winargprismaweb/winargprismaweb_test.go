@@ -353,7 +353,7 @@ func TestParsePrismaWebOptionsExercise(t *testing.T) {
 }
 
 func TestParsePrismaWebFCICashflow(t *testing.T) {
-	body := []byte(`2026-06-15 fci_cashflow type=suscripcion_fci fci_id=BALANZ_AHORRO notional=1000000.00 cp=30-71234567-8
+	body := []byte(`2026-06-15 fci_cashflow type=suscripcion_fci fci_id=FONDO_AHORRO notional=1000000.00 cp=30-71234567-8
 2026-06-15 fci_flujo type=rescate_fci fci_id=ALLARIA_RV notional=500000.00 cp=30-99999999-1
 `)
 	f := ParsePrismaWebFCICashflow(body)

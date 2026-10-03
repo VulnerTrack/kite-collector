@@ -5,7 +5,7 @@
 // bookrunner ALYCs leading AR equity issuances on BYMA + NYSE/
 // NASDAQ cross-listings (Santander Investment Securities, Galicia
 // Investments, BBVA AR, Macro Securities, BTG Pactual AR,
-// Allaria, Cohen Bursátil, BACS, Balanz Capital).
+// Allaria, Cohen Bursátil, BACS).
 //
 // Regulated under Ley 26.831 + Ley 27.260 + CNV RG 622 art.13
 // (prospecto) + art.18 (IPO requisitos) + art.30-bis (estabilización)
@@ -87,7 +87,6 @@ const (
 	ALYCAllaria             BookrunnerALYC = "allaria"
 	ALYCCohenBursatil       BookrunnerALYC = "cohen-bursatil"
 	ALYCBACS                BookrunnerALYC = "bacs"
-	ALYCBalanzCapital       BookrunnerALYC = "balanz-capital"
 	ALYCItauAR              BookrunnerALYC = "itau-ar"
 	ALYCCustom              BookrunnerALYC = "custom"
 	ALYCNone                BookrunnerALYC = "none"
@@ -328,7 +327,7 @@ func IsCandidateName(name string) bool {
 		"santander_investment", "galicia_investments",
 		"macro_securities", "btg_pactual", "btg-pactual",
 		"allaria_", "cohen_bursatil", "cohen-bursatil",
-		"bacs_", "balanz_capital", "balanz-capital",
+		"bacs_",
 	} {
 		if strings.Contains(n, tok) {
 			return true
@@ -437,9 +436,6 @@ func BookrunnerALYCFromName(name string) BookrunnerALYC {
 	case strings.HasPrefix(n, "bacs_") ||
 		strings.Contains(n, "_bacs_"):
 		return ALYCBACS
-	case strings.Contains(n, "balanz_capital") ||
-		strings.Contains(n, "balanz-capital"):
-		return ALYCBalanzCapital
 	case strings.HasPrefix(n, "itau_ar") ||
 		strings.HasPrefix(n, "itau-ar"):
 		return ALYCItauAR

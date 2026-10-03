@@ -41,7 +41,6 @@ func TestEnumStrings(t *testing.T) {
 		{string(EnvUnknown), "unknown"},
 		{string(BrokerCocos), "cocos"},
 		{string(BrokerIOL), "iol"},
-		{string(BrokerBalanz), "balanz"},
 		{string(BrokerPPI), "ppi"},
 		{string(BrokerBullMarket), "bullmarket"},
 		{string(BrokerAllaria), "allaria"},
@@ -170,7 +169,6 @@ func TestBrokerRouteFromBody(t *testing.T) {
 	cases := map[string]BrokerRoute{
 		"url=cocos.capital":      BrokerCocos,
 		"url=invertironline":     BrokerIOL,
-		"url=balanz.com":         BrokerBalanz,
 		"url=portfoliopersonal":  BrokerPPI,
 		"url=bullmarket":         BrokerBullMarket,
 		"url=allaria":            BrokerAllaria,
