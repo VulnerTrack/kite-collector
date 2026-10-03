@@ -1,0 +1,61 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA256
+
+Architectures: amd64 arm64
+Codename: stable
+Components: main
+Date: Sat, 03 Oct 2026 09:55:02 +0000
+Description: Repositorio oficial de APT para Kite Collector
+Label: Kite Collector Repo
+Origin: VulnerTrack
+Signed-By: 88A0A4B50F3478BC0D4729FA79847F85E3FF6E43
+Suite: stable
+Valid-Until: Mon, 02 Nov 2026 09:55:02 +0000
+MD5Sum:
+ a1a81a531dcd6e5ac9025ca3ca1a8bdf              317 Release
+ 394b7c24a71d76f208af4c52dd1f0ee9             5283 main/binary-amd64/Packages
+ 309d8746ea009a88162c773296e24c77             1675 main/binary-amd64/Packages.gz
+ c132adc5fd67e53d9f88d43bb4a52550             1624 main/binary-amd64/Packages.xz
+ 8e315bf5dcd0e41db53a7ced294391c7             2169 main/binary-arm64/Packages
+ fc03e2f33b74f2e992b71d4d986ec914              900 main/binary-arm64/Packages.gz
+ 1a98eae9afc007ad388ddb4f6a0e978c              944 main/binary-arm64/Packages.xz
+SHA1:
+ 0381ed384c1456f4142fa5dfcde7f43676f70975              317 Release
+ fae8615252681b865f11b89305c03b75b764a7d1             5283 main/binary-amd64/Packages
+ 3ad5e4aa730713540ea0a6fd954bc96e419b980a             1675 main/binary-amd64/Packages.gz
+ d77509aa8de9104c50a4cfe626b408ab66867445             1624 main/binary-amd64/Packages.xz
+ 1bc43ad38541965cb484afdf5af56a9399c77f58             2169 main/binary-arm64/Packages
+ 179867a3f99fc16796feac6e42263fce9684ee80              900 main/binary-arm64/Packages.gz
+ 5d86362aab31881f628a30a2f69da84b75910201              944 main/binary-arm64/Packages.xz
+SHA256:
+ 0a2d5972651c2068bd316521d76f8b0f4882f81b9d5a225d0bedcf3b8cd0f1c7              317 Release
+ 79f05b5eeeb02da34aa51b77e74ba7b4ab0b50d56c16da96000bd06041cdcbad             5283 main/binary-amd64/Packages
+ a5678cc11d2b9f6796e421b1a2c15d965522d2fdc8f01c790e569c5c7abced66             1675 main/binary-amd64/Packages.gz
+ c5a76c8c5ebbee18097abc87443f5de1d82ec83db3e1ea3a9c6ae45200f32b66             1624 main/binary-amd64/Packages.xz
+ c86258032d6f0f50ad14f6ec291a1024126f01b5953661c32383c2f88fab90b8             2169 main/binary-arm64/Packages
+ b244aa6793cb9ca0facfc101ce442af4a2fce161e34ddd72244777b24854cf3b              900 main/binary-arm64/Packages.gz
+ 6ab0325f3527d5cb1b08b91f6e45b8ee804c4129f04a40659ea09fca8978e775              944 main/binary-arm64/Packages.xz
+SHA512:
+ ac37a1426e3f75fbc2f8fa3755bfc446e3f03e2a414ed7c18cb6611ff488e5a359dd66d711223b0c0100e505051da959bcabb4db2d9a9374d9b7d51e19f96761              317 Release
+ 9c3f06d939e0cb1f184ba1e5209a830d3e81dbc1168d44f8c8f71c9f34483bc179d8042a898d5bb1ec9f53f12c491f1e6d5893e9024cc1df4485932873f7f926             5283 main/binary-amd64/Packages
+ 9757ce98a3a37f836e02637fe86356543115f9653942c6e46d78696c88cd04e3ca6a3592da1842cb6e41fa2de8fefbe7bd2d63aff46a0856d5cffef5e9ef5232             1675 main/binary-amd64/Packages.gz
+ d77dabc1c26fe7a43c1acfa092da941cfd57296eaf2b15a607cc49f9868f44099ca89242e42503af3fae7be4d3c10f5c0ae2f361b2b275add3cd321332a9496b             1624 main/binary-amd64/Packages.xz
+ 5ffb08f761008fc886710be4e30fb9066ab1748897dbcf20aeaab4031bd8fa729c6bd2fb0a858c2d84641e38756a67941d8d03ceea1193a48e418c9b42facaef             2169 main/binary-arm64/Packages
+ ef17ae818f9faaf3e9a6b242087b545c133cc3626fc0cf864cb4b56043fa3f74698057251d48e4d43883563c768fa9ae9313f14cc3136dd4c6ed80270be7f66d              900 main/binary-arm64/Packages.gz
+ 8b073f86fda3a70eac3b12b413d722d19048c2f4515f55ae766822a83b0e4b3c32b088915e513067abf964d9456ac0ec263da1c85e939cb124a642055c99ce88              944 main/binary-arm64/Packages.xz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCAAdFiEEiKCktQ80eLwNRyn6eYR/heP/bkMFAmrA0PYACgkQeYR/heP/
+bkO6fRAAjCR0b3prbLpTKg2Apxx9V1ifzrtA31Q/xBshQBw/NjBs7D/tyAgMr5rb
+uAVTfdfsXTnXhyp50u6zJaOBaSbDSpLuvWEob9SX9DZL7YCtgH+OvFmF2fyyzYa+
+I43MjXu/k3q4kJ+fjeqjINCh3Z6pcdPj9xdo0jaYw/5d5f/2dFKC2UoARI7122Ye
+L2p7iQNto22Hccqd5oiCyHCf//hdgsE+M3zBOT5VtwCKitMdVN/ZVeuv9oFXyMwn
+KiKE4GBzmYiINJLPrXb+HqKYW0ju9x4jfXtaz2j2HYraxq3kdoeLoMVqMNzGJvv2
+drV8Ji7N53vWkI0fqyHLmQcsqwaZmJHigQ8FvH2v3Dh3ENx6F00msdoBJQ7nmk9h
+0IozcJdyMWnmP+TwUGR0+H66Q9WyYHCNXRbjtuJIf9koJmdRjkjDK8wWm0EbQvov
+E0epgKaR1XHqrC4oTs4noa9KTOBrQuIHFCCHvFQBXszlKYTQelMdCv/bRGeBMYp2
+7wO8u3ErEAb3mcXJYl2fyNPifQ3RUMfG7qAw+/65IdKWkMiW/v7u2KiXx4wAL/VH
+HUcn2mluLfbINPZ8SAjmC7cpB1k5exuBE3GWmNg68OiYZjwkjp49R0TG1sNx7KNQ
+P8xw+/3zr8dfXjR4qi0uF4CVhJKIazcbAnOotgKC/2AkBqXNfsI=
+=U7/Y
+-----END PGP SIGNATURE-----
