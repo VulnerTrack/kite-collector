@@ -3,9 +3,9 @@ module github.com/vulnertrack/kite-collector
 go 1.26.6
 
 require (
-	github.com/Microsoft/go-winio v0.6.2
+	github.com/Microsoft/go-winio v0.6.3
 	github.com/go-jose/go-jose/v4 v4.1.5
-	github.com/go-ldap/ldap/v3 v3.4.14
+	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/google/cel-go v0.30.0
 	github.com/google/go-tpm v0.9.8
 	github.com/google/uuid v1.6.0
@@ -14,21 +14,21 @@ require (
 	github.com/lxn/walk v0.0.0-20210112085537-c389da54e794
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/praetorian-inc/fingerprintx v1.1.19
-	github.com/shirou/gopsutil/v4 v4.26.8
+	github.com/shirou/gopsutil/v4 v4.26.9
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
-	golang.org/x/crypto v0.57.0
-	golang.org/x/net v0.59.0
-	golang.org/x/sync v0.23.0
-	golang.org/x/sys v0.48.0
-	golang.org/x/term v0.46.0
-	golang.org/x/text v0.42.0
+	golang.org/x/crypto v0.58.0
+	golang.org/x/net v0.60.0
+	golang.org/x/sync v0.24.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.47.0
+	golang.org/x/text v0.43.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.59.0
+	modernc.org/sqlite v1.60.1
 )
 
 require (
@@ -48,7 +48,7 @@ require (
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ebitengine/purego v0.10.2 // indirect
+	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
@@ -77,11 +77,11 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
+	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
 	github.com/projectdiscovery/wappalyzergo v0.2.17 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
-	github.com/sirupsen/logrus v1.9.4 // indirect
+	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
@@ -100,7 +100,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260706201446-f0a921348800 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
-	modernc.org/libc v1.75.7 // indirect
+	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
