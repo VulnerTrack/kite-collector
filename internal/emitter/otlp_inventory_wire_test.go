@@ -55,6 +55,34 @@ func TestOTLP_WireShape_InventoryAttributes(t *testing.T) {
 	}
 }
 
+// The AD account attributes go out under their contract keys only — no
+// legacy twin — and the redactor must not strip ad.password_last_set,
+// which is a rotation timestamp, not a credential.
+func TestOTLP_WireShape_ADAttributes(t *testing.T) {
+	endpoint, reqs := startCaptureServer(t, http.StatusOK)
+	em := newWireTestEmitter(t, endpoint)
+	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
+
+	evt := makeEvent(t, model.EventMachineDiscovered, model.SeverityLow)
+	evt.DiscoverySource = "ldap"
+	evt.AD = make(map[string]string, len(contract.ADMachineAttributes))
+	for _, key := range contract.ADMachineAttributes {
+		evt.AD[key] = "value-of-" + key
+	}
+	require.NoError(t, em.Emit(context.Background(), evt))
+
+	require.Len(t, *reqs, 1)
+	payload := decodeOTLPPayload(t, (*reqs)[0].Body)
+	attrs := attrMap(payload.ResourceLogs[0].ScopeLogs[0].LogRecords[0].Attributes)
+	for _, key := range contract.ADMachineAttributes {
+		assert.Equalf(t, "value-of-"+key, attrs[key], "attribute %q must reach the wire", key)
+		assert.Truef(t, contract.IsAllowedEventAttribute(contract.EventMachineDiscovered, key), "%s must be declared in the contract", key)
+		assert.Truef(t, contract.IsAllowedEventAttribute(contract.EventMachineChanged, key), "%s must be declared in the contract", key)
+	}
+	_, legacy := attrs["sam_account_name"]
+	assert.False(t, legacy, "AD attributes have no legacy snake_case key")
+}
+
 func TestOTLP_WireShape_InventoryAttributesOmittedWhenEmpty(t *testing.T) {
 	endpoint, reqs := startCaptureServer(t, http.StatusOK)
 	em := newWireTestEmitter(t, endpoint)
@@ -64,11 +92,11 @@ func TestOTLP_WireShape_InventoryAttributesOmittedWhenEmpty(t *testing.T) {
 	require.Len(t, *reqs, 1)
 	payload := decodeOTLPPayload(t, (*reqs)[0].Body)
 	attrs := attrMap(payload.ResourceLogs[0].ScopeLogs[0].LogRecords[0].Attributes)
-	for _, key := range []string{
+	for _, key := range append([]string{
 		"container_id", "image_id", "image_digest", "services", "service_categories",
 		contract.AttrMachineContainerID, contract.AttrMachineImageID, contract.AttrMachineImageDigest,
 		contract.AttrMachineServices, contract.AttrMachineServiceCategories,
-	} {
+	}, contract.ADMachineAttributes...) {
 		_, present := attrs[key]
 		assert.Falsef(t, present, "attribute %q must be omitted when empty", key)
 	}

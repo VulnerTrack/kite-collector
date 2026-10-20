@@ -47,6 +47,7 @@ func TestGoldenEvents(t *testing.T) {
 		event EventName
 	}{
 		{"log_machine_discovered.json", EventMachineDiscovered},
+		{"log_machine_discovered_ldap.json", EventMachineDiscovered},
 		{"log_machine_changed.json", EventMachineChanged},
 		{"log_finding_configuration.json", EventFindingConfiguration},
 		{"log_finding_posture.json", EventFindingPosture},

@@ -22,7 +22,10 @@ package contract
 //
 // 1.1 (additive): adds EventProbeHeartbeat for synthetic per-source liveness
 // signals plus tamper detection. No prior attribute removed or renamed.
-const Version = "1.3"
+//
+// 1.4 (additive): the ad.* Active Directory account attributes
+// (ADMachineAttributes) on machine.discovered / machine.changed.
+const Version = "1.4"
 
 // ResourceAttributeKey enumerates every resource attribute the agent is
 // permitted to attach to a signal. The set is closed: anything not declared
@@ -219,12 +222,14 @@ var AllowedDiscoverySources = map[string]struct{}{
 	"ldap":                 {},
 }
 
-// LDAP/Active Directory machine tag keys per RFC-0121 §5.4. These keys are
-// emitted on EventMachineDiscovered records produced by the LDAP discovery
-// source and consumed by the Python ontology bridge to materialize
+// LDAP/Active Directory machine tag keys per RFC-0121 §5.4. The LDAP
+// discovery source writes them into Machine.Tags; model.MachineEvent lifts
+// them and the OTLP emitter sends them on machine.discovered and
+// machine.changed records (v1.4) so the platform can materialize
 // ActiveDirectoryDomain / ActiveDirectoryAccount / OrganizationalUnit
-// entities. Values are JSON-encoded for collection-typed fields (spns,
-// groups) so they round-trip through the OTLP string attribute layer.
+// entities. On the wire every value is a string: spns and groups are JSON
+// arrays, enabled is "true"/"false", uac_flags is decimal, and the two
+// timestamps are RFC 3339 UTC.
 const (
 	AttrADDomainDNSName      = "ad.domain_dns_name"
 	AttrADSAMAccountName     = "ad.sam_account_name"
@@ -238,6 +243,21 @@ const (
 	AttrADUACFlags           = "ad.uac_flags"
 	AttrADDistinguishedName  = "ad.distinguished_name"
 )
+
+// ADMachineAttributes lists the AD keys in wire order.
+var ADMachineAttributes = []string{
+	AttrADDomainDNSName,
+	AttrADSAMAccountName,
+	AttrADObjectSID,
+	AttrADDistinguishedName,
+	AttrADOUPath,
+	AttrADEnabled,
+	AttrADUACFlags,
+	AttrADLastLogonTimestamp,
+	AttrADPasswordLastSet,
+	AttrADSPNs,
+	AttrADGroups,
+}
 
 // Machine inventory attributes added in contract v1.2 (additive MAY
 // attributes on machine.discovered / machine.changed). The three hashes
@@ -380,6 +400,17 @@ var EventAttributes = map[EventName]map[string]struct{}{
 		AttrMachineImageDigest:              {},
 		AttrMachineServices:                 {},
 		AttrMachineServiceCategories:        {},
+		AttrADDomainDNSName:                 {},
+		AttrADSAMAccountName:                {},
+		AttrADObjectSID:                     {},
+		AttrADDistinguishedName:             {},
+		AttrADOUPath:                        {},
+		AttrADEnabled:                       {},
+		AttrADUACFlags:                      {},
+		AttrADLastLogonTimestamp:            {},
+		AttrADPasswordLastSet:               {},
+		AttrADSPNs:                          {},
+		AttrADGroups:                        {},
 	},
 	EventMachineChanged: {
 		AttrEventDomain:                     {},
@@ -406,6 +437,17 @@ var EventAttributes = map[EventName]map[string]struct{}{
 		AttrMachineImageDigest:              {},
 		AttrMachineServices:                 {},
 		AttrMachineServiceCategories:        {},
+		AttrADDomainDNSName:                 {},
+		AttrADSAMAccountName:                {},
+		AttrADObjectSID:                     {},
+		AttrADDistinguishedName:             {},
+		AttrADOUPath:                        {},
+		AttrADEnabled:                       {},
+		AttrADUACFlags:                      {},
+		AttrADLastLogonTimestamp:            {},
+		AttrADPasswordLastSet:               {},
+		AttrADSPNs:                          {},
+		AttrADGroups:                        {},
 	},
 	EventFindingConfiguration: {
 		AttrEventDomain:                     {},

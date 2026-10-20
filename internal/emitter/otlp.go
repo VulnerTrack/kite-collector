@@ -537,6 +537,11 @@ func contractAttributes(e *model.MachineEvent) [][2]string {
 	add(contract.AttrMachineImageDigest, e.ImageDigest)
 	add(contract.AttrMachineServices, model.EncodeServices(e.Services))
 	add(contract.AttrMachineServiceCategories, strings.Join(model.ServiceCategories(e.Services), ","))
+	// v1.4 Active Directory account attributes. These have no legacy
+	// snake_case twin: they postdate the dual-emit window.
+	for _, key := range contract.ADMachineAttributes {
+		add(key, e.AD[key])
+	}
 	return pairs
 }
 

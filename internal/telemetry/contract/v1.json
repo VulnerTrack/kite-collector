@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vulnertrack.io/schemas/kite-collector/telemetry-contract/v1.json",
   "title": "kite-collector → central OTel telemetry contract",
-  "description": "Closed set of resource attributes, log event names, span names, metric instruments, and per-event attribute keys the kite-collector agent is permitted to emit. RFC-0115 v1.3 (additive: probe.heartbeat; container image hashes + service inventory on machine events; per-record Ed25519 signature attributes on every log record).",
+  "description": "Closed set of resource attributes, log event names, span names, metric instruments, and per-event attribute keys the kite-collector agent is permitted to emit. RFC-0115 v1.4 (additive: probe.heartbeat; container image hashes + service inventory on machine events; per-record Ed25519 signature attributes on every log record; ad.* Active Directory account attributes on machine events).",
   "type": "object",
   "properties": {
-    "version": { "const": "1.3" },
+    "version": { "const": "1.4" },
     "resource_attributes": { "$ref": "#/$defs/ResourceAttributes" },
     "events": { "$ref": "#/$defs/Events" },
     "spans": { "$ref": "#/$defs/Spans" },
@@ -118,7 +118,18 @@
           "type": "string",
           "description": "v1.2: sorted, comma-joined categories present in security.machine.services; members drawn from the closed set below",
           "pattern": "^(directory|database|cache|search|message_queue|web|remote_access|file_sharing|object_storage|mail|dns|monitoring|identity|secrets|container_platform|ci|other)(,(directory|database|cache|search|message_queue|web|remote_access|file_sharing|object_storage|mail|dns|monitoring|identity|secrets|container_platform|ci|other))*$"
-        }
+        },
+        "ad.domain_dns_name":      { "type": "string", "description": "v1.4: DNS name of the Active Directory domain, from the configured base DN" },
+        "ad.sam_account_name":     { "type": "string", "description": "v1.4: computer sAMAccountName without the trailing $" },
+        "ad.object_sid":           { "type": "string", "pattern": "^S-1-", "description": "v1.4: objectSid in S-1-5-21-… form" },
+        "ad.distinguished_name":   { "type": "string", "description": "v1.4: distinguishedName of the computer object" },
+        "ad.ou_path":              { "type": "string", "description": "v1.4: distinguishedName of the parent OU or container" },
+        "ad.enabled":              { "type": "string", "enum": ["true", "false"], "description": "v1.4: false when userAccountControl has ACCOUNTDISABLE" },
+        "ad.uac_flags":            { "type": "string", "pattern": "^[0-9]+$", "description": "v1.4: userAccountControl bitmask, decimal" },
+        "ad.last_logon_timestamp": { "type": "string", "format": "date-time", "description": "v1.4: replicated lastLogonTimestamp (lags the real last logon by up to 14 days); omitted when never set" },
+        "ad.password_last_set":    { "type": "string", "format": "date-time", "description": "v1.4: pwdLastSet, when the machine account password last rotated; omitted when never set" },
+        "ad.spns":                 { "type": "string", "description": "v1.4: JSON array of servicePrincipalName values" },
+        "ad.groups":               { "type": "string", "description": "v1.4: JSON array of memberOf group distinguished names" }
       }
     },
     "EventMachineDiscovered": {

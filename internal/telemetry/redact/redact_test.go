@@ -93,6 +93,7 @@ func TestIsForbidden_AllowsContractKeys(t *testing.T) {
 		"event.name",
 		"security.machine.name",
 		"security.finding.title",
+		"ad.password_last_set",
 	}
 	for _, k := range cases {
 		t.Run(k, func(t *testing.T) {

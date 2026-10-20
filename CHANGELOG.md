@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Machines discovered from Active Directory now send their computer account on machine telemetry events: domain, `sAMAccountName`, object SID, DN, OU, enabled state, `userAccountControl`, last logon, password rotation time, SPNs, and group memberships as `ad.*` attributes; telemetry contract v1.4 (additive). The LDAP source collected these all along, but they were dropped before export.
 - The dashboard's Containers count now comes from the Docker/Podman engine, so the sidebar badge and the agent profile's container row match the page instead of always reading 0 — they counted the `host_containers` table, which nothing writes. With no engine reachable the badge is omitted rather than showing a zero.
 - Every OTLP log record now carries its own Ed25519 signature: `kite.record.signature`, the signing agent's `kite.record.signer.fingerprint` (the identity fingerprint), and `kite.record.signature.alg`. The signature covers the record's canonical form so a receiver can verify each record after the batch has been unwrapped, split, or stored; telemetry contract v1.3 (additive). Verifier: `internal/telemetry/recordsig`.
 - `kite-collector doctor` (alias `check`) now records its connectivity outcome on the enrolled identity, so `kite-collector status` stops reporting "no connection check has run yet" after a check from the CLI. Previously only the dashboard's "Run check" button set that stamp.

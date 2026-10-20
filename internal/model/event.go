@@ -41,6 +41,10 @@ type MachineEvent struct {
 	ContainerID string `json:"container_id,omitempty"`
 	ImageID     string `json:"image_id,omitempty"`
 	ImageDigest string `json:"image_digest,omitempty"`
+	// AD holds the Active Directory account attributes (contract.AttrAD*
+	// key → wire string) lifted from Machine.Tags. Nil unless the machine
+	// came from the LDAP source.
+	AD map[string]string `json:"ad,omitempty"`
 	// Services is the machine's service inventory (directory, database,
 	// queue, …) lifted from the TagServices tag.
 	Services  []MachineService `json:"services,omitempty"`
@@ -113,6 +117,9 @@ func BuildEventDetails(a Machine, eventType EventType) string {
 		details["services"] = EncodeServices(services)
 		details["service_categories"] = strings.Join(ServiceCategories(services), ",")
 	}
+	for key, v := range ADAttributesFromTags(tags) {
+		details[key] = v
+	}
 
 	encoded, err := json.Marshal(details)
 	if err != nil {
@@ -143,5 +150,6 @@ func (e *MachineEvent) FromMachine(a Machine) {
 	e.ContainerID = TagString(tags, TagContainerID)
 	e.ImageID = TagString(tags, TagImageID)
 	e.ImageDigest = TagString(tags, TagImageDigest)
+	e.AD = ADAttributesFromTags(tags)
 	e.Services = ServicesFromTags(a.Tags)
 }

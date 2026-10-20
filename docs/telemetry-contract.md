@@ -108,6 +108,26 @@ Because `services` lives in `Machine.Tags`, it is persisted, merged by the dedup
 
 The log-record body (`details`) repeats `container_id`, `image_id`, `image_digest`, `services` and `service_categories` for human triage.
 
+## Active Directory account attributes (v1.4, additive)
+
+Machines found by the **ldap** source (`security.machine.discovery.source = "ldap"`) also carry the computer account they came from. The source writes these keys into `Machine.Tags` (`internal/discovery/ldap/convert.go`); `MachineEvent.FromMachine` lifts them (`model.ADAttributesFromTags`) and both machine events send them under the contract key only — they have no legacy snake_case twin. Each is omitted when empty, and the body (`details`) repeats them under the same keys.
+
+| Contract key | Value (always a string) | LDAP attribute |
+|---|---|---|
+| `ad.domain_dns_name` | domain DNS name, e.g. `corp.example` | derived from the configured base DN |
+| `ad.sam_account_name` | account name without the trailing `$` | `sAMAccountName` |
+| `ad.object_sid` | `S-1-5-21-…` | `objectSid` |
+| `ad.distinguished_name` | the computer object's DN | `distinguishedName` |
+| `ad.ou_path` | DN of the parent OU or container | derived from the DN |
+| `ad.enabled` | `true` / `false` (false when `ACCOUNTDISABLE` is set) | `userAccountControl` |
+| `ad.uac_flags` | bitmask, decimal | `userAccountControl` |
+| `ad.last_logon_timestamp` | RFC 3339 UTC; omitted when never set. Replicated value: lags the real last logon by up to 14 days | `lastLogonTimestamp` |
+| `ad.password_last_set` | RFC 3339 UTC; omitted when never set. When the machine account password last rotated | `pwdLastSet` |
+| `ad.spns` | JSON array of strings | `servicePrincipalName` |
+| `ad.groups` | JSON array of group DNs | `memberOf` |
+
+`ad.password_last_set` is on the redactor's allowlist (`internal/telemetry/redact`): it is a timestamp, but its key would otherwise trip the `password` substring rule. Users, groups, OUs and GPOs (`model.ADInventory`) and the LDAP audit findings stay in the local SQLite store; only these per-computer keys leave the agent.
+
 ## Spans (target: §4.5)
 
 Spans land when the SDK migration (RFC-0073) ships. The closed span set:
@@ -216,6 +236,7 @@ v1.0  — this document; frozen at agent v0.5.x
 v1.1  — additive: probe.heartbeat event
 v1.2  — additive: container identity hashes + service inventory on machine events
 v1.3  — additive: per-record Ed25519 signature attributes (kite.record.*) on every log record
+v1.4  — additive: ad.* Active Directory account attributes on machine events
 v1.x  — purely additive: new MAY attributes, MAY span attributes, metric labels
 v2.0  — breaking: removal/rename of MUST attributes, enum semantic change, event removal
         Requires a 90-day dual-emit window (RFC-0115 §2.3).

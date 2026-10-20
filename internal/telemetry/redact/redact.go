@@ -34,6 +34,10 @@ var allowedSensitiveKeys = map[string]struct{}{
 	// would otherwise strip a REQUIRED machine.* attribute (RFC-0115
 	// §4.4.1).
 	"security.machine.authorization": {},
+	// Contract-declared AD attribute (v1.4): the time the machine account
+	// password last rotated (pwdLastSet), never the password itself — the
+	// "password" substring rule would otherwise strip it.
+	"ad.password_last_set": {},
 }
 
 // forbiddenSubstrings are case-insensitive fragments that, when present in
