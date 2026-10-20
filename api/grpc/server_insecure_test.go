@@ -33,7 +33,9 @@ func serveOnEphemeralPort(t *testing.T, srv *Server) string {
 	t.Cleanup(func() {
 		srv.Stop()
 		select {
-		case <-done:
+		case err := <-done:
+			// Serve's return after Stop is not under test; record it only.
+			t.Logf("Serve returned after Stop: %v", err)
 		case <-time.After(10 * time.Second):
 			t.Error("Serve did not return after Stop")
 		}
