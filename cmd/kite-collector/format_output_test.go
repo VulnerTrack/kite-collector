@@ -224,6 +224,11 @@ func TestDashboardOAuthOptions(t *testing.T) {
 }
 
 func TestIsHeadless_LinuxDependsOnDisplayEnv(t *testing.T) {
+	// An SSH session short-circuits to headless; clear it so the test
+	// passes when run over SSH.
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("SSH_TTY", "")
+	t.Setenv("SSH_CLIENT", "")
 	t.Setenv("DISPLAY", "")
 	t.Setenv("WAYLAND_DISPLAY", "")
 	assert.True(t, isHeadless())
