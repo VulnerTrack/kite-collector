@@ -4,6 +4,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -142,7 +143,7 @@ func MTLSOrAPIKey(next http.Handler, apiKey string) http.Handler {
 		// Fall back to API key.
 		if apiKey != "" {
 			provided := r.Header.Get(apiKeyHeader)
-			if provided == apiKey {
+			if subtle.ConstantTimeCompare([]byte(provided), []byte(apiKey)) == 1 {
 				slog.Debug("mTLS+APIKey: authenticated via API key")
 				next.ServeHTTP(w, r)
 				return

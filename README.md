@@ -472,8 +472,11 @@ instead of SSH-ing to the host to run `kite-collector scan`. The dashboard uses
 the same endpoints.
 
 All routes sit behind the `MTLSOrAPIKey` middleware (RFC-0063): when an API
-key is configured every request must present it via `X-API-Key` or a valid
-mTLS client certificate.
+key is configured (`fleet.api_key`) every request must present it via
+`X-API-Key` or a valid mTLS client certificate. The server listens on
+`127.0.0.1:8080` by default (`api.addr` / `KITE_API_ADDR`); binding it beyond
+loopback without `fleet.api_key` leaves it unauthenticated, and the agent logs
+`agent.api.unauthenticated_exposed` at startup.
 
 Only one scan runs at a time. A second `POST /api/v1/scans` while a scan is
 already running returns `409 Conflict` with the active scan's id, so callers

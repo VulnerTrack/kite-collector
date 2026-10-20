@@ -293,6 +293,17 @@ func splitListenAddr(addr string) (host, port string) {
 	return strings.Trim(addr, "[]"), ""
 }
 
+// isLoopbackListenAddr reports whether addr answers only on this host:
+// localhost or a loopback IP. Wildcards and interface addresses do not.
+func isLoopbackListenAddr(addr string) bool {
+	host, _ := splitListenAddr(addr)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func isWildcardHost(host string) bool {
 	switch host {
 	case "", "0.0.0.0", "::", "0:0:0:0:0:0:0:0":

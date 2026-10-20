@@ -13,8 +13,10 @@ func TestLoad_APIAddrDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.API.Addr != ":8080" {
-		t.Fatalf("default api.addr = %q, want %q", cfg.API.Addr, ":8080")
+	// Loopback by default: the API serves inventory and starts scans, so
+	// exposing it to the network is an explicit choice (with fleet.api_key).
+	if cfg.API.Addr != "127.0.0.1:8080" {
+		t.Fatalf("default api.addr = %q, want %q", cfg.API.Addr, "127.0.0.1:8080")
 	}
 }
 

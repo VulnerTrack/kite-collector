@@ -58,6 +58,10 @@ const (
 	LogCodeAPIStarting     LogCode = "agent.api.starting"
 	LogCodeAPIServerFailed LogCode = "agent.api.server_failed"
 	LogCodeAPIDisabled     LogCode = "agent.api.disabled"
+	// LogCodeAPIUnauthenticatedExposed fires when api.addr listens beyond
+	// loopback and fleet.api_key is unset, so anyone on the network can
+	// read inventory and start or cancel scans.
+	LogCodeAPIUnauthenticatedExposed LogCode = "agent.api.unauthenticated_exposed"
 
 	// dashboard surface — embedded dashboard server lifecycle
 	LogCodeDashboardStarting       LogCode = "agent.dashboard.starting"

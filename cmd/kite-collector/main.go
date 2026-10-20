@@ -1493,7 +1493,9 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	if reader, ok := st.(rest.NetworkScanReader); ok {
 		apiHandler.SetNetworkScanReader(reader)
 	}
-	apiMux := apiHandler.Mux()
+	// fleet.api_key turns on the RFC-0063 MTLSOrAPIKey middleware, which
+	// only Handler() applies — the bare Mux() would serve unauthenticated.
+	apiHandler.SetAPIKey(cfg.Fleet.APIKey)
 
 	// Empty api.addr disables the REST API, mirroring the dashboard's
 	// empty-addr semantics below. Override via config or KITE_API_ADDR
@@ -1501,9 +1503,14 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	apiAddr := cfg.API.Addr
 	var apiSrv *http.Server
 	if apiAddr != "" {
+		if cfg.Fleet.APIKey == "" && !isLoopbackListenAddr(apiAddr) {
+			slog.Warn("REST API is reachable from the network without authentication; set fleet.api_key or bind api.addr to 127.0.0.1",
+				"code", string(LogCodeAPIUnauthenticatedExposed),
+				"addr", apiAddr)
+		}
 		apiSrv = &http.Server{
 			Addr:              apiAddr,
-			Handler:           apiMux,
+			Handler:           apiHandler.Handler(),
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 		go func() {

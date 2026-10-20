@@ -553,7 +553,7 @@ func Load(path string) (*Config, error) {
 	// VPN host discovery is a local, read-only source (like agent): on by
 	// default, disable with discovery.sources.vpn.enabled=false.
 	v.SetDefault("discovery.sources.vpn.enabled", true)
-	v.SetDefault("api.addr", ":8080")
+	v.SetDefault("api.addr", "127.0.0.1:8080")
 	v.SetDefault("audit.enabled", true)
 	v.SetDefault("audit.profile", "standard")
 	v.SetDefault("audit.ssh.enabled", true)

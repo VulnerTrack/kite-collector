@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 536 codes across 60 packages.
+**Catalog size:** 537 codes across 60 packages.
 
 ---
 
@@ -94,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 44 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 45 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -150,6 +150,12 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.api.starting` | `LogCodeAPIStarting` | — |
 | `agent.api.server_failed` | `LogCodeAPIServerFailed` | — |
 | `agent.api.disabled` | `LogCodeAPIDisabled` | — |
+
+**LogCodeAPIUnauthenticatedExposed fires when api.addr listens beyond loopback and fleet.api_key is unset, so anyone on the network can read inventory and start or cancel scans.**
+
+| Code | Constant | Description |
+|---|---|---|
+| `agent.api.unauthenticated_exposed` | `LogCodeAPIUnauthenticatedExposed` | — |
 
 **dashboard surface — embedded dashboard server lifecycle**
 

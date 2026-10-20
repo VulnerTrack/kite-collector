@@ -263,5 +263,7 @@ stale_threshold: 168h       # 7 days
 
 # REST API (scan coordinator endpoints in streaming mode).
 # Overridable via KITE_API_ADDR; an empty addr disables the server.
+# Defaults to loopback. Binding beyond it (e.g. :8080) without
+# fleet.api_key lets anyone on the network read inventory and start scans.
 api:
-  addr: :8080
+  addr: 127.0.0.1:8080
