@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const (
@@ -38,11 +40,11 @@ func probeK8s(ctx context.Context, services []ServiceSignature) []DiscoveredServ
 
 	client := &http.Client{
 		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
+		Transport: useragent.Wrap(&http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true, //#nosec G402 -- in-cluster API with service account token
 			},
-		},
+		}),
 	}
 
 	url := fmt.Sprintf("%s/api/v1/namespaces/%s/services", k8sAPIServer, strings.TrimSpace(string(namespace)))

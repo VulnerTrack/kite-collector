@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"path"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // Default analyzer limits. These are exposed via AnalyzerOptions so callers
@@ -61,7 +63,7 @@ func NewAnalyzer(opts AnalyzerOptions) *Analyzer {
 	} else {
 		a.client = &http.Client{
 			Timeout:   a.timeout,
-			Transport: newRecordingTransport(),
+			Transport: useragent.Wrap(newRecordingTransport()),
 		}
 	}
 	return a

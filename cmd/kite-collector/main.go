@@ -91,6 +91,7 @@ import (
 	telresource "github.com/vulnertrack/kite-collector/internal/telemetry/resource"
 	"github.com/vulnertrack/kite-collector/internal/timefmt"
 	"github.com/vulnertrack/kite-collector/internal/tunnel"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // Build-time variables set via ldflags.
@@ -3670,7 +3671,8 @@ func printEnrollmentLaunch(launchURL string, noBrowser bool) {
 
 func dashboardReachable(rawURL string) bool {
 	client := http.Client{
-		Timeout: 750 * time.Millisecond,
+		Timeout:   750 * time.Millisecond,
+		Transport: useragent.Wrap(nil),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -3703,7 +3705,8 @@ func waitForDashboard(rawURL string, timeout time.Duration) bool {
 func waitForDashboardEnrollment(ctx context.Context, baseURL, waitID string) error {
 	waitURL := strings.TrimRight(baseURL, "/") + "/api/v1/enrollment/wait/" + url.PathEscape(waitID)
 	client := http.Client{
-		Timeout: 2 * time.Second,
+		Timeout:   2 * time.Second,
+		Transport: useragent.Wrap(nil),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -4235,7 +4238,7 @@ func collectOTLPStages(endpoint, certsDir string, timeout time.Duration) ([]otlp
 			}
 			transport.TLSClientConfig = tlsCfg
 		}
-		client := &http.Client{Transport: transport, Timeout: timeout}
+		client := &http.Client{Transport: useragent.Wrap(transport), Timeout: timeout}
 
 		// Minimal OTLP logs payload — one log record so the collector accepts it.
 		pingURL := strings.TrimRight(endpoint, "/") + "/v1/logs"
@@ -4531,6 +4534,11 @@ func (a dashboardStreamAdapter) Status() dashboard.StreamStatus {
 // ---------------------------------------------------------------------------
 
 func main() {
+	// Name the collector on every outbound request instead of net/http's
+	// "Go-http-client/2.0"; DefaultClient covers the call sites that use it.
+	useragent.SetVersion(version)
+	http.DefaultClient.Transport = useragent.Wrap(http.DefaultClient.Transport)
+
 	loadEnvFile(".env")
 
 	if os.Getenv("KITE_OAUTH_SUPABASE_URL") == "" {

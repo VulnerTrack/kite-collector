@@ -131,7 +131,7 @@ func enroll(agent, token, dir string) error {
 	if base == "" {
 		base = defaultPKI
 	}
-	client := &http.Client{Timeout: 45 * time.Second}
+	client := &http.Client{Timeout: 45 * time.Second, Transport: uaTransport{}}
 	resp, err := client.Post(base+"/pki/enroll/token", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("contact PKI: %w", err)
@@ -581,7 +581,7 @@ func heartbeat(ctx context.Context, dir string) error {
 	}
 	p := proof{AgentCode: cert.Subject.CommonName, Certificate: string(certPEM), Nonce: nonce, Signature: base64.StdEncoding.EncodeToString(sig), Timestamp: now}
 	body, _ := json.Marshal(p)
-	client := &http.Client{Timeout: 45 * time.Second}
+	client := &http.Client{Timeout: 45 * time.Second, Transport: uaTransport{}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, defaultPKI+"/pki/agent/heartbeat", bytes.NewReader(body))
 	if err != nil {
 		return err

@@ -22,6 +22,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/dashboard"
 	"github.com/vulnertrack/kite-collector/internal/plural"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 type fleetDiscoverResponse struct {
@@ -157,7 +158,7 @@ func requestFleetDiscovery(parent context.Context, dashboardURL string, timeout 
 		return fleetDiscoverResponse{}, fmt.Errorf("create fleet discovery request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := (&http.Client{Timeout: timeout}).Do(req)
+	resp, err := (&http.Client{Timeout: timeout, Transport: useragent.Wrap(nil)}).Do(req)
 	if err != nil {
 		return fleetDiscoverResponse{}, fmt.Errorf("contact local Kite dashboard at %s: %w", dashboardURL, err)
 	}
@@ -342,7 +343,7 @@ func requestFleetDiscoveryResults(parent context.Context, dashboardURL string, t
 		return fleetDiscoverResponse{}, fmt.Errorf("create fleet discovery results request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	resp, err := (&http.Client{Timeout: timeout}).Do(req)
+	resp, err := (&http.Client{Timeout: timeout, Transport: useragent.Wrap(nil)}).Do(req)
 	if err != nil {
 		return fleetDiscoverResponse{}, fmt.Errorf("contact local Kite dashboard at %s: %w", dashboardURL, err)
 	}
@@ -446,7 +447,7 @@ func requestFleetPackage(ctx context.Context, dashboardURL string, targets []str
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/zip")
-	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+	client := &http.Client{Transport: useragent.Wrap(nil), CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
 	resp, err := client.Do(req)

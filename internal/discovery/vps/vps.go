@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const (
@@ -60,7 +62,7 @@ func newClient(name, base string, auth authFunc) *apiClient {
 		name: name,
 		base: base,
 		auth: auth,
-		http: &http.Client{Timeout: clientTimeout},
+		http: &http.Client{Timeout: clientTimeout, Transport: useragent.Wrap(nil)},
 	}
 }
 

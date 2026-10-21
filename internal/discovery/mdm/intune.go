@@ -16,6 +16,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // Intune implements discovery.Source by listing managed devices from
@@ -84,7 +85,7 @@ func (i *Intune) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		return nil, nil
 	}
 
-	client := &http.Client{Timeout: clientTimeout}
+	client := &http.Client{Timeout: clientTimeout, Transport: useragent.Wrap(nil)}
 
 	token, err := i.acquireToken(ctx, client, tenantID, clientID, clientSecret)
 	if err != nil {

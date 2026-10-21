@@ -19,6 +19,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const clientTimeout = 30 * time.Second
@@ -131,9 +132,9 @@ func newPVEClient(endpoint, tokenID, tokenSecret string) (*pveClient, error) {
 	return &pveClient{
 		http: &http.Client{
 			Timeout: clientTimeout,
-			Transport: &http.Transport{
+			Transport: useragent.Wrap(&http.Transport{
 				TLSClientConfig: tc,
-			},
+			}),
 		},
 		base:        endpoint,
 		tokenID:     tokenID,

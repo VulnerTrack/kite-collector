@@ -26,6 +26,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/telemetry/contract"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/recordsig"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/redact"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // Compile-time interface check.
@@ -123,7 +124,7 @@ func NewOTLP(cfg OTLPConfig, serviceVersion string) (*OTLPEmitter, error) {
 
 	return &OTLPEmitter{
 		client: &http.Client{
-			Transport: transport,
+			Transport: useragent.Wrap(transport),
 			Timeout:   30 * time.Second,
 		},
 		endpoint:       endpoint,

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const pkiCertificatePageSize = 1000
@@ -69,7 +71,7 @@ type pkiHTTPCertificateReader struct {
 }
 
 func newPKIHTTPCertificateReader() *pkiHTTPCertificateReader {
-	return &pkiHTTPCertificateReader{client: &http.Client{Timeout: 20 * time.Second}}
+	return &pkiHTTPCertificateReader{client: &http.Client{Timeout: 20 * time.Second, Transport: useragent.Wrap(nil)}}
 }
 
 func (r *pkiHTTPCertificateReader) List(

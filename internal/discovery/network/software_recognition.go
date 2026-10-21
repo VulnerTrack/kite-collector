@@ -18,6 +18,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/network/compositefingerprint"
 	"github.com/vulnertrack/kite-collector/internal/discovery/network/servicefp"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // PackageManager tags stamped on network-recognised software so the
@@ -305,7 +306,7 @@ func pinnedDialClient(ip netip.Addr, port int, sni string, timeout time.Duration
 		MaxIdleConnsPerHost:   2,
 	}
 	return &http.Client{
-		Transport: tr,
+		Transport: useragent.Wrap(tr),
 		Timeout:   timeout,
 		// A fingerprint sweep reads the landing response, not a login
 		// redirect chain; capping redirects keeps a misconfigured vhost

@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const (
@@ -70,7 +72,7 @@ func newClient(name, base string, auth authFunc) *apiClient {
 		name:    name,
 		base:    base,
 		auth:    auth,
-		http:    &http.Client{Timeout: clientTimeout},
+		http:    &http.Client{Timeout: clientTimeout, Transport: useragent.Wrap(nil)},
 		headers: make(map[string]string),
 	}
 }
@@ -81,7 +83,7 @@ func newClient(name, base string, auth authFunc) *apiClient {
 func newClientWithTLS(name, base string, auth authFunc, tlsCfg *tls.Config) *apiClient {
 	c := newClient(name, base, auth)
 	if tlsCfg != nil {
-		c.http.Transport = &http.Transport{TLSClientConfig: tlsCfg}
+		c.http.Transport = useragent.Wrap(&http.Transport{TLSClientConfig: tlsCfg})
 	}
 	return c
 }

@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // DefaultPerRequestTimeout is the per-HTTP-call deadline. Probes are
@@ -43,7 +45,8 @@ func NewDetector(client *http.Client, signatures []Signature) *Detector {
 // the caller cannot accidentally remove.
 func defaultClient() *http.Client {
 	return &http.Client{
-		Timeout: DefaultPerRequestTimeout,
+		Timeout:   DefaultPerRequestTimeout,
+		Transport: useragent.Wrap(nil),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

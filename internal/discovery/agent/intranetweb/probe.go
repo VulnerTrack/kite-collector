@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // DefaultProbeTimeout is the per-target wall-clock budget. We keep
@@ -81,7 +83,7 @@ func (p HTTPProbe) Probe(ctx context.Context, scheme Scheme, t Target) (Endpoint
 		DisableKeepAlives:     true,
 	}
 	client := &http.Client{
-		Transport: tr,
+		Transport: useragent.Wrap(tr),
 		Timeout:   timeout,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			// Never follow redirects — the redirect target is a separate

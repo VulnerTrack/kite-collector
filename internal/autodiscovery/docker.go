@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const dockerAPIVersion = "v1.43"
@@ -137,7 +139,7 @@ func newDockerProbeClient(socketPath string) *dockerProbeClient {
 	}
 	return &dockerProbeClient{
 		base: "http://localhost",
-		http: &http.Client{Transport: transport, Timeout: 10 * time.Second},
+		http: &http.Client{Transport: useragent.Wrap(transport), Timeout: 10 * time.Second},
 	}
 }
 

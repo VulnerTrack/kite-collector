@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // tailscaleEnumerator discovers tailnet hosts two ways, preferring the one
@@ -40,7 +42,7 @@ func newTailscaleEnumerator() *tailscaleEnumerator {
 		run:        defaultRunner,
 		lookPath:   defaultLookPath,
 		getenv:     defaultGetenv,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: useragent.Wrap(nil)},
 		binary:     "tailscale",
 		apiBaseURL: "https://api.tailscale.com",
 		timeout:    5 * time.Second,

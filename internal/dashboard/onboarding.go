@@ -32,6 +32,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/secretstore"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 	"github.com/vulnertrack/kite-collector/internal/timefmt"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // onboardingDeps bundles everything the onboarding handlers need.
@@ -608,7 +609,7 @@ func loginToSupabase(ctx context.Context, supabaseURL, anonKey, email, password,
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: useragent.Wrap(nil)}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("network error authenticating with Supabase: %w", err)
@@ -747,7 +748,7 @@ func onboardingProbeClient(deps onboardingDeps, tlsSettings config.TLSConfig) (*
 		transport.TLSClientConfig = tlsCfg
 	}
 	return &http.Client{
-		Transport: transport,
+		Transport: useragent.Wrap(transport),
 		Timeout:   8 * time.Second,
 	}, nil
 }

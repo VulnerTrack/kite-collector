@@ -23,6 +23,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const (
@@ -183,7 +184,7 @@ func newClient(host string) *dockerClient {
 
 	return &dockerClient{
 		base: strings.TrimRight(host, "/"),
-		http: &http.Client{Transport: transport, Timeout: clientTimeout},
+		http: &http.Client{Transport: useragent.Wrap(transport), Timeout: clientTimeout},
 	}
 }
 

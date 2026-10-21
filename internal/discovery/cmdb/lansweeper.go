@@ -17,6 +17,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // Lansweeper implements discovery.Source by listing machine resources from the
@@ -148,7 +149,7 @@ func (l *Lansweeper) httpClient(apiURL string) (*http.Client, *url.URL, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("lansweeper: %w", err)
 		}
-		return &http.Client{Timeout: cmdbClientTimeout}, u, nil
+		return &http.Client{Timeout: cmdbClientTimeout, Transport: useragent.Wrap(nil)}, u, nil
 	}
 	client, u, err := connectorkit.SafeClient("lansweeper", apiURL, false)
 	if err != nil {

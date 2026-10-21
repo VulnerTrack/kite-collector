@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // MaxCPEsPerRequest is the server-enforced limit on CPEs per correlation
@@ -32,7 +34,7 @@ func NewClient(endpoint string, tlsConfig *tls.Config) *Client {
 	return &Client{
 		endpoint: endpoint,
 		httpClient: &http.Client{
-			Transport: transport,
+			Transport: useragent.Wrap(transport),
 			Timeout:   30 * time.Second,
 		},
 	}

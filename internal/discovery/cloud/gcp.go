@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // GCP implements discovery.Source by listing Compute Engine instances across
@@ -191,7 +192,7 @@ func tokenFromMetadata(ctx context.Context) (string, error) {
 	}
 	req.Header.Set("Metadata-Flavor", "Google")
 
-	client := &http.Client{Timeout: 2 * time.Second}
+	client := &http.Client{Timeout: 2 * time.Second, Transport: useragent.Wrap(nil)}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("metadata request: %w", err)

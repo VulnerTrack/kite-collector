@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // SignedConfig is a YAML policy document with an Ed25519 signature.
@@ -65,7 +67,8 @@ func NewPullClient(policyURL string, verifyKey ed25519.PublicKey) *PullClient {
 		policyURL: policyURL,
 		verifyKey: verifyKey,
 		httpClient: &http.Client{
-			Timeout: 15 * time.Second,
+			Timeout:   15 * time.Second,
+			Transport: useragent.Wrap(nil),
 		},
 	}
 }

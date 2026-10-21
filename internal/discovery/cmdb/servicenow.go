@@ -15,6 +15,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // ServiceNow implements discovery.Source by listing configuration items from
@@ -142,7 +143,7 @@ func (s *ServiceNow) httpClient(instanceURL string) (*http.Client, *url.URL, err
 		if err != nil {
 			return nil, nil, fmt.Errorf("servicenow: %w", err)
 		}
-		return &http.Client{Timeout: cmdbClientTimeout}, u, nil
+		return &http.Client{Timeout: cmdbClientTimeout, Transport: useragent.Wrap(nil)}, u, nil
 	}
 	client, u, err := connectorkit.SafeClient("servicenow", instanceURL, false)
 	if err != nil {

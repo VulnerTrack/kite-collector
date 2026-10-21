@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // probeDockerComposeLabels queries the Docker API for running containers and
@@ -19,12 +21,12 @@ import (
 func probeDockerComposeLabels(ctx context.Context, socketPath string, services []ServiceSignature) []DiscoveredService {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
+		Transport: useragent.Wrap(&http.Transport{
 			DialContext: func(dctx context.Context, _, _ string) (net.Conn, error) {
 				d := net.Dialer{Timeout: 5 * time.Second}
 				return d.DialContext(dctx, "unix", socketPath)
 			},
-		},
+		}),
 	}
 
 	url := fmt.Sprintf("http://localhost/%s/containers/json", dockerAPIVersion)

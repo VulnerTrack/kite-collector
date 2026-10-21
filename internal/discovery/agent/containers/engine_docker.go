@@ -13,6 +13,7 @@ import (
 	"time"
 
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // dockerAPIVersion is pinned to a widely-supported version; both Docker
@@ -112,15 +113,15 @@ func newDockerHTTPClient(socket string) httpDoer {
 		sockPath := strings.TrimPrefix(socket, "unix://")
 		return &http.Client{
 			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
+			Transport: useragent.Wrap(&http.Transport{
 				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 					return (&net.Dialer{Timeout: 10 * time.Second}).
 						DialContext(ctx, "unix", sockPath)
 				},
-			},
+			}),
 		}
 	}
-	return &http.Client{Timeout: 30 * time.Second}
+	return &http.Client{Timeout: 30 * time.Second, Transport: useragent.Wrap(nil)}
 }
 
 // dockerContainerSummary mirrors the subset of /containers/json fields we

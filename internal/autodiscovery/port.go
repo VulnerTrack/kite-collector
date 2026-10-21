@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const (
@@ -168,11 +169,11 @@ func fingerprint(ctx context.Context, endpoint, path, match string, timeout time
 
 	client := &http.Client{
 		Timeout: timeout,
-		Transport: &http.Transport{
+		Transport: useragent.Wrap(&http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true, //#nosec G402 -- self-signed certs common in infrastructure services
 			},
-		},
+		}),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse // don't follow redirects
 		},

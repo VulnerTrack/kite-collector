@@ -16,6 +16,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 type integrationCLIView struct {
@@ -141,7 +143,7 @@ func newIntegrationsConfigureCmd(dashboardURL *string) *cobra.Command {
 			}
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			req.Header.Set("Origin", strings.TrimRight(*dashboardURL, "/"))
-			client := &http.Client{Timeout: 6 * time.Minute}
+			client := &http.Client{Timeout: 6 * time.Minute, Transport: useragent.Wrap(nil)}
 			resp, err := client.Do(req)
 			if err != nil {
 				return fmt.Errorf("configure integration: %w", err)
@@ -164,7 +166,7 @@ func newIntegrationsConfigureCmd(dashboardURL *string) *cobra.Command {
 }
 
 func fetchIntegrations(baseURL string) ([]integrationCLIView, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: useragent.Wrap(nil)}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/api/v1/integrations", nil)

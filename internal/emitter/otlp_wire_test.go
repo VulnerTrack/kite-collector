@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // capturedRequest records a single HTTP request hitting the fake OTLP server.
@@ -23,6 +25,7 @@ type capturedRequest struct {
 	Method      string
 	Path        string
 	ContentType string
+	UserAgent   string
 	Body        []byte
 }
 
@@ -47,6 +50,7 @@ func startCaptureServer(t *testing.T, status int) (string, *[]capturedRequest) {
 			Method:      r.Method,
 			Path:        r.URL.Path,
 			ContentType: r.Header.Get("Content-Type"),
+			UserAgent:   r.UserAgent(),
 			Body:        body,
 		})
 		mu.Unlock()
@@ -78,6 +82,7 @@ func startSequenceServer(t *testing.T, statuses []int) (string, *[]capturedReque
 			Method:      r.Method,
 			Path:        r.URL.Path,
 			ContentType: r.Header.Get("Content-Type"),
+			UserAgent:   r.UserAgent(),
 			Body:        body,
 		})
 		status := statuses[len(statuses)-1]
@@ -148,6 +153,20 @@ func makeEvent(t *testing.T, eventType model.EventType, sev model.Severity) mode
 // ---------------------------------------------------------------------------
 // 1. Canonical event shape
 // ---------------------------------------------------------------------------
+
+// The collector names itself on the wire rather than sending net/http's
+// anonymous "Go-http-client/x" default.
+func TestOTLP_WireShape_UserAgentNamesCollector(t *testing.T) {
+	endpoint, reqs := startCaptureServer(t, http.StatusOK)
+	em := newWireTestEmitter(t, endpoint)
+	t.Cleanup(func() { _ = em.Shutdown(context.Background()) })
+
+	require.NoError(t, em.Emit(context.Background(), makeEvent(t, model.EventMachineDiscovered, model.SeverityMedium)))
+
+	require.Len(t, *reqs, 1)
+	assert.Equal(t, useragent.String(), (*reqs)[0].UserAgent)
+	assert.True(t, strings.HasPrefix((*reqs)[0].UserAgent, useragent.Product+"/"))
+}
 
 func TestOTLP_WireShape_CanonicalEvent(t *testing.T) {
 	endpoint, reqs := startCaptureServer(t, http.StatusOK)

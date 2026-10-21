@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // httpClient is the test seam — the production collector uses a
@@ -35,7 +37,8 @@ func NewCollector() Collector {
 	//#nosec G101 -- these are well-known cloud-provider instance-metadata URLs, not credentials
 	return &probeCollector{
 		client: &http.Client{
-			Timeout: DefaultProbeTimeout,
+			Timeout:   DefaultProbeTimeout,
+			Transport: useragent.Wrap(nil),
 		},
 		awsMetaURL:   "http://169.254.169.254/latest/dynamic/instance-identity/document",
 		awsTokenURL:  "http://169.254.169.254/latest/api/token",

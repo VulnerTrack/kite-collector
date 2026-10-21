@@ -17,6 +17,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/envelope"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/hostmetrics"
 	"github.com/vulnertrack/kite-collector/internal/telemetry/redact"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // MetricsScopeName is the OTLP instrumentation-scope name carried on every
@@ -85,7 +86,7 @@ func NewOTLPMetrics(cfg OTLPConfig) (*OTLPMetricsEmitter, error) {
 
 	return &OTLPMetricsEmitter{
 		client: &http.Client{
-			Transport: transport,
+			Transport: useragent.Wrap(transport),
 			Timeout:   30 * time.Second,
 		},
 		endpoint:   endpoint,

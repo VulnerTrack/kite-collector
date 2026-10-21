@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // LOLDriversFeedURL is the canonical drivers.json published by loldrivers.io.
@@ -150,7 +152,7 @@ type LOLDriversLoader struct {
 // URL and a 30 s HTTP timeout.
 func NewLOLDriversLoader() *LOLDriversLoader {
 	return &LOLDriversLoader{
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
+		HTTP:    &http.Client{Timeout: 30 * time.Second, Transport: useragent.Wrap(nil)},
 		FeedURL: LOLDriversFeedURL,
 		MaxSize: 64 << 20,
 	}

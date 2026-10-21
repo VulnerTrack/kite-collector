@@ -25,6 +25,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/scan"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 type kiteLoginView struct {
@@ -955,7 +956,8 @@ func resolveKiteOAuthLaunchURL(ctx context.Context, authURL string) string {
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:   5 * time.Second,
+		Transport: useragent.Wrap(nil),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -1216,7 +1218,7 @@ func exchangeKiteOAuthCode(r *http.Request, oauth OAuthOptions, code, verifier, 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second, Transport: useragent.Wrap(nil)}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, kiteerrors.FromCatalog(kiteerrors.CodeOAuthTokenExchange, err).With("stage", "network")

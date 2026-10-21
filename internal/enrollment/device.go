@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // DeviceAuthorization contains only the values shown to the operator.
@@ -59,7 +61,7 @@ func (c *Client) enrollDevice(ctx context.Context, agentCode string, display fun
 	// Do not forward a grant or JWT through an HTTP redirect.
 	client := *c
 	if c.http == nil || c.http == http.DefaultClient {
-		client.http = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		client.http = &http.Client{Timeout: 15 * time.Second, Transport: useragent.Wrap(nil), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
 	var authorization struct {
 		DeviceAuthorization

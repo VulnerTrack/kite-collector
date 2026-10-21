@@ -19,6 +19,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/agent/software"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const (
@@ -80,7 +81,7 @@ func (w *Wazuh) Discover(ctx context.Context, cfg map[string]any) ([]model.Machi
 	}
 	httpClient := &http.Client{
 		Timeout:   clientTimeout,
-		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+		Transport: useragent.Wrap(&http.Transport{TLSClientConfig: tlsCfg}),
 	}
 
 	auth := newAuth(endpoint, username, password, httpClient)

@@ -16,6 +16,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // Device42 implements discovery.Source by listing devices from a Device42
@@ -153,7 +154,7 @@ func (d *Device42) httpClient(apiURL string) (*http.Client, *url.URL, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("device42: %w", err)
 		}
-		return &http.Client{Timeout: cmdbClientTimeout}, u, nil
+		return &http.Client{Timeout: cmdbClientTimeout, Transport: useragent.Wrap(nil)}, u, nil
 	}
 	client, u, err := connectorkit.SafeClient("device42", apiURL, true)
 	if err != nil {

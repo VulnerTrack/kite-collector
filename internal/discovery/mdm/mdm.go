@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const (
@@ -41,7 +42,7 @@ func newValidatedClient(sourceName, baseURL, apiURL string, allowPrivate bool) (
 		if err != nil {
 			return nil, nil, fmt.Errorf("%s: %w", sourceName, err)
 		}
-		return &http.Client{Timeout: clientTimeout}, u, nil
+		return &http.Client{Timeout: clientTimeout, Transport: useragent.Wrap(nil)}, u, nil
 	}
 	client, u, err := connectorkit.SafeClient(sourceName, apiURL, allowPrivate)
 	if err != nil {

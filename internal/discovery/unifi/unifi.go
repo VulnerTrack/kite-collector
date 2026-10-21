@@ -34,6 +34,7 @@ import (
 	kiteerrors "github.com/vulnertrack/kite-collector/internal/errors"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 const (
@@ -72,7 +73,7 @@ func (u *UniFi) discoverCloud(ctx context.Context, apiKey string) ([]model.Machi
 
 	client := &cloudClient{
 		apiKey: apiKey,
-		http:   &http.Client{Timeout: clientTimeout},
+		http:   &http.Client{Timeout: clientTimeout, Transport: useragent.Wrap(nil)},
 	}
 
 	now := time.Now().UTC()
@@ -353,7 +354,7 @@ func newLocalClient(ctx context.Context, endpoint, username, password string) (*
 	c := &localClient{
 		base: parsed,
 		http: &http.Client{
-			Transport: transport,
+			Transport: useragent.Wrap(transport),
 			Timeout:   clientTimeout,
 			Jar:       jar,
 		},

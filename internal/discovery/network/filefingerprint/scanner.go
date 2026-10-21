@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // DefaultPerRequestTimeout caps each HTTP GET.
@@ -52,7 +54,8 @@ func (s *Scanner) SetMaxConcurrent(n int) {
 
 func defaultClient() *http.Client {
 	return &http.Client{
-		Timeout: DefaultPerRequestTimeout,
+		Timeout:   DefaultPerRequestTimeout,
+		Transport: useragent.Wrap(nil),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			// Refuse redirects — a 302 from /.env to /index.html
 			// would otherwise mask the file-not-present case.

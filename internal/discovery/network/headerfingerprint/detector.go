@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // DefaultPerRequestTimeout caps the single GET we issue per origin.
@@ -35,7 +37,8 @@ func NewDetector(client *http.Client, signatures []Signature) *Detector {
 
 func defaultClient() *http.Client {
 	return &http.Client{
-		Timeout: DefaultPerRequestTimeout,
+		Timeout:   DefaultPerRequestTimeout,
+		Transport: useragent.Wrap(nil),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			// Refuse redirects — origin → CDN edge → varnish chain
 			// would muddle the origin's own headers.

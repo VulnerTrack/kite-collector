@@ -27,6 +27,7 @@ import (
 	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // SourceName is the stable identifier emitted on the
@@ -462,7 +463,7 @@ func (e *EntraID) hardenedClient(conf *entraConfig) (httpClient, error) {
 	}
 	return &http.Client{
 		Timeout:   timeout,
-		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+		Transport: useragent.Wrap(&http.Transport{TLSClientConfig: tlsCfg}),
 	}, nil
 }
 

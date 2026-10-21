@@ -152,7 +152,7 @@ func newLegacyOTLPClient(dir string, snapshot *inventorySnapshot) (*legacyOTLPCl
 	}
 	return &legacyOTLPClient{
 		endpoint: endpoint,
-		http:     &http.Client{Transport: transport, Timeout: 60 * time.Second},
+		http:     &http.Client{Transport: uaTransport{base: transport}, Timeout: 60 * time.Second},
 		resource: mapOTLPAttributes(resource),
 	}, nil
 }

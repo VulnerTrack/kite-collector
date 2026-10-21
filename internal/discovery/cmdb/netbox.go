@@ -16,6 +16,7 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/discovery/connectorkit"
 	"github.com/vulnertrack/kite-collector/internal/model"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // NetBox implements discovery.Source by listing devices from a NetBox
@@ -152,7 +153,7 @@ func (n *NetBox) httpClient(apiURL string) (*http.Client, *url.URL, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("netbox: %w", err)
 		}
-		return &http.Client{Timeout: cmdbClientTimeout}, u, nil
+		return &http.Client{Timeout: cmdbClientTimeout, Transport: useragent.Wrap(nil)}, u, nil
 	}
 	client, u, err := connectorkit.SafeClient("netbox", apiURL, true)
 	if err != nil {

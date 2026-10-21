@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // clientTimeout bounds every connector's outbound request, matching the value
@@ -65,7 +66,7 @@ func SafeClientWithTimeout(sourceName, rawURL string, allowPrivate bool, timeout
 
 	client := &http.Client{
 		Timeout:   timeout,
-		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+		Transport: useragent.Wrap(&http.Transport{TLSClientConfig: tlsCfg}),
 	}
 	return client, u, nil
 }

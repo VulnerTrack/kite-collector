@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // JWKSClient fetches and caches the server's JWKS for payload encryption.
@@ -34,7 +36,7 @@ func NewJWKSClient(url string, logger *slog.Logger) *JWKSClient {
 		url:    url,
 		logger: logger,
 		keys:   make(map[string]jose.JSONWebKey),
-		client: &http.Client{Timeout: 10 * time.Second},
+		client: &http.Client{Timeout: 10 * time.Second, Transport: useragent.Wrap(nil)},
 		ttl:    1 * time.Hour,
 	}
 }

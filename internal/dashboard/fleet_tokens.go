@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 var errFleetSignInRequired = errors.New("VulnerTrack sign-in required")
@@ -76,7 +78,7 @@ func (s *fleetPackageService) issueTokens(
 }
 
 func newFleetHTTPTokenIssuer() *fleetHTTPTokenIssuer {
-	return &fleetHTTPTokenIssuer{client: &http.Client{Timeout: 15 * time.Second}}
+	return &fleetHTTPTokenIssuer{client: &http.Client{Timeout: 15 * time.Second, Transport: useragent.Wrap(nil)}}
 }
 
 func (i *fleetHTTPTokenIssuer) MintBatch(

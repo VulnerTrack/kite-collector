@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/vulnertrack/kite-collector/internal/safenet"
+	"github.com/vulnertrack/kite-collector/internal/useragent"
 )
 
 // netbirdEnumerator discovers NetBird mesh hosts. Like Tailscale it has two
@@ -144,7 +145,7 @@ func (e *netbirdEnumerator) enumerateAPI(ctx context.Context, mgmt, token string
 		if terr != nil {
 			return nil, fmt.Errorf("netbird: %w", terr)
 		}
-		client = &http.Client{Timeout: e.timeout, Transport: &http.Transport{TLSClientConfig: tlsCfg}}
+		client = &http.Client{Timeout: e.timeout, Transport: useragent.Wrap(&http.Transport{TLSClientConfig: tlsCfg})}
 	}
 	baseURL := strings.TrimRight(base.String(), "/")
 
