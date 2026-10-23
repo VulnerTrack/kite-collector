@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 537 codes across 60 packages.
+**Catalog size:** 539 codes across 60 packages.
 
 ---
 
@@ -1619,7 +1619,7 @@ Source: [`internal/scan/logcodes.go`](../internal/scan/logcodes.go) · 3 codes
 
 ## `sqlite` (internal/store/sqlite)
 
-Source: [`internal/store/sqlite/logcodes.go`](../internal/store/sqlite/logcodes.go) · 19 codes
+Source: [`internal/store/sqlite/logcodes.go`](../internal/store/sqlite/logcodes.go) · 21 codes
 
 **preflight surface — db_path sanity warnings before opening**
 
@@ -1644,6 +1644,8 @@ Source: [`internal/store/sqlite/logcodes.go`](../internal/store/sqlite/logcodes.
 | `sqlitestore.encrypted.snapshot_failed` | `LogCodeEncryptedSnapshotFailed` | — |
 | `sqlitestore.encrypted.remove_working_file_failed` | `LogCodeEncryptedRemoveWorkingFile` | — |
 | `sqlitestore.encrypted.remove_workdir_failed` | `LogCodeEncryptedRemoveWorkdir` | — |
+| `sqlitestore.encrypted.joined_working_copy` | `LogCodeEncryptedJoinedWorkingCopy` | — |
+| `sqlitestore.encrypted.left_working_copy` | `LogCodeEncryptedLeftWorkingCopy` | — |
 
 **migrate surface — schema migration apply / recovery**
 

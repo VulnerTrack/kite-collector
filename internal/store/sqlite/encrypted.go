@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"syscall"
 
 	"github.com/vulnertrack/kite-collector/internal/store"
 )
@@ -33,6 +32,7 @@ type EncryptedStore struct {
 	workPath    string // path to the decrypted working copy
 	keyBackend  string // "tpm", "keyring", or "file"
 	logger      *slog.Logger
+	share       *workingCopyShare
 	key         []byte // AES-256 key (32 bytes)
 	useRAMDisk  bool   // true if working copy is on a RAM-backed filesystem
 }
@@ -170,7 +170,9 @@ func workingPath(encPath string, logger *slog.Logger) (path string, onRAMDisk bo
 // NewEncrypted opens an encrypted SQLite database. If encPath contains
 // encrypted data, it is decrypted using key into a tmpfs working copy.
 // If encPath does not exist, a fresh database is created in tmpfs and
-// will be encrypted on Close.
+// will be encrypted on Close. When another process already has encPath
+// open, the store joins that process's working copy instead of decrypting
+// over it (see workingCopyShare).
 //
 // keyBackend is the identity backend name ("tpm", "keyring", "file")
 // and controls whether a security warning is emitted at startup.
@@ -198,35 +200,27 @@ func NewEncrypted(encPath string, key []byte, keyBackend string, logger *slog.Lo
 
 	workPath, onRAMDisk := workingPath(encPath, logger)
 
-	encrypted, err := IsEncrypted(encPath)
+	share, first, err := joinWorkingCopy(workPath)
 	if err != nil {
-		return nil, fmt.Errorf("encrypted store: check encrypted: %w", err)
+		return nil, fmt.Errorf("encrypted store: %w", err)
 	}
-
-	if encrypted {
-		logger.Info("decrypting encrypted database into working copy",
-			"code", string(LogCodeEncryptedDecrypting),
-			"enc_path", encPath,
-			"work_path", workPath,
-			"on_ramdisk", onRAMDisk)
-		err = DecryptFile(encPath, workPath, key)
-		if err != nil {
-			return nil, fmt.Errorf("encrypted store: decrypt: %w", err)
-		}
-	} else if fileExists(encPath) {
-		// Unencrypted existing DB — first time enabling encryption.
-		logger.Info("migrating existing unencrypted database to encrypted-at-rest storage",
-			"code", string(LogCodeEncryptedMigratingUnencrypted),
+	if first {
+		err = populateWorkingCopy(encPath, workPath, key, onRAMDisk, logger)
+	} else {
+		logger.Info("joining the working copy another process has open",
+			"code", string(LogCodeEncryptedJoinedWorkingCopy),
 			"enc_path", encPath,
 			"work_path", workPath)
-		err = copyFile(encPath, workPath)
-		if err != nil {
-			return nil, fmt.Errorf("encrypted store: copy: %w", err)
-		}
 	}
+	if err != nil {
+		share.done()
+		return nil, err
+	}
+	share.opened()
 
 	inner, err := New(workPath)
 	if err != nil {
+		share.done()
 		return nil, err
 	}
 
@@ -234,6 +228,7 @@ func NewEncrypted(encPath string, key []byte, keyBackend string, logger *slog.Lo
 		Store:      inner,
 		encPath:    encPath,
 		workPath:   workPath,
+		share:      share,
 		key:        key,
 		logger:     logger,
 		keyBackend: keyBackend,
@@ -241,9 +236,75 @@ func NewEncrypted(encPath string, key []byte, keyBackend string, logger *slog.Lo
 	}, nil
 }
 
+// populateWorkingCopy fills the working copy from the at-rest file for the
+// first holder. Leftovers of a crashed holder are cleared first: a stale
+// -wal replayed over a freshly decrypted database mixes pages from two
+// different states. With no at-rest file yet, the leftover working copy is
+// kept, since it is the only copy of what the crashed holder wrote.
+func populateWorkingCopy(encPath, workPath string, key []byte, onRAMDisk bool, logger *slog.Logger) error {
+	encrypted, err := IsEncrypted(encPath)
+	if err != nil {
+		return fmt.Errorf("encrypted store: check encrypted: %w", err)
+	}
+
+	switch {
+	case encrypted:
+		removeStaleWorkingFiles(workPath)
+		logger.Info("decrypting encrypted database into working copy",
+			"code", string(LogCodeEncryptedDecrypting),
+			"enc_path", encPath,
+			"work_path", workPath,
+			"on_ramdisk", onRAMDisk)
+		if err := DecryptFile(encPath, workPath, key); err != nil {
+			return fmt.Errorf("encrypted store: decrypt: %w", err)
+		}
+	case fileExists(encPath):
+		// Unencrypted existing DB — first time enabling encryption.
+		removeStaleWorkingFiles(workPath)
+		logger.Info("migrating existing unencrypted database to encrypted-at-rest storage",
+			"code", string(LogCodeEncryptedMigratingUnencrypted),
+			"enc_path", encPath,
+			"work_path", workPath)
+		if err := copyFile(encPath, workPath); err != nil {
+			return fmt.Errorf("encrypted store: copy: %w", err)
+		}
+	}
+	return nil
+}
+
+func removeStaleWorkingFiles(workPath string) {
+	for _, p := range []string{workPath, workPath + "-wal", workPath + "-shm"} {
+		_ = os.Remove(p) // #nosec G703 -- p is a derived internal working path
+	}
+}
+
 // Close encrypts the working database back to the persistent path,
 // then removes the plaintext working copy from tmpfs (or fallback path).
+// While other processes still have the working copy open, it snapshots
+// this process's writes to the persistent path instead and leaves the
+// working copy to the last holder.
 func (es *EncryptedStore) Close() error {
+	if es.share.holders == nil {
+		return nil // already closed
+	}
+	last, err := es.share.leave()
+	defer es.share.done()
+	if err != nil || !last {
+		es.logger.Info("other processes still use the working copy; snapshotting and leaving it to the last holder",
+			"code", string(LogCodeEncryptedLeftWorkingCopy),
+			"work_path", es.workPath,
+			"enc_path", es.encPath,
+			"error", err)
+		var snapErr error
+		if inner, ok := es.Store.(*SQLiteStore); ok {
+			snapErr = es.snapshot(context.Background(), inner)
+		}
+		if closeErr := es.Store.Close(); closeErr != nil {
+			return fmt.Errorf("encrypted store: close inner: %w", closeErr)
+		}
+		return errors.Join(err, snapErr)
+	}
+
 	// Close the inner SQLite connection first.
 	if err := es.Store.Close(); err != nil {
 		return fmt.Errorf("encrypted store: close inner: %w", err)
@@ -281,12 +342,19 @@ func (es *EncryptedStore) Close() error {
 // plaintext never touches durable disk — then encrypts it atomically onto the
 // at-rest path (writeFileAtomic: temp + fsync + rename, so a crash mid-encrypt
 // leaves the previous good at-rest file intact).
+//
+// Snapshots hold the share's gate: every process sharing the working copy
+// uses the same snapshot path, and the gate also keeps a snapshot from
+// racing the last holder's final encryption.
 func (es *EncryptedStore) Snapshot(ctx context.Context) error {
 	inner, ok := es.Store.(*SQLiteStore)
 	if !ok {
 		return errors.New("encrypted store: snapshot requires an inner *SQLiteStore")
 	}
+	return es.share.withGate(func() error { return es.snapshot(ctx, inner) })
+}
 
+func (es *EncryptedStore) snapshot(ctx context.Context, inner *SQLiteStore) error {
 	// VACUUM INTO refuses to overwrite, so clear any leftover from a prior
 	// crashed snapshot before writing.
 	snapPath := es.workPath + ".snap"
@@ -325,19 +393,16 @@ func (es *EncryptedStore) UseRAMDisk() bool {
 }
 
 // removeWorkingFiles cleans up the plaintext working copy and SQLite
-// journal files (WAL, SHM). It also attempts to remove the per-instance
-// namespaced parent directory (e.g. /dev/shm/kite-collector/<nsHash>/)
-// if it is empty, but never recursively — a non-empty parent is left
-// alone (we don't want to silently nuke files we didn't create) and we
-// never touch any directory above the namespaced subdir, so cleanup
-// cannot reach files belonging to other EncryptedStore instances.
+// journal files (WAL, SHM). The namespaced directory stays: it holds the
+// share's lock files, which must outlive every holder (see
+// workingCopyShare).
 func (es *EncryptedStore) removeWorkingFiles() {
 	for _, path := range []string{
 		es.workPath,
 		es.workPath + "-wal",
 		es.workPath + "-shm",
 	} {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) { // #nosec G703 -- path is a derived internal working path
 			es.logger.Warn("plaintext working file remove failed; manual cleanup may be required",
 				"code", string(LogCodeEncryptedRemoveWorkingFile),
 				"error", err,
@@ -345,32 +410,6 @@ func (es *EncryptedStore) removeWorkingFiles() {
 				"work_root", es.workPath)
 		}
 	}
-
-	// Best-effort removal of the per-instance namespaced parent
-	// directory. If it's not empty (ENOTEMPTY) we leave it alone —
-	// other instances use different namespaces, so a non-empty parent
-	// here means a stray file we shouldn't blindly delete.
-	parent := filepath.Dir(es.workPath)
-	if isNamespacedWorkDir(parent) {
-		if err := os.Remove(parent); err != nil &&
-			!os.IsNotExist(err) && !errors.Is(err, syscall.ENOTEMPTY) {
-			// Non-fatal — log at debug level via Warn for visibility
-			// without alarming operators.
-			es.logger.Warn("namespaced work dir remove failed; non-fatal — leaves an empty directory behind",
-				"code", string(LogCodeEncryptedRemoveWorkdir),
-				"error", err,
-				"path", parent)
-		}
-	}
-}
-
-// isNamespacedWorkDir returns true if dir looks like a per-instance
-// namespaced work directory (i.e. its parent is a "kite-collector"
-// directory). This guards Remove() from ever touching anything above
-// the namespaced subdir, so it cannot reach files belonging to other
-// EncryptedStore instances or to unrelated processes.
-func isNamespacedWorkDir(dir string) bool {
-	return filepath.Base(filepath.Dir(dir)) == "kite-collector"
 }
 
 func fileExists(path string) bool {

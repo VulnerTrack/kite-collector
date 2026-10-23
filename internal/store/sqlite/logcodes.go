@@ -40,6 +40,8 @@ const (
 	LogCodeEncryptedSnapshotFailed       LogCode = "sqlitestore.encrypted.snapshot_failed"
 	LogCodeEncryptedRemoveWorkingFile    LogCode = "sqlitestore.encrypted.remove_working_file_failed"
 	LogCodeEncryptedRemoveWorkdir        LogCode = "sqlitestore.encrypted.remove_workdir_failed"
+	LogCodeEncryptedJoinedWorkingCopy    LogCode = "sqlitestore.encrypted.joined_working_copy"
+	LogCodeEncryptedLeftWorkingCopy      LogCode = "sqlitestore.encrypted.left_working_copy"
 
 	// migrate surface — schema migration apply / recovery
 	LogCodeMigrateChecksumMismatch LogCode = "sqlitestore.migrate.checksum_mismatch"

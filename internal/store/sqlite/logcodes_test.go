@@ -22,6 +22,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeEncryptedDecrypting, LogCodeEncryptedMigratingUnencrypted,
 		LogCodeEncryptedEncryptingAtRest,
 		LogCodeEncryptedRemoveWorkingFile, LogCodeEncryptedRemoveWorkdir,
+		LogCodeEncryptedJoinedWorkingCopy, LogCodeEncryptedLeftWorkingCopy,
 		LogCodeMigrateChecksumMismatch, LogCodeMigrateApplying,
 		LogCodeMigrateColumnExists, LogCodeMigrateApplied, LogCodeMigrateEntryRemoved,
 	}
@@ -54,6 +55,7 @@ func TestLogCodes_AreUnique(t *testing.T) {
 		LogCodeEncryptedDecrypting, LogCodeEncryptedMigratingUnencrypted,
 		LogCodeEncryptedEncryptingAtRest,
 		LogCodeEncryptedRemoveWorkingFile, LogCodeEncryptedRemoveWorkdir,
+		LogCodeEncryptedJoinedWorkingCopy, LogCodeEncryptedLeftWorkingCopy,
 		LogCodeMigrateChecksumMismatch, LogCodeMigrateApplying,
 		LogCodeMigrateColumnExists, LogCodeMigrateApplied, LogCodeMigrateEntryRemoved,
 	}
