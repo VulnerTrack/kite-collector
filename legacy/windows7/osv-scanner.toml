@@ -28,3 +28,8 @@ reason = "golang.org/x/sys frozen at last go1.17-compatible release; uncalled pe
 id = "GO-2026-5970"
 ignoreUntil = 2026-11-13
 reason = "golang.org/x/text 0.3.8 is the last go1.17-compatible release (main module ships current x/text); uncalled per call analysis. Review by sunset or when Win7 support drops."
+
+[[IgnoredVulns]]
+id = "GO-2026-6629"
+ignoreUntil = 2026-11-13
+reason = "golang.org/x/text 0.3.8 frozen (fix 0.41.0 needs go >= 1.18); the advisory is in x/text/secure/precis, which this module never links (only encoding/charmap + transform). Review by sunset or when Win7 support drops."
