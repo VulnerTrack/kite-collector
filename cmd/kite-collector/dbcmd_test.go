@@ -199,7 +199,7 @@ func TestRunReport_UnopenableStoreFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "open store")
 }
 
-func TestRunDB_EncryptedDatabasePointsAtQueryCommand(t *testing.T) {
+func TestRunDB_EncryptedDatabasePointsAtDashboardAndCheatsheet(t *testing.T) {
 	// Any file that does not carry the SQLite magic reads as encrypted;
 	// this deterministic branch never launches the sqlite3 CLI.
 	dbPath := filepath.Join(t.TempDir(), "kite.db")
@@ -213,6 +213,7 @@ func TestRunDB_EncryptedDatabasePointsAtQueryCommand(t *testing.T) {
 		require.NoError(t, runDB(dbPath))
 	})
 	assert.Contains(t, out, "Database is encrypted at rest. The sqlite3 CLI cannot read it.")
-	assert.Contains(t, out, "kite-collector query machines")
+	assert.NotContains(t, out, "kite-collector query", "query is deprecated too")
 	assert.Contains(t, out, "kite-collector dashboard")
+	assert.Contains(t, out, "docs/sqlite-cheatsheet.md")
 }

@@ -2129,16 +2129,12 @@ func runDB(dbPath string) error {
 	if err == nil && encrypted {
 		fmt.Println("Database is encrypted at rest. The sqlite3 CLI cannot read it.")
 		fmt.Println()
-		fmt.Println("Use the built-in query command instead:")
-		fmt.Println()
-		fmt.Println("  kite-collector query machines")
-		fmt.Println("  kite-collector query software")
-		fmt.Println("  kite-collector query findings")
-		fmt.Println("  kite-collector query scans")
-		fmt.Println()
-		fmt.Println("Or use the dashboard:")
+		fmt.Println("Browse and export its tables in the dashboard:")
 		fmt.Println()
 		fmt.Println("  kite-collector dashboard")
+		fmt.Println()
+		fmt.Println("To query it with sqlite3, open the decrypted working copy while a")
+		fmt.Println("kite-collector process has the database open: docs/sqlite-cheatsheet.md")
 		return nil
 	}
 
@@ -2157,7 +2153,7 @@ func runDB(dbPath string) error {
 			fmt.Println("  Download from: https://www.sqlite.org/download.html")
 		}
 		fmt.Println()
-		fmt.Println("  Or use: kite-collector query machines")
+		fmt.Println("  Or browse the tables in the dashboard: kite-collector dashboard")
 		return nil
 	}
 
