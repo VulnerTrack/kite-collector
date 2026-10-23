@@ -1,5 +1,7 @@
 # kite-collector
 
+[Español](README.es.md)
+
 Configuration Management Database (CMDB) agent for IT asset discovery.
 
 A single binary that scans your network, inventories installed software, and captures the as-built configuration state of every host it observes. Discovery sources span cloud APIs, hypervisors, OS, network listeners, and dozens of config files (SSH, firewall, PAM, nsswitch, MongoDB, MySQL, …).
@@ -308,16 +310,13 @@ Assets never default to `authorized`. Only positive matches against your source 
 
 ## Database
 
-All results are stored in a portable SQLite file. A one-shot `scan` writes
-`./kite.db`; the installed service keeps `kite.db` in its data directory, and
-`kite-collector status` prints the path.
-
-```bash
-sqlite3 kite.db "SELECT hostname, machine_type, is_authorized FROM machines"
-sqlite3 kite.db "SELECT software_name, version, cpe23 FROM installed_software LIMIT 10"
-sqlite3 kite.db "SELECT check_id, severity, title FROM config_findings"
-sqlite3 kite.db "SELECT started_at, status, total_machines FROM scan_runs ORDER BY started_at DESC"
-```
+All results are stored in a SQLite file, `kite.db`, encrypted at rest with a
+key derived from the agent identity. A one-shot `scan` writes `./kite.db`; the
+installed service keeps it in its data directory, and `kite-collector status`
+prints the path. Browse and export its tables from the dashboard at
+<http://127.0.0.1:9090/tables>, or query the decrypted working copy with
+`sqlite3` while kite-collector has it open:
+[docs/sqlite-cheatsheet.md](docs/sqlite-cheatsheet.md).
 
 ## Platform integration
 

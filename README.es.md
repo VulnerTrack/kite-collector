@@ -1,335 +1,250 @@
 # kite-collector
 
-Agente de descubrimiento de activos de ciberseguridad, auditoria de configuracion y analisis de postura.
+[English](README.md)
 
-Un solo binario que escanea tu red, inventaria el software instalado, audita la configuracion del sistema en busca de debilidades de seguridad (CWE), y recomienda mitigaciones basadas en patrones de ataque (CAPEC). Los resultados se almacenan en una base de datos SQLite local -- sin servidores, sin dependencias, completamente offline.
+Agente de Base de Datos de Gestión de Configuración (CMDB) para el descubrimiento de activos de TI.
 
-## Instalacion
+Un solo binario que escanea tu red, inventaría el software instalado y registra el estado de configuración real de cada host que observa. Las fuentes de descubrimiento abarcan APIs de nube, hipervisores, el sistema operativo, servicios en escucha y decenas de archivos de configuración (SSH, firewall, PAM, nsswitch, MongoDB, MySQL, …).
 
-### Instalacion rapida (Linux, macOS, FreeBSD, OpenBSD)
+Los resultados se guardan en una base de datos SQLite local. Sin servidores, sin dependencias, completamente offline.
+
+**Contenido:** [Instalación](#instalación), [Primer escaneo](#primer-escaneo), [Qué descubre](#qué-descubre), [Configuración](#configuración), [Comandos](#comandos), [Base de datos](#base-de-datos), [Dashboard](#dashboard), [API de escaneo](#api-de-escaneo), [Envío a OpenTelemetry](#envío-a-opentelemetry), [Seguridad](#seguridad)
+
+## Instalación
+
+### Instalación rápida (Linux, macOS, FreeBSD, OpenBSD)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VulnerTrack/kite-collector/main/installers/installer.sh | sh
-sudo kite-collector enroll    # inicia sesion; el servicio arranca al enrolarse
+sudo kite-collector enroll    # inicia sesión; el servicio arranca al quedar enrolado
 ```
 
 El script instala el collector y registra su servicio en segundo plano
-(habilitado al arranque; arranca al enrolarse), asi que iniciar sesion es el
-unico paso restante. Si el script no pudo registrar el servicio,
-`sudo kite-collector install` por si solo lo registra, inicia sesion y lo
-arranca. Elige el canal nativo: el repositorio APT en Debian/Ubuntu, el `.rpm`
-del release en Fedora/RHEL/SUSE, y el binario estatico en `/usr/local/bin` en
-los demas. Cada descarga se verifica con SHA256 contra el `checksums.txt` del
-release. En Debian/Ubuntu amd64 instala por defecto `kite-collector-osquery`
-(el agente con osqueryd incluido) y lo prefiere: volver a ejecutar el
-instalador reemplaza un agente simple por el paquete con osquery, salvo con
-`KITE_OSQUERY=no`. En los demas sistemas instala el agente simple e indica
-como agregar osquery. Variables (del lado `sh` del pipe):
-`KITE_VERSION=1.2.3`, `KITE_OSQUERY=no|yes`,
-`KITE_INSTALL_METHOD=apt|rpm|binary` y `KITE_INSTALL_DIR`.
+(habilitado al arranque; se inicia en cuanto el host queda enrolado), así que
+solo falta iniciar sesión. Elige el canal nativo: el repositorio APT en
+Debian/Ubuntu, el `.rpm` del release en Fedora/RHEL/SUSE y el binario estático
+en `/usr/local/bin` en los demás, y verifica cada descarga contra el
+`checksums.txt` del release. En un host donde el script no pudo registrar el
+servicio, `sudo kite-collector install` por sí solo lo registra, inicia sesión
+y lo arranca.
 
-### Ubuntu / Debian (Repositorio APT)
+Define estas variables del lado `sh` de la tubería, por ejemplo
+`curl -fsSL …/installer.sh | KITE_OSQUERY=no sh`:
 
-Puedes instalar `kite-collector` en distribuciones basadas en Debian (como Ubuntu, Linux Mint o Pop!_OS) utilizando nuestro repositorio oficial de APT:
+| variable | efecto |
+|----------|--------|
+| `KITE_VERSION=1.2.3` | fija un release |
+| `KITE_OSQUERY=no` | collector simple, y lo conserva en ejecuciones posteriores, aunque exista el paquete con osquery (`yes` exige el paquete) |
+| `KITE_INSTALL_METHOD=binary` | fuerza `apt`, `rpm` o `binary` |
+| `KITE_INSTALL_DIR=$HOME/.local/bin` | destino del binario; un directorio en el que puedes escribir no requiere root |
 
-1. Descargar e instalar la clave pública del repositorio:
-   ```bash
-   curl -fsSL https://vulnertrack.github.io/kite-collector/repository.key | sudo tee /usr/share/keyrings/kite-collector-keyring.asc > /dev/null
-   ```
-
-2. Agregar el repositorio a tus fuentes de sistema:
-   ```bash
-   echo "deb [signed-by=/usr/share/keyrings/kite-collector-keyring.asc] https://vulnertrack.github.io/kite-collector/ stable main" | sudo tee /etc/apt/sources.list.d/kite-collector.list
-   ```
-
-3. Actualizar la lista de paquetes e instalar el agente:
-   ```bash
-   sudo apt update
-   sudo apt install kite-collector
-   kite-collector install
-   ```
-
-El repositorio conserva las **tres versiones más recientes** de cada
-paquete, así que puedes fijar una versión o volver a una anterior sin salir
-de apt:
+### Ubuntu / Debian (repositorio APT)
 
 ```bash
-apt-cache policy kite-collector          # candidata y todas las versiones disponibles
-sudo apt install kite-collector=1.2.3    # fijar una versión, p. ej. para revertir
+curl -fsSL https://vulnertrack.github.io/kite-collector/repository.key \
+  | sudo tee /usr/share/keyrings/kite-collector-keyring.asc > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/kite-collector-keyring.asc] https://vulnertrack.github.io/kite-collector/ stable main" \
+  | sudo tee /etc/apt/sources.list.d/kite-collector.list
+sudo apt update && sudo apt install kite-collector
+sudo kite-collector enroll
 ```
 
-Las versiones que salen del repositorio siguen disponibles como artefactos
-de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases).
-La firma del archivo se renueva cada noche y su fichero `Release` lleva un
-`Valid-Until` de 30 días, de modo que `apt update` avisará si alguna vez te
-sirven un índice caducado en lugar de ocultar una actualización en silencio.
+El paquete trae y habilita su propia unidad de systemd, así que después de
+`apt install` solo queda enrolar. El repositorio conserva los tres releases más
+recientes de cada paquete: `apt-cache policy kite-collector` los lista y
+`sudo apt install kite-collector=1.2.3` fija una versión o regresa a una
+anterior. Los releases más antiguos siguen en la página de
+[GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases).
 
-¿Necesitas también [osquery](https://osquery.io) en el host? Instala
-`kite-collector-osquery` — el mismo agente más un osqueryd incluido que corre
-como el servicio systemd `kite-osqueryd` (socket de extensiones en
-`/run/kite-osquery/kite-osquery.em`, que la fuente de descubrimiento osquery
-del collector detecta automáticamente). Está aislado bajo
-`/opt/kite-collector` para no chocar con una instalación independiente de
-osquery, e instalar cualquiera de `kite-collector`/`kite-collector-osquery`
-reemplaza limpiamente al otro.
+### Fedora, RHEL, SUSE, Arch
 
-### Snap (Linux Universal)
+- **Fedora / RHEL / SUSE:** la instalación rápida usa el `.rpm` del release.
+  Para hacerlo a mano, descárgalo de
+  [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) y
+  ejecuta `sudo dnf install ./kite-collector-*.rpm`.
+- **Arch:** instala desde el repositorio pacman firmado con
+  `sudo pacman -Syu kite-collector` después de agregarlo como se describe en
+  [packaging/pacman/README.md](packaging/pacman/README.md#client-install).
 
-Para cualquier distribución de Linux compatible con Snap (incluyendo Ubuntu, Debian, Fedora, Arch Linux, etc.), puedes instalar el agente directamente desde la Snap Store:
+### Snap
 
 ```bash
 sudo snap install kite-collector
 sudo kite-collector install
 sudo kite-collector enroll
-sudo snap start --enable kite-collector.kite-collector-daemon
 ```
 
-En la edición Snap, `install` prepara el almacenamiento persistente en
-`/var/snap/kite-collector/common/certs`; el directorio padre `common` permanece
-bajo control de snapd, mientras el collector puede proteger el subdirectorio
-`certs`. snapd ya administra el binario, el servicio y las actualizaciones.
-Consulta el estado con `snap services kite-collector` y los logs con
+snapd administra el binario, el servicio y las actualizaciones; `install`
+prepara el almacenamiento persistente en `/var/snap/kite-collector/common/certs`
+y `enroll` habilita e inicia el servicio. Revisa el servicio con
+`snap services kite-collector` y sigue sus logs con
 `sudo snap logs -f kite-collector.kite-collector-daemon`.
-
-### Otras distribuciones Linux (Fedora, Red Hat, Arch Linux, etc.)
-
-Para aquellas distribuciones que NO utilizan el gestor de paquetes `apt` (como Fedora, Red Hat Enterprise Linux, CentOS o Arch Linux, las cuales usan `dnf`, `yum` o `pacman`):
-
-- **Fedora / Red Hat / CentOS**: Puedes descargar el paquete `.rpm` directamente desde la pestaña de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) e instalarlo usando tu gestor de paquetes (por ejemplo, `sudo dnf install ./kite-collector-*.rpm`).
-- **Arch Linux / Otras distribuciones**: Descarga el binario precompilado dentro del archivo `.tar.gz` desde la página de Releases, extráelo y colócalo en tu `PATH`. Alternativamente, puedes compilarlo desde el código fuente.
 
 ### macOS (Homebrew)
 
-Instala `kite-collector` en macOS desde nuestro tap de Homebrew. El cask elimina automáticamente el atributo de cuarentena de Gatekeeper, por lo que el binario se ejecuta sin el aviso de "desarrollador no identificado":
-
 ```bash
 brew install --cask vulnertrack/tap/kite-collector
-kite-collector install
+sudo kite-collector install   # registra launchd contra el binario que administra brew, sin una segunda copia
 ```
 
-¿Necesitas también [osquery](https://osquery.io) en el endpoint? macOS no
-recibe un osqueryd incluido — un binario empaquetado por kite correría bajo la
-firma de kite y necesitaría el permiso de Acceso Total al Disco de kite en
-lugar del de osquery — así que kite adopta el daemon que ya tienes:
-
-```bash
-brew install --cask osquery
-sudo kite-collector install --with-osquery
-```
-
-Eso registra el daemon launchd hermano `kite-osqueryd` apuntando a
-`/opt/osquery/lib/osquery.app`, con nombres propios para no chocar con el
-trabajo `io.osquery.agent` de osquery. Si prefieres ejecutar el daemon propio
-de osquery (`sudo osqueryctl start`), el descubrimiento lo detecta solo y no
-hace falta configurar nada. Una advertencia de macOS antes de confiar en un
-resultado limpio: sin Acceso Total al Disco, osqueryd lee las rutas protegidas
-por TCC *vacías en lugar de fallar*. Detalles en
-[docs/macos-osquery.md](docs/macos-osquery.md).
-
-### Despliegue masivo desde el dashboard
-
-El dashboard local de kite-collector incluye la opción **Mass deployment**.
-Desde allí se genera un único paquete Ansible temporal para computadoras
-Windows, Linux y macOS:
-
-1. Abre el dashboard y selecciona **Mass deployment**.
-2. Presiona **Discover computers**. Con un solo clic Kite combina escaneo TCP,
-   banners SSH, Bonjour/mDNS, NetBIOS, SSDP y WS-Discovery. Muestra la IP local
-   detectada y sólo consulta su red `/24` después de la confirmación explícita.
-3. Selecciona las computadoras compatibles que Kite ya descubrió en
-   **Machines**. Kite obtiene automáticamente su sistema operativo y
-   arquitectura. También puedes agregar hosts o IP adicionales con el formato
-   `hostname,os,arch`.
-4. Presiona **Generate deployment package**. Kite solicita automáticamente al
-   PKI un token distinto, de un solo uso y dos horas, para cada computadora y
-   descarga el ZIP. El operador no copia ni escribe credenciales de enrolamiento.
-5. Lleva el ZIP a una computadora de control Linux que tenga acceso de red a
-   los equipos, descomprímelo y ejecuta `./deploy.sh`.
-
-#### Preparar computadoras Windows sin copiar archivos
-
-El mismo comando puede ejecutarse en cualquier cantidad de computadoras
-Windows 7/8/10/11 y Windows Server 2008 R2 o posterior. En cada una, abre
-**Símbolo del sistema (CMD) como administrador** y pega:
-
-```cmd
-sc.exe config WinRM start= auto & sc.exe start WinRM & winrm quickconfig -quiet & netsh advfirewall firewall add rule name="Kite WinRM HTTP 5985" dir=in action=allow protocol=TCP localport=5985 profile=any remoteip=localsubnet & netstat -ano | findstr ":5985"
-```
-
-Este comando sólo habilita el canal administrativo WinRM; no instala ni enrola
-Kite y no contiene tokens, credenciales ni valores específicos del equipo. La
-regla permite conexiones únicamente desde la subred local. Al finalizar debe
-aparecer una línea que contenga `:5985`. Después de ejecutarlo en las
-computadoras seleccionadas, el operador genera un solo ZIP y ejecuta
-`./deploy.sh` una vez desde Linux. El despliegue instala y enrola todas las
-computadoras usando el token único incluido para cada una. Para cada Windows,
-`deploy.sh` propone automáticamente `NOMBRE-PC\Administrador`; pulsa Enter para
-aceptarlo o escribe otra cuenta administrativa. Esto también funciona de forma
-dinámica cuando el paquete contiene decenas o cientos de equipos.
-
-El script solicita las credenciales de AD/WinRM y SSH al ejecutarse; las
-contraseñas de infraestructura no se guardan en el paquete. Windows requiere
-WinRM y Linux/macOS requieren SSH y elevación de privilegios. El token de
-credenciales de enrolamiento están dentro del ZIP y son confidenciales: elimina
-el ZIP cuando termine el despliegue o expiren.
-La versión del collector, el endpoint PKI y los códigos únicos de cada equipo
-se completan automáticamente desde el controlador; el operador no debe
-ingresarlos.
-
-La detección del sistema operativo usa evidencia de alta confianza, como WinRM
-o un banner SSH que identifica la distribución. Si la red o el firewall no
-ofrecen una señal concluyente, Kite deja el sistema sin seleccionar para evitar
-instalar por error en un router, una impresora u otro dispositivo.
-Cuando un equipo anuncia OpenSSH pero no permite distinguir Linux de macOS, el
-paquete ejecuta esa comprobación automáticamente al conectarse, detecta también
-`amd64`/`arm64` y guarda el resultado en `detected-platforms.csv`. El operador
-no necesita escribir esos comandos.
+El cask elimina el atributo de cuarentena de Gatekeeper, así que el binario se
+ejecuta sin el aviso de "desarrollador no identificado". Para actualizar basta
+`brew upgrade --cask kite-collector`: el servicio en ejecución detecta el
+binario nuevo y se reinicia con él. Ejecuta `sudo kite-collector uninstall`
+antes de `brew uninstall`, porque el cask solo elimina el job de launchd con
+`brew uninstall --zap`.
 
 ### Windows
 
-Para Windows, puedes instalar `kite-collector` usando cualquiera de estos métodos rápidos y sencillos:
+Descarga `kite-collector_<version>_amd64.msi` de
+[GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases) y haz
+doble clic, o despliégalo en silencio (GPO/Intune) como administrador:
 
-#### 1. Instalador MSI (Recomendado)
-Descarga el último instalador `kite-collector_<version>_amd64.msi` desde la página de [GitHub Releases](https://github.com/VulnerTrack/kite-collector/releases). Haz doble clic en él para iniciar el asistente de instalación, o realiza un despliegue silencioso para empresas (GPO/Intune) como administrador:
 ```powershell
-msiexec /i kite-collector_amd64.msi /quiet
+msiexec /i kite-collector_<version>_amd64.msi /quiet
 ```
 
-¿Necesitas también [osquery](https://osquery.io) en el endpoint? Usa
-`kite-collector-osquery_<version>_amd64.msi` — la misma instalación más un
-osqueryd incluido, registrado como el servicio `kite-osqueryd` con nombres
-propios para no chocar con una instalación independiente de osquery. Detalles
-en [docs/window_install.md](docs/window_install.md#bundled-osquery-msi-kite-collector-osquery)
-(en inglés).
+Otras formas de instalar:
 
-Para desplegar una versión fija por lotes en cientos de computadoras Windows
-unidas al dominio, utiliza el [despliegue de flota con Ansible](deploy/ansible/README.md).
+| Método | Cómo |
+| ------ | ---- |
+| Asistente gráfico | Doble clic en `kite-collector_windows_amd64_bin.exe`; detecta el doble clic y abre el instalador |
+| PowerShell | `irm https://get.kite-collector.dev/install.ps1 \| iex` |
+| PowerShell, solo binario (sin servicio) | `& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService` |
+| WinGet | `winget install VulnerTrack.KiteCollector` |
+| Scoop | `scoop bucket add vulnertrack https://github.com/VulnerTrack/homebrew-tap` y después `scoop install kite-collector` |
 
-#### 2. Asistente Gráfico Integrado
-Descarga el binario para Windows `kite-collector_windows_amd64.exe` y haz doble clic sobre él en el Explorador de Archivos. El binario detectará el doble clic y abrirá automáticamente el asistente gráfico de instalación para registrar el servicio.
+Guías paso a paso (en inglés): [docs/windows-quickstart.md](docs/windows-quickstart.md)
+y [docs/window_install.md](docs/window_install.md). Las computadoras con
+Windows 7 SP1 y Windows 8 necesitan la compilación legacy aislada de 32 bits:
+[legacy/windows7/README.md](legacy/windows7/README.md).
 
-#### 3. PowerShell de una línea
-Abre una consola de PowerShell y ejecuta el script de instalación automatizado:
-```powershell
-irm https://get.kite-collector.dev/install.ps1 | iex
-```
+### Agregar osquery
 
-#### 4. Windows Package Manager (WinGet)
-Instálalo usando el gestor de paquetes nativo de Windows 10 y 11:
-```powershell
-winget install VulnerTrack.KiteCollector
-```
+| Plataforma | Cómo |
+| ---------- | ---- |
+| Debian / Ubuntu amd64 | La instalación rápida elige `kite-collector-osquery` por defecto; con apt, `sudo apt install kite-collector-osquery` |
+| Windows | `kite-collector-osquery_<version>_amd64.msi` ([detalles](docs/window_install.md#bundled-osquery-msi-kite-collector-osquery)) |
+| macOS | `brew install --cask osquery` y después `sudo kite-collector install --with-osquery` ([detalles](docs/macos-osquery.md)) |
 
-#### 5. Scoop
-Si utilizas Scoop, añade nuestro repositorio e instálalo con:
-```powershell
-scoop bucket add vulnertrack https://github.com/VulnerTrack/homebrew-tap
-scoop install kite-collector
-```
+En Linux y Windows el paquete es el mismo agente más un osqueryd que corre como
+el servicio `kite-osqueryd`. Vive bajo las rutas propias de kite, así que nunca
+choca con una instalación independiente de osquery, y la fuente osquery del
+collector encuentra su socket por sí sola. Los dos paquetes de Debian se
+reemplazan entre sí al instalarse.
 
-### Descarga Manual / Otros Sistemas
+macOS no tiene paquete con osquery. kite adopta el osquery que ya tienes,
+porque un osqueryd incluido tendría que correr bajo la firma de kite y su
+permiso de Acceso total al disco. Si ejecutas el daemon propio de osquery
+(`sudo osqueryctl start`), el descubrimiento lo detecta sin configurar nada en
+kite. Sin Acceso total al disco, osqueryd lee las rutas protegidas por TCC
+como *vacías en lugar de fallar*; lee
+[docs/macos-osquery.md](docs/macos-osquery.md) antes de confiar en un
+resultado limpio.
 
-Si prefieres descargar directamente los binarios precompilados o estás en macOS/Windows:
+### Descarga manual y compilación desde el código fuente
 
 ```bash
 # Linux
-curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download/kite-collector_linux_amd64 -o kite-collector
-chmod +x kite-collector
+curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download/kite-collector_linux_amd64.tar.gz | tar xz
 
 # macOS
 curl -sSL https://github.com/VulnerTrack/kite-collector/releases/latest/download/kite-collector_darwin_arm64.tar.gz | tar xz
 
-# Windows (PowerShell)
-irm https://get.kite-collector.dev/install.ps1 | iex
-
-# Windows rapido, solo binario
-& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService
-```
-
-### Compilar desde el código fuente
-
-```bash
+# Desde el código fuente
 make build
+
+# Compilación cruzada para Windows
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w -H=windowsgui" -o bin/kite-collector.exe ./cmd/kite-collector
 ```
 
-## Uso
+### Actualizaciones y desinstalación
+
+Cuando un gestor de paquetes (Homebrew, apt, dnf, pacman) instaló el binario,
+`kite-collector install` registra el servicio contra la ruta que administra el
+paquete en lugar de copiarlo. Una actualización del paquete reinicia entonces
+el servicio con la versión nueva; el agente nota que su binario cambió en disco
+y se relanza, esperando antes a que termine cualquier escaneo en curso.
+
+- `install --copy` fuerza una copia en la ruta del servicio.
+- `install --repair` corrige un servicio que quedó apuntando a una copia
+  desactualizada (`kite-collector doctor` te avisa cuando es el caso).
+- `uninstall --purge` también elimina el directorio de datos.
+
+### Despliegue masivo
+
+La página **Mass deployment** del dashboard descubre computadoras en la red
+local y genera un paquete de Ansible de corta duración que instala y enrola
+collectors en equipos Windows, Linux y macOS, con una credencial de
+enrolamiento de un solo uso por computadora. Los equipos Windows necesitan
+WinRM habilitado primero. El recorrido completo y el comando para preparar
+WinRM están en [docs/mass-deployment.md](docs/mass-deployment.md) (en inglés).
+
+## Primer escaneo
 
 ```bash
-# Escanear el host local (funciona inmediatamente, sin configuracion)
-./kite-collector scan
-
-# Escanear una subred
-./kite-collector scan --scope 192.168.1.0/24
-
-# Incluir contenedores Docker
-./kite-collector scan --source docker
-
-# Salida en JSON
-./kite-collector scan --output json
-
-# Comparar dos escaneos para detectar cambios
-./kite-collector diff scan1.db scan2.db
-
-# Monitoreo continuo
-./kite-collector agent --stream --interval 6h
-
-# Asistente de configuracion interactivo
-./kite-collector init
-
-# Consultar la base de datos
-./kite-collector query assets
-./kite-collector query software --limit 20
-./kite-collector query findings --severity high
-
-# Abrir el dashboard en el navegador
-./kite-collector dashboard
+kite-collector status                          # ¿instalado, enrolado, sano?
+kite-collector scan                            # escanea este host (sin configuración)
+kite-collector scan --scope 192.168.1.0/24     # escanea una subred
+kite-collector scan --source docker            # incluye contenedores Docker
+kite-collector scan --output json              # table (por defecto), json o csv
+kite-collector dashboard                       # explora los resultados
+kite-collector agent --stream --interval 6h    # monitoreo continuo
 ```
 
-## Que descubre
+Cuando algo no se ve bien, `kite-collector doctor` explica por qué y qué
+ejecutar a continuación.
 
-| Fuente | Activos | Autenticacion |
-|--------|---------|---------------|
-| Agente local | Hostname, OS, interfaces, paquetes instalados | No |
-| Escaneo de red | Hosts alcanzables via TCP connect | No |
-| Docker / Podman | Contenedores, imagenes, redes | Acceso al socket |
-| UniFi | Clientes (VLAN, puerto switch, senal), dispositivos de red | Credenciales del controlador |
-| AWS EC2 | Instancias EC2 en todas las regiones | Credenciales IAM |
-| GCP Compute | VMs de Compute Engine | ADC |
-| Azure | Maquinas virtuales en todas las suscripciones | Service principal |
-| Proxmox | VMs y contenedores LXC | Token API |
-| SNMP | Switches, routers, UPS | Community string |
+## Qué descubre
 
-## Que audita
+| Fuente          | Activos                                                     | Autenticación             |
+| --------------- | ----------------------------------------------------------- | ------------------------- |
+| Agente local    | Hostname, SO, interfaces, paquetes instalados               | No                        |
+| Escaneo de red  | Hosts alcanzables por conexión TCP                          | No                        |
+| Docker / Podman | Contenedores, imágenes, redes                               | Acceso al socket          |
+| UniFi           | Clientes (VLAN, puerto de switch, señal), equipos de red    | Credenciales del controlador |
+| AWS EC2         | Instancias EC2 en todas las regiones                        | Credenciales IAM          |
+| GCP Compute     | VMs de Compute Engine                                       | ADC                       |
+| Azure           | Máquinas virtuales en todas las suscripciones               | Service principal         |
+| Proxmox         | VMs y contenedores LXC                                      | Token de API              |
+| SNMP            | Switches, routers, UPS                                      | Community string          |
 
-La auditoria de configuracion verifica tu sistema y mapea los hallazgos a identificadores de debilidad [CWE](https://cwe.mitre.org/):
+Estas son las fuentes comunes. Todas las fuentes, con las credenciales que
+necesita cada una, están en
+[configs/kite-collector.example.yaml](configs/kite-collector.example.yaml).
 
-| Verificacion | Ejemplo | CWE |
-|-------------|---------|-----|
-| Login root por SSH permitido | `PermitRootLogin yes` | CWE-250 |
-| Autenticacion por contrasena habilitada | `PasswordAuthentication yes` | CWE-287 |
-| Sin firewall activo | iptables/nftables/ufw todos inactivos | CWE-284 |
-| ASLR deshabilitado | `randomize_va_space=0` | CWE-330 |
-| Archivo shadow legible por todos | `/etc/shadow` modo 644 | CWE-732 |
-| Servicio Telnet ejecutandose | Puerto 23 escuchando | CWE-319 |
-| Base de datos expuesta | Puerto 5432 en 0.0.0.0 | CWE-284 |
+### Revisiones de configuración
 
-Los hallazgos se cruzan con patrones de ataque [CAPEC](https://capec.mitre.org/) para generar mitigaciones accionables.
+Para cada host, el agente registra:
 
-## Inventario de software
+| Revisión              | Qué registra                                               |
+| --------------------- | ---------------------------------------------------------- |
+| Configuración SSH     | `PermitRootLogin`, `PasswordAuthentication`, ciphers, MACs |
+| Firewall              | Tablas de reglas de iptables / nftables / ufw              |
+| Kernel                | Ajuste de ASLR, línea de comandos del kernel, módulos cargados |
+| Permisos de archivos  | `/etc/shadow`, `/etc/sudoers`, secretos legibles por todos |
+| Servicios en escucha  | Puertos TCP/UDP abiertos por proceso                       |
+| Bases de datos en escucha | Direcciones de enlace de Postgres / MySQL / MongoDB    |
 
-Detecta automaticamente y consulta los gestores de paquetes instalados:
+Estas observaciones llegan a la CMDB como datos de inventario. kite-collector
+reporta el estado de configuración y no lo califica contra una taxonomía de
+vulnerabilidades.
 
-| Gestor de paquetes | Plataformas |
-|-------------------|-------------|
-| dpkg | Debian, Ubuntu, Kali |
-| pacman | Arch, Manjaro, EndeavourOS |
-| rpm | RHEL, Fedora, CentOS, SUSE |
+### Inventario de software
 
-Cada paquete recibe un identificador [CPE 2.3](https://nvd.nist.gov/products/cpe) para correlacion de vulnerabilidades con bases de datos CVE.
+El agente lee los paquetes instalados de los gestores de paquetes del sistema
+(dpkg, rpm, dnf, zypper, pacman, apk, xbps, portage, nix, Homebrew, MacPorts,
+Flatpak, Snap, el registro de Windows, WinGet, Chocolatey, Scoop, …) y de los
+ecosistemas de lenguajes (npm, pip, Cargo, módulos de Go, Maven, NuGet,
+RubyGems, Composer, Conda, …). Cada paquete recibe un identificador
+[CPE 2.3](https://nvd.nist.gov/products/cpe) para que las herramientas que lo
+consumen (tu SIEM, tu CMDB, tu escáner de vulnerabilidades) puedan cruzar el
+inventario con sus propios datos.
 
-## Configuracion
+## Configuración
 
-Funciona inmediatamente con valores predeterminados sensatos y sin archivo de configuracion. Para personalizar, crea un archivo YAML:
+kite-collector funciona sin archivo de configuración. Para cambiar su
+comportamiento, crea una configuración YAML:
 
 ```yaml
 discovery:
@@ -344,6 +259,10 @@ discovery:
     docker:
       enabled: true
       host: unix:///var/run/docker.sock
+    unifi:
+      enabled: true
+      endpoint: https://192.168.1.1:8443
+      site: default
 
 classification:
   authorization:
@@ -353,76 +272,68 @@ classification:
 audit:
   enabled: true
 
-stale_threshold: 168h   # 7 dias
+stale_threshold: 168h # 7 días
 ```
 
-Las variables de entorno sobrescriben la configuracion con el prefijo `KITE_` (ej. `KITE_LOG_LEVEL=debug`).
+Las variables de entorno con prefijo `KITE_` sobrescriben la configuración (por
+ejemplo `KITE_LOG_LEVEL=debug`).
 
-Consulta `configs/kite-collector.example.yaml` para todas las opciones.
-
-## Formatos de salida
-
-| Formato | Caso de uso |
-|---------|------------|
-| `--output table` | Visualizacion en terminal (predeterminado) |
-| `--output json` | Ingestion SIEM, pipelines CI/CD, consumo API |
-| `--output csv` | Hojas de calculo, reportes |
+Consulta `configs/kite-collector.example.yaml` para ver todas las opciones.
 
 ## Comandos
 
-| Comando | Descripcion |
-|---------|-------------|
-| `scan` | Descubrimiento + auditoria + analisis de postura (una vez) |
-| `agent --stream` | Modo continuo con intervalo configurable |
-| `diff <db1> <db2>` | Comparar dos bases de datos de escaneo |
-| `report` | Generar reporte de activos |
-| `init` | Asistente de configuracion interactivo |
-| `query <target>` | Consultar la base de datos SQLite |
-| `db` | Abrir shell SQLite con formato tabla |
-| `dashboard` | Abrir dashboard en el navegador |
-| `error <code>` | Buscar un codigo de error |
-| `version` | Imprimir version, commit, fecha de compilacion |
+| Comando          | Descripción                                                     |
+| ---------------- | --------------------------------------------------------------- |
+| `install`        | Instala como servicio e inicia sesión (`--agent-code` + `--token` sin interfaz) |
+| `uninstall`      | Elimina el servicio                                             |
+| `enroll`         | Enrola con VulnerTrack (navegador, código de inicio de sesión o token con alcance) |
+| `unenroll`       | Elimina el enrolamiento local                                   |
+| `scan`           | Descubrimiento único + auditoría de configuración (`--detect` solo sondea) |
+| `agent --stream` | Modo continuo con intervalo configurable                        |
+| `service`        | Start/stop/restart/status del servicio instalado                |
+| `status`         | Estado del agente de un vistazo (`--json` para scripts)         |
+| `doctor`         | Diagnóstico por etapas con sugerencias de corrección (alias: `check`) |
+| `dashboard`      | UI local en el navegador; aquí se exploran los datos            |
+| `fleet`          | Descubre computadoras y despliega collectors                    |
+| `integrations`   | Lista y configura los servicios conectados a Kite               |
+| `version`        | Muestra versión, commit y fecha de compilación                  |
 
-## Clasificacion de activos
+Los comandos anteriores (`stream`, `query`, `db`, `diff`, `report`, …) siguen
+funcionando pero no aparecen en la ayuda, y cada uno indica su reemplazo al
+ejecutarse.
+
+## Clasificación de activos
 
 Cada activo descubierto se clasifica en dos ejes:
 
-**Autorizacion** (este activo deberia estar aqui?):
-- `unknown` -- predeterminado, aun no evaluado
-- `authorized` -- coincide con una entrada en la lista blanca
-- `unauthorized` -- explicitamente no esta en la lista blanca
+**Autorización** (¿este activo debería estar aquí?):
 
-**Estado de gestion** (este activo cumple nuestros controles de seguridad?):
-- `unknown` -- predeterminado, controles no configurados
-- `managed` -- todos los controles requeridos presentes
-- `unmanaged` -- falta uno o mas controles requeridos
+- `unknown`: valor por defecto, aún sin evaluar
+- `authorized`: coincide con una entrada de la lista de permitidos
+- `unauthorized`: explícitamente fuera de la lista de permitidos
 
-Los activos nunca se clasifican como `authorized` por defecto. Solo las coincidencias positivas contra tu fuente de verdad producen `authorized`.
+**Estado de gestión** (¿este activo cumple nuestros controles de seguridad?):
+
+- `unknown`: valor por defecto, controles sin configurar
+- `managed`: tiene todos los controles requeridos
+- `unmanaged`: le falta uno o más controles requeridos
+
+Los activos nunca son `authorized` por defecto. Solo una coincidencia positiva
+contra tu fuente de verdad produce `authorized`.
 
 ## Base de datos
 
-Todos los resultados se almacenan en un archivo SQLite portatil en `./kite.db`:
+Todos los resultados se guardan en un archivo SQLite, `kite.db`, cifrado en
+reposo con una llave derivada de la identidad del agente. Un `scan` único
+escribe `./kite.db`; el servicio instalado lo guarda en su directorio de datos
+y `kite-collector status` muestra la ruta. Explora y exporta sus tablas desde
+el dashboard en <http://127.0.0.1:9090/tables>, o consulta la copia de trabajo
+descifrada con `sqlite3` mientras kite-collector la tiene abierta:
+[docs/sqlite-cheatsheet.md](docs/sqlite-cheatsheet.md) (en inglés).
 
-```bash
-# Consultar activos
-kite-collector query assets
+## Integración con la plataforma
 
-# Consultar software instalado
-kite-collector query software --limit 20
-
-# Consultar hallazgos de configuracion
-kite-collector query findings
-
-# Historial de escaneos
-kite-collector query scans
-
-# O usar el shell SQLite directamente
-kite-collector db
-```
-
-## Integracion con la plataforma
-
-kite-collector puede alimentar al [Vulnertrack Intelligence Engine](https://github.com/VulnerTrack/vulnertrack-intelligence-engine) para cruzar activos contra bases de datos CVE/CWE/CAPEC:
+kite-collector puede alimentar al [Vulnertrack Intelligence Engine](https://github.com/VulnerTrack/vulnertrack-intelligence-engine) para que su inventario sea la fuente de verdad de las herramientas que lo consumen:
 
 ```bash
 # Importar resultados de escaneo a ClickHouse
@@ -432,37 +343,62 @@ vie kite scan --scope 192.168.1.0/24 --import
 vie kite assets --authorized unauthorized
 ```
 
-En modo streaming, los eventos OTLP se envian a un OpenTelemetry Collector para monitoreo en tiempo real.
+## Dashboard
+
+`kite-collector dashboard` sirve la UI local. Su banner de inicio muestra las
+URLs que lo alcanzan, cada una etiquetada **this machine**, **local network** o
+**public**, así que el banner indica si está expuesto. Las direcciones de
+puentes de contenedores y VMs se cuentan en lugar de listarse. Con
+`kite-collector agent --dashboard-addr` las mismas URLs aparecen en el log de
+inicio.
+
+- **Containers**: vista en vivo de los contenedores locales de Docker / Podman
+  / Compose con gráficas de CPU y memoria e historial de imágenes:
+  [docs/container-observability.md](docs/container-observability.md).
+- **Volumes**: capacidad, presión de inodos y estado de cifrado de cada sistema
+  de archivos montado en toda la flota:
+  [docs/storage-observability.md](docs/storage-observability.md).
+
+## API de escaneo
+
+En modo de larga duración (`kite-collector agent`), el agente sirve una API
+REST que inicia, sigue (Server-Sent Events) y cancela escaneos; el dashboard
+usa los mismos endpoints. Escucha en `127.0.0.1:8080` por defecto (`api.addr`).
+Define `fleet.api_key` antes de enlazarla a otra dirección; sin llave la API no
+tiene autenticación. Solo corre un escaneo a la vez. Referencia:
+[docs/scan-api.md](docs/scan-api.md).
+
+## Envío a OpenTelemetry
+
+kite-collector envía los eventos del ciclo de vida de las máquinas a cualquier
+collector compatible con OTLP (Grafana Alloy, OpenTelemetry Collector, Datadog
+Agent, etc.) como registros de log OTLP sobre HTTP/JSON:
+
+```yaml
+streaming:
+  interval: 6h
+  otlp:
+    endpoint: http://localhost:4318
+    protocol: http
+```
+
+```bash
+kite-collector agent --stream --interval 6h
+```
+
+- Atributos y tipos de eventos: [docs/telemetry-contract.md](docs/telemetry-contract.md)
+- mTLS, firma y cifrado del payload, reintentos:
+  [docs/otlp-streaming.md](docs/otlp-streaming.md)
+- Un collector listo para ejecutar con Docker Compose:
+  [examples/streaming-to-otel/](examples/streaming-to-otel/)
 
 ## Seguridad
 
-- **Solo lectura** -- nunca escribe, modifica, ni ejecuta codigo en los sistemas descubiertos
-- **Sin credenciales en almacenamiento** -- SQLite contiene solo datos de activos, nunca tokens ni contrasenas
-- **Logging estructurado** -- salida JSON `log/slog` con redaccion automatica de credenciales
-- **Privilegios minimos** -- funciona como usuario no-root con degradacion elegante para rutas sin permiso
+- **Solo lectura**: nunca escribe, modifica ni ejecuta código en los sistemas descubiertos
+- **Almacenamiento dedicado de credenciales**: las contraseñas de los conectores nunca entran a SQLite ni al YAML; Kite usa el almacén de credenciales del sistema operativo cuando está disponible y, en hosts sin interfaz, un almacén AES-256-GCM cifrado con la llave de identidad
+- **Logs estructurados**: salida JSON de `log/slog` con redacción automática de credenciales
+- **Privilegios mínimos**: funciona sin root y degrada con gracia en rutas sin permiso
 
 ## Licencia
 
-MIT -- ver [LICENSE](LICENSE).
-# Compatibilidad con Windows 7 (legacy)
-
-El despliegue masivo detecta automáticamente Windows 7 y los equipos Windows
-de 32 bits. En esos casos instala `kite-collector-legacy`, compilado con Go
-1.17/386 softfloat para Windows 7 SP1; los Windows modernos de 64 bits siguen usando el MSI
-completo. El operador ejecuta el mismo `./deploy.sh`: no debe elegir el
-instalador ni actualizar PowerShell manualmente.
-
-La edición legacy permite enrolamiento por token, validación de certificados,
-heartbeat firmado, ejecución como servicio e inventario local persistente. La
-base transaccional se guarda en `C:\ProgramData\kite-collector\kite.db`; el
-dashboard local está disponible en `http://127.0.0.1:9090` y el servicio
-actualiza el inventario al iniciar y cada seis horas. Incluye sistema,
-hardware, software, actualizaciones, usuarios, servicios, procesos, red,
-puertos, discos, drivers, tareas, inicio y controles de seguridad disponibles
-en Windows 7. Cada snapshot también se sincroniza automáticamente por OTLP con
-mTLS: el resumen llega a `analytics_asset_current_state` y todas las categorías
-completas llegan a `analytics_windows_inventory_categories` en Supabase. Si la
-red no está disponible, el agente conserva el snapshot local y reintenta cada
-cinco minutos. Windows 7 ya no recibe soporte del fabricante, por lo que esta
-edición debe tratarse como un puente de migración y WinRM debe limitarse a la
-red de administración.
+MIT, ver [LICENSE](LICENSE).
