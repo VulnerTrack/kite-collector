@@ -56,7 +56,7 @@ func TestBuildOTLPSealer_PrefersClientCertificate(t *testing.T) {
 		TLS:        config.TLSConfig{Enabled: true, CertFile: certFile, KeyFile: keyFile},
 		Encryption: config.EncryptionConfig{Enabled: true, ServerJWKURL: "https://otel.example.com/.well-known/jwks.json"},
 	}
-	sealer, err := buildOTLPSealer(otlp, id)
+	sealer, err := buildOTLPSealer(otlp, id, slog.Default())
 	require.NoError(t, err)
 	assert.True(t, sealer.SignsWithCertificate(), "cert wins over identity key when both exist")
 	assert.Equal(t, envelope.CertificateKeyID(leaf), sealer.SignerKeyID())
@@ -71,7 +71,7 @@ func TestBuildOTLPSealer_FallsBackToIdentityKey(t *testing.T) {
 	otlp := config.OTLPConfig{
 		Encryption: config.EncryptionConfig{Enabled: true, ServerJWKURL: "https://otel.example.com/.well-known/jwks.json"},
 	}
-	sealer, err := buildOTLPSealer(otlp, id)
+	sealer, err := buildOTLPSealer(otlp, id, slog.Default())
 	require.NoError(t, err)
 	assert.False(t, sealer.SignsWithCertificate())
 	assert.Equal(t, id.AgentID.String(), sealer.SignerKeyID(), "receiver looks the key up by agent id")
@@ -82,7 +82,7 @@ func TestBuildOTLPSealer_FailsClosed(t *testing.T) {
 	otlp := config.OTLPConfig{
 		Encryption: config.EncryptionConfig{Enabled: true, ServerJWKURL: "https://otel.example.com/.well-known/jwks.json"},
 	}
-	_, err := buildOTLPSealer(otlp, nil)
+	_, err := buildOTLPSealer(otlp, nil, slog.Default())
 	require.Error(t, err, "no cert and no identity: refuse rather than send plaintext")
 
 	// A configured but unreadable certificate is an error too — never fall
@@ -91,7 +91,7 @@ func TestBuildOTLPSealer_FailsClosed(t *testing.T) {
 	dir := t.TempDir()
 	id, err := identity.LoadOrCreate(dir, slog.Default())
 	require.NoError(t, err)
-	_, err = buildOTLPSealer(otlp, id)
+	_, err = buildOTLPSealer(otlp, id, slog.Default())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "client certificate")
 }
@@ -106,7 +106,7 @@ func TestBuildOTLPSigner_SignsWithClientCertificate(t *testing.T) {
 		TLS:     config.TLSConfig{Enabled: true, CertFile: certFile, KeyFile: keyFile},
 		Signing: config.SigningConfig{Enabled: true},
 	}
-	signer, err := buildOTLPSigner(otlp, id)
+	signer, err := buildOTLPSigner(otlp, id, slog.Default())
 	require.NoError(t, err)
 	assert.True(t, signer.SignsWithCertificate(), "the enrolled cert is the signing credential")
 	assert.Equal(t, envelope.CertificateKeyID(leaf), signer.SignerKeyID())
@@ -133,7 +133,7 @@ func TestBuildOTLPSigner_OmitCertificateChain(t *testing.T) {
 	signer, err := buildOTLPSigner(config.OTLPConfig{
 		TLS:     config.TLSConfig{Enabled: true, CertFile: certFile, KeyFile: keyFile},
 		Signing: config.SigningConfig{Enabled: true, OmitCertificateChain: true},
-	}, nil)
+	}, nil, slog.Default())
 	require.NoError(t, err)
 	assert.False(t, signer.SignsWithCertificate(), "no x5c travels")
 	assert.Equal(t, envelope.CertificateKeyID(leaf), signer.SignerKeyID(),
@@ -151,7 +151,7 @@ func TestBuildOTLPSigner_FallsBackToIdentityKey(t *testing.T) {
 	id, err := identity.LoadOrCreate(dir, slog.Default())
 	require.NoError(t, err)
 
-	signer, err := buildOTLPSigner(config.OTLPConfig{Signing: config.SigningConfig{Enabled: true}}, id)
+	signer, err := buildOTLPSigner(config.OTLPConfig{Signing: config.SigningConfig{Enabled: true}}, id, slog.Default())
 	require.NoError(t, err)
 	assert.False(t, signer.SignsWithCertificate())
 	assert.Equal(t, id.AgentID.String(), signer.SignerKeyID())
@@ -161,7 +161,7 @@ func TestBuildOTLPSigner_FallsBackToIdentityKey(t *testing.T) {
 // Signing that cannot find a credential must stop the agent, not degrade
 // to unsigned telemetry.
 func TestBuildOTLPSigner_NoCredentialFailsLoudly(t *testing.T) {
-	_, err := buildOTLPSigner(config.OTLPConfig{Signing: config.SigningConfig{Enabled: true}}, nil)
+	_, err := buildOTLPSigner(config.OTLPConfig{Signing: config.SigningConfig{Enabled: true}}, nil, slog.Default())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "streaming.otlp.signing")
 }
@@ -177,7 +177,7 @@ func TestBuildOTLPSigner_RejectsMismatchedCertAndKey(t *testing.T) {
 	_, err := buildOTLPSigner(config.OTLPConfig{
 		TLS:     config.TLSConfig{Enabled: true, CertFile: certFile, KeyFile: otherKey},
 		Signing: config.SigningConfig{Enabled: true},
-	}, nil)
+	}, nil, slog.Default())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "do not match")
 }

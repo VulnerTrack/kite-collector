@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,6 +32,8 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/config"
 	osquerydisc "github.com/vulnertrack/kite-collector/internal/discovery/osquery"
+	"github.com/vulnertrack/kite-collector/internal/emitter"
+	"github.com/vulnertrack/kite-collector/internal/identity"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/plural"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
@@ -162,7 +165,8 @@ func runDoctorChecks(ctx context.Context, o doctorOptions) []doctorCheck {
 	if endpoint == "" {
 		endpoint = "https://otel.vulnertrack.io"
 	}
-	connectivity := doctorConnectivityChecks(endpoint, opts.CertsDir, o.Timeout)
+	protect := doctorProbeProtection(cfg, opts.CertsDir, opts.DbPath)
+	connectivity := doctorConnectivityChecks(endpoint, opts.CertsDir, o.Timeout, protect)
 	checks = append(checks, connectivity...)
 	checks = append(checks, recordDoctorCheckStamp(ctx, opts.DbPath, connectivity))
 	return checks
@@ -522,10 +526,50 @@ func doctorCertificatesCheck(certsDir string, state installer.State) doctorCheck
 	return c
 }
 
+// doctorProbeProtection builds the payload protection the agent would
+// apply, so otlp-ping is signed or enveloped exactly like real telemetry: a
+// gateway that only accepts application/jose would reject a plain ping it
+// never sees in production. Read-only and silent: the identity is loaded,
+// never created, and the builders' start-up logging is discarded.
+func doctorProbeProtection(cfg *config.Config, certsDir, dbPath string) otlpProbeProtection {
+	if cfg == nil {
+		return otlpProbeProtection{}
+	}
+	otlp := cfg.Streaming.OTLP
+	if !otlp.Encryption.Enabled && !otlp.Signing.Enabled {
+		return otlpProbeProtection{}
+	}
+	useEnrolledTLS(&otlp, certsDir)
+	identityDir := cfg.Identity.DataDir
+	if identityDir == "" {
+		identityDir = filepath.Dir(dbPath)
+	}
+	quiet := slog.New(slog.DiscardHandler)
+	// A missing identity is not an error here: the client certificate
+	// signs, and buildOTLPProtection says so when neither is available.
+	id, _ := identity.Load(identityDir, quiet)
+	sealer, mode, err := buildOTLPProtection(otlp, id, quiet)
+	return otlpProbeProtection{err: err, sealer: sealer, mode: mode}
+}
+
+// otlpPingHint explains a failed otlp-ping in terms of the protection it
+// was sent with, since the receiver's answer means different things for a
+// plain, signed, or enveloped body.
+func otlpPingHint(protect otlpProbeProtection) string {
+	switch {
+	case protect.err != nil:
+		return "the agent refuses to start with this streaming.otlp signing/encryption config; fix the client certificate, identity, or server_jwk_url"
+	case protect.mode == emitter.ProtectionEnvelope:
+		return "the ping was enveloped (application/jose) as streaming.otlp.encryption requires; the endpoint must be the gateway that unwraps it, not a stock OpenTelemetry Collector"
+	default:
+		return "verify the endpoint, firewall egress, and enrollment certs; a receiver that only accepts enveloped bodies needs streaming.otlp.encryption enabled"
+	}
+}
+
 // doctorConnectivityChecks maps the staged OTLP probes (formerly the
 // check-otlp command) onto doctor checks.
-func doctorConnectivityChecks(endpoint, certsDir string, timeout time.Duration) []doctorCheck {
-	stages, err := collectOTLPStages(endpoint, certsDir, timeout)
+func doctorConnectivityChecks(endpoint, certsDir string, timeout time.Duration, protect otlpProbeProtection) []doctorCheck {
+	stages, err := collectOTLPStages(endpoint, certsDir, timeout, protect)
 	if err != nil {
 		return []doctorCheck{{
 			Name: "connectivity", Status: doctorFail, Detail: err.Error(),
@@ -542,6 +586,13 @@ func doctorConnectivityChecks(endpoint, certsDir string, timeout time.Duration) 
 			c.Detail = s.Error // e.g. "skipped (no --certs-dir provided)"
 		case s.OK:
 			c.Status = doctorPass
+			if s.Name == "otlp-ping" && protect.sealer != nil {
+				c.Detail += " · " + string(protect.mode)
+			}
+		case s.Name == "otlp-ping":
+			c.Status = doctorFail
+			c.Detail = s.Error
+			c.Hint = otlpPingHint(protect)
 		default:
 			c.Status = doctorFail
 			c.Detail = s.Error

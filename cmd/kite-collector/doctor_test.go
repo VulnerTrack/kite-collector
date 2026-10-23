@@ -2,17 +2,25 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/vulnertrack/kite-collector/internal/config"
+	"github.com/vulnertrack/kite-collector/internal/emitter"
+	"github.com/vulnertrack/kite-collector/internal/envelope"
 	"github.com/vulnertrack/kite-collector/internal/installer"
 	"github.com/vulnertrack/kite-collector/internal/store/sqlite"
 )
@@ -101,7 +109,7 @@ func TestDoctorConnectivityChecks_PlainHTTPEndpoint(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	checks := doctorConnectivityChecks(srv.URL, t.TempDir(), 3*time.Second)
+	checks := doctorConnectivityChecks(srv.URL, t.TempDir(), 3*time.Second, otlpProbeProtection{})
 	require.Len(t, checks, 3)
 	assert.Equal(t, doctorPass, checkByName(t, checks, "tcp-dial").Status)
 	assert.Equal(t, doctorSkip, checkByName(t, checks, "tls-handshake").Status, "no certs → mTLS stage skipped")
@@ -109,7 +117,7 @@ func TestDoctorConnectivityChecks_PlainHTTPEndpoint(t *testing.T) {
 }
 
 func TestDoctorConnectivityChecks_UnreachableEndpoint(t *testing.T) {
-	checks := doctorConnectivityChecks("http://127.0.0.1:1", t.TempDir(), 500*time.Millisecond)
+	checks := doctorConnectivityChecks("http://127.0.0.1:1", t.TempDir(), 500*time.Millisecond, otlpProbeProtection{})
 	require.Len(t, checks, 3)
 	assert.Equal(t, doctorFail, checkByName(t, checks, "tcp-dial").Status)
 	assert.Equal(t, doctorSkip, checkByName(t, checks, "tls-handshake").Status)
@@ -253,4 +261,73 @@ func TestRecordDoctorCheckStamp(t *testing.T) {
 		id := identity()
 		require.NotNil(t, id.LastCheckFailedAt)
 	})
+}
+
+// The envelope gateway rejects any /v1/logs body that is not enveloped, so
+// the ping passes only when doctor seals it the way the agent would.
+func TestDoctorConnectivityChecks_EnvelopedPingReachesGateway(t *testing.T) {
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	jwks, err := json.Marshal(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{
+		Key: k.Public(), KeyID: "gw-1", Algorithm: string(envelope.KeyAlgorithm), Use: "enc",
+	}}})
+	require.NoError(t, err)
+
+	var mu sync.Mutex
+	var seen http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/jwks.json":
+			_, _ = w.Write(jwks)
+		case "/v1/logs":
+			mu.Lock()
+			seen = r.Header.Clone()
+			mu.Unlock()
+			if r.Header.Get("Content-Type") != emitter.ContentTypeJOSE {
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	certFile, keyFile, _ := writeAgentPEMs(t, t.TempDir())
+	cfg := &config.Config{}
+	cfg.Streaming.OTLP.TLS = config.TLSConfig{CertFile: certFile, KeyFile: keyFile}
+	cfg.Streaming.OTLP.Encryption = config.EncryptionConfig{Enabled: true, ServerJWKURL: srv.URL + "/.well-known/jwks.json"}
+
+	certsDir := t.TempDir() // no agent.pem, so the probe skips mTLS against this plain-HTTP server
+	protect := doctorProbeProtection(cfg, certsDir, filepath.Join(t.TempDir(), "kite.db"))
+	require.NoError(t, protect.err)
+
+	ping := checkByName(t, doctorConnectivityChecks(srv.URL, certsDir, 3*time.Second, protect), "otlp-ping")
+	assert.Equal(t, doctorPass, ping.Status, ping.Detail)
+	assert.Contains(t, ping.Detail, string(emitter.ProtectionEnvelope))
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, emitter.ContentTypeJOSE, seen.Get("Content-Type"))
+	assert.Equal(t, "gw-1", seen.Get(emitter.HeaderEnvelopeKeyID))
+}
+
+func TestDoctorProbeProtection_UnusableConfigFailsPingWithoutCreatingIdentity(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{}
+	cfg.Streaming.OTLP.Signing = config.SigningConfig{Enabled: true}
+	dataDir, certsDir := t.TempDir(), t.TempDir()
+
+	protect := doctorProbeProtection(cfg, certsDir, filepath.Join(dataDir, "kite.db"))
+	require.Error(t, protect.err, "no client certificate and no identity to sign with")
+	_, err := os.Stat(filepath.Join(dataDir, "identity.json"))
+	assert.True(t, os.IsNotExist(err), "doctor must not create an identity")
+
+	ping := checkByName(t, doctorConnectivityChecks(srv.URL, certsDir, 3*time.Second, protect), "otlp-ping")
+	assert.Equal(t, doctorFail, ping.Status)
+	assert.Contains(t, ping.Detail, "payload protection")
+	assert.Contains(t, ping.Hint, "refuses to start")
 }

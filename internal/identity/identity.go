@@ -196,6 +196,21 @@ func LoadOrCreate(dataDir string, logger *slog.Logger) (*Identity, error) {
 	return id, nil
 }
 
+// Load reads an existing identity without creating, stamping or rewriting
+// it, for read-only callers such as `kite-collector doctor`. A missing file
+// returns an error wrapping fs.ErrNotExist.
+func Load(dataDir string, logger *slog.Logger) (*Identity, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	idPath := filepath.Join(dataDir, "identity.json")
+	data, err := os.ReadFile(idPath) // #nosec G304 — path derived from trusted config
+	if err != nil {
+		return nil, fmt.Errorf("read identity file: %w", err)
+	}
+	return loadFromBytes(data, idPath, logger)
+}
+
 // populateBinaryHash fills BinaryHash on the live Identity. A failure is
 // logged but not fatal — the tamper-check path treats an empty BinaryHash as
 // "unknown, skip" so a packaging quirk on one OS cannot stop scans elsewhere.

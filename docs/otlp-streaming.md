@@ -161,8 +161,8 @@ fails.
 
 **A stock OpenTelemetry Collector cannot read enveloped bodies.** Enable this
 only when a gateway that decrypts and verifies the envelope fronts the
-collector. The OTLP ping in `kite-collector doctor` still sends plain JSON, so
-a gateway that only accepts `application/jose` reports the ping as rejected.
+collector. `kite-collector doctor` seals its OTLP ping the same way, so a
+passing ping means the gateway accepts this agent's envelopes.
 
 ### The signing credential (both modes)
 

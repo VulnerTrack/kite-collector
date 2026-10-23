@@ -113,6 +113,19 @@ func prepareWire(ctx context.Context, sealer *envelope.Sealer, mode ProtectionMo
 	}
 }
 
+// NewProtectedRequest builds the POST an emitter configured with sealer
+// and mode would send for body, so a connectivity probe crosses the wire
+// in the same shape as real telemetry: a gateway that only accepts
+// enveloped bodies would reject a plain ping it would never see in
+// production.
+func NewProtectedRequest(ctx context.Context, sealer *envelope.Sealer, mode ProtectionMode, endpoint string, body []byte) (*http.Request, error) {
+	w, err := prepareWire(ctx, sealer, mode, body)
+	if err != nil {
+		return nil, err
+	}
+	return w.newRequest(ctx, endpoint)
+}
+
 // newRequest builds the POST for this payload.
 func (w wirePayload) newRequest(ctx context.Context, endpoint string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(w.body))

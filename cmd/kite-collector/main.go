@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -1091,12 +1090,7 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 	if endpointOverride != "" {
 		cfg.Streaming.OTLP.Endpoint = endpointOverride
 	}
-	if _, err := os.Stat(filepath.Join(certsDir, "agent.pem")); err == nil {
-		cfg.Streaming.OTLP.TLS.Enabled = true
-		cfg.Streaming.OTLP.TLS.CertFile = filepath.Join(certsDir, "agent.pem")
-		cfg.Streaming.OTLP.TLS.KeyFile = filepath.Join(certsDir, "agent-key.pem")
-		cfg.Streaming.OTLP.TLS.CAFile = filepath.Join(certsDir, "ca.pem")
-	}
+	useEnrolledTLS(&cfg.Streaming.OTLP, certsDir)
 
 	// Validate configuration early.
 	if err := cfg.Validate(); err != nil {
@@ -1366,29 +1360,14 @@ func runAgent(ctx context.Context, cfgFile, dbPath, interval, certsDir, endpoint
 		if agentIdentity != nil {
 			otlpCfg.RecordSigner = agentIdentity
 		}
-		// RFC-0072 §4.8 payload protection: sign with the enrolled client
-		// certificate (x5c travels with the signature so the receiver needs
-		// no key registry), falling back to the identity.json Ed25519 key
-		// when no certificate is configured. Misconfiguration fails
-		// start-up: an operator who turned protection on must not silently
-		// get unprotected telemetry. The two modes are mutually exclusive
-		// and config validation has already rejected enabling both.
-		switch {
-		case cfg.Streaming.OTLP.Encryption.Enabled:
-			sealer, sealErr := buildOTLPSealer(cfg.Streaming.OTLP, agentIdentity)
-			if sealErr != nil {
-				return fmt.Errorf("create OTLP envelope: %w", sealErr)
-			}
-			otlpCfg.Sealer = sealer
-			otlpCfg.Protection = emitter.ProtectionEnvelope
-		case cfg.Streaming.OTLP.Signing.Enabled:
-			signer, signErr := buildOTLPSigner(cfg.Streaming.OTLP, agentIdentity)
-			if signErr != nil {
-				return fmt.Errorf("create OTLP signer: %w", signErr)
-			}
-			otlpCfg.Sealer = signer
-			otlpCfg.Protection = emitter.ProtectionDetached
+		// Misconfigured payload protection fails start-up: an operator who
+		// turned it on must not silently get unprotected telemetry.
+		sealer, protection, protErr := buildOTLPProtection(cfg.Streaming.OTLP, agentIdentity, slog.Default())
+		if protErr != nil {
+			return protErr
 		}
+		otlpCfg.Sealer = sealer
+		otlpCfg.Protection = protection
 		otlpEmitter, otlpErr := emitter.NewOTLP(otlpCfg, version)
 		if otlpErr != nil {
 			return fmt.Errorf("create OTLP emitter: %w", otlpErr)
@@ -4128,6 +4107,16 @@ func currentOSUser() string {
 	return ""
 }
 
+// otlpProbeProtection is the payload protection the otlp-ping stage
+// applies, so the probe reaches the receiver in the shape the agent's
+// telemetry does. The zero value sends plain OTLP/JSON; err records why
+// the configured protection could not be built.
+type otlpProbeProtection struct {
+	err    error
+	sealer *envelope.Sealer
+	mode   emitter.ProtectionMode
+}
+
 type otlpCheckStage struct {
 	Name  string `json:"stage"`
 	Error string `json:"error,omitempty"`
@@ -4174,7 +4163,7 @@ Example:
 }
 
 func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool) error {
-	stages, err := collectOTLPStages(endpoint, certsDir, timeout)
+	stages, err := collectOTLPStages(endpoint, certsDir, timeout, otlpProbeProtection{})
 	if err != nil {
 		return err
 	}
@@ -4186,7 +4175,7 @@ func runCheckOTLP(endpoint, certsDir string, timeout time.Duration, jsonOut bool
 // first failed stage. Hard setup errors (bad endpoint URL, unreadable certs)
 // are returned as an error instead of a stage result. Shared by the doctor
 // command and the deprecated check-otlp command.
-func collectOTLPStages(endpoint, certsDir string, timeout time.Duration) ([]otlpCheckStage, error) {
+func collectOTLPStages(endpoint, certsDir string, timeout time.Duration, protect otlpProbeProtection) ([]otlpCheckStage, error) {
 	certFile := filepath.Join(certsDir, "agent.pem")
 	keyFile := filepath.Join(certsDir, "agent-key.pem")
 	caFile := filepath.Join(certsDir, "ca.pem")
@@ -4319,17 +4308,22 @@ func collectOTLPStages(endpoint, certsDir string, timeout time.Duration) ([]otlp
 			},
 		}
 		body, _ := json.Marshal(payload)
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, pingURL, bytes.NewReader(body))
-		if reqErr != nil {
-			return nil, fmt.Errorf("build ping request: %w", reqErr)
-		}
-		req.Header.Set("Content-Type", "application/json")
-
 		start := time.Now()
+		s := otlpCheckStage{Name: "otlp-ping"}
+		if protect.err != nil {
+			s.Error = "payload protection: " + protect.err.Error()
+			return append(stages, s), nil
+		}
+		// Sealing fetches the receiver's JWKS, so it is timed with the POST.
+		req, reqErr := emitter.NewProtectedRequest(ctx, protect.sealer, protect.mode, pingURL, body)
+		if reqErr != nil {
+			s.DurMS = time.Since(start).Milliseconds()
+			s.Error = reqErr.Error()
+			return append(stages, s), nil
+		}
 		resp, pingErr := client.Do(req)
-		ms := time.Since(start).Milliseconds()
+		s.DurMS = time.Since(start).Milliseconds()
 
-		s := otlpCheckStage{Name: "otlp-ping", DurMS: ms}
 		if pingErr != nil {
 			s.Error = pingErr.Error()
 		} else {
@@ -4357,7 +4351,7 @@ func collectOTLPStages(endpoint, certsDir string, timeout time.Duration) ([]otlp
 //
 // feature names the config surface that asked for protection, so a
 // misconfigured agent says which switch it cannot honour.
-func otlpSigningKey(otlp config.OTLPConfig, id *identity.Identity, feature string) (envelope.SigningKey, error) {
+func otlpSigningKey(otlp config.OTLPConfig, id *identity.Identity, feature string, logger *slog.Logger) (envelope.SigningKey, error) {
 	switch {
 	case otlp.TLS.CertFile != "" && otlp.TLS.KeyFile != "":
 		key, err := envelope.LoadSigningKey(otlp.TLS.CertFile, otlp.TLS.KeyFile)
@@ -4370,7 +4364,7 @@ func otlpSigningKey(otlp config.OTLPConfig, id *identity.Identity, feature strin
 		if err != nil {
 			return envelope.SigningKey{}, fmt.Errorf("identity signing key: %w", err)
 		}
-		slog.Warn("OTLP payload signing with identity key: no client certificate configured under streaming.otlp.tls, "+
+		logger.Warn("OTLP payload signing with identity key: no client certificate configured under streaming.otlp.tls, "+
 			"so signatures carry no x5c chain and the receiver must know this agent's public key",
 			"code", string(LogCodeTelemetryEnvelopeIdentitySigner),
 			"agent_id", id.AgentID.String())
@@ -4381,14 +4375,52 @@ func otlpSigningKey(otlp config.OTLPConfig, id *identity.Identity, feature strin
 	}
 }
 
+// buildOTLPProtection resolves streaming.otlp.encryption / signing into the
+// sealer and wire mode the emitter applies (RFC-0072 §4.8): sign with the
+// enrolled client certificate (x5c travels with the signature so the
+// receiver needs no key registry), falling back to the identity.json
+// Ed25519 key when no certificate is configured. The two modes are
+// mutually exclusive and config validation has already rejected enabling
+// both. Neither enabled returns a nil sealer: plain OTLP/JSON.
+func buildOTLPProtection(otlp config.OTLPConfig, id *identity.Identity, logger *slog.Logger) (*envelope.Sealer, emitter.ProtectionMode, error) {
+	switch {
+	case otlp.Encryption.Enabled:
+		sealer, err := buildOTLPSealer(otlp, id, logger)
+		if err != nil {
+			return nil, "", fmt.Errorf("create OTLP envelope: %w", err)
+		}
+		return sealer, emitter.ProtectionEnvelope, nil
+	case otlp.Signing.Enabled:
+		signer, err := buildOTLPSigner(otlp, id, logger)
+		if err != nil {
+			return nil, "", fmt.Errorf("create OTLP signer: %w", err)
+		}
+		return signer, emitter.ProtectionDetached, nil
+	}
+	return nil, emitter.ProtectionNone, nil
+}
+
+// useEnrolledTLS points otlp at the enrollment certificates in certsDir
+// when they exist: the credentials the agent presents for mTLS and signs
+// protected payloads with.
+func useEnrolledTLS(otlp *config.OTLPConfig, certsDir string) {
+	if _, err := os.Stat(filepath.Join(certsDir, "agent.pem")); err != nil {
+		return
+	}
+	otlp.TLS.Enabled = true
+	otlp.TLS.CertFile = filepath.Join(certsDir, "agent.pem")
+	otlp.TLS.KeyFile = filepath.Join(certsDir, "agent-key.pem")
+	otlp.TLS.CAFile = filepath.Join(certsDir, "ca.pem")
+}
+
 // buildOTLPSigner constructs the sign-only credential for
 // streaming.otlp.signing: bodies stay plain OTLP/JSON and each carries a
 // detached JWS proving which certificate produced those exact bytes.
 // Authenticity and integrity without confidentiality, and without
 // requiring anything of the receiver — an OTLP collector that knows
 // nothing about signatures still ingests the batch.
-func buildOTLPSigner(otlp config.OTLPConfig, id *identity.Identity) (*envelope.Sealer, error) {
-	key, err := otlpSigningKey(otlp, id, "streaming.otlp.signing")
+func buildOTLPSigner(otlp config.OTLPConfig, id *identity.Identity, logger *slog.Logger) (*envelope.Sealer, error) {
+	key, err := otlpSigningKey(otlp, id, "streaming.otlp.signing", logger)
 	if err != nil {
 		return nil, err
 	}
@@ -4400,7 +4432,7 @@ func buildOTLPSigner(otlp config.OTLPConfig, id *identity.Identity) (*envelope.S
 	if err != nil {
 		return nil, fmt.Errorf("payload signer: %w", err)
 	}
-	slog.Info("OTLP payload signing configured; every body carries a detached JWS over its exact bytes",
+	logger.Info("OTLP payload signing configured; every body carries a detached JWS over its exact bytes",
 		"code", string(LogCodeTelemetrySigningConfigured),
 		"signer_kid", signer.SignerKeyID(),
 		"signer_alg", signer.Algorithm(),
@@ -4412,19 +4444,19 @@ func buildOTLPSigner(otlp config.OTLPConfig, id *identity.Identity) (*envelope.S
 // buildOTLPSealer constructs the RFC-0072 §4.8 envelope sealer for the
 // streaming.otlp path: the body is signed and then encrypted to the
 // receiver's JWK, so the payload is confidential as well as authentic.
-func buildOTLPSealer(otlp config.OTLPConfig, id *identity.Identity) (*envelope.Sealer, error) {
+func buildOTLPSealer(otlp config.OTLPConfig, id *identity.Identity, logger *slog.Logger) (*envelope.Sealer, error) {
 	enc := otlp.Encryption
-	key, err := otlpSigningKey(otlp, id, "streaming.otlp.encryption")
+	key, err := otlpSigningKey(otlp, id, "streaming.otlp.encryption", logger)
 	if err != nil {
 		return nil, err
 	}
 
-	jwks := envelope.NewJWKSClient(enc.ServerJWKURL, slog.Default())
+	jwks := envelope.NewJWKSClient(enc.ServerJWKURL, logger)
 	sealer, err := envelope.NewSealer(key, jwks)
 	if err != nil {
 		return nil, fmt.Errorf("envelope sealer: %w", err)
 	}
-	slog.Info("OTLP envelope configured; payloads are JWS-signed and JWE-encrypted end to end",
+	logger.Info("OTLP envelope configured; payloads are JWS-signed and JWE-encrypted end to end",
 		"code", string(LogCodeTelemetryEnvelopeConfigured),
 		"signer_kid", sealer.SignerKeyID(),
 		"signer_alg", sealer.Algorithm(),

@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -233,4 +234,19 @@ func TestLoadOrCreate_StampsExpectedBinaryHashOnLegacyFile(t *testing.T) {
 	raw, err := os.ReadFile(idPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(raw), "expected_binary_hash")
+}
+
+func TestLoad_ReadsExistingWithoutCreating(t *testing.T) {
+	dir := t.TempDir()
+	_, err := Load(dir, nil)
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	_, statErr := os.Stat(filepath.Join(dir, "identity.json"))
+	assert.True(t, os.IsNotExist(statErr), "Load must never create identity.json")
+
+	created, err := LoadOrCreate(dir, nil)
+	require.NoError(t, err)
+	loaded, err := Load(dir, nil)
+	require.NoError(t, err)
+	assert.Equal(t, created.AgentID, loaded.AgentID)
+	assert.Equal(t, created.PrivateKey, loaded.PrivateKey)
 }
