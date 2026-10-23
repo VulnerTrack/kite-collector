@@ -105,11 +105,20 @@ func TestVerifyDetached_TruncatedSignatureFails(t *testing.T) {
 	sig, err := signer.SignDetached(body, "application/json")
 	require.NoError(t, err)
 
+	// Flip a bit in the decoded signature. Overwriting trailing base64
+	// characters is a no-op whenever the random ES256 signature already
+	// ends in those bits (1 run in 256).
+	parts := strings.Split(sig.Compact, ".")
+	rawSig, err := base64.RawURLEncoding.DecodeString(parts[2])
+	require.NoError(t, err)
+	rawSig[0] ^= 0x01
+	flipped := parts[0] + ".." + base64.RawURLEncoding.EncodeToString(rawSig)
+
 	for name, bad := range map[string]string{
 		"empty":          "",
 		"no dots":        "not-a-jws",
 		"dropped sig":    sig.Compact[:strings.LastIndexByte(sig.Compact, '.')],
-		"flipped sig":    sig.Compact[:len(sig.Compact)-2] + "AA",
+		"flipped sig":    flipped,
 		"header garbage": "!!!.." + strings.Split(sig.Compact, ".")[2],
 	} {
 		t.Run(name, func(t *testing.T) {
