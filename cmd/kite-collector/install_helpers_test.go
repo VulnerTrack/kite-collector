@@ -159,9 +159,9 @@ func TestEnrollmentPresent(t *testing.T) {
 	assert.True(t, enrollmentPresent(full))
 }
 
-func TestPrintSnapPostInstall_Enrolled(t *testing.T) {
+func TestPrintSnapPostInstall_EnrolledAndStarted(t *testing.T) {
 	var buf bytes.Buffer
-	printSnapPostInstall(&buf, "/var/snap/kite/common/certs", true)
+	printSnapPostInstall(&buf, "/var/snap/kite/common/certs", true, true)
 	out := buf.String()
 
 	assert.Contains(t, out, "Current state:")
@@ -170,23 +170,54 @@ func TestPrintSnapPostInstall_Enrolled(t *testing.T) {
 	assert.Contains(t, out, "  ✓  enrollment   ca.pem + agent.pem + agent-key.pem present")
 	assert.NotContains(t, out, "Enroll this collector",
 		"enrolled install must not ask for enrollment")
-	// Step numbering starts at 1 with the snap service step.
+	assert.NotContains(t, out, "snap start",
+		"install already started the service")
+	assert.Contains(t, out, "  1. Verify OTLP connectivity:")
+	assert.Contains(t, out, "  2. View logs:")
+	assert.Contains(t, out, "  3. Open the dashboard:")
+}
+
+func TestPrintSnapPostInstall_EnrolledNotStartedOffersStart(t *testing.T) {
+	var buf bytes.Buffer
+	printSnapPostInstall(&buf, "/var/snap/kite/common/certs", true, false)
+	out := buf.String()
+
 	assert.Contains(t, out, "  1. Enable and start the snap service:")
-	assert.Contains(t, out, "  2. Verify OTLP connectivity:")
-	assert.Contains(t, out, "  3. View logs:")
+	assert.Contains(t, out, "sudo snap start --enable kite-collector.kite-collector-daemon")
 	assert.Contains(t, out, "  4. Open the dashboard:")
 }
 
 func TestPrintSnapPostInstall_NotEnrolledLeadsWithEnrollStep(t *testing.T) {
 	var buf bytes.Buffer
-	printSnapPostInstall(&buf, "/var/snap/kite/common/certs", false)
+	printSnapPostInstall(&buf, "/var/snap/kite/common/certs", false, false)
 	out := buf.String()
 
 	assert.Contains(t, out, "  ✗  enrollment   certs missing")
-	assert.Contains(t, out, "  1. Enroll this collector (one-time):")
+	assert.Contains(t, out, "  1. Enroll this collector (one-time; also starts the service):")
 	assert.Contains(t, out, "sudo kite-collector enroll --certs-dir /var/snap/kite/common/certs")
-	assert.Contains(t, out, "  2. Enable and start the snap service:")
-	assert.Contains(t, out, "  5. Open the dashboard:")
+	assert.NotContains(t, out, "snap start",
+		"enroll starts the snap service, so no separate start step")
+	assert.Contains(t, out, "  2. Verify OTLP connectivity:")
+	assert.Contains(t, out, "  4. Open the dashboard:")
+}
+
+func TestParseSnapServiceStatus(t *testing.T) {
+	const header = "Service                               Startup   Current   Notes\n"
+	tests := []struct {
+		name string
+		out  string
+		want service.Status
+	}{
+		{"active", header + "kite-collector.kite-collector-daemon  enabled   active    -\n", service.StatusRunning},
+		{"inactive", header + "kite-collector.kite-collector-daemon  disabled  inactive  -\n", service.StatusStopped},
+		{"other service only", header + "other.daemon  enabled  active  -\n", service.StatusStopped},
+		{"empty", "", service.StatusStopped},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseSnapServiceStatus([]byte(tt.out)))
+		})
+	}
 }
 
 func TestPrintPostInstall_FreshTreeReportsMissingPieces(t *testing.T) {

@@ -3610,6 +3610,11 @@ func isLaunchdUserDomainMismatch(err error) bool {
 }
 
 func transitionEnrolledService(userMode bool) (string, error) {
+	if installer.RunningInSnap() {
+		// snapd owns the daemon, so the service-manager handle below would
+		// report it as not installed and enrollment would leave it stopped.
+		return transitionEnrolledServiceWithOps(snapServiceOps(context.Background()))
+	}
 	svc, _, err := newProgramService(svcOpts{userService: userMode})
 	if err != nil {
 		return "", fmt.Errorf("create service handle: %w", err)
@@ -3650,6 +3655,51 @@ func transitionEnrolledServiceWithOps(ops enrolledServiceOps) (string, error) {
 		return "", fmt.Errorf("start service: %w", err)
 	}
 	return "started", nil
+}
+
+// snapServiceOps controls the snap's daemon through snapctl, the only
+// service control strict confinement allows from inside the snap. The
+// daemon ships with install_mode: disable, so the first start also
+// enables it.
+func snapServiceOps(ctx context.Context) enrolledServiceOps {
+	snapctl := func(args ...string) ([]byte, error) {
+		out, err := exec.CommandContext(ctx, "snapctl", args...).CombinedOutput() // #nosec G204 -- fixed executable; arguments are constants
+		if err != nil {
+			return out, fmt.Errorf("snapctl %s: %w (%s)", strings.Join(args, " "), err, trimOutput(out))
+		}
+		return out, nil
+	}
+	return enrolledServiceOps{
+		status: func() (service.Status, error) {
+			out, err := snapctl("services", installer.SnapServiceName)
+			if err != nil {
+				return service.StatusUnknown, err
+			}
+			return parseSnapServiceStatus(out), nil
+		},
+		start: func() error {
+			_, err := snapctl("start", "--enable", installer.SnapServiceName)
+			return err
+		},
+		restart: func() error {
+			_, err := snapctl("restart", installer.SnapServiceName)
+			return err
+		},
+	}
+}
+
+// parseSnapServiceStatus reads the Current column of `snapctl services`:
+//
+//	Service                               Startup   Current   Notes
+//	kite-collector.kite-collector-daemon  disabled  inactive  -
+func parseSnapServiceStatus(out []byte) service.Status {
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 3 && fields[0] == installer.SnapServiceName && fields[2] == "active" {
+			return service.StatusRunning
+		}
+	}
+	return service.StatusStopped
 }
 
 func printPlatformEnrollmentComplete(baseURL, serviceAction string) {

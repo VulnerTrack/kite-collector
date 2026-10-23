@@ -913,16 +913,17 @@ func runSnapInstall(cmd *cobra.Command, a installArgs) error {
 	if !enrolled {
 		enrolled = enrollmentPresent(certsDir)
 	}
+	started := false
 	if enrolled && !a.noStart {
-		control := exec.CommandContext(cmd.Context(), "snapctl", "start", "--enable", installer.SnapServiceName) // #nosec G204 -- executable and arguments are fixed constants
-		if controlOut, err := control.CombinedOutput(); err != nil {
-			_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v (%s)\n", err, trimOutput(controlOut))
+		if err := snapServiceOps(cmd.Context()).start(); err != nil {
+			_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v\n", err)
 		} else {
+			started = true
 			_, _ = fmt.Fprintf(out, "  ✓  service %q enabled and started\n", installer.SnapServiceName)
 		}
 	}
 
-	printSnapPostInstall(out, certsDir, enrolled)
+	printSnapPostInstall(out, certsDir, enrolled, started)
 	return nil
 }
 
@@ -1017,7 +1018,10 @@ func enrollmentPresent(certsDir string) bool {
 	return true
 }
 
-func printSnapPostInstall(out io.Writer, certsDir string, enrolled bool) {
+// printSnapPostInstall lists only the steps still open: `enroll` starts the
+// daemon itself, so a manual start is offered only for an enrolled install
+// whose service did not start (--no-start, or snapctl failed).
+func printSnapPostInstall(out io.Writer, certsDir string, enrolled, started bool) {
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Current state:")
 	_, _ = fmt.Fprintln(out, "  ✓  binary       /snap/bin/kite-collector")
@@ -1032,12 +1036,14 @@ func printSnapPostInstall(out io.Writer, certsDir string, enrolled bool) {
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, "Next steps:")
 	step := 1
-	if !enrolled {
-		_, _ = fmt.Fprintf(out, "  %d. Enroll this collector (one-time):\n       sudo kite-collector enroll --certs-dir %s\n\n", step, certsDir)
+	switch {
+	case !enrolled:
+		_, _ = fmt.Fprintf(out, "  %d. Enroll this collector (one-time; also starts the service):\n       sudo kite-collector enroll --certs-dir %s\n\n", step, certsDir)
+		step++
+	case !started:
+		_, _ = fmt.Fprintf(out, "  %d. Enable and start the snap service:\n       sudo snap start --enable %s\n\n", step, installer.SnapServiceName)
 		step++
 	}
-	_, _ = fmt.Fprintf(out, "  %d. Enable and start the snap service:\n       sudo snap start --enable %s\n\n", step, installer.SnapServiceName)
-	step++
 	_, _ = fmt.Fprintf(out, "  %d. Verify OTLP connectivity:\n       sudo kite-collector check --certs-dir %s\n\n", step, certsDir)
 	step++
 	_, _ = fmt.Fprintf(out, "  %d. View logs:\n       sudo snap logs -f %s\n\n", step, installer.SnapServiceName)

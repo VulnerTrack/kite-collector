@@ -69,13 +69,12 @@ page.
 sudo snap install kite-collector
 sudo kite-collector install
 sudo kite-collector enroll
-sudo snap start --enable kite-collector.kite-collector-daemon
 ```
 
 snapd manages the binary, service, and updates; `install` prepares persistent
-storage under `/var/snap/kite-collector/common/certs`. Check the
-service with `snap services kite-collector` and follow its logs with
-`sudo snap logs -f kite-collector.kite-collector-daemon`.
+storage under `/var/snap/kite-collector/common/certs`, and `enroll` enables
+and starts the service. Check the service with `snap services kite-collector`
+and follow its logs with `sudo snap logs -f kite-collector.kite-collector-daemon`.
 
 ### macOS (Homebrew)
 
