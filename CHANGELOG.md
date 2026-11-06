@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix the inventory telemetry lint checks and avoid truncating legacy Windows telemetry span identifiers when an event carries more than 255 attributes. Dashboard render logs now keep table names in structured fields, and the Windows 7 dashboard opens through the native URL handler.
 - Export the complete persisted software inventory, interfaces and discovered machine metadata on every machine observation, including unchanged rescans. Software travels in batches of 200 packages without truncation; continuation records do not repeat lifecycle alerts or inflate aggregate host counts. This lets the engine retain discovery in CMDB and promote software and services into governed inventory.
 
 - Running `kite-collector status`, `doctor`, or `dashboard` while the service is up no longer corrupts the service's database. Every process that opens `kite.db` used the same decrypted working copy, and each new one decrypted the last snapshot over it in place, so the second open failed with "database disk image is malformed" and the service lost its writes since that snapshot. Processes now share the working copy through OS file locks: the first opener decrypts it, later ones read the live data, and only the last closer encrypts it back and removes it; a process that closes while others still use it snapshots its own writes first.

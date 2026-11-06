@@ -191,7 +191,10 @@ func runText(ctx context.Context, exe string, args ...string) string {
 func runProbe(parent context.Context, exe string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(parent, 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, args...)
+	// All callers use the built-in inventoryProbes or fixed hostname/registry
+	// commands above; neither executable nor arguments come from requests or
+	// discovered data, and no command shell is invoked.
+	cmd := exec.CommandContext(ctx, exe, args...) // #nosec G204 -- trusted, built-in inventory commands
 	cmd.Env = os.Environ()
 	out, err := cmd.CombinedOutput()
 	out = decodeWindowsOutput(out)

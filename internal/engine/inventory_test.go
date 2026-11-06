@@ -11,10 +11,14 @@ import (
 )
 
 func TestInventoryEventsCarryEveryPackageOnUnchangedRescan(t *testing.T) {
-	machine := model.Machine{ID: uuid.New(), Hostname: "host", Architecture: "amd64",
-		Interfaces: []model.NetworkInterface{{IPAddress: "10.0.0.1"}}}
-	event := model.MachineEvent{ID: uuid.New(), EventType: model.EventMachineAnalyzed,
-		Details: model.BuildEventDetails(machine, model.EventMachineAnalyzed)}
+	machine := model.Machine{
+		ID: uuid.New(), Hostname: "host", Architecture: "amd64",
+		Interfaces: []model.NetworkInterface{{IPAddress: "10.0.0.1"}},
+	}
+	event := model.MachineEvent{
+		ID: uuid.New(), EventType: model.EventMachineAnalyzed,
+		Details: model.BuildEventDetails(machine, model.EventMachineAnalyzed),
+	}
 	event.FromMachine(machine)
 	packages := make([]model.InstalledSoftware, 914)
 	for i := range packages {
@@ -57,8 +61,10 @@ func TestInventoryEventsRetainHostsWithoutPackages(t *testing.T) {
 
 func TestInventoryContinuationDoesNotRepeatLifecycleAlert(t *testing.T) {
 	machine := model.Machine{ID: uuid.New()}
-	event := model.MachineEvent{ID: uuid.New(), EventType: model.EventUnauthorizedMachineDetected,
-		Severity: model.SeverityHigh, Details: model.BuildEventDetails(machine, model.EventUnauthorizedMachineDetected)}
+	event := model.MachineEvent{
+		ID: uuid.New(), EventType: model.EventUnauthorizedMachineDetected,
+		Severity: model.SeverityHigh, Details: model.BuildEventDetails(machine, model.EventUnauthorizedMachineDetected),
+	}
 	chunks, err := inventoryEvents(machine, event, make([]model.InstalledSoftware, 201))
 	require.NoError(t, err)
 	require.Equal(t, event.EventType, chunks[0].EventType)

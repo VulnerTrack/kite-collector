@@ -505,8 +505,9 @@ func Serve(addr string, st store.Store, rc ReportContext, logger *slog.Logger, o
 		if renderErr := renderIndexPage(&buf, "tables", func(fragBuf io.Writer) error {
 			return render(fragBuf, r.Context())
 		}); renderErr != nil {
-			logger.Error("dashboard: render page tables/"+name,
+			logger.Error("dashboard: render table page",
 				"code", string(LogCodeServeTablePageRender),
+				"table", name,
 				"error", renderErr)
 			http.Error(w, renderErr.Error(), http.StatusInternalServerError)
 			return

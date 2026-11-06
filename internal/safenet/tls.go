@@ -25,7 +25,9 @@ func TLSConfig(insecureEnv, caCertEnv string) (*tls.Config, error) {
 			"code", string(LogCodeTLSVerificationDisabled),
 			"env", insecureEnv,
 			"warning", "not recommended for production")
-		cfg.InsecureSkipVerify = true //nolint:gosec // user-controlled opt-in via env var
+		// Explicit operator opt-in for development, with a warning above;
+		// certificate verification remains enabled by default.
+		cfg.InsecureSkipVerify = true // #nosec G402 -- intentional operator-configured insecure mode
 		return cfg, nil
 	}
 

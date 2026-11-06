@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/vulnertrack/kite-collector/internal/model"
@@ -44,7 +45,7 @@ func inventoryEvents(machine model.Machine, event model.MachineEvent, software [
 		// The payload contains only JSON-compatible model fields.
 		encoded, err := json.Marshal(base)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("encode machine inventory chunk %d: %w", page, err)
 		}
 		chunk.Details = string(encoded)
 		out = append(out, chunk)

@@ -2,12 +2,29 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestInventorySpanIDDoesNotTruncateAttributeCount(t *testing.T) {
+	body := map[string]string{"hostname": "host"}
+	attrs := map[string]string{"event_name": "MachineAnalyzed"}
+	first := newInventoryOTLPRecord(body, attrs, time.Now(), "trace")
+	for i := 0; i < 256; i++ {
+		attrs[fmt.Sprintf("extra-%d", i)] = "value"
+	}
+	second := newInventoryOTLPRecord(body, attrs, time.Now(), "trace")
+	if first.SpanID == second.SpanID {
+		t.Fatal("attribute counts 1 and 257 must not produce identical span IDs")
+	}
+	if len(first.SpanID) != 16 || len(second.SpanID) != 16 {
+		t.Fatal("OTLP span IDs must remain 8 bytes encoded as hex")
+	}
+}
 
 func TestParseCSVRows(t *testing.T) {
 	rows, err := parseCSVRows([]byte("Node,Name,Version\r\nPC,Example,1.2\r\n"))

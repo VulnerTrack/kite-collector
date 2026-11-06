@@ -9,8 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -110,7 +108,9 @@ func newLegacyOTLPClient(dir string, snapshot *inventorySnapshot) (*legacyOTLPCl
 	if err != nil {
 		pool = x509.NewCertPool()
 	}
-	if caPEM, readErr := os.ReadFile(caPath); readErr == nil {
+	// The enrollment directory is operator-selected and ca.pem is a fixed
+	// filename, never a path supplied by telemetry or an HTTP request.
+	if caPEM, readErr := os.ReadFile(caPath); readErr == nil { // #nosec G304 -- trusted enrollment CA path
 		pool.AppendCertsFromPEM(caPEM)
 	}
 	tlsConfig := &tls.Config{
@@ -123,9 +123,11 @@ func newLegacyOTLPClient(dir string, snapshot *inventorySnapshot) (*legacyOTLPCl
 	if err != nil {
 		return nil, err
 	}
-	leaf, err := loadLeafCertificate(certPath)
+	// LoadX509KeyPair already validated and loaded a non-empty certificate
+	// chain. Reuse those bytes instead of reopening the enrollment file.
+	leaf, err := x509.ParseCertificate(clientCert.Certificate[0])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse OTLP client certificate: %w", err)
 	}
 	hostname := snapshot.Hostname
 	if hostname == "" {
@@ -172,18 +174,6 @@ func normalizeLegacyOTLPEndpoint(raw string) (string, error) {
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return parsed.String(), nil
-}
-
-func loadLeafCertificate(path string) (*x509.Certificate, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	block, _ := pem.Decode(data)
-	if block == nil {
-		return nil, errors.New("invalid agent certificate")
-	}
-	return x509.ParseCertificate(block.Bytes)
 }
 
 func certificateTenant(cert *x509.Certificate) string {
@@ -354,7 +344,10 @@ func legacyInventoryFindings(snapshot *inventorySnapshot) []map[string]string {
 func newInventoryOTLPRecord(body interface{}, attrs map[string]string, timestamp time.Time, traceID string) legacyOTLPLogRecord {
 	encoded, _ := json.Marshal(body)
 	bodyText := string(encoded)
-	spanRaw := sha256.Sum256(append(encoded, byte(len(attrs))))
+	// Encode the full count: a byte truncates after 255 and makes counts
+	// separated by 256 produce the same span ID for an identical body.
+	spanInput := strconv.AppendInt(append(encoded, 0), int64(len(attrs)), 10)
+	spanRaw := sha256.Sum256(spanInput)
 	return legacyOTLPLogRecord{
 		Body:                 legacyOTLPValue{StringValue: &bodyText},
 		TimeUnixNano:         strconv.FormatInt(timestamp.UnixNano(), 10),

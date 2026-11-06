@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -278,7 +277,7 @@ func openLegacyDashboard(addr string) {
 	if host, port, err := net.SplitHostPort(addr); err == nil && (host == "0.0.0.0" || host == "::") {
 		target = "http://127.0.0.1:" + port + "/"
 	}
-	_ = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", target).Start()
+	openLegacyBrowser(target)
 }
 
 var legacyDashboardTemplate = template.Must(template.New("dashboard").Funcs(template.FuncMap{
