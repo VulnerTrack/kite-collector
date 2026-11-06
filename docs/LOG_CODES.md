@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 539 codes across 60 packages.
+**Catalog size:** 541 codes across 60 packages.
 
 ---
 
@@ -1381,7 +1381,7 @@ Source: [`internal/endpoint/logcodes.go`](../internal/endpoint/logcodes.go) · 1
 
 ## `engine` (internal/engine)
 
-Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 36 codes
+Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 38 codes
 
 **discovery surface — phase 1 of the scan pipeline**
 
@@ -1407,6 +1407,7 @@ Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 36 co
 | `engine.software.persisted` | `LogCodeSoftwarePersisted` | — |
 | `engine.software.parse_error` | `LogCodeSoftwareParseError` | — |
 | `engine.software.parse_errors_truncated` | `LogCodeSoftwareParseTruncated` | — |
+| `engine.software.telemetry_read_failed` | `LogCodeSoftwareTelemetryReadFailed` | — |
 
 **audit surfaces — config/code/container-env/ldap/entra auditors**
 
@@ -1443,6 +1444,7 @@ Source: [`internal/engine/logcodes.go`](../internal/engine/logcodes.go) · 36 co
 |---|---|---|
 | `engine.events.persist_failed` | `LogCodeEventsPersistFailed` | — |
 | `engine.events.emit_failed` | `LogCodeEventsEmitFailed` | — |
+| `engine.events.inventory_encode_failed` | `LogCodeInventoryEncodeFailed` | — |
 
 **scan-run lifecycle**
 
