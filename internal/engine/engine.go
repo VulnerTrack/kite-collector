@@ -940,7 +940,25 @@ func (e *Engine) RunWithOptions(ctx context.Context, cfg *config.Config, opts Ru
 			Details:   model.BuildEventDetails(machines[i], evtType),
 		}
 		evt.FromMachine(machines[i])
-		events = append(events, evt)
+		// Inventory is independent of material host changes. Read the persisted
+		// packages after collection, including the agent's separate package scan.
+		software, inventoryErr := e.store.ListSoftware(ctx, machines[i].ID)
+		if inventoryErr != nil {
+			slog.Warn("software inventory read for telemetry failed",
+				"code", string(LogCodeSoftwareTelemetryReadFailed),
+				"error", inventoryErr, "machine_id", machines[i].ID)
+			softwareErrors++
+			software = machines[i].Software
+		}
+		inventory, encodeErr := inventoryEvents(machines[i], evt, software)
+		if encodeErr != nil {
+			slog.Warn("inventory event encoding failed", "code", string(LogCodeInventoryEncodeFailed),
+				"error", encodeErr, "machine_id", machines[i].ID)
+			softwareErrors++
+			events = append(events, evt)
+		} else {
+			events = append(events, inventory...)
+		}
 	}
 
 	for i := range staleMachines {

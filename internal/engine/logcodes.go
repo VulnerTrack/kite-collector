@@ -27,10 +27,11 @@ const (
 	LogCodeStaleDetectFailed           LogCode = "engine.machines.stale_detect_failed"
 
 	// software persistence
-	LogCodeSoftwarePersistFailed  LogCode = "engine.software.persist_failed"
-	LogCodeSoftwarePersisted      LogCode = "engine.software.persisted"
-	LogCodeSoftwareParseError     LogCode = "engine.software.parse_error"
-	LogCodeSoftwareParseTruncated LogCode = "engine.software.parse_errors_truncated"
+	LogCodeSoftwarePersistFailed       LogCode = "engine.software.persist_failed"
+	LogCodeSoftwarePersisted           LogCode = "engine.software.persisted"
+	LogCodeSoftwareParseError          LogCode = "engine.software.parse_error"
+	LogCodeSoftwareParseTruncated      LogCode = "engine.software.parse_errors_truncated"
+	LogCodeSoftwareTelemetryReadFailed LogCode = "engine.software.telemetry_read_failed"
 
 	// audit surfaces — config/code/container-env/ldap/entra auditors
 	LogCodeAuditFailed                LogCode = "engine.audit.phase_failed"
@@ -60,8 +61,9 @@ const (
 	LogCodeCloudDNSSnapshotPersist LogCode = "engine.cloud_dns.snapshot_persist_failed"
 
 	// event emission
-	LogCodeEventsPersistFailed LogCode = "engine.events.persist_failed"
-	LogCodeEventsEmitFailed    LogCode = "engine.events.emit_failed"
+	LogCodeEventsPersistFailed   LogCode = "engine.events.persist_failed"
+	LogCodeEventsEmitFailed      LogCode = "engine.events.emit_failed"
+	LogCodeInventoryEncodeFailed LogCode = "engine.events.inventory_encode_failed"
 
 	// scan-run lifecycle
 	LogCodeScanRunCompleteFailed LogCode = "engine.scan.complete_failed"

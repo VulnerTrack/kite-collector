@@ -49,6 +49,12 @@ func NewAggregate(otlp *OTLPEmitter) *AggregateOTLPEmitter {
 // Emit records an event in the aggregate counters. No data is sent
 // to the collector until Flush is called.
 func (a *AggregateOTLPEmitter) Emit(_ context.Context, event model.MachineEvent) error {
+	var inventory struct {
+		Chunk int `json:"inventory_chunk"`
+	}
+	if json.Unmarshal([]byte(event.Details), &inventory) == nil && inventory.Chunk > 0 {
+		return nil // Continuation of the same host's inventory, not another host.
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

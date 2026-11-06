@@ -33,6 +33,23 @@ func aggregateEvent(eventType model.EventType, scanRun uuid.UUID) model.MachineE
 	}
 }
 
+func TestAggregateInventoryChunksCountHostOnce(t *testing.T) {
+	agg, reqs := newAggregateHarness(t, http.StatusOK)
+	scanRun := uuid.New()
+	first := aggregateEvent(model.EventMachineDiscovered, scanRun)
+	first.Details = `{"inventory_chunk":0,"inventory_chunks":5}`
+	require.NoError(t, agg.Emit(context.Background(), first))
+	for _, details := range []string{`{"inventory_chunk":1}`, `{"inventory_chunk":2}`, `{"inventory_chunk":3}`, `{"inventory_chunk":4}`} {
+		continuation := aggregateEvent(model.EventMachineAnalyzed, scanRun)
+		continuation.Details = details
+		require.NoError(t, agg.Emit(context.Background(), continuation))
+	}
+	attrs := attrMap(flushedRecord(t, agg, reqs).Attributes)
+	assert.Equal(t, "1", attrs["total_machines"])
+	assert.Equal(t, "1", attrs["new_machines"])
+	assert.Equal(t, "0", attrs["findings_count"])
+}
+
 // flushedRecord flushes the aggregate and returns the single log record of
 // the single request that reached the capture server.
 func flushedRecord(t *testing.T, agg *AggregateOTLPEmitter, reqs *[]capturedRequest) otlpLogRecord {
