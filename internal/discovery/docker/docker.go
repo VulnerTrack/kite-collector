@@ -138,6 +138,7 @@ func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		slog.Info("docker: images discovered", "count", len(images)) //#nosec G706 -- structured slog
 	}
 	digests := imageDigestIndex(images)
+	imageFacts := make(map[string]map[string]string)
 
 	now := time.Now().UTC()
 	machines := make([]model.Machine, 0, len(containers))
@@ -147,7 +148,22 @@ func (d *Docker) Discover(ctx context.Context, cfg map[string]any) ([]model.Mach
 		if inspErr != nil {
 			slog.Warn("docker: inspect failed", "code", string(LogCodeEnumerateInspectFailed), "container", truncate(c.ID, 12), "error", inspErr)
 		}
-		machines = append(machines, containerToMachine(c, detail, digests[c.ImageID], now))
+		facts, cached := imageFacts[c.ImageID]
+		if !cached {
+			facts = client.imageIdentity(ctx, c.ImageID)
+			imageFacts[c.ImageID] = facts
+		}
+		machine := containerToMachine(c, detail, digests[c.ImageID], now)
+		tags := buildContainerTags(c, detail, digests[c.ImageID])
+		for key, value := range facts {
+			tags[key] = value
+		}
+		for key, value := range client.containerOSIdentity(ctx, c.ID) {
+			tags[key] = value
+		}
+		encoded, _ := json.Marshal(tags)
+		machine.Tags = string(encoded)
+		machines = append(machines, machine)
 	}
 
 	slog.Info("docker: discovery complete", "containers", len(machines)) //#nosec G706 -- structured slog
@@ -189,6 +205,10 @@ func newClient(host string) *dockerClient {
 }
 
 func (c *dockerClient) get(ctx context.Context, path string) ([]byte, error) {
+	return c.getLimited(ctx, path, 32<<20)
+}
+
+func (c *dockerClient) getLimited(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
 	url := fmt.Sprintf("%s/%s%s", c.base, apiVersion, path)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil) //#nosec G704 -- URL from user-configured Docker host
@@ -202,9 +222,12 @@ func (c *dockerClient) get(ctx context.Context, path string) ([]byte, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read body: %w", err)
+	}
+	if int64(len(body)) > maxBytes {
+		return nil, errors.New("docker API response exceeds size limit")
 	}
 
 	if resp.StatusCode != http.StatusOK {
