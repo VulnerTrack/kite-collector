@@ -1,0 +1,120 @@
+Package: kite-collector-osquery
+Architecture: amd64
+Version: 0.65.0
+Priority: optional
+Section: admin
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 122373
+Provides: kite-collector
+Depends: libc6 (>= 2.12), zlib1g
+Conflicts: kite-collector
+Replaces: kite-collector
+Filename: pool/main/k/kite-collector-osquery/kite-collector-osquery_0.65.0_amd64.deb
+Size: 45058444
+MD5sum: a3e6a126cd1e689b8f186e48fac24aa9
+SHA1: 7152d85052b9bfab3b454001e1eb9e4e4a3fb629
+SHA256: 375c6662a4623b7f82f9c36a89a01b614c0744c88f03fc99cd59953cfce0f17b
+SHA512: 79b30ffb08d5d7d17516ed8f39a8f3914410638d001b5dc6c5d3e4c8dcf63f2b639c377b2c54a95ea7288a58719a9e25cd0a409a5af0eb29dffc019c795bdd29
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Kite Collector bundled with osquery.
+ Cybersecurity machine discovery, configuration audit, and posture
+ analysis agent, plus a bundled osquery daemon (kite-osqueryd) the
+ collector's osquery discovery source reads over the Thrift extensions
+ socket at /run/kite-osquery/kite-osquery.em.
+
+Package: kite-collector-osquery
+Architecture: amd64
+Version: 0.65.1
+Priority: optional
+Section: admin
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 122569
+Provides: kite-collector
+Depends: libc6 (>= 2.12), zlib1g
+Conflicts: kite-collector
+Replaces: kite-collector
+Filename: pool/main/k/kite-collector-osquery/kite-collector-osquery_0.65.1_amd64.deb
+Size: 45126414
+MD5sum: 0412e10c3924a0c4f535acdffe97714c
+SHA1: 2a10eb14d6cea19bac957ac468bb2dc4841ee3cb
+SHA256: 71dac860a1c600182a077c0a9144101f2533d0a2625f0afabc0e56d56e6a1a23
+SHA512: 86fc8de2dbc620524e0b7b0e02439f47404397a1b8a4d58b8b36b4df272ba637dd3a21d8f0568d846168885793debf25e4bdae607451026747361762b6816dc7
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Kite Collector bundled with osquery.
+ Cybersecurity machine discovery, configuration audit, and posture
+ analysis agent, plus a bundled osquery daemon (kite-osqueryd) the
+ collector's osquery discovery source reads over the Thrift extensions
+ socket at /run/kite-osquery/kite-osquery.em.
+
+Package: kite-collector-osquery
+Architecture: amd64
+Version: 0.66.0
+Priority: optional
+Section: admin
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 122621
+Provides: kite-collector
+Depends: libc6 (>= 2.12), zlib1g
+Conflicts: kite-collector
+Replaces: kite-collector
+Filename: pool/main/k/kite-collector-osquery/kite-collector-osquery_0.66.0_amd64.deb
+Size: 45146138
+MD5sum: 796266001b05b807ed4dc5b0c69d2c88
+SHA1: 557efb1783fe1d01f36dc480d6cb4f0b643585a5
+SHA256: e8ba5551942558f6be0c0c1659bf58e9034765b4973d4cef75a4008af5b268bc
+SHA512: ee5b24bcba5a5128d4a3f55ab4833ded50cf48faf94be7f4cef1024eb53094ce5fdc9405036fdb1f1fba276446a896392a067a5a5b999904484e7345f5acef1e
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Kite Collector bundled with osquery.
+ Cybersecurity machine discovery, configuration audit, and posture
+ analysis agent, plus a bundled osquery daemon (kite-osqueryd) the
+ collector's osquery discovery source reads over the Thrift extensions
+ socket at /run/kite-osquery/kite-osquery.em.
+
+Package: kite-collector
+Architecture: amd64
+Version: 0.65.0
+Priority: optional
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 36935
+Conflicts: kite-collector-osquery
+Filename: pool/main/k/kite-collector/kite-collector_0.65.0_linux_amd64.deb
+Size: 13384046
+MD5sum: fd22198cd4a9eb9bf39dae3cce81e8e0
+SHA1: 71862a412133d329293d6389b320194c194ef24a
+SHA256: 3390beb9cc2aa2b3ad7014ffc34b52678e7d0264c333ce804a2f946b31e98ef6
+SHA512: dc70159bb28f9bf604a55c3f96028ca4ba4d635224846c712e972aac275ef2bf5526ebf37b6c218fc213ef07246b92b937bfe572f8a38358809ad1ef012a3024
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
+
+Package: kite-collector
+Architecture: amd64
+Version: 0.65.1
+Priority: optional
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 37131
+Conflicts: kite-collector-osquery
+Filename: pool/main/k/kite-collector/kite-collector_0.65.1_linux_amd64.deb
+Size: 13448328
+MD5sum: 263318070332155e4415f4d6a036c8ce
+SHA1: b5f0c8865ee1a33eed894eeced558305f61c8b10
+SHA256: 0bbd5bdd64bf5740ec8ab4155afc86b889bc82cfacfdb368b63d5447aa4b5d72
+SHA512: a67995faba7825c8e9746fe6b78a964753a8a5c28fef1f8945e8268641b0e55776c1f9653f73d08f4ad744189bce076678f9f116405baf272c01abf095698595
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
+
+Package: kite-collector
+Architecture: amd64
+Version: 0.66.0
+Priority: optional
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 37183
+Conflicts: kite-collector-osquery
+Filename: pool/main/k/kite-collector/kite-collector_0.66.0_linux_amd64.deb
+Size: 13472806
+MD5sum: 8313fa4f3fd276c131442ffb6cd4347e
+SHA1: 6f910a5266558f168b044771cf5a7d9f2c074227
+SHA256: 67eeca96c96502838ddff96b2e5d3f7f4ecd9efdcf34d5cbeee8e27fb8ce1475
+SHA512: 1e0708ef85fbf198c5643907cefe0474e4080440cfe67cbe3ba17589853cb9c5f756fab68c2071c342e21bb94211742baf758dadbc48983d1e709792e5a9a280
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
+
