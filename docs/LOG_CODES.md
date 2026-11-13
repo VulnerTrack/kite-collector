@@ -12,7 +12,7 @@ To regenerate this file:
 go run ./tools/loginventory/cmd > docs/LOG_CODES.md
 ```
 
-**Catalog size:** 541 codes across 60 packages.
+**Catalog size:** 543 codes across 60 packages.
 
 ---
 
@@ -94,7 +94,7 @@ Source: [`api/rest/logcodes.go`](../api/rest/logcodes.go) · 17 codes
 
 ## `main` (cmd/kite-collector)
 
-Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 45 codes
+Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) · 47 codes
 
 **bootstrap surface — startup-time configuration validation**
 
@@ -176,6 +176,8 @@ Source: [`cmd/kite-collector/logcodes.go`](../cmd/kite-collector/logcodes.go) ·
 | `agent.scan.periodic_failed` | `LogCodeScanPeriodicFailed` | — |
 | `agent.scan.periodic_complete` | `LogCodeScanPeriodicComplete` | — |
 | `agent.lifecycle.shutdown` | `LogCodeAgentShutdown` | — |
+| `agent.service.agent_exited` | `LogCodeServiceAgentExited` | — |
+| `agent.service.recovery_failed` | `LogCodeServiceRecoveryFailed` | — |
 
 **engine surface — scan engine identity wiring**
 
