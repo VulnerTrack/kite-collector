@@ -34,6 +34,7 @@ func TestLogCodes_FollowConvention(t *testing.T) {
 		LogCodeScanStreamingStarting, LogCodeScanInitialFailed, LogCodeScanInitialComplete,
 		LogCodeScanPeriodicFailed, LogCodeScanPeriodicComplete,
 		LogCodeAgentShutdown,
+		LogCodeServiceAgentExited, LogCodeServiceRecoveryFailed,
 		LogCodeEngineIdentityUnavailable,
 		LogCodeCLIFlushWriter, LogCodeCLIConfigLoadFallback,
 		LogCodeEnrollRequestSubmitted, LogCodeEnrollComplete,

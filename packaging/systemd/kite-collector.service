@@ -12,6 +12,8 @@
 Description=Kite Collector - continuous machine discovery and OTLP streaming agent
 Documentation=https://github.com/VulnerTrack/kite-collector
 After=network.target
+# A persistent startup failure must not permanently exhaust restart attempts.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -26,7 +28,7 @@ ExecStart=/usr/bin/kite-collector service run \
 # cleanly when it notices its binary changed on disk, and systemd relaunches
 # the new version.
 Restart=always
-RestartSec=5
+RestartSec=60
 KillSignal=SIGTERM
 # program.Stop waits up to 15s for the agent loop to drain; give it headroom.
 TimeoutStopSec=20

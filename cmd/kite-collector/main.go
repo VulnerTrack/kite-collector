@@ -3634,8 +3634,8 @@ func transitionEnrolledServiceWithOps(ops enrolledServiceOps) (string, error) {
 
 // snapServiceOps controls the snap's daemon through snapctl, the only
 // service control strict confinement allows from inside the snap. The
-// daemon ships with install_mode: disable, so the first start also
-// enables it.
+// Older snap releases shipped disabled, so start also enables the daemon
+// when upgrading one of those installations.
 func snapServiceOps(ctx context.Context) enrolledServiceOps {
 	snapctl := func(args ...string) ([]byte, error) {
 		out, err := exec.CommandContext(ctx, "snapctl", args...).CombinedOutput() // #nosec G204 -- fixed executable; arguments are constants

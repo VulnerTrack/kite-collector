@@ -76,6 +76,8 @@ const (
 	LogCodeScanPeriodicFailed    LogCode = "agent.scan.periodic_failed"
 	LogCodeScanPeriodicComplete  LogCode = "agent.scan.periodic_complete"
 	LogCodeAgentShutdown         LogCode = "agent.lifecycle.shutdown"
+	LogCodeServiceAgentExited    LogCode = "agent.service.agent_exited"
+	LogCodeServiceRecoveryFailed LogCode = "agent.service.recovery_failed"
 
 	// engine surface — scan engine identity wiring
 	LogCodeEngineIdentityUnavailable LogCode = "agent.engine.identity_unavailable"

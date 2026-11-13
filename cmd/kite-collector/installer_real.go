@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -131,6 +132,13 @@ func (r realInstaller) Install(ctx context.Context, opts installer.Options) erro
 	_ = svc.Uninstall()
 	if instErr := svc.Install(); instErr != nil {
 		return fmt.Errorf("install service: %w", instErr)
+	}
+	// The dashboard and unattended installer need the same boot/recovery
+	// guarantees as the CLI, including when upgrading an older registration.
+	bootErr := enableBootPersistence(opts.UserMode)
+	recoveryErr := installer.ConfigureServiceRecovery(svcName)
+	if err := errors.Join(bootErr, recoveryErr); err != nil {
+		return fmt.Errorf("configure service persistence: %w", err)
 	}
 
 	// The sibling osquery daemon (RFC-0156 R1/R3/R5/R6). No-op unless this

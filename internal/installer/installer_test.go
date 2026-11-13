@@ -10,6 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBuildSvcConfigEnablesPlatformRecoveryPolicies(t *testing.T) {
+	cfg := BuildSvcConfig(Options{})
+	assert.Equal(t, true, cfg.Option["RunAtLoad"])
+	assert.Equal(t, true, cfg.Option["KeepAlive"])
+	assert.Equal(t, "always", cfg.Option["Restart"])
+	assert.Equal(t, "restart", cfg.Option["OnFailure"])
+	assert.Equal(t, "60s", cfg.Option["OnFailureDelayDuration"])
+	assert.Equal(t, 86400, cfg.Option["OnFailureResetPeriod"])
+}
+
 // TestDetectDefaults_PopulatesSmartFields asserts that DetectDefaults always
 // returns a non-empty BinaryDir + CertsDir for the current GOOS and that the
 // Detected facts reflect the running process. The exact paths are platform-

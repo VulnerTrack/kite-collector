@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Keep managed agents supervised: unexpected agent-loop exits now terminate the process so the OS restarts it; Windows configures repeated failure recovery for new, upgraded and MSI services. CLI/Snap installs start the service while awaiting enrollment and return boot/recovery/start failures to automation. The PowerShell installer now defaults to an elevated, checksum-verified system service in Program Files; use `-NoService` for the previous manual binary-only behavior. Packaged systemd services retry without exhausting the start limit, and Snap restarts clean upgrade exits too. Install this release on endpoints to apply these fixes; the default inventory interval remains six hours.
 - Fix the inventory telemetry lint checks and avoid truncating legacy Windows telemetry span identifiers when an event carries more than 255 attributes. Dashboard render logs now keep table names in structured fields, and the Windows 7 dashboard opens through the native URL handler.
 - Export the complete persisted software inventory, interfaces and discovered machine metadata on every machine observation, including unchanged rescans. Software travels in batches of 200 packages without truncation; continuation records do not repeat lifecycle alerts or inflate aggregate host counts. This lets the engine retain discovery in CMDB and promote software and services into governed inventory.
 

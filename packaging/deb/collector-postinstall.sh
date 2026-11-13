@@ -2,10 +2,9 @@
 # postinst for the main kite-collector deb/rpm. The package ships the
 # systemd unit, so this hook makes systemd see it, enables it at boot,
 # bridges upgrades from the old /usr/local/bin layout, and picks up new
-# binaries. The unit is enabled but not started: an unenrolled agent has
-# nothing useful to do, and `kite-collector enroll` starts it once the host
-# is enrolled. This is the same end state `kite-collector install` reaches
-# on a packaged system, so apt/dnf alone is a complete service install.
+# binaries. Fresh installs start immediately so onboarding and collection
+# do not need a separate service-start command. Upgrades preserve an
+# explicitly stopped service; running services restart onto the new binary.
 #
 # Every systemd interaction is guarded on /run/systemd/system so installs
 # inside containers (no systemd as PID 1) and chroots succeed cleanly.
@@ -34,12 +33,15 @@ bridge_legacy_path() {
 bridge_legacy_path
 
 if [ -d /run/systemd/system ]; then
-    systemctl daemon-reload || true
-    systemctl enable kite-collector.service || true
+    systemctl daemon-reload
+    systemctl enable kite-collector.service
+    # Debian: configure with no previous version. RPM: first install = 1.
+    if { [ "${1:-}" = configure ] && [ -z "${2:-}" ]; } || [ "${1:-}" = 1 ]; then
+        systemctl start kite-collector.service
     # Upgrade over a running service: restart onto the new binary now
     # rather than waiting for the agent's own binary-change watcher.
-    if systemctl is-active --quiet kite-collector.service; then
-        systemctl restart kite-collector.service || true
+    elif systemctl is-active --quiet kite-collector.service; then
+        systemctl restart kite-collector.service
     fi
 fi
 

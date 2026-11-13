@@ -54,10 +54,9 @@ func (p *program) Start(_ service.Service) error {
 	p.done = make(chan struct{})
 	go func() {
 		defer close(p.done)
-		// runAgent's error is intentionally swallowed here: the service
-		// manager only cares about the process exit code, and unrecoverable
-		// errors will already have been logged by runAgent itself.
-		_ = runAgent(ctx, p.cfgFile, p.dbPath, "", p.certsDir, p.endpoint, p.dashboardAddr, p.verbose, true, false)
+		runManagedAgent(ctx, func(ctx context.Context) error {
+			return runAgent(ctx, p.cfgFile, p.dbPath, "", p.certsDir, p.endpoint, p.dashboardAddr, p.verbose, true, false)
+		}, os.Exit)
 	}()
 	// Zero-step upgrades: when a package manager swaps the binary on disk
 	// (brew upgrade, apt/pacman upgrade), drain the agent and exit cleanly
@@ -77,6 +76,18 @@ func (p *program) Start(_ service.Service) error {
 		os.Exit(0)
 	})
 	return nil
+}
+
+// A service that lost its agent must terminate so the OS can restart it.
+// Cancellation is a deliberate stop (including upgrades), not a failure.
+func runManagedAgent(ctx context.Context, run func(context.Context) error, exit func(int)) {
+	err := run(ctx)
+	if ctx.Err() != nil {
+		return
+	}
+	slog.Error("agent exited unexpectedly; requesting service-manager restart",
+		"code", string(LogCodeServiceAgentExited), "error", err)
+	exit(1)
 }
 
 func (p *program) Stop(_ service.Service) error {
@@ -206,7 +217,7 @@ What it does:
          approve the collector, and paste the code back — the code is
          single-use and expires in minutes, no durable secret is pasted
        - legacy token flow: pass --token pki_enroll_v1_... to skip sign-in
-  6. If enrollment succeeds (or certs are already present), starts the service
+  6. Starts the service, including while awaiting enrollment (unless --no-start)
 
 Optional osquery half (--with-osquery, macOS): registers the sibling
 "kite-osqueryd" daemon against an osqueryd this host already has — the pkg
@@ -513,6 +524,11 @@ func newServiceRunCmd() *cobra.Command {
 		Short:  "Run as a managed service (invoked by the OS service manager)",
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			// Repair existing/MSI Windows registrations before any filesystem
+			// setup can fail. Those paths may never have run the CLI installer.
+			if err := installer.ConfigureServiceRecovery(svcName); err != nil {
+				slog.Error("could not configure service recovery", "code", string(LogCodeServiceRecoveryFailed), "error", err)
+			}
 			if certsDir == "" {
 				certsDir = defaultCertsDir(userMode)
 			}
@@ -814,17 +830,17 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 		}
 	}
 
-	// Boot persistence is implicit on launchd (Install writes the plist
-	// into the system/user LaunchDaemons dir) but on systemd and Windows
-	// SCM the unit/service is registered "manual" by default. Enable
-	// here so a reboot brings the service back without operator action.
-	if enableErr := enableBootPersistence(a.userMode); enableErr != nil {
-		// Non-fatal: the service is registered and (about to be) running.
-		// Persistence is a recoverable miss — the operator can run the
-		// platform's enable command later.
+	// Attempt all activation steps, but never report a successful install
+	// when boot persistence or recovery could not be configured.
+	enableErr := enableBootPersistence(a.userMode)
+	if enableErr != nil {
 		_, _ = fmt.Fprintf(out, "  ✗  boot persistence: %v\n", enableErr)
 	} else {
 		_, _ = fmt.Fprintf(out, "  ✓  boot persistence enabled\n")
+	}
+	recoveryErr := installer.ConfigureServiceRecovery(svcName)
+	if recoveryErr != nil {
+		_, _ = fmt.Fprintf(out, "  ✗  service recovery: %v\n", recoveryErr)
 	}
 
 	// The sibling osquery daemon (RFC-0156 R1/R3/R5/R6). No-op unless this
@@ -841,6 +857,7 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	if bundleErr = installSiblingOsquery(opts.toInstallerOptions(), a.withOsquery, out, nil); bundleErr != nil {
 		_, _ = fmt.Fprintf(out, "  ✗  %v\n", bundleErr)
 	}
+	installErr := errors.Join(enableErr, recoveryErr, bundleErr)
 
 	// Inline enrollment so the operator does not have to chain a second
 	// command. We run it AFTER service registration so a failure here
@@ -849,37 +866,26 @@ func runInstall(cmd *cobra.Command, a installArgs) error {
 	// will explain the state either way.
 	enrolled := enrollDuringInstall(cmd, a)
 	if !enrolled && signInDuringInstallWanted(a, enrollmentPresent(a.certsDir), installSessionInteractive()) {
-		enrolled = signInDuringInstall(cmd, a)
+		signInDuringInstall(cmd, a)
 	}
 
-	// Auto-start when the service has something to do — i.e. enrollment
-	// just succeeded OR certs were already present from a prior install.
-	// Starting an unenrolled service produces nothing but auth-error logs,
-	// so we skip in that case and leave the post-install report to
-	// instruct the operator.
+	// Keep the service available for onboarding too. runAgent defers the
+	// initial scan until enrollment; requiring a manual start afterwards
+	// leaves new computers with an installed but idle collector.
 	if a.noStart {
-		return bundleErr
+		return installErr
 	}
-	st := installer.Probe(installer.Options{
-		UserMode:  a.userMode,
-		BinaryDir: filepath.Dir(dst),
-		CertsDir:  a.certsDir,
-	})
-	// wasRunning joins the start conditions: an upgrade over a running
-	// service must hand back a running service, even when the enrollment
-	// heuristics would otherwise stay quiet.
-	if !enrolled && !st.CertsEnrolled && !wasRunning {
-		// No certs → starting now is just noise. Stay quiet here; the
-		// post-install report tells the operator what to do next.
-		return bundleErr
-	}
-	outcome, startErr := controlInstalledService(svc, "start", a.userMode)
+	return errors.Join(installErr, startCollectorService(out, svc, a.userMode))
+}
+
+func startCollectorService(out io.Writer, svc serviceController, userMode bool) error {
+	outcome, startErr := controlInstalledService(svc, "start", userMode)
 	if startErr != nil {
 		_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v\n", startErr)
-		return bundleErr
+		return fmt.Errorf("start collector service: %w", startErr)
 	}
-	_, _ = fmt.Fprintf(out, "  ✓  service %q %s\n", cfg.Name, outcome)
-	return bundleErr
+	_, _ = fmt.Fprintf(out, "  ✓  service %q %s\n", svcName, outcome)
+	return nil
 }
 
 // runSnapInstall performs only the mutable setup that belongs inside a snap.
@@ -898,7 +904,7 @@ func runSnapInstall(cmd *cobra.Command, a installArgs) error {
 		if a.agentCode != "" {
 			_, _ = fmt.Fprintf(out, "  enroll agent_code=%s → %s\n", a.agentCode, certsDir)
 		}
-		_, _ = fmt.Fprintf(out, "  enable service %s after enrollment\n", installer.SnapServiceName)
+		_, _ = fmt.Fprintf(out, "  enable service %s (unless --no-start)\n", installer.SnapServiceName)
 		return nil
 	}
 
@@ -914,9 +920,10 @@ func runSnapInstall(cmd *cobra.Command, a installArgs) error {
 		enrolled = enrollmentPresent(certsDir)
 	}
 	started := false
-	if enrolled && !a.noStart {
-		if err := snapServiceOps(cmd.Context()).start(); err != nil {
-			_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v\n", err)
+	var startErr error
+	if !a.noStart {
+		if startErr = snapServiceOps(cmd.Context()).start(); startErr != nil {
+			_, _ = fmt.Fprintf(out, "  ✗  service start failed: %v\n", startErr)
 		} else {
 			started = true
 			_, _ = fmt.Fprintf(out, "  ✓  service %q enabled and started\n", installer.SnapServiceName)
@@ -924,7 +931,7 @@ func runSnapInstall(cmd *cobra.Command, a installArgs) error {
 	}
 
 	printSnapPostInstall(out, certsDir, enrolled, started)
-	return nil
+	return startErr
 }
 
 func enrollDuringInstall(cmd *cobra.Command, a installArgs) bool {
@@ -1170,12 +1177,17 @@ func logsHint(userMode bool) string {
 //
 // Missing platform tooling (systemctl absent on a non-systemd Linux,
 // sc.exe unavailable somehow) is returned as an error so the install
-// flow can report it without aborting — boot persistence is a recoverable
-// miss, not a corrupt install.
+// flow can attempt to start the collector but still return a failed install.
 func enableBootPersistence(userMode bool) error {
 	ctx := context.Background()
 	switch runtime.GOOS {
 	case "linux":
+		// These backends enable boot persistence as part of Install itself.
+		// Do not fail an otherwise valid install because systemctl is absent.
+		switch service.Platform() {
+		case "linux-upstart", "linux-openrc", "linux-rcs", "linux-procd", "unix-systemv":
+			return nil
+		}
 		args := []string{"enable", svcName + ".service"}
 		if userMode {
 			args = append([]string{"--user"}, args...)

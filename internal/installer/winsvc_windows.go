@@ -48,18 +48,14 @@ func SetMachineEnv(name, value string) error {
 // an already-registered service (R5) — the Windows counterpart of the Linux
 // unit's Restart=on-failure / RestartSec=5.
 //
-// kardianos/service's cross-platform abstraction has no notion of recovery
-// actions (its "Restart"/"KeepAlive" options are launchd/systemd concepts that
-// map to nothing on Windows), which is exactly why the MSI's <ServiceInstall>
-// never configured them either and why a crashed kite-osqueryd has, until now,
-// stayed dead until a manual restart or reboot. This is the one Windows-only
-// call that closes that gap; it must run *after* svc.Install() because it opens
-// the service by name.
+// Used for both collectors and osquery, including existing/MSI registrations
+// that did not receive kardianos/service's OnFailure options. This must run
+// after registration because it opens the service by name.
 //
 // SetRecoveryActionsOnNonCrashFailures is the non-obvious second half: by
-// default SCM only counts a *crash* (non-zero exit / unhandled exception) as a
-// failure. A daemon that exits 0 because it could not open its RocksDB
-// database would otherwise never trip the recovery policy at all.
+// default SCM only recovers when a process dies without reporting STOPPED.
+// This flag also covers a reported STOPPED with a non-zero status. A clean
+// operator-requested stop still does not trigger recovery.
 func ConfigureServiceRecovery(serviceName string) error {
 	m, err := mgr.Connect()
 	if err != nil {

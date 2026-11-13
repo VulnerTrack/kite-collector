@@ -106,7 +106,7 @@ Other ways to install:
 | Method | How |
 | ------ | --- |
 | GUI wizard | Double-click `kite-collector_windows_amd64_bin.exe`; it detects the double-click and opens the installer |
-| PowerShell | `irm https://get.kite-collector.dev/install.ps1 \| iex` |
+| PowerShell (Administrator; automatic service) | `irm https://get.kite-collector.dev/install.ps1 \| iex` |
 | PowerShell, binary only (no service) | `& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService` |
 | WinGet | `winget install VulnerTrack.KiteCollector` |
 | Scoop | `scoop bucket add vulnertrack https://github.com/VulnerTrack/homebrew-tap` then `scoop install kite-collector` |

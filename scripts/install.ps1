@@ -4,9 +4,10 @@
 # This script:
 #   1. Detects the system architecture
 #   2. Downloads the latest kite-collector binary from GitHub Releases directly
-#   3. Installs it to %LOCALAPPDATA%\kite-collector\
-#   4. Adds the install directory to the user PATH
-#   5. Optionally registers the Windows service when -Service is passed
+#   3. Verifies SHA256 against the published release checksums
+#   4. Installs to %ProgramFiles%\kite-collector\ and registers/starts the service
+#      (-NoService explicitly installs only a user binary in %LOCALAPPDATA%)
+#   5. Configures automatic startup and failure recovery
 #   6. Prints getting-started instructions
 #
 # -Osquery (RFC-0156) switches to the self-contained installer,
@@ -22,7 +23,7 @@
 # -Osquery must be run from an Administrator PowerShell.
 
 param(
-    [switch]$Service,
+    [switch]$Service = $true,
     [switch]$NoService,
     [switch]$NoPath,
     [switch]$Osquery
@@ -33,6 +34,11 @@ $ProgressPreference = "SilentlyContinue"
 
 $repo = "VulnerTrack/kite-collector"
 $installDir = "$env:LOCALAPPDATA\kite-collector"
+$installService = $Service -and -not $NoService
+if ($installService) {
+    # A LocalSystem service must not execute from a user-writable directory.
+    $installDir = Join-Path $env:ProgramFiles "kite-collector"
+}
 
 Write-Host ""
 Write-Host "  kite-collector installer" -ForegroundColor Cyan
@@ -47,19 +53,22 @@ if (-not [System.Environment]::Is64BitOperatingSystem) {
 $arch = "amd64"
 Write-Host "  Architecture: windows/$arch"
 
-# ---------------------------------------------------------------------------
-# Self-contained bundle path (-Osquery): one download, both services.
-# ---------------------------------------------------------------------------
-if ($Osquery) {
+if ($Osquery -and -not $installService) {
+    throw "-Osquery installs machine services and cannot be combined with -NoService or -Service:`$false."
+}
+if ($installService -or $Osquery) {
     $isAdmin = ([Security.Principal.WindowsPrincipal] `
         [Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     if (-not $isAdmin) {
-        Write-Host "  ERROR: -Osquery installs two machine services and must run from an" -ForegroundColor Red
-        Write-Host "         Administrator PowerShell." -ForegroundColor Red
-        exit 1
+        throw "Automatic service installation requires Administrator PowerShell. Use -NoService only for a manual, binary-only installation."
     }
+}
 
+# ---------------------------------------------------------------------------
+# Self-contained bundle path (-Osquery): one download, both services.
+# ---------------------------------------------------------------------------
+if ($Osquery) {
     $bundleAsset = "kite-collector-osquery_windows_${arch}.exe"
     $bundleUrl = "https://github.com/$repo/releases/latest/download/$bundleAsset"
     $bundlePath = Join-Path $env:TEMP $bundleAsset
@@ -121,17 +130,45 @@ if ($Osquery) {
 $assetName = "kite-collector_windows_${arch}_bin.exe"
 $downloadUrl = "https://github.com/$repo/releases/latest/download/$assetName"
 $binaryPath = "$installDir\kite-collector.exe"
-$tmpPath = "$binaryPath.download"
 
 Write-Host "  Downloading $assetName..."
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+$stagingDir = Join-Path $installDir (".install-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $stagingDir | Out-Null
+$tmpPath = Join-Path $stagingDir $assetName
 try {
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tmpPath -UseBasicParsing
-    Move-Item -Force -Path $tmpPath -Destination $binaryPath
-} catch {
-    Remove-Item -Force -ErrorAction SilentlyContinue $tmpPath
-    Write-Host "  ERROR: download failed from $downloadUrl" -ForegroundColor Red
-    throw
+    $checksums = (Invoke-WebRequest -Uri "https://github.com/$repo/releases/latest/download/checksums.txt" -UseBasicParsing).Content
+    $pattern = '^([a-fA-F0-9]{64})\s+\*?' + [regex]::Escape($assetName) + '$'
+    $expected = @($checksums -split '\r?\n' | ForEach-Object {
+        if ($_.Trim() -match $pattern) { $Matches[1].ToLowerInvariant() }
+    })
+    if ($expected.Count -ne 1) {
+        throw "Release checksums do not contain exactly one SHA256 for $assetName."
+    }
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpPath).Hash.ToLowerInvariant()
+    if ($actual -ne $expected[0]) {
+        throw "Checksum mismatch for $assetName; the installer was not executed."
+    }
+
+    if ($installService) {
+        # Run the verified staging copy so the native installer can stop the
+        # existing service before replacing its locked executable on upgrades.
+        Write-Host "  Installing the automatic Windows service..."
+        & $tmpPath install --binary-dir $installDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "Service installation failed (exit $LASTEXITCODE). Fix the reported error and rerun this installer."
+        }
+    } else {
+        Move-Item -Force -Path $tmpPath -Destination $binaryPath
+        Write-Host "  Binary-only installation requested; no automatic service was registered."
+    }
+    & $binaryPath version
+    if ($LASTEXITCODE -ne 0) {
+        throw "Installed binary verification failed (exit $LASTEXITCODE)."
+    }
+} finally {
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDir
 }
 
 # Add to PATH if not already present.
@@ -148,24 +185,8 @@ if (-not $NoPath) {
     }
 }
 
-# Verify installation.
 Write-Host ""
-Write-Host "  Installed:" -ForegroundColor Green
-& $binaryPath version
-Write-Host ""
-
-if ($Service -and -not $NoService) {
-    # Windows service registration uses SCM and requires Administrator rights.
-    Write-Host "  Registering kite-collector as a Windows service..."
-    try {
-        & $binaryPath install --binary-dir $installDir
-    } catch {
-        Write-Host "  WARNING: service registration failed: $_" -ForegroundColor Yellow
-        Write-Host "  You can retry later from Administrator PowerShell with: kite-collector install" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "  Skipping service registration. Use -Service from Administrator PowerShell to register it."
-}
+Write-Host "  Installed successfully: $binaryPath" -ForegroundColor Green
 Write-Host ""
 
 # Print getting-started instructions.
@@ -174,9 +195,13 @@ Write-Host ""
 Write-Host "    # One-time enrollment with your platform"
 Write-Host "    kite-collector enroll --agent-code <code> --token <token>"
 Write-Host ""
-Write-Host "    # Optional: register/start the continuous streaming service from Administrator PowerShell"
-Write-Host "    kite-collector install"
-Write-Host "    kite-collector service start"
+if (-not $installService) {
+    Write-Host "    # Enable automatic collection from Administrator PowerShell"
+    Write-Host "    kite-collector install"
+} else {
+    Write-Host "    # The service is running and starts automatically when Windows boots."
+    Write-Host "    # Enrollment is required before inventory can be sent to your organization."
+}
 Write-Host ""
 Write-Host "    # Check service status"
 Write-Host "    kite-collector service status"

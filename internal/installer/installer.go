@@ -269,10 +269,13 @@ func buildSvcConfig(opts Options) *service.Config {
 		Executable:  opts.BinaryPath(),
 		Arguments:   args,
 		Option: service.KeyValue{
-			"UserService": opts.UserMode,
-			"RunAtLoad":   true,
-			"KeepAlive":   true,
-			"Restart":     "always",
+			"UserService":            opts.UserMode,
+			"RunAtLoad":              true,
+			"KeepAlive":              true,
+			"Restart":                "always",
+			"OnFailure":              "restart",
+			"OnFailureDelayDuration": "60s",
+			"OnFailureResetPeriod":   86400,
 		},
 	}
 }

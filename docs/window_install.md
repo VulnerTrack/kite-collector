@@ -11,14 +11,15 @@ the same install command works identically on Linux (systemd) and macOS
 
 ## TL;DR — one-liner installer
 
-Open PowerShell and run:
+Open PowerShell **as Administrator** and run:
 
 ```powershell
 irm https://get.kite-collector.dev/install.ps1 | iex
 ```
 
-This is self-contained: it downloads the binary, adds it to your PATH, and
-registers a **per-user** Windows service. No elevation required.
+This downloads and verifies the binary, installs it under Program Files, and
+registers and starts a **LocalSystem** Windows service. It starts at boot even
+when nobody signs in. Enrollment is still required to send inventory.
 
 For the fastest binary-only install, skip service registration:
 
@@ -29,9 +30,8 @@ For the fastest binary-only install, skip service registration:
 After it finishes:
 
 ```powershell
-kite-collector install --agent-code <code>   # sign in with Vulnertrack in the browser
-kite-collector service start --user
-kite-collector service status --user
+kite-collector enroll --agent-code <code>   # sign in with Vulnertrack in the browser
+kite-collector service status
 ```
 
 ## What the installer does
@@ -42,28 +42,28 @@ kite-collector service status --user
 2. Downloads the latest `kite-collector_windows_amd64_bin.exe` asset directly
    from the GitHub Releases `latest/download` URL, avoiding a separate API
    request.
-3. Downloads it to `%LOCALAPPDATA%\kite-collector\kite-collector.exe`.
-4. Appends that directory to the **user** `Path` environment variable.
-5. Runs `kite-collector.exe install --user --binary-dir %LOCALAPPDATA%\kite-collector`
-   which registers the per-user `kite-collector` Windows service pointing at
-   the downloaded executable.
+3. Verifies its SHA256 against `checksums.txt` before executing it.
+4. Runs the native installer from a staging directory under Program Files,
+   so an existing service can be stopped before its executable is replaced.
+5. Configures PATH, automatic boot startup and failure recovery, then starts
+   the service. A failure in these steps returns an error to scripted callers.
 
-## Choosing system vs. user install
+## Automatic service or manual binary
 
 | Scope | Privilege | Service runs as | Best for |
 | --- | --- | --- | --- |
-| **User** (default in `install.ps1`) | Standard user | Your logged-in user | Workstations, laptops, dev machines |
-| **System** | Administrator | `LocalSystem` | Servers, shared endpoints, fleet-managed boxes |
+| **System service** (default) | Administrator | `LocalSystem` | Automatic collection on workstations and servers |
+| **Binary only** (`-NoService`) | Standard user | No service | Manual scans |
 
-### User install (no elevation needed)
+### Binary only (no elevation needed)
 
 ```powershell
-kite-collector install --user
+& ([scriptblock]::Create((irm https://get.kite-collector.dev/install.ps1))) -NoService
 ```
 
-The service is registered against your user account and is visible only when
-you are logged in. It is the right choice if the kite-collector binary lives
-under `%LOCALAPPDATA%`.
+The binary lives under `%LOCALAPPDATA%\kite-collector`. This mode does not
+collect automatically. Windows service registration requires Administrator
+rights; `--user` does not create an unprivileged Windows service.
 
 ### System install (Administrator)
 
@@ -100,8 +100,6 @@ run:
 # System install
 kite-collector.exe install --binary-dir "C:\Program Files\kite-collector"
 
-# Or user install
-kite-collector.exe install --user --binary-dir "$env:LOCALAPPDATA\kite-collector"
 ```
 
 ## Install flags
@@ -110,7 +108,7 @@ kite-collector.exe install --user --binary-dir "$env:LOCALAPPDATA\kite-collector
 kite-collector install [flags]
 
 Flags:
-      --user                install as a per-user service (no Administrator needed)
+      --no-start            explicitly leave the service stopped after installation
       --certs-dir string    certificate store path (default: OS-appropriate)
       --binary-dir string   directory to install the binary (default: OS-appropriate)
       --config string       path to configuration file to pass to the service
@@ -126,13 +124,13 @@ that will be registered with SCM.
 
 ## Managing the service
 
-All control commands work in both modes; pass `--user` for per-user services.
+Use an Administrator PowerShell to change the service state.
 
 ```powershell
-kite-collector service start    --user   # start the service
-kite-collector service stop     --user   # stop the service
-kite-collector service restart  --user   # stop + start
-kite-collector service status   --user   # prints: running | stopped | not installed | unknown
+kite-collector service start      # start the service
+kite-collector service stop       # explicitly stop the service
+kite-collector service restart    # stop + start
+kite-collector service status     # running | stopped | not installed | unknown
 ```
 
 You can also use Windows-native tools:
@@ -169,11 +167,44 @@ Verify connectivity:
 kite-collector check
 ```
 
-Then start the service:
+The installer starts the service automatically. Verify its status:
 
 ```powershell
-kite-collector service start --user
+kite-collector service status
 ```
+
+## Recovery and upgrading existing computers
+
+Install the updated release on **each computer**, or distribute it through
+your existing endpoint management system. Deploying the VulnerTrack frontend
+or backend does not update installed Kite agents. Re-run the PowerShell
+installer as Administrator, or use the updated MSI. Preserve the existing
+certificate directory to keep enrollment.
+
+Windows retries a failed service after 60 seconds, again after 60 seconds,
+and after 120 seconds for subsequent failures. If the agent loop exits
+unexpectedly, the process now exits with an error so SCM can restart it.
+The service also reapplies recovery settings on startup for older and MSI
+registrations. Inspect the installed settings with:
+
+```powershell
+Get-Service kite-collector
+sc.exe qc kite-collector
+sc.exe qfailure kite-collector
+sc.exe qfailureflag kite-collector
+```
+
+Expect `AUTO_START`, restart actions and the failure-actions flag enabled.
+Run a supervised restart/reboot check on a pilot computer before rolling out
+to the fleet. An explicit stop or uninstall remains respected. A powered-off
+or suspended computer cannot run scans; execution resumes when it is available.
+Enrollment and valid configuration are still required. Recovery keeps retrying
+startup errors, but cannot repair invalid credentials or a full disk itself.
+
+Continuous service operation does not mean a continuous full inventory scan:
+the default inventory interval is still **6 hours**, with an initial scan on
+startup when enrolled. Set `streaming.interval` in the installed configuration
+if a different interval is needed.
 
 ## Viewing logs
 
@@ -194,9 +225,7 @@ emits debug-level structured logs.
 
 ```powershell
 # Stops the service (if running) and removes the SCM registration.
-# Match the mode the service was installed with.
-kite-collector uninstall --user      # per-user service
-kite-collector uninstall              # system service (requires Administrator)
+kite-collector uninstall              # requires Administrator
 ```
 
 The installed binary and certificate store are intentionally **left in
@@ -211,13 +240,13 @@ Remove-Item -Recurse -Force "$env:ProgramData\kite-collector"
 
 ## File locations
 
-| Item | User install | System install |
+| Item | Binary-only install | System service |
 | --- | --- | --- |
 | Binary | `%LOCALAPPDATA%\kite-collector\kite-collector.exe` | `%ProgramFiles%\kite-collector\kite-collector.exe` |
 | Certificate store | `%LOCALAPPDATA%\kite-collector\data\` | `%ProgramData%\kite-collector\` |
-| Service name (SCM) | `kite-collector` | `kite-collector` |
-| Service display name | Kite Collector | Kite Collector |
-| Logs | Windows Event Log → Application → kite-collector | Same |
+| Service name (SCM) | None | `kite-collector` |
+| Service display name | None | Kite Collector |
+| Logs | CLI output | Windows Event Log → Application → kite-collector |
 
 ## Bundled osquery MSI (`kite-collector-osquery`)
 

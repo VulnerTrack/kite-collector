@@ -2,7 +2,10 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -11,6 +14,52 @@ import (
 
 	"github.com/vulnertrack/kite-collector/internal/installer"
 )
+
+func fakeSnapctl(t *testing.T, body string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("snapctl is Linux-only")
+	}
+	binDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "snapctl"), []byte("#!/bin/sh\n"+body), 0o700))
+	t.Setenv("PATH", binDir)
+	t.Setenv("SNAP", "/snap/kite-collector/42")
+	t.Setenv("SNAP_COMMON", filepath.Join(t.TempDir(), "common"))
+}
+
+func TestRunSnapInstallStartsServiceBeforeEnrollment(t *testing.T) {
+	fakeSnapctl(t, "printf '%s' \"$*\" > \"$KITE_TEST_SNAP_CALL\"\n")
+	callFile := filepath.Join(t.TempDir(), "call")
+	t.Setenv("KITE_TEST_SNAP_CALL", callFile)
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+	cmd.SetContext(context.Background())
+	require.NoError(t, runSnapInstall(cmd, installArgs{}))
+	call, err := os.ReadFile(callFile)
+	require.NoError(t, err)
+	assert.Equal(t, "start --enable "+installer.SnapServiceName, string(call))
+}
+
+func TestRunSnapInstallReportsStartFailure(t *testing.T) {
+	fakeSnapctl(t, "echo 'service unavailable' >&2\nexit 1\n")
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+	cmd.SetContext(context.Background())
+	err := runSnapInstall(cmd, installArgs{})
+	require.ErrorContains(t, err, "service unavailable")
+	assert.Contains(t, out.String(), "service start failed")
+}
+
+func TestRunSnapInstallHonorsExplicitNoStart(t *testing.T) {
+	fakeSnapctl(t, "exit 1\n")
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+	require.NoError(t, runSnapInstall(cmd, installArgs{noStart: true}))
+	assert.NotContains(t, out.String(), "service start failed")
+}
 
 func TestRunInstallInsideSnapDoesNotCopyToHost(t *testing.T) {
 	commonDir := filepath.Join(t.TempDir(), "common")
