@@ -205,17 +205,35 @@ type NetworkInterface struct {
 // multiple locations distinct rows, so a filesystem scan is faithful
 // row-for-row rather than collapsed to a unique set.
 type InstalledSoftware struct {
-	SoftwareName   string    `json:"software_name"`
-	Vendor         string    `json:"vendor"`
-	Version        string    `json:"version"`
-	CPE23          string    `json:"cpe23"`
-	PackageManager string    `json:"package_manager"`
-	Architecture   string    `json:"architecture,omitempty"`
-	Description    string    `json:"description,omitempty"`
-	License        string    `json:"license,omitempty"`
-	Homepage       string    `json:"homepage,omitempty"`
-	InstallPath    string    `json:"install_path,omitempty"`
-	ID             uuid.UUID `json:"id"`
-	MachineID      uuid.UUID `json:"machine_id"`
-	Depth          int       `json:"depth,omitempty"`
+	SoftwareName   string                `json:"software_name"`
+	Vendor         string                `json:"vendor"`
+	Version        string                `json:"version"`
+	CPE23          string                `json:"cpe23"`
+	PackageManager string                `json:"package_manager"`
+	Architecture   string                `json:"architecture,omitempty"`
+	Description    string                `json:"description,omitempty"`
+	License        string                `json:"license,omitempty"`
+	Homepage       string                `json:"homepage,omitempty"`
+	InstallPath    string                `json:"install_path,omitempty"`
+	SourcePackage  string                `json:"source_package,omitempty"`
+	SourceVersion  string                `json:"source_version,omitempty"`
+	PackageOwner   *SoftwarePackageOwner `json:"package_owner,omitempty"`
+	ID             uuid.UUID             `json:"id"`
+	MachineID      uuid.UUID             `json:"machine_id"`
+	Depth          int                   `json:"depth,omitempty"`
+}
+
+// SoftwarePackageOwner is an installed native package owning a module file.
+// Its version is independent of the module's $VERSION. Evidence names the
+// local ownership query; neither the namespace nor a remote release implies it.
+type SoftwarePackageOwner struct {
+	Name           string `json:"name"`
+	Version        string `json:"version"`
+	PackageManager string `json:"package_manager"`
+	Architecture   string `json:"architecture,omitempty"`
+	SourcePackage  string `json:"source_package,omitempty"`
+	SourceVersion  string `json:"source_version,omitempty"`
+	Homepage       string `json:"homepage,omitempty"`
+	File           string `json:"file"`
+	Evidence       string `json:"evidence"`
 }

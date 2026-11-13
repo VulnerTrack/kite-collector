@@ -16,6 +16,10 @@ import (
 // Dpkg collects installed packages using dpkg-query on Debian-based systems.
 type Dpkg struct{}
 
+// Keep ${Package}: switching to binary:Package would change inventory keys for
+// multiarch packages. source:Version can differ from the binary's version.
+const dpkgFormat = "${Package}\t${Version}\t${Architecture}\t${source:Package}\t${source:Version}\t${Homepage}\t${binary:Summary}\t${db:Status-Status}\n"
+
 // NewDpkg returns a new Dpkg collector.
 func NewDpkg() *Dpkg { return &Dpkg{} }
 
@@ -31,14 +35,14 @@ func (d *Dpkg) Available() bool {
 // Collect runs dpkg-query and returns parsed results. Output is capped at
 // 64 MB and the command is killed after 60 seconds.
 func (d *Dpkg) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "dpkg-query", "-W", "-f=${Package}\t${Version}\t${Architecture}\n")
+	out, err := runWithLimits(ctx, "dpkg-query", "-W", "-f="+dpkgFormat)
 	if err != nil {
 		return nil, fmt.Errorf("dpkg-query: %w", err)
 	}
 	return ParseDpkgOutput(string(out)), nil
 }
 
-// ParseDpkgOutput parses the raw output of dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n'.
+// ParseDpkgOutput accepts both the legacy three-column output and dpkgFormat.
 func ParseDpkgOutput(raw string) *Result {
 	result := &Result{}
 	scanner := bufio.NewScanner(strings.NewReader(raw))
@@ -51,7 +55,7 @@ func ParseDpkgOutput(raw string) *Result {
 			continue
 		}
 
-		parts := strings.SplitN(line, "\t", 3)
+		parts := strings.Split(line, "\t")
 		if len(parts) < 2 || parts[0] == "" {
 			result.Errs = append(result.Errs, CollectError{
 				Collector: "dpkg",
@@ -63,8 +67,22 @@ func ParseDpkgOutput(raw string) *Result {
 		}
 
 		arch := ""
-		if len(parts) == 3 {
+		if len(parts) >= 3 {
 			arch = parts[2]
+		}
+		// dpkg -W also lists removed packages with residual configuration.
+		if len(parts) >= 8 && parts[len(parts)-1] != "installed" {
+			continue
+		}
+		field := func(i int) string {
+			if i < len(parts) {
+				return parts[i]
+			}
+			return ""
+		}
+		description := field(6)
+		if len(parts) >= 8 {
+			description = strings.Join(parts[6:len(parts)-1], "\t")
 		}
 
 		result.Items = append(result.Items, model.InstalledSoftware{
@@ -73,8 +91,15 @@ func ParseDpkgOutput(raw string) *Result {
 			Version:        parts[1],
 			PackageManager: "dpkg",
 			Architecture:   arch,
+			SourcePackage:  field(3),
+			SourceVersion:  field(4),
+			Homepage:       field(5),
+			Description:    description,
 			CPE23:          BuildCPE23WithArch("", parts[0], parts[1], arch),
 		})
+	}
+	if err := scanner.Err(); err != nil {
+		result.Errs = append(result.Errs, CollectError{Collector: "dpkg", Line: lineNum, Err: err})
 	}
 
 	result.Sort()

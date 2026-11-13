@@ -22,7 +22,11 @@ func TestInventoryEventsCarryEveryPackageOnUnchangedRescan(t *testing.T) {
 	event.FromMachine(machine)
 	packages := make([]model.InstalledSoftware, 914)
 	for i := range packages {
-		packages[i] = model.InstalledSoftware{SoftwareName: fmt.Sprintf("pkg-%d", i), Version: "1", InstallPath: "/usr/lib"}
+		packages[i] = model.InstalledSoftware{
+			SoftwareName: fmt.Sprintf("pkg-%d", i), Version: "1", InstallPath: "/usr/lib",
+			SourcePackage: "upstream", SourceVersion: "2-1",
+			PackageOwner: &model.SoftwarePackageOwner{Name: "owner", Version: "3-1", PackageManager: "dpkg", File: "/usr/lib/module.pm", Evidence: "dpkg-query-search"},
+		}
 	}
 	chunks, err := inventoryEvents(machine, event, packages)
 	require.NoError(t, err)
@@ -47,6 +51,9 @@ func TestInventoryEventsCarryEveryPackageOnUnchangedRescan(t *testing.T) {
 			require.False(t, seen[pkg.SoftwareName])
 			seen[pkg.SoftwareName] = true
 			require.Equal(t, "/usr/lib", pkg.InstallPath)
+			require.Equal(t, "upstream", pkg.SourcePackage)
+			require.Equal(t, "2-1", pkg.SourceVersion)
+			require.Equal(t, packages[0].PackageOwner, pkg.PackageOwner)
 		}
 	}
 	require.Len(t, seen, len(packages))

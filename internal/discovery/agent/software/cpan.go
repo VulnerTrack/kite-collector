@@ -29,7 +29,9 @@ func (c *CPAN) Collect(ctx context.Context) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cpan -l: %w", err)
 	}
-	return ParseCPANOutput(string(out)), nil
+	result := ParseCPANOutput(string(out))
+	enrichCPANOwnership(ctx, result)
+	return result, nil
 }
 
 // cpanModuleName matches a Perl module name: one or more identifier

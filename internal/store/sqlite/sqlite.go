@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -413,7 +414,7 @@ func replaceSoftwareTx(ctx context.Context, tx *sql.Tx, m model.Machine) error {
 		return fmt.Errorf("clear software for %s: %w", machineID, err)
 	}
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("prepare insert software: %w", err)
 	}
@@ -428,6 +429,7 @@ func replaceSoftwareTx(ctx context.Context, tx *sql.Tx, m model.Machine) error {
 			rowID.String(), machineID, sw.SoftwareName, sw.Vendor, sw.Version,
 			nullStr(sw.CPE23), nullStr(sw.PackageManager), nullStr(sw.Architecture),
 			sw.Description, sw.License, sw.Homepage, sw.InstallPath, sw.Depth,
+			sw.SourcePackage, sw.SourceVersion, softwareOwnerJSON(sw.PackageOwner),
 		); err != nil {
 			return fmt.Errorf("insert software %s for %s: %w", sw.SoftwareName, machineID, err)
 		}
@@ -1238,7 +1240,13 @@ func (s *SQLiteStore) MarkScanCancelRequested(ctx context.Context, id uuid.UUID,
 // Installed Software
 // ---------------------------------------------------------------------------
 
-const softwareColumns = `id, machine_id, software_name, vendor, version, cpe23, package_manager, architecture, description, license, homepage, install_path, depth`
+const softwareColumns = `id, machine_id, software_name, vendor, version, cpe23, package_manager, architecture, description, license, homepage, install_path, depth, source_package, source_version, package_owner`
+
+// The owner struct contains only JSON-compatible scalar fields.
+func softwareOwnerJSON(owner *model.SoftwarePackageOwner) string {
+	data, _ := json.Marshal(owner)
+	return string(data)
+}
 
 // scanSoftware reads a single row from the result set into an InstalledSoftware.
 func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSoftware, error) {
@@ -1250,6 +1258,7 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 		cpe23        sql.NullString
 		pkgMgr       sql.NullString
 		arch         sql.NullString
+		ownerJSON    string
 	)
 	err := row.Scan(
 		&idStr,
@@ -1265,6 +1274,9 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 		&s.Homepage,
 		&s.InstallPath,
 		&s.Depth,
+		&s.SourcePackage,
+		&s.SourceVersion,
+		&ownerJSON,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan software: %w", err)
@@ -1282,6 +1294,9 @@ func scanSoftware(row interface{ Scan(dest ...any) error }) (*model.InstalledSof
 	s.CPE23 = cpe23.String
 	s.PackageManager = pkgMgr.String
 	s.Architecture = arch.String
+	if err := json.Unmarshal([]byte(ownerJSON), &s.PackageOwner); err != nil {
+		return nil, fmt.Errorf("decode software package owner: %w", err)
+	}
 
 	return &s, nil
 }
@@ -1310,7 +1325,7 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, machineID uuid.UUID, s
 		}
 
 		stmt, err := tx.PrepareContext(ctx,
-			`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			`INSERT INTO installed_software (`+softwareColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
 			return fmt.Errorf("prepare insert software: %w", err)
 		}
@@ -1332,6 +1347,9 @@ func (s *SQLiteStore) UpsertSoftware(ctx context.Context, machineID uuid.UUID, s
 				software[i].Homepage,    // NOT NULL DEFAULT ''
 				software[i].InstallPath, // NOT NULL DEFAULT ''
 				software[i].Depth,       // NOT NULL DEFAULT 0
+				software[i].SourcePackage,
+				software[i].SourceVersion,
+				softwareOwnerJSON(software[i].PackageOwner),
 			)
 			if err != nil {
 				return fmt.Errorf("insert software %s: %w", software[i].SoftwareName, err)
