@@ -1,0 +1,48 @@
+Package: kite-collector
+Architecture: arm64
+Version: 0.66.0
+Priority: optional
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 35211
+Conflicts: kite-collector-osquery
+Filename: pool/main/k/kite-collector/kite-collector_0.66.0_linux_arm64.deb
+Size: 12460746
+MD5sum: db307deb5a06173fafeda26b63fae558
+SHA1: 0b70515a3f38090df8aca393a4a9ca72ad6f8dc3
+SHA256: 5fc940a63ce6895a12ccb5f58568ab9ee262dbc64db4c341f68bba109255d7ea
+SHA512: 14b4822a949f4927c9c9c71caa21fa8c56c588033369fb74fc63f6d69c556ea31bb4a8ddb8e94d700a3010f078303b5844ffcf739bbe64662084dec46739ff2e
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
+
+Package: kite-collector
+Architecture: arm64
+Version: 0.66.2
+Priority: optional
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 35211
+Conflicts: kite-collector-osquery
+Filename: pool/main/k/kite-collector/kite-collector_0.66.2_linux_arm64.deb
+Size: 12469070
+MD5sum: 107d27978d5737000b19057abb45fc3d
+SHA1: 1ac57efb887bce4f725e6da61937e6e6a96a959e
+SHA256: 2ec6f229555381eca092b0ba7da02548f264b5611fe930624ab1df0c99fc82ec
+SHA512: cb9e97ba9bd59c915049919907f9d54a7784691f0f34eaa2d861af1aff7ecd5710ba6447c30a1a753a5c95eb90e4efb7af90549b6ca35891bc5930dc9b4b4993
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
+
+Package: kite-collector
+Architecture: arm64
+Version: 0.66.3
+Priority: optional
+Maintainer: VulnerTrack <hello@vulnertrack.dev>
+Installed-Size: 35211
+Conflicts: kite-collector-osquery
+Filename: pool/main/k/kite-collector/kite-collector_0.66.3_linux_arm64.deb
+Size: 12477018
+MD5sum: 60e2ac5ef931bfd839168eb32a24b2aa
+SHA1: be45a5e442535741ccd4a4e462e1c80832c8665d
+SHA256: e00213a9e33bd0dd7cb2c0c8d969ea04b706b69109b9f39b60e40a69703bc50e
+SHA512: a88f278ec5f1278135319f3a4a15bd99d0b0bf968f6aa7b9d59bdefdd0caa2560b1dbb703b14174b2674ea8bd94c6447a2a25699b1f8d532d1654175795af144
+Homepage: https://github.com/VulnerTrack/kite-collector
+Description: Cybersecurity machine discovery, configuration audit, and posture analysis agent.
+
