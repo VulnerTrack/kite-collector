@@ -16,6 +16,8 @@ import (
 // RPM collects installed packages using rpm on Red Hat-based systems.
 type RPM struct{}
 
+const rpmFormat = "%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\t%{ARCH}\t%{SOURCERPM}\t%{URL}\t%{LICENSE}\t%{SUMMARY}\n"
+
 // NewRPM returns a new RPM collector.
 func NewRPM() *RPM { return &RPM{} }
 
@@ -31,14 +33,14 @@ func (r *RPM) Available() bool {
 // Collect runs rpm -qa and returns parsed results. Output is capped at
 // 64 MB and the command is killed after 60 seconds.
 func (r *RPM) Collect(ctx context.Context) (*Result, error) {
-	out, err := runWithLimits(ctx, "rpm", "-qa", "--queryformat", "%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\t%{ARCH}\n")
+	out, err := runWithLimits(ctx, "rpm", "-qa", "--queryformat", rpmFormat)
 	if err != nil {
 		return nil, fmt.Errorf("rpm -qa: %w", err)
 	}
 	return ParseRPMOutput(string(out)), nil
 }
 
-// ParseRPMOutput parses the raw output of rpm -qa --queryformat '%{NAME}\t%{VERSION}-%{RELEASE}\t%{VENDOR}\t%{ARCH}\n'.
+// ParseRPMOutput parses rpmFormat and the legacy two/four-column output.
 func ParseRPMOutput(raw string) *Result {
 	result := &Result{}
 	scanner := bufio.NewScanner(strings.NewReader(raw))
@@ -51,7 +53,7 @@ func ParseRPMOutput(raw string) *Result {
 			continue
 		}
 
-		parts := strings.SplitN(line, "\t", 4)
+		parts := strings.SplitN(line, "\t", 8)
 		if len(parts) < 2 || parts[0] == "" {
 			result.Errs = append(result.Errs, CollectError{
 				Collector: "rpm",
@@ -78,7 +80,7 @@ func ParseRPMOutput(raw string) *Result {
 			}
 		}
 
-		result.Items = append(result.Items, model.InstalledSoftware{
+		item := model.InstalledSoftware{
 			ID:             uuid.Must(uuid.NewV7()),
 			SoftwareName:   parts[0],
 			Version:        parts[1],
@@ -86,10 +88,49 @@ func ParseRPMOutput(raw string) *Result {
 			PackageManager: "rpm",
 			Architecture:   arch,
 			CPE23:          BuildCPE23WithArch(vendor, parts[0], parts[1], arch),
-		})
+		}
+		if len(parts) >= 8 {
+			item.SourcePackage, item.SourceVersion = rpmSource(parts[4])
+			item.Homepage, item.License, item.Description = rpmValue(parts[5]), rpmValue(parts[6]), rpmValue(parts[7])
+		}
+		result.Items = append(result.Items, item)
 	}
 
 	return result
+}
+
+func rpmValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "(none)" {
+		return ""
+	}
+	return value
+}
+
+// The source header names the source's own version/release, which may differ
+// from a subpackage. RPM VERSION and RELEASE cannot contain a dash.
+func rpmSource(filename string) (string, string) {
+	var nvr string
+	switch {
+	case strings.HasSuffix(filename, ".src.rpm"):
+		nvr = strings.TrimSuffix(filename, ".src.rpm")
+	case strings.HasSuffix(filename, ".nosrc.rpm"):
+		nvr = strings.TrimSuffix(filename, ".nosrc.rpm")
+	default:
+		return "", ""
+	}
+	if strings.ContainsAny(nvr, "/\\ \t\r\n") {
+		return "", ""
+	}
+	release := strings.LastIndexByte(nvr, '-')
+	if release <= 0 || release == len(nvr)-1 {
+		return "", ""
+	}
+	version := strings.LastIndexByte(nvr[:release], '-')
+	if version <= 0 || version == release-1 {
+		return "", ""
+	}
+	return nvr[:version], nvr[version+1:]
 }
 
 // Compile-time interface check.

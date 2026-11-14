@@ -57,7 +57,7 @@ var collectorExecCases = []struct {
 musl-1.2.4-r2 x86_64 {musl} (MIT) [installed]
 EOF
 `,
-		want: []wantItem{{name: "musl", vendor: "musl", version: "1.2.4-r2", arch: "x86_64"}},
+		want: []wantItem{{name: "musl", version: "1.2.4-r2", arch: "x86_64"}},
 	},
 	{
 		binary: "bun",

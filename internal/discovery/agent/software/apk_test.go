@@ -18,14 +18,16 @@ func TestParseAPKOutput_ValidLines(t *testing.T) {
 	require.Len(t, result.Items, 2)
 	assert.Equal(t, "curl", result.Items[0].SoftwareName)
 	assert.Equal(t, "8.7.1-r0", result.Items[0].Version)
-	assert.Equal(t, "curl", result.Items[0].Vendor)
+	assert.Empty(t, result.Items[0].Vendor)
+	assert.Equal(t, "curl", result.Items[0].SourcePackage)
+	assert.Equal(t, "8.7.1-r0", result.Items[0].SourceVersion)
 	assert.Equal(t, "x86_64", result.Items[0].Architecture)
 	assert.Equal(t, "apk", result.Items[0].PackageManager)
 	assert.NotEmpty(t, result.Items[0].CPE23)
 
 	assert.Equal(t, "busybox", result.Items[1].SoftwareName)
 	assert.Equal(t, "1.36.1-r29", result.Items[1].Version)
-	assert.Equal(t, "busybox", result.Items[1].Vendor)
+	assert.Empty(t, result.Items[1].Vendor)
 	assert.False(t, result.HasErrors())
 }
 
@@ -51,7 +53,8 @@ func TestParseAPKOutput_PackageWithHyphenatedName(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	assert.Equal(t, "alpine-base", result.Items[0].SoftwareName)
 	assert.Equal(t, "3.20.0-r0", result.Items[0].Version)
-	assert.Equal(t, "alpine-base", result.Items[0].Vendor)
+	assert.Equal(t, "alpine-base", result.Items[0].SourcePackage)
+	assert.Empty(t, result.Items[0].Vendor)
 }
 
 func TestParseAPKOutput_NoOrigin(t *testing.T) {
