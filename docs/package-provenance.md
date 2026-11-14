@@ -13,9 +13,20 @@ and `dpkg-query-search` evidence. The module name, version and CPE remain intact
 
 File lookups do not load the inspected modules or evaluate their version code.
 Queries use batches of at most 100 modules, with a 60-second deadline for the
-whole optional enrichment. Shadowed module copies, ambiguous owners, interpreter wrappers,
-missing commands and unowned files leave ownership unknown without discarding
-the module. This first ownership adapter supports Debian/Ubuntu; it does not
+whole optional enrichment. Module paths are canonicalized before `dpkg-query -S`
+so version-directory symlinks such as `/usr/share/perl/5.38` resolve to the path
+registered by dpkg. Repeated aliases for one file are deduplicated. When there
+are distinct module copies, every file must have an installed owner with the
+same exact source package and source version (or the same binary package and
+version when source metadata is absent). This covers Perl's matching `perl-base`
+and `perl-modules` copies without mixing versions from genuinely shadowed modules.
+The module's own version is never replaced with its owner's version.
+
+At most 16 distinct paths per module are accepted; overflow, conflicting or
+unowned copies, ambiguous owners, interpreter wrappers and missing commands
+leave ownership unknown without discarding the module. File ownership queries
+remain bounded to 100 paths per command under the shared 60-second deadline.
+This first ownership adapter supports Debian/Ubuntu; it does not
 infer CPAN distributions or owners for other operating systems.
 
 The additive SQLite migration runs automatically when Kite opens its database.

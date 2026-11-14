@@ -2,6 +2,7 @@ package software
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +26,7 @@ func TestDpkgSourceVersionAndInstalledStatus(t *testing.T) {
 }
 
 func TestCPANOwnershipUsesInstalledNativeVersionAndPreservesModules(t *testing.T) {
-	fakeToolOnPath(t, "perl", `printf '%s' '{"Git::I18N":"/usr/share/perl5/Git/I18N.pm","Private::Thing":"/opt/perl/Private/Thing.pm","Shared::File":"/usr/share/perl5/Shared/File.pm"}'`)
+	fakeToolOnPath(t, "perl", `printf '%s' '{"Git::I18N":["/usr/share/perl5/Git/I18N.pm"],"Private::Thing":["/opt/perl/Private/Thing.pm"],"Shared::File":["/usr/share/perl5/Shared/File.pm"]}'`)
 	fakeToolOnPath(t, "dpkg-query", `case "$1" in
 -W) printf 'git\t1:2.43.0-1ubuntu7\tamd64\tgit\t1:2.43.0-1ubuntu7\thttps://git-scm.com\tGit\tinstalled\n' ;;
 -S) printf 'git: /usr/share/perl5/Git/I18N.pm\nfirst, second: /usr/share/perl5/Shared/File.pm\n'; exit 1 ;;
@@ -77,13 +78,21 @@ func TestPerlFileLookupDoesNotExecuteModule(t *testing.T) {
 	out, err := runWithLimits(context.Background(), perl, "-e", perlModulePaths, "--", "OwnershipFixture")
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "OwnershipFixture.pm")
-	// A shadowed copy might have another module version or native owner.
+	// Distinct copies stay visible so all native owners must be checked.
 	other := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(other, "OwnershipFixture.pm"), []byte("die 'shadowed module';\n"), 0o600))
 	t.Setenv("PERL5LIB", dir+string(os.PathListSeparator)+other)
 	out, err = runWithLimits(context.Background(), perl, "-e", perlModulePaths, "--", "OwnershipFixture")
 	require.NoError(t, err)
-	assert.JSONEq(t, "{}", string(out))
+	var paths map[string][]string
+	require.NoError(t, json.Unmarshal(out, &paths))
+	dir, err = filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	other, err = filepath.EvalSymlinks(other)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{
+		filepath.Join(dir, "OwnershipFixture.pm"), filepath.Join(other, "OwnershipFixture.pm"),
+	}, paths["OwnershipFixture"])
 }
 
 func TestCPANInterpreterRequiresKnownShebang(t *testing.T) {

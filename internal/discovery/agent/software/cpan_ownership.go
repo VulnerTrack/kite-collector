@@ -8,17 +8,21 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/vulnertrack/kite-collector/internal/model"
 )
 
-const ownershipBatch = 100
+const (
+	ownershipBatch = 100
+	maxModulePaths = 16
+)
 
 // Only locate files; never require installed modules or evaluate their VERSION
 // assignments. Use the same interpreter as cpan so another Perl's @INC cannot
 // supply an unrelated package owner.
-const perlModulePaths = `use JSON::PP; my %paths;
+const perlModulePaths = `use JSON::PP; use Cwd qw(abs_path); my %paths;
 for my $name (@ARGV) {
     next unless $name =~ /^\w+(?:::\w+)*$/;
     (my $file = $name) =~ s!::!/!g;
@@ -26,11 +30,18 @@ for my $name (@ARGV) {
     for my $dir (@INC) {
         next if ref($dir) || $dir !~ m!^/!;
         my $path = "$dir/$file.pm";
-        $files{$path} = 1 if -f $path;
+        next unless -f $path;
+        # dpkg records the real directory (5.38.2), while @INC commonly
+        # contains a symlink (5.38). Keep real, unique files for ownership.
+        my $real = abs_path($path);
+        if (!defined($real)) { $files{'unresolved'} = 1; last; }
+        $files{$real} = 1;
+        last if keys(%files) > 16;
     }
-    # cpan -l can list shadowed copies with different versions. Without a
-    # unique file, the module/version row cannot establish a specific owner.
-    $paths{$name} = (keys %files)[0] if keys(%files) == 1;
+    # Keep every distinct copy: the Go side requires ALL owners to agree on
+    # one installed package/source version before using an owner fallback.
+    $paths{$name} = [sort keys %files]
+        if keys(%files) && keys(%files) <= 16 && !exists($files{'unresolved'});
 }
 print encode_json(\%paths);`
 
@@ -112,40 +123,58 @@ func enrichCPANOwnershipWith(ctx context.Context, result *Result, interpreter st
 		if err != nil {
 			continue
 		}
-		var paths map[string]string
+		var paths map[string][]string
 		if json.Unmarshal(out, &paths) != nil {
 			continue
 		}
 		wanted := map[string]bool{}
-		search := []string{"-S", "--"}
+		search := []string{}
 		for i := start; i < end; i++ {
-			path := paths[result.Items[i].SoftwareName]
-			// dpkg -S accepts glob patterns. Only literal absolute file paths
-			// are ownership evidence; returned names must also match exactly.
-			if !filepath.IsAbs(path) || len(path) > 2048 || strings.ContainsAny(path, "*?[]\\\n\r\t") {
+			name := result.Items[i].SoftwareName
+			files := literalModulePaths(paths[name])
+			paths[name] = files
+			if len(files) == 0 {
 				continue
 			}
-			result.Items[i].InstallPath = path
-			if !wanted[path] {
-				search = append(search, path)
-				wanted[path] = true
+			if len(files) == 1 {
+				result.Items[i].InstallPath = files[0]
+			}
+			for _, path := range files {
+				if !wanted[path] {
+					search = append(search, path)
+					wanted[path] = true
+				}
 			}
 		}
 		if len(wanted) == 0 {
 			continue
 		}
-		out, _, code, err := runWithLimitsTolerateExit(ctx, "dpkg-query", search...)
-		// Exit 1 can mean that only some files have a registered owner.
-		if err != nil || (code != 0 && code != 1) {
-			continue
-		}
-		owners := parseDpkgFileOwners(string(out), wanted)
-		for i := start; i < end; i++ {
-			item := &result.Items[i]
-			p := packages[owners[item.InstallPath]]
-			if p == nil || p.Version == "" {
+		owners := map[string]string{}
+		// Multiple module copies must not turn one lookup into an unbounded
+		// argv. Every batch still shares the optional enrichment's deadline.
+		for offset := 0; offset < len(search) && ctx.Err() == nil; offset += ownershipBatch {
+			files := search[offset:min(offset+ownershipBatch, len(search))]
+			out, _, code, err := runWithLimitsTolerateExit(ctx, "dpkg-query", append([]string{"-S", "--"}, files...)...)
+			// Exit 1 can mean that only some files have a registered owner.
+			if err != nil || (code != 0 && code != 1) {
 				continue
 			}
+			batch := make(map[string]bool, len(files))
+			for _, path := range files {
+				batch[path] = true
+			}
+			for path, owner := range parseDpkgFileOwners(string(out), batch) {
+				owners[path] = owner
+			}
+		}
+		for i := start; i < end; i++ {
+			item := &result.Items[i]
+			files := paths[item.SoftwareName]
+			p := commonModuleOwner(files, owners, packages)
+			if p == nil {
+				continue
+			}
+			item.InstallPath = files[0]
 			item.PackageOwner = &model.SoftwarePackageOwner{
 				Name: p.SoftwareName, Version: p.Version, PackageManager: "dpkg",
 				Architecture: p.Architecture, SourcePackage: p.SourcePackage,
@@ -154,6 +183,44 @@ func enrichCPANOwnershipWith(ctx context.Context, result *Result, interpreter st
 			}
 		}
 	}
+}
+
+func literalModulePaths(paths []string) []string {
+	if len(paths) == 0 || len(paths) > maxModulePaths {
+		return nil
+	}
+	for _, path := range paths {
+		// dpkg -S accepts glob patterns. Reject the entire set rather than
+		// accidentally establishing a unique owner from a partial lookup.
+		if !filepath.IsAbs(path) || len(path) > 2048 || !strings.HasSuffix(path, ".pm") ||
+			strings.ContainsAny(path, "*?[]\\\x00\n\r\t") {
+			return nil
+		}
+	}
+	paths = slices.Clone(paths)
+	slices.Sort(paths)
+	return slices.Compact(paths)
+}
+
+func commonModuleOwner(paths []string, owners map[string]string, packages map[string]*model.InstalledSoftware) *model.InstalledSoftware {
+	var first *model.InstalledSoftware
+	var key [3]string
+	for _, path := range paths {
+		p := packages[owners[path]]
+		if p == nil || p.Version == "" {
+			return nil
+		}
+		identity := [3]string{"binary", p.SoftwareName, p.Version}
+		if p.SourcePackage != "" && p.SourceVersion != "" {
+			identity = [3]string{"source", p.SourcePackage, p.SourceVersion}
+		}
+		if first == nil {
+			first, key = p, identity
+		} else if key != identity {
+			return nil
+		}
+	}
+	return first
 }
 
 func parseDpkgFileOwners(raw string, wanted map[string]bool) map[string]string {
