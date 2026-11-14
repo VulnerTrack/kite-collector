@@ -94,3 +94,30 @@ func TestCPANInterpreterRequiresKnownShebang(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "cpan"), []byte("#!/usr/bin/perl -I/other\n"), 0o700))
 	assert.Empty(t, cpanInterpreter())
 }
+
+func TestCPANInterpreterConfinesSymlinkToExecutableDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires privileges on Windows")
+	}
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	require.NoError(t, os.Mkdir(bin, 0o700))
+	t.Setenv("PATH", bin)
+	script := []byte("#!/usr/bin/perl\n")
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "cpan-versioned"), script, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "outside"), script, 0o700))
+	path := filepath.Join(bin, "cpan")
+	for _, tc := range []struct {
+		name, target, want string
+	}{
+		{"inside", "cpan-versioned", "/usr/bin/perl"},
+		{"relative escape", "../outside", ""},
+		{"absolute escape", filepath.Join(root, "outside"), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, os.Symlink(tc.target, path))
+			defer func() { require.NoError(t, os.Remove(path)) }()
+			assert.Equal(t, tc.want, cpanInterpreter())
+		})
+	}
+}

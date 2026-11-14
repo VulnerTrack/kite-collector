@@ -44,7 +44,9 @@ func cpanInterpreter() string {
 	if err != nil {
 		return ""
 	}
-	f, err := os.Open(path)
+	// Read only inside the PATH directory that supplied cpan. Root-aware
+	// opening also rejects a symlink redirected outside that directory.
+	f, err := os.OpenInRoot(filepath.Dir(path), filepath.Base(path))
 	if err != nil {
 		return ""
 	}
